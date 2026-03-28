@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bob's Daily Intelligence Briefing</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB_6PnXWdtpR-x-jcJIuzOaROoVRplY5SM",
+  authDomain: "pokerhq-a67e4.firebaseapp.com",
+  projectId: "pokerhq-a67e4",
+  storageBucket: "pokerhq-a67e4.firebasestorage.app",
+  messagingSenderId: "91226487101",
+  appId: "1:91226487101:web:0cf1b3411ff9d17a00ad54"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+const COLL = 'briefings-bob';
+
+function setSyncStatus(status, msg) {
+  var el = document.getElementById('sync-status');
+  if (!el) return;
+  var colors = {syncing:'#C9A84C',ok:'#2DB87A',error:'#E85C5C',offline:'rgba(255,255,255,.3)'};
+  var icons  = {syncing:'⟳',ok:'✓',error:'✗',offline:'○'};
+  el.textContent = (icons[status]||'○')+' '+msg;
+  el.style.color = colors[status]||'rgba(255,255,255,.3)';
+}
+
+// Save a briefing
+window.fbSaveBriefing = async function(dateKey, data) {
+  try {
+    setSyncStatus('syncing','Saving...');
+    await setDoc(doc(db, COLL, dateKey), { data: JSON.stringify(data), saved: Date.now() });
+    setSyncStatus('ok','Synced');
+  } catch(e) { setSyncStatus('error','Save failed'); console.error(e); }
+};
+
+// Load all briefings for history
+window.fbLoadHistory = async function() {
+  try {
+    setSyncStatus('syncing','Loading...');
+    var snap = await getDocs(collection(db, COLL));
+    var history = [];
+    snap.forEach(function(d) {
+      var parsed = JSON.parse(d.data().data);
+      history.push({ key: d.id, saved: d.data().saved, data: parsed });
+    });
+    history.sort(function(a,b){ return b.saved-a.saved; });
+    window._briefingHistory = history;
+    setSyncStatus('ok','Synced');
+    if (window.renderHistory) window.renderHistory();
+  } catch(e) { setSyncStatus('error','Load failed'); console.error(e); }
+};
+
+// Initial load
+window.fbLoadHistory();
+</script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080A0E;--bg2:#0F1218;--bg3:#161B24;--bg4:#1E2430;
+  --rim:rgba(255,255,255,0.06);--rim2:rgba(255,255,255,0.12);--rim3:rgba(255,255,255,0.2);
+  --gold:#C9A84C;--gold2:#E8C97A;--gold-dim:rgba(201,168,76,0.12);
+  --green:#2DB87A;--green-dim:rgba(45,184,122,0.12);
+  --red:#E85C5C;--red-dim:rgba(232,92,92,0.12);
+  --blue:#3498DB;--blue-dim:rgba(52,152,219,0.12);
+  --purple:#9B6FE8;--purple-dim:rgba(155,111,232,0.12);
+  --teal:#1EC8C8;
+  --serif:'Playfair Display',Georgia,serif;
+  --mono:'DM Mono','Courier New',monospace;
+  --sans:'DM Sans',system-ui,sans-serif;
+  --txt:#fff;--txt2:rgba(255,255,255,.6);--txt3:rgba(255,255,255,.35);
+}
+body.light{
+  --bg:#F0EDE6;--bg2:#FFFFFF;--bg3:#F5F2EC;--bg4:#E8E4DB;
+  --rim:rgba(0,0,0,0.08);--rim2:rgba(0,0,0,0.14);--rim3:rgba(0,0,0,0.22);
+  --gold:#8B6914;--gold2:#A07820;--gold-dim:rgba(139,105,20,0.1);
+  --green:#1A7A40;--green-dim:rgba(26,122,64,0.1);
+  --red:#C0392B;--red-dim:rgba(192,57,43,0.1);
+  --txt:#1A1A1A;--txt2:rgba(0,0,0,.6);--txt3:rgba(0,0,0,.35);
+}
+html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh}
+
+/* ── NAV ── */
+.nav{background:var(--bg2);border-bottom:1px solid var(--rim);padding:.7rem 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:.5rem}
+.nav-brand{font-family:var(--serif);font-size:20px;font-weight:700;color:var(--gold);white-space:nowrap}
+.nav-brand span{font-family:var(--mono);font-size:11px;color:var(--txt3);margin-left:.5rem;letter-spacing:.08em}
+.nav-center{display:flex;gap:.2rem;flex-wrap:wrap}
+.ntab{font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:.4rem .85rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;text-transform:uppercase;white-space:nowrap}
+.ntab:hover{color:var(--txt);background:var(--bg3)}
+.ntab.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.2)}
+.nav-right{display:flex;align-items:center;gap:.6rem}
+.nav-clock{font-family:var(--mono);font-size:12px;color:var(--txt3);letter-spacing:.05em}
+#sync-status{font-family:var(--mono);font-size:11px;color:var(--txt3);transition:color .3s;white-space:nowrap}
+.nav-btn{font-family:var(--mono);font-size:10px;padding:.35rem .8rem;border-radius:6px;border:1px solid var(--rim2);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.nav-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.theme-btn{background:transparent;border:1px solid var(--rim2);border-radius:6px;padding:.35rem .6rem;cursor:pointer;font-size:14px;transition:all .15s}
+.theme-btn:hover{border-color:var(--gold);background:var(--gold-dim)}
+
+/* ── PAGES ── */
+.page{display:none;padding:1.5rem;max-width:1200px;margin:0 auto;animation:fadeIn .3s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── HERO ── */
+.hero{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid var(--rim);border-radius:14px;padding:1.5rem 2rem;margin-bottom:1.5rem;position:relative;overflow:hidden}
+.hero::after{content:'📰';position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);font-size:80px;opacity:.04;pointer-events:none}
+.hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--gold);margin-bottom:.4rem;text-transform:uppercase}
+.hero-date{font-family:var(--serif);font-size:28px;font-weight:700;color:var(--txt);line-height:1.2;margin-bottom:.35rem}
+.hero-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em}
+.hero-divider{width:48px;height:2px;background:var(--gold);margin-top:.85rem}
+
+/* ── TICKER ── */
+.ticker{display:flex;border:1px solid var(--rim);border-radius:12px;overflow:hidden;margin-bottom:1.5rem;background:var(--bg2)}
+.tick{flex:1;padding:.85rem 1.25rem;border-right:1px solid var(--rim);position:relative}
+.tick:last-child{border-right:none}
+.tick-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--txt3);text-transform:uppercase;margin-bottom:.25rem}
+.tick-val{font-family:var(--mono);font-size:18px;font-weight:500;color:var(--txt)}
+.tick-move{font-family:var(--mono);font-size:11px;margin-top:.15rem}
+.tick-up{color:var(--green)}.tick-down{color:var(--red)}.tick-flat{color:var(--txt3)}
+.tick-bar{position:absolute;bottom:0;left:0;height:2px;width:100%;opacity:.2}
+
+/* ── PASTE ZONE ── */
+.paste-zone{background:var(--bg2);border:1px dashed rgba(201,168,76,.4);border-radius:14px;padding:1.25rem;margin-bottom:1.5rem}
+.paste-label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--txt3);margin-bottom:.5rem;text-transform:uppercase}
+.paste-zone textarea{width:100%;min-height:90px;background:transparent;border:none;outline:none;font-family:var(--mono);font-size:12px;color:var(--txt2);resize:vertical;line-height:1.7}
+.paste-zone textarea::placeholder{color:rgba(255,255,255,.15)}
+body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
+.paste-actions{display:flex;align-items:center;justify-content:space-between;margin-top:.75rem;flex-wrap:wrap;gap:.5rem}
+.paste-hint{font-family:var(--mono);font-size:10px;color:var(--txt3)}
+.btn-row{display:flex;gap:.5rem}
+.btn-primary{font-family:var(--mono);font-size:11px;padding:.5rem 1.2rem;background:var(--gold);color:var(--bg);border:none;border-radius:7px;cursor:pointer;font-weight:500;text-transform:uppercase;letter-spacing:.08em;transition:background .15s}
+.btn-primary:hover{background:var(--gold2)}
+.btn-sec{font-family:var(--mono);font-size:11px;padding:.5rem .9rem;background:transparent;color:var(--txt3);border:1px solid var(--rim);border-radius:7px;cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.06em}
+.btn-sec:hover{border-color:var(--rim2);color:var(--txt)}
+
+/* ── SCORE BAR ── */
+.score-bar{display:none;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.75rem 1rem;background:var(--bg2);border:1px solid var(--rim);border-radius:10px;margin-bottom:1.5rem}
+.score-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--txt3);text-transform:uppercase}
+.score-chip{font-family:var(--mono);font-size:10px;padding:2px 9px;border-radius:20px}
+.sc-high{background:var(--green-dim);color:var(--green);border:1px solid rgba(45,184,122,.25)}
+.sc-med{background:rgba(240,168,50,.1);color:#F0A832;border:1px solid rgba(240,168,50,.25)}
+.sc-low{background:var(--purple-dim);color:var(--purple);border:1px solid rgba(155,111,232,.25)}
+.sc-none{background:var(--rim);color:var(--txt3);border:1px solid var(--rim)}
+
+/* ── STORY CARDS ── */
+.sec-hdr{display:flex;align-items:center;gap:.6rem;margin-bottom:1rem}
+.sec-pip{width:4px;height:20px;border-radius:3px;flex-shrink:0}
+.sec-name{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt3)}
+.card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1.1rem 1.35rem;margin-bottom:.75rem;position:relative;overflow:hidden;transition:border-color .2s,transform .15s}
+.card:hover{border-color:var(--rim2);transform:translateY(-1px)}
+.card-accent{position:absolute;top:0;left:0;width:4px;height:100%}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:.45rem}
+.card-hl{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt);line-height:1.35;flex:1}
+.rel-badge{font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;margin-top:3px;letter-spacing:.05em;text-transform:uppercase}
+.rel-high{background:var(--green-dim);color:var(--green);border:1px solid rgba(45,184,122,.3)}
+.rel-med{background:rgba(240,168,50,.1);color:#F0A832;border:1px solid rgba(240,168,50,.3)}
+.rel-low{background:var(--purple-dim);color:var(--purple);border:1px solid rgba(155,111,232,.3)}
+.rel-none-b{background:var(--rim);color:var(--txt3);border:1px solid var(--rim)}
+.card-body{font-size:13px;color:var(--txt2);line-height:1.75;margin-bottom:.7rem}
+.card-footer{display:flex;align-items:flex-start;gap:.6rem;flex-wrap:wrap}
+.src{font-family:var(--mono);font-size:10px;color:var(--txt3);background:var(--bg3);border:1px solid var(--rim);border-radius:5px;padding:2px 8px;white-space:nowrap;flex-shrink:0}
+.rel-text{font-size:12px;color:var(--txt2);line-height:1.5;flex:1}
+.rel-text strong{color:var(--gold);font-weight:500}
+.rel-none-txt{font-size:11px;color:var(--txt3);font-style:italic}
+
+/* ── WATCH CARD ── */
+.watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
+.watch-stripe{position:absolute;top:0;left:0;width:4px;height:100%;background:var(--red)}
+.watch-body{font-size:13px;color:var(--txt2);line-height:1.8;padding-left:.25rem}
+
+/* ── SECTION TABS (within page) ── */
+.section-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:768px){.section-grid{grid-template-columns:1fr}}
+
+/* ── HISTORY TAB ── */
+.search-bar{position:relative;margin-bottom:1.25rem}
+.search-input{width:100%;background:var(--bg2);border:1px solid var(--rim2);border-radius:10px;padding:.65rem 1rem .65rem 2.5rem;font-family:var(--mono);font-size:13px;color:var(--txt);outline:none;transition:border-color .15s}
+.search-input:focus{border-color:var(--gold)}
+.search-input::placeholder{color:var(--txt3)}
+.search-icon{position:absolute;left:.85rem;top:50%;transform:translateY(-50%);color:var(--txt3);font-size:14px;pointer-events:none}
+.hist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem}
+.hist-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.25rem;cursor:pointer;transition:all .2s}
+.hist-card:hover{border-color:var(--gold);transform:translateY(-1px)}
+.hist-date{font-family:var(--serif);font-size:17px;font-weight:700;color:var(--txt);margin-bottom:.3rem}
+.hist-meta{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;margin-bottom:.5rem}
+.hist-preview{font-size:12px;color:var(--txt2);line-height:1.55}
+.hist-chips{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.5rem}
+.hist-chip{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:20px;background:var(--bg3);color:var(--txt3);border:1px solid var(--rim)}
+.empty-state{padding:3rem;text-align:center;color:var(--txt3);font-family:var(--mono);font-size:13px;letter-spacing:.06em}
+
+/* ── WEEKLY DIGEST ── */
+.digest-btn-wrap{margin-bottom:1.25rem}
+.digest-card{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid rgba(201,168,76,.2);border-radius:14px;padding:1.5rem;margin-bottom:1.5rem}
+.digest-title{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--gold);margin-bottom:1rem}
+.digest-section{margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--rim)}
+.digest-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.digest-section-name{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem}
+.digest-item{font-size:13px;color:var(--txt2);line-height:1.65;margin-bottom:.3rem;padding-left:.75rem;border-left:2px solid var(--rim2)}
+
+/* ── MOBILE ── */
+@media(max-width:768px){
+  .nav{padding:.55rem 1rem}
+  .nav-center{display:none}
+  .nav-clock{display:none}
+  .page{padding:1rem}
+  .hero{padding:1rem 1.25rem}
+  .hero-date{font-size:20px}
+  .ticker{flex-wrap:wrap}
+  .tick{min-width:33%;border-bottom:1px solid var(--rim)}
+  .hist-grid{grid-template-columns:1fr}
+  .mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--rim);z-index:200;padding:.5rem 0 calc(.5rem + env(safe-area-inset-bottom))}
+  .mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:.35rem .2rem;border:none;background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--mono);font-size:8px;letter-spacing:.04em;text-transform:uppercase;transition:color .15s}
+  .mob-tab.active{color:var(--gold)}
+  .mob-tab-icon{font-size:16px;line-height:1}
+  body{padding-bottom:65px}
+  .paste-zone textarea{min-height:70px}
+  .card-hl{font-size:14px}
+  .search-input{font-size:16px}
+}
+@media(min-width:769px){.mobile-nav{display:none}}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">INTELLIGENCE <span>// BOB</span></div>
+  <div class="nav-center">
+    <button class="ntab active" data-page="today" onclick="switchPage('today',this)">📰 Today</button>
+    <button class="ntab" data-page="global" onclick="switchPage('global',this)">🌍 Global</button>
+    <button class="ntab" data-page="ph" onclick="switchPage('ph',this)">🇵🇭 Philippines</button>
+    <button class="ntab" data-page="ai" onclick="switchPage('ai',this)">🤖 AI & Markets</button>
+    <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
+  </div>
+  <div class="nav-right">
+    <div class="nav-clock" id="nav-clock">--:--</div>
+    <div id="sync-status">○ Loading...</div>
+    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">🌙</button>
+    <button class="nav-btn" onclick="exportPDF()">⬇ PDF</button>
+  </div>
+</nav>
+
+<!-- ═══════════════ TODAY PAGE ═══════════════ -->
+<div class="page active" id="page-today">
+
+  <div class="hero">
+    <div class="hero-eyebrow">Daily Intelligence Briefing</div>
+    <div class="hero-date" id="hero-date">Paste briefing to begin</div>
+    <div class="hero-sub">FORENSIC BI · AUSTRALIAN INSURANCE · PH CONSULTING</div>
+    <div class="hero-divider"></div>
+  </div>
+
+  <div class="ticker">
+    <div class="tick"><div class="tick-label">PSEi</div><div class="tick-val" id="t-psei">—</div><div class="tick-move tick-flat" id="t-psei-m">—</div><div class="tick-bar" style="background:#3498DB"></div></div>
+    <div class="tick"><div class="tick-label">ASX 200</div><div class="tick-val" id="t-asx">—</div><div class="tick-move tick-flat" id="t-asx-m">—</div><div class="tick-bar" style="background:#F0A832"></div></div>
+    <div class="tick"><div class="tick-label">S&P 500</div><div class="tick-val" id="t-sp">—</div><div class="tick-move tick-flat" id="t-sp-m">—</div><div class="tick-bar" style="background:#2DB87A"></div></div>
+  </div>
+
+  <div class="paste-zone">
+    <div class="paste-label">Paste Gemini Briefing JSON Here</div>
+    <textarea id="raw-input" placeholder="Paste your Gemini daily briefing JSON here..."></textarea>
+    <div class="paste-actions">
+      <span class="paste-hint">JSON → RENDER → AUTO-SAVE ↗</span>
+      <div class="btn-row">
+        <button class="btn-sec" onclick="clearBriefing()">CLEAR</button>
+        <button class="btn-primary" onclick="renderBriefing()">RENDER ↗</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="score-bar" id="score-bar">
+    <span class="score-label">Relevance:</span>
+    <span class="score-chip sc-high" id="sc-high">● HIGH: 0</span>
+    <span class="score-chip sc-med" id="sc-med">● MED: 0</span>
+    <span class="score-chip sc-low" id="sc-low">● LOW: 0</span>
+    <span class="score-chip sc-none" id="sc-none">● NONE: 0</span>
+  </div>
+
+  <div id="today-out">
+    <div class="empty-state">AWAITING BRIEFING INPUT</div>
+  </div>
+</div>
+
+<!-- ═══════════════ GLOBAL PAGE ═══════════════ -->
+<div class="page" id="page-global">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Section View</div>
+    <div class="hero-date" style="font-size:22px">🌍 Global News</div>
+    <div class="hero-sub" id="global-date-sub">No briefing loaded</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div id="global-out"><div class="empty-state">RENDER A BRIEFING FIRST</div></div>
+</div>
+
+<!-- ═══════════════ PH PAGE ═══════════════ -->
+<div class="page" id="page-ph">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Section View</div>
+    <div class="hero-date" style="font-size:22px">🇵🇭 Philippines</div>
+    <div class="hero-sub" id="ph-date-sub">No briefing loaded</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div id="ph-out"><div class="empty-state">RENDER A BRIEFING FIRST</div></div>
+</div>
+
+<!-- ═══════════════ AI & MARKETS PAGE ═══════════════ -->
+<div class="page" id="page-ai">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Section View</div>
+    <div class="hero-date" style="font-size:22px">🤖 AI, Markets & EV</div>
+    <div class="hero-sub" id="ai-date-sub">No briefing loaded</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div id="ai-out"><div class="empty-state">RENDER A BRIEFING FIRST</div></div>
+</div>
+
+<!-- ═══════════════ HISTORY PAGE ═══════════════ -->
+<div class="page" id="page-history">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Briefing Archive</div>
+    <div class="hero-date" style="font-size:22px">📁 History</div>
+    <div class="hero-sub" id="hist-count-sub">Loading...</div>
+    <div class="hero-divider"></div>
+  </div>
+
+  <div class="digest-btn-wrap" id="digest-btn-wrap" style="display:none">
+    <button class="btn-primary" onclick="generateDigest()">📋 GENERATE WEEKLY DIGEST</button>
+  </div>
+
+  <div id="digest-out"></div>
+
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input class="search-input" type="text" id="search-input" placeholder="Search briefings by keyword..." oninput="searchBriefings(this.value)">
+  </div>
+
+  <div id="history-out"><div class="empty-state">LOADING HISTORY...</div></div>
+</div>
+
+<!-- MOBILE BOTTOM NAV -->
+<div class="mobile-nav">
+  <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
+  <button class="mob-tab" id="mob-global" onclick="switchPageMobile('global',this)"><span class="mob-tab-icon">🌍</span>GLOBAL</button>
+  <button class="mob-tab" id="mob-ph" onclick="switchPageMobile('ph',this)"><span class="mob-tab-icon">🇵🇭</span>PH</button>
+  <button class="mob-tab" id="mob-ai" onclick="switchPageMobile('ai',this)"><span class="mob-tab-icon">🤖</span>AI</button>
+  <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
+</div>
+
+<script>
+// ── CONSTANTS ──
+var SEC_META = {
+  global:  {pip:'#3498DB', label:'GLOBAL NEWS',      page:'global'},
+  ph:      {pip:'#2DB87A', label:'PHILIPPINES',       page:'ph'},
+  ai:      {pip:'#9B6FE8', label:'AI & TECHNOLOGY',   page:'ai'},
+  markets: {pip:'#F0A832', label:'MARKETS & ECONOMY', page:'ai'},
+  ev:      {pip:'#1EC8C8', label:'EV INDUSTRY',       page:'ai'},
+  watch:   {pip:'#E85C5C', label:'ONE THING TO WATCH',page:'today'}
+};
+var HIGH_KEYS = ['insurance','claim','forensic','business interruption','bsp','consulting','audit','cpa','underwriting','indemnity','assessment','reinsurance','aud','asx'];
+var MED_KEYS  = ['market','economy','inflation','trade','technology','gdp','rate','central bank','supply chain','disruption','peso','currency'];
+var _currentData = null;
+window._briefingHistory = [];
+
+// ── CLOCK ──
+function tickClock() {
+  var t = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:false});
+  var el = document.getElementById('nav-clock');
+  if (el) el.textContent = 'PHT '+t;
+}
+tickClock(); setInterval(tickClock,1000);
+
+// ── THEME ──
+function toggleTheme() {
+  var light = document.body.classList.toggle('light');
+  document.getElementById('theme-btn').textContent = light ? '☀️' : '🌙';
+  localStorage.setItem('briefing_theme', light?'light':'dark');
+}
+if (localStorage.getItem('briefing_theme')==='light') {
+  document.body.classList.add('light');
+  document.getElementById('theme-btn').textContent = '☀️';
+}
+
+// ── PAGE SWITCHING ──
+function switchPage(id, el) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
+  var pg = document.getElementById('page-'+id);
+  if (pg) pg.classList.add('active');
+  if (el) el.classList.add('active');
+  var mob = document.getElementById('mob-'+id);
+  if (mob) mob.classList.add('active');
+  if (id==='history') renderHistory();
+  window.scrollTo(0,0);
+}
+function switchPageMobile(id, el) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.ntab,.mob-tab').forEach(function(t){ t.classList.remove('active'); });
+  var pg = document.getElementById('page-'+id);
+  if (pg) pg.classList.add('active');
+  if (el) el.classList.add('active');
+  document.querySelectorAll('.ntab').forEach(function(t){
+    if (t.getAttribute('data-page')===id) t.classList.add('active');
+  });
+  if (id==='history') renderHistory();
+  window.scrollTo(0,0);
+}
+
+// ── SCORE ──
+function scoreRelevance(rel) {
+  if (!rel||!rel.trim()) return 'none';
+  var r = rel.toLowerCase();
+  if (r.includes('no direct relevance')) return 'none';
+  if (HIGH_KEYS.some(function(k){ return r.includes(k); })) return 'high';
+  if (MED_KEYS.some(function(k){ return r.includes(k); })) return 'med';
+  return 'low';
+}
+
+// ── PARSER ──
+function parseInput(raw) {
+  var js = raw.indexOf('{'), je = raw.lastIndexOf('}');
+  if (js!==-1 && je!==-1) {
+    try {
+      var d = JSON.parse(raw.substring(js,je+1));
+      if (d.sections) return normalise(d);
+    } catch(e){}
+  }
+  return null;
+}
+
+function normalise(d) {
+  var r = {date:d.date||'', markets:d.markets||null, watch:d.watch||'', watch_source:d.watch_source||'', sections:{}};
+  var secs = Array.isArray(d.sections) ? d.sections : Object.keys(d.sections).map(function(k){ return {id:k,stories:d.sections[k]}; });
+  secs.forEach(function(sec) {
+    r.sections[sec.id] = (sec.stories||[]).map(function(st) {
+      return {headline:st.headline||'', body:st.body||'', source:st.source||'', relevance:st.relevant===false?'':(st.relevance||'')};
+    });
+  });
+  return r;
+}
+
+// ── RENDER ──
+function renderBriefing() {
+  var raw = document.getElementById('raw-input').value.trim();
+  if (!raw) return;
+  var data = parseInput(raw);
+  if (!data) { alert('Could not parse JSON. Check your Gemini output.'); return; }
+  _currentData = data;
+
+  // Hero date
+  if (data.date) {
+    document.getElementById('hero-date').textContent = data.date;
+    ['global-date-sub','ph-date-sub','ai-date-sub'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.textContent = data.date;
+    });
+  }
+
+  // Ticker
+  if (data.markets) {
+    setTick('t-psei','t-psei-m', data.markets.psei, data.markets.psei_move);
+    setTick('t-asx', 't-asx-m',  data.markets.asx,  data.markets.asx_move);
+    setTick('t-sp',  't-sp-m',   data.markets.sp500, data.markets.sp500_move);
+  }
+
+  // Render all sections
+  var counts = {high:0,med:0,low:0,none:0};
+  var todayHTML = '', globalHTML = '', phHTML = '', aiHTML = '';
+
+  Object.keys(SEC_META).forEach(function(id) {
+    var meta = SEC_META[id];
+    if (id==='watch') return; // handled separately
+    var stories = data.sections[id] || [];
+    if (!stories.length) return;
+
+    var secHTML = '<div class="sec-hdr"><div class="sec-pip" style="background:'+meta.pip+'"></div><div class="sec-name">'+meta.label+'</div></div>';
+    stories.forEach(function(st) {
+      var score = scoreRelevance(st.relevance);
+      counts[score]++;
+      var bc = {high:'rel-high',med:'rel-med',low:'rel-low',none:'rel-none-b'}[score];
+      secHTML += '<div class="card"><div class="card-accent" style="background:'+meta.pip+'"></div>';
+      secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
+      secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
+      secHTML += '<div class="card-footer">';
+      if (st.source) secHTML += '<span class="src">📍 '+esc(st.source)+'</span>';
+      if (score!=='none') secHTML += '<div class="rel-text"><strong>→ Bob:</strong> '+esc(st.relevance)+'</div>';
+      else secHTML += '<div class="rel-none-txt">No direct relevance today</div>';
+      secHTML += '</div></div>';
+    });
+
+    todayHTML += '<div style="margin-bottom:1.75rem;animation:fadeIn .4s ease">'+secHTML+'</div>';
+    if (meta.page==='global') globalHTML += '<div style="margin-bottom:1.75rem">'+secHTML+'</div>';
+    if (meta.page==='ph')     phHTML     += '<div style="margin-bottom:1.75rem">'+secHTML+'</div>';
+    if (meta.page==='ai')     aiHTML     += '<div style="margin-bottom:1.75rem">'+secHTML+'</div>';
+  });
+
+  // Watch section
+  if (data.watch) {
+    var wHTML = '<div style="margin-bottom:1.75rem"><div class="sec-hdr"><div class="sec-pip" style="background:#E85C5C"></div><div class="sec-name">ONE THING TO WATCH</div></div><div class="watch-card"><div class="watch-stripe"></div><div class="watch-body">'+esc(data.watch)+'</div>'+(data.watch_source?'<div style="margin-top:.6rem"><span class="src">📍 '+esc(data.watch_source)+'</span></div>':'')+'</div></div>';
+    todayHTML += wHTML;
+  }
+
+  document.getElementById('today-out').innerHTML  = todayHTML  || '<div class="empty-state">NO CONTENT PARSED</div>';
+  document.getElementById('global-out').innerHTML = globalHTML || '<div class="empty-state">NO GLOBAL NEWS IN THIS BRIEFING</div>';
+  document.getElementById('ph-out').innerHTML     = phHTML     || '<div class="empty-state">NO PH NEWS IN THIS BRIEFING</div>';
+  document.getElementById('ai-out').innerHTML     = aiHTML     || '<div class="empty-state">NO AI/MARKETS NEWS IN THIS BRIEFING</div>';
+
+  // Score bar
+  ['high','med','low','none'].forEach(function(s){
+    var el = document.getElementById('sc-'+s);
+    if (el) el.textContent = '● '+s.toUpperCase()+': '+counts[s];
+  });
+  document.getElementById('score-bar').style.display = 'flex';
+
+  // Auto-save to Firebase
+  autoSave(data);
+}
+
+function setTick(vi,mi,val,mov) {
+  if (val) { var e=document.getElementById(vi); if(e) e.textContent=val; }
+  if (mov) {
+    var me=document.getElementById(mi); if (!me) return;
+    me.textContent=mov;
+    var d=mov.toLowerCase().includes('down')||mov.includes('-')?'down':mov.toLowerCase().includes('up')||mov.includes('+')?'up':'flat';
+    me.className='tick-move tick-'+d;
+  }
+}
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function clearBriefing() {
+  document.getElementById('raw-input').value='';
+  document.getElementById('hero-date').textContent='Paste briefing to begin';
+  document.getElementById('today-out').innerHTML='<div class="empty-state">AWAITING BRIEFING INPUT</div>';
+  document.getElementById('score-bar').style.display='none';
+  ['t-psei','t-asx','t-sp'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent='—'; });
+  ['t-psei-m','t-asx-m','t-sp-m'].forEach(function(id){ var e=document.getElementById(id); if(e){e.textContent='—';e.className='tick-move tick-flat';} });
+  _currentData=null;
+}
+
+// ── AUTO SAVE TO FIREBASE ──
+function autoSave(data) {
+  if (!window.fbSaveBriefing) return;
+  var key = (data.date||new Date().toISOString().split('T')[0]).replace(/[^a-zA-Z0-9]/g,'-');
+  window.fbSaveBriefing(key, data);
+  // Refresh history cache
+  setTimeout(function(){ if(window.fbLoadHistory) window.fbLoadHistory(); }, 1500);
+}
+
+// ── HISTORY ──
+window.renderHistory = function() {
+  var history = window._briefingHistory || [];
+  var countEl = document.getElementById('hist-count-sub');
+  if (countEl) countEl.textContent = history.length+' briefing'+(history.length!==1?'s':'')+' saved';
+
+  // Show digest button if 5+ this week
+  var now = new Date();
+  var weekStart = new Date(now); weekStart.setDate(now.getDate()-7);
+  var thisWeek = history.filter(function(h){ return new Date(h.saved) >= weekStart; });
+  var dbw = document.getElementById('digest-btn-wrap');
+  if (dbw) dbw.style.display = thisWeek.length>=2 ? 'block' : 'none';
+
+  var search = (document.getElementById('search-input')||{}).value||'';
+  renderHistoryList(history, search);
+};
+
+function renderHistoryList(history, search) {
+  var el = document.getElementById('history-out');
+  if (!el) return;
+  var filtered = history;
+  if (search.trim()) {
+    var q = search.toLowerCase();
+    filtered = history.filter(function(h) {
+      var d = h.data;
+      if ((d.date||'').toLowerCase().includes(q)) return true;
+      var allText = '';
+      Object.keys(d.sections||{}).forEach(function(k){
+        (d.sections[k]||[]).forEach(function(st){
+          allText += (st.headline||'') + ' ' + (st.body||'') + ' ';
+        });
+      });
+      return allText.toLowerCase().includes(q);
+    });
+  }
+
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-state">'+(search?'NO RESULTS FOR "'+esc(search)+'"':'NO BRIEFINGS SAVED YET')+'</div>';
+    return;
+  }
+
+  var html = '<div class="hist-grid">';
+  filtered.forEach(function(h) {
+    var d = h.data;
+    var preview = '';
+    var firstSec = Object.keys(d.sections||{})[0];
+    if (firstSec && d.sections[firstSec] && d.sections[firstSec][0]) {
+      preview = (d.sections[firstSec][0].headline||'').substring(0,80);
+    }
+    var storyCount = Object.values(d.sections||{}).reduce(function(a,b){ return a+(b||[]).length; },0);
+    var saved = new Date(h.saved).toLocaleDateString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    html += '<div class="hist-card" onclick="loadBriefing(\''+h.key+'\')">';
+    html += '<div class="hist-date">'+esc(d.date||h.key)+'</div>';
+    html += '<div class="hist-meta">Saved '+saved+' PHT</div>';
+    if (preview) html += '<div class="hist-preview">'+esc(preview)+(preview.length>=80?'...':'')+'</div>';
+    html += '<div class="hist-chips"><span class="hist-chip">'+storyCount+' stories</span>';
+    if (d.markets && d.markets.psei) html += '<span class="hist-chip">PSEi '+esc(d.markets.psei)+'</span>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function searchBriefings(q) {
+  renderHistoryList(window._briefingHistory||[], q);
+}
+
+function loadBriefing(key) {
+  var h = (window._briefingHistory||[]).find(function(x){ return x.key===key; });
+  if (!h) return;
+  _currentData = h.data;
+  // Simulate render without re-pasting
+  var fakeRaw = JSON.stringify(h.data);
+  document.getElementById('raw-input').value = fakeRaw;
+  renderBriefing();
+  switchPage('today', document.querySelector('.ntab[data-page="today"]'));
+}
+
+// ── WEEKLY DIGEST ──
+function generateDigest() {
+  var history = window._briefingHistory||[];
+  var now = new Date();
+  var weekStart = new Date(now); weekStart.setDate(now.getDate()-7);
+  var thisWeek = history.filter(function(h){ return new Date(h.saved)>=weekStart; });
+  if (!thisWeek.length) { alert('No briefings from this week to digest.'); return; }
+
+  var digest = {global:[], ph:[], ai:[], markets:[], ev:[], watch:[]};
+  thisWeek.forEach(function(h) {
+    var d = h.data;
+    Object.keys(d.sections||{}).forEach(function(k) {
+      if (digest[k]) {
+        (d.sections[k]||[]).filter(function(st){
+          return scoreRelevance(st.relevance)==='high';
+        }).forEach(function(st){
+          digest[k].push({date:d.date, headline:st.headline, body:st.body});
+        });
+      }
+    });
+    if (d.watch) digest.watch.push({date:d.date, text:d.watch});
+  });
+
+  var html = '<div class="digest-card">';
+  html += '<div class="digest-title">📋 Weekly Intelligence Digest</div>';
+  html += '<div style="font-family:var(--mono);font-size:10px;color:var(--txt3);margin-bottom:1rem">'+thisWeek.length+' briefings · '+new Date(thisWeek[thisWeek.length-1].saved).toLocaleDateString()+' – '+new Date(thisWeek[0].saved).toLocaleDateString()+'</div>';
+
+  var labels = {global:'🌍 Global',ph:'🇵🇭 Philippines',ai:'🤖 AI & Tech',markets:'📈 Markets',ev:'⚡ EV Industry',watch:'🔭 Watch Items'};
+  Object.keys(labels).forEach(function(k) {
+    if (!digest[k] || !digest[k].length) return;
+    html += '<div class="digest-section">';
+    html += '<div class="digest-section-name">'+labels[k]+'</div>';
+    digest[k].slice(0,5).forEach(function(item) {
+      html += '<div class="digest-item"><strong style="color:var(--gold);font-size:11px;font-family:var(--mono)">'+esc(item.date||'')+'</strong> — '+esc(item.headline||item.text||'')+'</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+
+  document.getElementById('digest-out').innerHTML = html;
+  document.getElementById('digest-out').scrollIntoView({behavior:'smooth'});
+}
+
+// ── PDF EXPORT ──
+function exportPDF() {
+  if (!_currentData) { alert('Render a briefing first.'); return; }
+  try {
+    var doc = new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    var ML=15,CW=180,y=16;
+    function chk(h){ if(y+h>282){doc.addPage();y=16;} }
+    function ln(text,size,color,bold,x,w){
+      doc.setFontSize(size); doc.setTextColor(color[0],color[1],color[2]); doc.setFont('helvetica',bold?'bold':'normal');
+      var lines=doc.splitTextToSize((text||'').replace(/[^\x00-\x7F]/g,''),w||CW);
+      return lines;
+    }
+    function draw(lines,x,yy,lh){ lines.forEach(function(l){doc.text(l,x,yy);yy+=lh;}); return yy; }
+
+    // Header
+    doc.setFillColor(201,168,76); doc.rect(ML,y,CW,.5,'F'); y+=4;
+    y=draw(ln('DAILY INTELLIGENCE BRIEFING',9,[170,130,30],true),ML,y,5); y+=2;
+    y=draw(ln(_currentData.date||'',18,[13,15,20],true),ML,y,9); y+=2;
+    y=draw(ln('FORENSIC BI — AUSTRALIAN INSURANCE — PH CONSULTING',8,[140,140,140]),ML,y,4); y+=2;
+    doc.setFillColor(201,168,76); doc.rect(ML,y,CW,.5,'F'); y+=6;
+
+    // Ticker
+    if (_currentData.markets) {
+      var m=_currentData.markets;
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+      doc.text('PSEi: '+(m.psei||'—')+' '+(m.psei_move||''), ML, y);
+      doc.text('ASX 200: '+(m.asx||'—')+' '+(m.asx_move||''), ML+62, y);
+      doc.text('S&P 500: '+(m.sp500||'—')+' '+(m.sp500_move||''), ML+124, y);
+      y+=8;
+    }
+
+    // Sections
+    var secOrder = ['global','ph','ai','markets','ev'];
+    secOrder.forEach(function(id) {
+      var stories=(_currentData.sections||{})[id]||[];
+      if (!stories.length) return;
+      var meta=SEC_META[id];
+      chk(12);
+      var pip=meta.pip.replace('#','').match(/.{2}/g).map(function(h){return parseInt(h,16);});
+      doc.setFillColor(pip[0],pip[1],pip[2]); doc.rect(ML,y,CW,.5,'F'); y+=3;
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+      doc.text(meta.label, ML, y); y+=6;
+
+      stories.forEach(function(st) {
+        var hlLines=doc.splitTextToSize((st.headline||'').replace(/[^\x00-\x7F]/g,''),CW-4);
+        var bdLines=doc.splitTextToSize((st.body||'').replace(/[^\x00-\x7F]/g,''),CW-4);
+        var relTxt=(st.relevance||'').replace(/[^\x00-\x7F]/g,'');
+        var relLines=relTxt?doc.splitTextToSize('Bob: '+relTxt,CW-4):[];
+        var cardH=hlLines.length*5+3+bdLines.length*4+2+(st.source?4:0)+(relLines.length?relLines.length*3.5+3:0)+8;
+        chk(cardH);
+        doc.setFillColor(250,250,250); doc.setDrawColor(220,220,220);
+        doc.roundedRect(ML,y,CW,cardH,2,2,'FD');
+        doc.setFillColor(pip[0],pip[1],pip[2]); doc.rect(ML,y,3,cardH,'F');
+        var cy=y+5;
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(13,15,20);
+        hlLines.forEach(function(l){doc.text(l,ML+5,cy);cy+=5;}); cy+=2;
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(70,70,70);
+        bdLines.forEach(function(l){doc.text(l,ML+5,cy);cy+=4;}); cy+=1;
+        if (st.source){doc.setFontSize(7);doc.setTextColor(150,150,150);doc.text(st.source.replace(/[^\x00-\x7F]/g,''),ML+5,cy);cy+=4;}
+        if (relLines.length){doc.setDrawColor(230,230,230);doc.line(ML+5,cy,ML+CW-5,cy);cy+=2.5;doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(140,112,30);relLines.forEach(function(l){doc.text(l,ML+5,cy);cy+=3.5;});}
+        y+=cardH+4;
+      });
+      y+=3;
+    });
+
+    // Watch
+    if (_currentData.watch) {
+      chk(20);
+      doc.setFillColor(232,92,92); doc.rect(ML,y,CW,.5,'F'); y+=3;
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+      doc.text('ONE THING TO WATCH', ML, y); y+=5;
+      var wLines=doc.splitTextToSize((_currentData.watch).replace(/[^\x00-\x7F]/g,''),CW-4);
+      var wH=wLines.length*4+8;
+      doc.setFillColor(255,248,248); doc.setDrawColor(232,92,92);
+      doc.roundedRect(ML,y,CW,wH,2,2,'FD');
+      doc.setFillColor(232,92,92); doc.rect(ML,y,3,wH,'F');
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(50,50,50);
+      var wy=y+5; wLines.forEach(function(l){doc.text(l,ML+6,wy);wy+=4;});
+      y+=wH+5;
+    }
+
+    var fname='Bob_Briefing_'+(_currentData.date||'').replace(/[^\w]/g,'_').replace(/[^\x00-\x7F]/g,'')+'.pdf';
+    doc.save(fname);
+  } catch(err){ alert('PDF error: '+err.message); }
+}
+</script>
+</body>
+</html>
