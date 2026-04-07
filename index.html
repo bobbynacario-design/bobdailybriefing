@@ -10,7 +10,7 @@
 <!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, orderBy, limit, startAfter, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -42,35 +42,39 @@ function getUid() {
   return window._firebaseUid || '';
 }
 
-// Firebase Anonymous Auth — sign in and store UID
+// Google Sign-In — opens popup and returns the stable Google account uid
 window.fbSignIn = async function() {
   try {
-    setSyncStatus('syncing','Authenticating...');
-    var cred = await signInAnonymously(auth);
+    setSyncStatus('syncing','Signing in...');
+    var provider = new GoogleAuthProvider();
+    var cred = await signInWithPopup(auth, provider);
     window._firebaseUid = cred.user.uid;
-    // Store UID locally so we can link passphrase to it
-    localStorage.setItem('briefing_fb_uid', cred.user.uid);
-    setSyncStatus('ok','Authenticated');
+    window._firebaseUser = cred.user;
+    setSyncStatus('ok','Signed in');
     return cred.user.uid;
   } catch(e) {
-    console.error('Firebase auth failed:', e);
-    setSyncStatus('error','Auth failed');
-    // Fall back to stored UID if offline
-    var storedUid = localStorage.getItem('briefing_fb_uid');
-    if (storedUid) {
-      window._firebaseUid = storedUid;
-      setSyncStatus('offline','Offline mode');
-      return storedUid;
-    }
+    console.error('Google sign-in failed:', e);
+    setSyncStatus('error','Sign-in failed');
     return null;
   }
 };
 
-// Listen for auth state changes
+// Sign out — clears Firebase session
+window.fbSignOut = async function() {
+  try { await signOut(auth); } catch(e) { console.warn(e); }
+  window._firebaseUid = null;
+  window._firebaseUser = null;
+};
+
+// Listen for auth state changes (auto sign-in if Firebase has a persisted session)
 onAuthStateChanged(auth, function(user) {
   if (user) {
     window._firebaseUid = user.uid;
-    localStorage.setItem('briefing_fb_uid', user.uid);
+    window._firebaseUser = user;
+    if (window._onAuthReady) window._onAuthReady(user);
+  } else {
+    window._firebaseUid = null;
+    window._firebaseUser = null;
   }
 });
 
@@ -83,8 +87,7 @@ window.fbSaveBriefing = async function(dateKey, data) {
     await setDoc(doc(db, COLL, dateKey), {
       data: JSON.stringify(data),
       saved: Date.now(),
-      uid: uid,
-      _ph: window._sessionPhash || ''
+      uid: uid
     });
     setSyncStatus('ok','Synced');
     window.lsSaveBriefing(dateKey, data);
@@ -246,8 +249,8 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-heig
 .auth-box input{width:100%;background:var(--bg3);border:1px solid var(--rim2);border-radius:8px;padding:.7rem 1rem;font-family:var(--mono);font-size:14px;color:var(--txt);outline:none;text-align:center;letter-spacing:.15em;transition:border-color .15s;margin-bottom:.75rem}
 .auth-box input:focus{border-color:var(--gold)}
 .auth-box input::placeholder{color:var(--txt3);letter-spacing:.06em}
-.auth-box .auth-btn{width:100%;font-family:var(--mono);font-size:12px;padding:.65rem;background:var(--gold);color:var(--bg);border:none;border-radius:8px;cursor:pointer;font-weight:500;text-transform:uppercase;letter-spacing:.1em;transition:background .15s}
-.auth-box .auth-btn:hover{background:var(--gold2)}
+.auth-box .auth-btn{width:100%;font-family:var(--sans,system-ui,sans-serif);font-size:14px;padding:.75rem 1rem;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:8px;cursor:pointer;font-weight:500;letter-spacing:.02em;transition:box-shadow .15s,background .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.auth-box .auth-btn:hover{background:#f8f9fa;box-shadow:0 1px 3px rgba(60,64,67,.3)}
 .auth-error{font-family:var(--mono);font-size:11px;color:var(--red);margin-top:.5rem;min-height:1.2em}
 .auth-mode-link{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:1rem;cursor:pointer;transition:color .15s}
 .auth-mode-link:hover{color:var(--gold)}
@@ -452,13 +455,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 <div class="auth-overlay" id="auth-overlay">
   <div class="auth-box">
     <div class="auth-icon">🔐</div>
-    <div class="auth-title" id="auth-title">Set Passphrase</div>
-    <div class="auth-sub" id="auth-sub">Create a passphrase to secure your briefings</div>
-    <input type="password" id="auth-input" placeholder="Enter passphrase" autocomplete="off">
-    <input type="password" id="auth-confirm" placeholder="Confirm passphrase" autocomplete="off">
-    <button class="auth-btn" id="auth-btn" onclick="handleAuth()">SET PASSPHRASE</button>
+    <div class="auth-title">Bob's Daily Briefing</div>
+    <div class="auth-sub">Sign in to sync your briefings across devices</div>
+    <button class="auth-btn google-btn" id="auth-btn" onclick="handleAuth()">
+      <svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle;margin-right:8px"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      Sign in with Google
+    </button>
     <div class="auth-error" id="auth-error"></div>
-    <div class="auth-mode-link" id="auth-reset-link" style="display:none" onclick="resetPassphrase()">Forgot passphrase? Reset (clears local data)</div>
   </div>
 </div>
 
@@ -635,139 +638,65 @@ var MED_KEYS  = ['market','economy','inflation','trade','technology','gdp','rate
 var _currentData = null;
 var _renderTimestamp = null;
 window._briefingHistory = [];
-window._sessionPhash = null;
-
-// ── AUTH GATE ──
-var AUTH_HASH_KEY = 'briefing_ph';
-var AUTH_SESSION_KEY = 'briefing_session';
-
-async function hashPassphrase(pass) {
-  var encoder = new TextEncoder();
-  var data = encoder.encode(pass + '_bob_briefing_salt_2026');
-  var hashBuf = await crypto.subtle.digest('SHA-256', data);
-  var hashArr = Array.from(new Uint8Array(hashBuf));
-  return hashArr.map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+// ── GOOGLE AUTH GATE ──
+function initAuthGate() {
+  var overlay = document.getElementById('auth-overlay');
+  overlay.classList.remove('hidden');
+  document.getElementById('auth-error').textContent = '';
 }
 
-function initAuthGate() {
-  var storedHash = localStorage.getItem(AUTH_HASH_KEY);
-  var overlay = document.getElementById('auth-overlay');
-  var titleEl = document.getElementById('auth-title');
-  var subEl = document.getElementById('auth-sub');
-  var btnEl = document.getElementById('auth-btn');
-  var confirmEl = document.getElementById('auth-confirm');
-  var resetLink = document.getElementById('auth-reset-link');
-
-  if (storedHash) {
-    // Returning user — unlock mode
-    titleEl.textContent = 'Unlock Briefings';
-    subEl.textContent = 'Enter your passphrase to access your briefings';
-    btnEl.textContent = 'UNLOCK';
-    confirmEl.style.display = 'none';
-    resetLink.style.display = 'block';
-  } else {
-    // First time — set passphrase mode
-    titleEl.textContent = 'Set Passphrase';
-    subEl.textContent = 'Create a passphrase to secure your briefings';
-    btnEl.textContent = 'SET PASSPHRASE';
-    confirmEl.style.display = '';
-    resetLink.style.display = 'none';
+function onSignedIn() {
+  document.getElementById('auth-overlay').classList.add('hidden');
+  var lockBtn = document.getElementById('lock-btn');
+  if (lockBtn) {
+    lockBtn.classList.add('unlocked');
+    lockBtn.textContent = '🔓';
+    lockBtn.title = 'Sign out';
   }
-  overlay.classList.remove('hidden');
-
-  // Auto-focus input
-  document.getElementById('auth-input').focus();
-
-  // Enter key to submit
-  document.getElementById('auth-input').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') handleAuth();
-  });
-  document.getElementById('auth-confirm').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') handleAuth();
-  });
+  if (window.fbLoadHistory) window.fbLoadHistory();
 }
 
 async function handleAuth() {
-  var storedHash = localStorage.getItem(AUTH_HASH_KEY);
-  var input = document.getElementById('auth-input').value;
-  var confirm = document.getElementById('auth-confirm').value;
   var errorEl = document.getElementById('auth-error');
   errorEl.textContent = '';
-
-  if (!input || input.length < 4) {
-    errorEl.textContent = 'Passphrase must be at least 4 characters';
+  if (!window.fbSignIn) {
+    errorEl.textContent = 'Auth not ready, try again';
     return;
   }
-
-  var hash = await hashPassphrase(input);
-
-  if (storedHash) {
-    // Verify mode
-    if (hash !== storedHash) {
-      errorEl.textContent = 'Incorrect passphrase';
-      document.getElementById('auth-input').value = '';
-      document.getElementById('auth-input').focus();
-      return;
-    }
+  var uid = await window.fbSignIn();
+  if (uid) {
+    onSignedIn();
   } else {
-    // Set mode — need confirmation
-    if (input !== confirm) {
-      errorEl.textContent = 'Passphrases do not match';
-      return;
-    }
-    localStorage.setItem(AUTH_HASH_KEY, hash);
-  }
-
-  // Authenticated — store session hash and proceed
-  window._sessionPhash = hash;
-  document.getElementById('auth-overlay').classList.add('hidden');
-  document.getElementById('lock-btn').classList.add('unlocked');
-  document.getElementById('lock-btn').textContent = '🔓';
-
-  // Sign in with Firebase Anonymous Auth, then load data
-  if (window.fbSignIn) {
-    window.fbSignIn().then(function(uid) {
-      if (uid && window.fbLoadHistory) {
-        window.fbLoadHistory();
-      } else if (window.lsLoadHistory) {
-        window.lsLoadHistory();
-      }
-    });
-  } else if (window._fbReady && window.fbLoadHistory) {
-    window.fbLoadHistory();
+    errorEl.textContent = 'Sign-in failed or cancelled';
   }
 }
 
 function lockSession() {
-  window._sessionPhash = null;
-  window._firebaseUid = null;
+  if (window.fbSignOut) window.fbSignOut();
   window._briefingHistory = [];
   _currentData = null;
-  document.getElementById('lock-btn').classList.remove('unlocked');
-  document.getElementById('lock-btn').textContent = '🔒';
-  document.getElementById('auth-input').value = '';
+  var lockBtn = document.getElementById('lock-btn');
+  if (lockBtn) {
+    lockBtn.classList.remove('unlocked');
+    lockBtn.textContent = '🔒';
+  }
   document.getElementById('auth-error').textContent = '';
   // Reset UI
   document.getElementById('today-out').innerHTML = '<div class="empty-state">AWAITING BRIEFING INPUT</div>';
   document.getElementById('hero-date').textContent = 'Paste briefing to begin';
   document.getElementById('hero-timestamp').textContent = '';
-  document.getElementById('score-bar').style.display = 'none';
-  document.getElementById('history-out').innerHTML = '<div class="empty-state">LOCKED</div>';
-  clearTabBadges();
-  // Show auth gate
+  var sb = document.getElementById('score-bar'); if (sb) sb.style.display = 'none';
+  document.getElementById('history-out').innerHTML = '<div class="empty-state">SIGNED OUT</div>';
+  if (typeof clearTabBadges === 'function') clearTabBadges();
   initAuthGate();
 }
 
-function resetPassphrase() {
-  if (!confirm('This will clear your stored passphrase and local briefing cache. Firebase data will remain but you will need to set a new passphrase. Continue?')) return;
-  localStorage.removeItem(AUTH_HASH_KEY);
-  localStorage.removeItem('briefings_bob_cache');
-  window._sessionPhash = null;
-  window._briefingHistory = [];
-  // Reinitialize auth gate in set mode
-  initAuthGate();
-  document.getElementById('auth-error').textContent = '';
-}
+// Auto sign-in if Firebase has a persisted Google session
+window._onAuthReady = function(user) {
+  if (user && document.getElementById('auth-overlay') && !document.getElementById('auth-overlay').classList.contains('hidden')) {
+    onSignedIn();
+  }
+};
 
 // ── JSON SCHEMA VALIDATION ──
 function validateBriefingSchema(data) {
