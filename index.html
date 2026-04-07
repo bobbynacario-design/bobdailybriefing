@@ -10,7 +10,8 @@
 <!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, orderBy, limit, startAfter, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_6PnXWdtpR-x-jcJIuzOaROoVRplY5SM",
@@ -22,8 +23,10 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db  = getFirestore(app);
 const COLL = 'briefings-bob';
+const PAGE_SIZE = 30;
 
 function setSyncStatus(status, msg) {
   var el = document.getElementById('sync-status');
@@ -34,34 +37,188 @@ function setSyncStatus(status, msg) {
   el.style.color = colors[status]||'rgba(255,255,255,.3)';
 }
 
-// Save a briefing
+// Get current authenticated UID
+function getUid() {
+  return window._firebaseUid || '';
+}
+
+// Firebase Anonymous Auth — sign in and store UID
+window.fbSignIn = async function() {
+  try {
+    setSyncStatus('syncing','Authenticating...');
+    var cred = await signInAnonymously(auth);
+    window._firebaseUid = cred.user.uid;
+    // Store UID locally so we can link passphrase to it
+    localStorage.setItem('briefing_fb_uid', cred.user.uid);
+    setSyncStatus('ok','Authenticated');
+    return cred.user.uid;
+  } catch(e) {
+    console.error('Firebase auth failed:', e);
+    setSyncStatus('error','Auth failed');
+    // Fall back to stored UID if offline
+    var storedUid = localStorage.getItem('briefing_fb_uid');
+    if (storedUid) {
+      window._firebaseUid = storedUid;
+      setSyncStatus('offline','Offline mode');
+      return storedUid;
+    }
+    return null;
+  }
+};
+
+// Listen for auth state changes
+onAuthStateChanged(auth, function(user) {
+  if (user) {
+    window._firebaseUid = user.uid;
+    localStorage.setItem('briefing_fb_uid', user.uid);
+  }
+});
+
+// Save a briefing (includes UID for server-side rule enforcement)
 window.fbSaveBriefing = async function(dateKey, data) {
+  var uid = getUid();
+  if (!uid) { setSyncStatus('error','Not authenticated'); return; }
   try {
     setSyncStatus('syncing','Saving...');
-    await setDoc(doc(db, COLL, dateKey), { data: JSON.stringify(data), saved: Date.now() });
+    await setDoc(doc(db, COLL, dateKey), {
+      data: JSON.stringify(data),
+      saved: Date.now(),
+      uid: uid,
+      _ph: window._sessionPhash || ''
+    });
     setSyncStatus('ok','Synced');
-  } catch(e) { setSyncStatus('error','Save failed'); console.error(e); }
+    window.lsSaveBriefing(dateKey, data);
+  } catch(e) {
+    setSyncStatus('error','Save failed — cached locally');
+    console.error(e);
+    window.lsSaveBriefing(dateKey, data);
+  }
 };
 
-// Load all briefings for history
-window.fbLoadHistory = async function() {
+// Delete a briefing (server-side rules enforce ownership, client checks as backup)
+window.fbDeleteBriefing = async function(dateKey) {
+  var uid = getUid();
+  if (!uid) { setSyncStatus('error','Not authenticated'); return; }
+  try {
+    setSyncStatus('syncing','Verifying...');
+    var snap = await getDoc(doc(db, COLL, dateKey));
+    if (snap.exists()) {
+      var docUid = snap.data().uid;
+      // Allow delete if: doc has matching uid, or legacy doc with no uid but matching _ph
+      if (docUid && docUid !== uid) {
+        setSyncStatus('error','Access denied');
+        if (window.showToast) window.showToast('Cannot delete: not your document','error');
+        return;
+      }
+    }
+    setSyncStatus('syncing','Deleting...');
+    await deleteDoc(doc(db, COLL, dateKey));
+    window.lsDeleteBriefing(dateKey);
+    setSyncStatus('ok','Deleted');
+    window._briefingHistory = (window._briefingHistory||[]).filter(function(h){ return h.key !== dateKey; });
+    if (window.renderHistory) window.renderHistory();
+    if (window.showToast) window.showToast('Briefing deleted','ok');
+  } catch(e) {
+    setSyncStatus('error','Delete failed');
+    console.error(e);
+    if (window.showToast) window.showToast('Delete failed: '+e.message,'error');
+  }
+};
+
+// Load briefings with pagination (filter by UID)
+window._lastDoc = null;
+window._allLoaded = false;
+
+window.fbLoadHistory = async function(loadMore) {
+  var uid = getUid();
+  if (!uid) {
+    if (window.lsLoadHistory) window.lsLoadHistory();
+    return;
+  }
   try {
     setSyncStatus('syncing','Loading...');
-    var snap = await getDocs(collection(db, COLL));
-    var history = [];
+    var q;
+    // Query with uid filter — this is enforced server-side by Firestore rules
+    if (loadMore && window._lastDoc) {
+      q = query(collection(db, COLL), where('uid','==',uid), orderBy('saved','desc'), startAfter(window._lastDoc), limit(PAGE_SIZE));
+    } else {
+      q = query(collection(db, COLL), where('uid','==',uid), orderBy('saved','desc'), limit(PAGE_SIZE));
+      if (!loadMore) {
+        window._briefingHistory = [];
+        window._lastDoc = null;
+        window._allLoaded = false;
+      }
+    }
+    var snap = await getDocs(q);
+    if (snap.empty && !loadMore) {
+      // Try loading legacy docs (no uid field) that match passphrase
+      await loadLegacyDocs(uid);
+      if (!window._briefingHistory.length) {
+        window.lsLoadHistory();
+        setSyncStatus('ok','From cache');
+      }
+      return;
+    }
     snap.forEach(function(d) {
-      var parsed = JSON.parse(d.data().data);
-      history.push({ key: d.id, saved: d.data().saved, data: parsed });
+      try {
+        var parsed = JSON.parse(d.data().data);
+        window._briefingHistory.push({ key: d.id, saved: d.data().saved, data: parsed });
+      } catch(e) { console.warn('Skip corrupt doc:', d.id); }
     });
-    history.sort(function(a,b){ return b.saved-a.saved; });
-    window._briefingHistory = history;
+    if (snap.docs.length > 0) {
+      window._lastDoc = snap.docs[snap.docs.length - 1];
+    }
+    if (snap.docs.length < PAGE_SIZE) {
+      window._allLoaded = true;
+    }
+    window.lsSyncFromFirebase();
     setSyncStatus('ok','Synced');
     if (window.renderHistory) window.renderHistory();
-  } catch(e) { setSyncStatus('error','Load failed'); console.error(e); }
+  } catch(e) {
+    setSyncStatus('error','Load failed — using cache');
+    console.error(e);
+    window.lsLoadHistory();
+  }
 };
 
-// Initial load
-window.fbLoadHistory();
+// Migrate legacy docs (pre-auth) — loads docs with matching _ph and stamps them with uid
+async function loadLegacyDocs(uid) {
+  try {
+    var ph = window._sessionPhash || '';
+    if (!ph) return;
+    // Load all docs and filter client-side for legacy ones
+    var q = query(collection(db, COLL), orderBy('saved','desc'), limit(100));
+    var snap = await getDocs(q);
+    var migrated = 0;
+    for (var i = 0; i < snap.docs.length; i++) {
+      var d = snap.docs[i];
+      var docData = d.data();
+      // Legacy doc: has _ph but no uid, or uid is empty
+      if ((!docData.uid || docData.uid === '') && docData._ph === ph) {
+        try {
+          var parsed = JSON.parse(docData.data);
+          window._briefingHistory.push({ key: d.id, saved: docData.saved, data: parsed });
+          // Migrate: stamp with uid for future server-side filtering
+          await setDoc(doc(db, COLL, d.id), { uid: uid }, { merge: true });
+          migrated++;
+        } catch(e) { console.warn('Skip legacy doc:', d.id); }
+      }
+    }
+    if (migrated > 0) {
+      if (window.showToast) window.showToast('Migrated ' + migrated + ' legacy briefing' + (migrated>1?'s':'') + ' to your account','info');
+    }
+    if (window._briefingHistory.length) {
+      window.lsSyncFromFirebase();
+      setSyncStatus('ok','Synced');
+      if (window.renderHistory) window.renderHistory();
+    }
+  } catch(e) {
+    console.warn('Legacy migration failed:', e);
+  }
+}
+
+// Deferred initial load — waits for auth gate
+window._fbReady = true;
 </script>
 
 <style>
@@ -111,12 +268,40 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-heig
 .page.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
+/* ── TOAST ── */
+.toast{position:fixed;top:1rem;right:1rem;z-index:9999;font-family:var(--mono);font-size:12px;padding:.65rem 1.1rem;border-radius:8px;color:#fff;opacity:0;transform:translateY(-10px);transition:all .3s ease;pointer-events:none;max-width:380px}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{background:#2DB87A;border:1px solid rgba(45,184,122,.4)}
+.toast.error{background:#E85C5C;border:1px solid rgba(232,92,92,.4)}
+.toast.info{background:#3498DB;border:1px solid rgba(52,152,219,.4)}
+.toast.warn{background:#F0A832;border:1px solid rgba(240,168,50,.4);color:#1A1A1A}
+
+/* ── AUTH GATE ── */
+.auth-overlay{position:fixed;inset:0;z-index:10000;background:var(--bg);display:flex;align-items:center;justify-content:center;animation:fadeIn .3s ease}
+.auth-overlay.hidden{display:none}
+.auth-box{background:var(--bg2);border:1px solid var(--rim2);border-radius:16px;padding:2.5rem 2rem;width:90%;max-width:380px;text-align:center}
+.auth-box .auth-icon{font-size:48px;margin-bottom:1rem;opacity:.7}
+.auth-box .auth-title{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--gold);margin-bottom:.4rem}
+.auth-box .auth-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em;margin-bottom:1.5rem}
+.auth-box input{width:100%;background:var(--bg3);border:1px solid var(--rim2);border-radius:8px;padding:.7rem 1rem;font-family:var(--mono);font-size:14px;color:var(--txt);outline:none;text-align:center;letter-spacing:.15em;transition:border-color .15s;margin-bottom:.75rem}
+.auth-box input:focus{border-color:var(--gold)}
+.auth-box input::placeholder{color:var(--txt3);letter-spacing:.06em}
+.auth-box .auth-btn{width:100%;font-family:var(--mono);font-size:12px;padding:.65rem;background:var(--gold);color:var(--bg);border:none;border-radius:8px;cursor:pointer;font-weight:500;text-transform:uppercase;letter-spacing:.1em;transition:background .15s}
+.auth-box .auth-btn:hover{background:var(--gold2)}
+.auth-error{font-family:var(--mono);font-size:11px;color:var(--red);margin-top:.5rem;min-height:1.2em}
+.auth-mode-link{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:1rem;cursor:pointer;transition:color .15s}
+.auth-mode-link:hover{color:var(--gold)}
+.lock-btn{background:transparent;border:1px solid var(--rim2);border-radius:6px;padding:.35rem .6rem;cursor:pointer;font-size:14px;transition:all .15s}
+.lock-btn:hover{border-color:var(--red);background:var(--red-dim)}
+.lock-btn.unlocked{border-color:var(--green);color:var(--green)}
+
 /* ── HERO ── */
 .hero{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid var(--rim);border-radius:14px;padding:1.5rem 2rem;margin-bottom:1.5rem;position:relative;overflow:hidden}
 .hero::after{content:'📰';position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);font-size:80px;opacity:.04;pointer-events:none}
 .hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--gold);margin-bottom:.4rem;text-transform:uppercase}
 .hero-date{font-family:var(--serif);font-size:28px;font-weight:700;color:var(--txt);line-height:1.2;margin-bottom:.35rem}
 .hero-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em}
+.hero-timestamp{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.4rem;letter-spacing:.04em}
 .hero-divider{width:48px;height:2px;background:var(--gold);margin-top:.85rem}
 
 /* ── TICKER ── */
@@ -142,6 +327,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .btn-primary:hover{background:var(--gold2)}
 .btn-sec{font-family:var(--mono);font-size:11px;padding:.5rem .9rem;background:transparent;color:var(--txt3);border:1px solid var(--rim);border-radius:7px;cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.06em}
 .btn-sec:hover{border-color:var(--rim2);color:var(--txt)}
+.btn-danger{font-family:var(--mono);font-size:10px;padding:.35rem .7rem;background:transparent;color:var(--red);border:1px solid var(--red-dim);border-radius:6px;cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.05em}
+.btn-danger:hover{background:var(--red-dim);border-color:var(--red)}
 
 /* ── SCORE BAR ── */
 .score-bar{display:none;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.75rem 1rem;background:var(--bg2);border:1px solid var(--rim);border-radius:10px;margin-bottom:1.5rem}
@@ -153,7 +340,6 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sc-none{background:var(--rim);color:var(--txt3);border:1px solid var(--rim)}
 
 /* ── STORY CARDS ── */
-.sec-hdr{display:flex;align-items:center;gap:.6rem;margin-bottom:1rem}
 .sec-pip{width:4px;height:20px;border-radius:3px;flex-shrink:0}
 .sec-name{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt3)}
 .card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1.1rem 1.35rem;margin-bottom:.75rem;position:relative;overflow:hidden;transition:border-color .2s,transform .15s}
@@ -189,14 +375,18 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .search-input::placeholder{color:var(--txt3)}
 .search-icon{position:absolute;left:.85rem;top:50%;transform:translateY(-50%);color:var(--txt3);font-size:14px;pointer-events:none}
 .hist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem}
-.hist-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.25rem;cursor:pointer;transition:all .2s}
+.hist-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.25rem;cursor:pointer;transition:all .2s;position:relative}
 .hist-card:hover{border-color:var(--gold);transform:translateY(-1px)}
 .hist-date{font-family:var(--serif);font-size:17px;font-weight:700;color:var(--txt);margin-bottom:.3rem}
 .hist-meta{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;margin-bottom:.5rem}
 .hist-preview{font-size:12px;color:var(--txt2);line-height:1.55}
 .hist-chips{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.5rem}
 .hist-chip{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:20px;background:var(--bg3);color:var(--txt3);border:1px solid var(--rim)}
+.hist-delete{position:absolute;top:.75rem;right:.75rem;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--txt3);cursor:pointer;font-size:14px;padding:2px 6px;transition:all .15s;opacity:0}
+.hist-card:hover .hist-delete{opacity:1}
+.hist-delete:hover{color:var(--red);border-color:var(--red);background:var(--red-dim)}
 .empty-state{padding:3rem;text-align:center;color:var(--txt3);font-family:var(--mono);font-size:13px;letter-spacing:.06em}
+.load-more-wrap{text-align:center;margin-top:1.25rem}
 
 /* ── WEEKLY DIGEST ── */
 .digest-btn-wrap{margin-bottom:1.25rem}
@@ -206,6 +396,65 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .digest-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
 .digest-section-name{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem}
 .digest-item{font-size:13px;color:var(--txt2);line-height:1.65;margin-bottom:.3rem;padding-left:.75rem;border-left:2px solid var(--rim2)}
+
+/* ── KBD HINT ── */
+.kbd-hint{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.04em;opacity:.6}
+.kbd{background:var(--bg3);border:1px solid var(--rim2);border-radius:3px;padding:1px 5px;font-size:9px}
+
+/* ── TAB BADGES ── */
+.tab-badge{font-family:var(--mono);font-size:9px;background:var(--gold-dim);color:var(--gold);border-radius:10px;padding:0 5px;margin-left:4px;min-width:16px;display:inline-block;text-align:center;line-height:16px;vertical-align:middle}
+.mob-tab .tab-badge{font-size:8px;padding:0 4px;min-width:14px;line-height:14px;margin-left:0;margin-top:1px}
+
+/* ── COLLAPSIBLE SECTIONS ── */
+.sec-hdr{display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;cursor:pointer;user-select:none;transition:opacity .15s}
+.sec-hdr:hover{opacity:.8}
+.sec-toggle{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-left:auto;transition:transform .2s}
+.sec-hdr.collapsed .sec-toggle{transform:rotate(-90deg)}
+.sec-stories{transition:all .3s ease;overflow:hidden}
+.sec-stories.collapsed{max-height:0!important;opacity:0;margin-bottom:0;pointer-events:none}
+
+/* ── TREND TRACKER ── */
+.trend-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1.1rem 1.35rem;margin-bottom:.75rem}
+.trend-row{display:flex;align-items:center;gap:.75rem;margin-bottom:.65rem}
+.trend-row:last-child{margin-bottom:0}
+.trend-keyword{font-family:var(--mono);font-size:12px;color:var(--txt);min-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trend-bar-wrap{flex:1;height:16px;background:var(--bg3);border-radius:4px;overflow:hidden;position:relative}
+.trend-bar{height:100%;border-radius:4px;transition:width .4s ease;min-width:2px}
+.trend-count{font-family:var(--mono);font-size:10px;color:var(--txt3);min-width:24px;text-align:right}
+.trend-delta{font-family:var(--mono);font-size:10px;min-width:40px;text-align:right}
+.trend-up{color:var(--green)}.trend-down{color:var(--red)}.trend-same{color:var(--txt3)}
+.trend-new{font-family:var(--mono);font-size:8px;background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,168,76,.3);border-radius:3px;padding:0 4px;margin-left:5px;letter-spacing:.06em;vertical-align:middle;line-height:14px;display:inline-block}
+.trend-spark{display:flex;align-items:flex-end;gap:1px;height:14px;margin-left:6px;flex-shrink:0}
+.trend-spark-bar{width:3px;border-radius:1px;background:var(--blue);opacity:.5;min-height:1px;transition:height .3s}
+.trend-spark-bar.active{opacity:1}
+.trend-card-title{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-bottom:1rem;letter-spacing:.06em;text-transform:uppercase}
+.trend-mover{display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;background:var(--bg3);border-radius:8px;margin-bottom:.4rem}
+.trend-mover:last-child{margin-bottom:0}
+.trend-mover-arrow{font-size:14px;flex-shrink:0}
+.trend-mover-word{font-family:var(--mono);font-size:12px;color:var(--txt);flex:1}
+.trend-mover-delta{font-family:var(--mono);font-size:11px;font-weight:500;min-width:40px;text-align:right}
+.trend-rel-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+.trend-rel-box{text-align:center;padding:.75rem .5rem;background:var(--bg3);border-radius:8px;border:1px solid var(--rim)}
+.trend-rel-num{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1.2}
+.trend-rel-label{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-top:.2rem}
+.trend-rel-pct{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:.15rem}
+.trend-period-toggle{display:flex;gap:.3rem;margin-bottom:1rem}
+.trend-period-btn{font-family:var(--mono);font-size:10px;padding:.3rem .7rem;border-radius:5px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;text-transform:uppercase}
+.trend-period-btn.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.2)}
+.trend-period-btn:hover{border-color:var(--rim2);color:var(--txt)}
+
+/* ── PROMPT TEMPLATE ── */
+.prompt-toggle{font-family:var(--mono);font-size:10px;color:var(--txt3);cursor:pointer;transition:color .15s;display:inline-flex;align-items:center;gap:.3rem}
+.prompt-toggle:hover{color:var(--gold)}
+.prompt-box{display:none;background:var(--bg3);border:1px solid var(--rim2);border-radius:10px;padding:1rem;margin-top:.75rem;position:relative}
+.prompt-box.open{display:block}
+.prompt-text{font-family:var(--mono);font-size:11px;color:var(--txt2);line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:250px;overflow-y:auto}
+.prompt-copy-btn{position:absolute;top:.6rem;right:.6rem;font-family:var(--mono);font-size:9px;padding:.3rem .7rem;background:var(--gold);color:var(--bg);border:none;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.06em;transition:background .15s}
+.prompt-copy-btn:hover{background:var(--gold2)}
+.auto-load-banner{background:var(--green-dim);border:1px solid rgba(45,184,122,.25);border-radius:10px;padding:.65rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem;animation:fadeIn .4s ease}
+.auto-load-banner .alb-text{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:.04em}
+.auto-load-banner .alb-dismiss{background:transparent;border:none;color:var(--green);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px;transition:opacity .15s}
+.auto-load-banner .alb-dismiss:hover{opacity:.6}
 
 /* ── MOBILE ── */
 @media(max-width:768px){
@@ -219,13 +468,15 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   .tick{min-width:33%;border-bottom:1px solid var(--rim)}
   .hist-grid{grid-template-columns:1fr}
   .mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--rim);z-index:200;padding:.5rem 0 calc(.5rem + env(safe-area-inset-bottom))}
-  .mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:.35rem .2rem;border:none;background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--mono);font-size:8px;letter-spacing:.04em;text-transform:uppercase;transition:color .15s}
+  .mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:.35rem .2rem;border:none;background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;transition:color .15s}
   .mob-tab.active{color:var(--gold)}
-  .mob-tab-icon{font-size:16px;line-height:1}
-  body{padding-bottom:65px}
-  .paste-zone textarea{min-height:70px}
+  .mob-tab-icon{font-size:18px;line-height:1}
+  body{padding-bottom:70px}
+  .trend-rel-grid{grid-template-columns:repeat(2,1fr)}
+  .paste-zone textarea{min-height:120px}
   .card-hl{font-size:14px}
   .search-input{font-size:16px}
+  .hist-delete{opacity:1}
 }
 @media(min-width:769px){.mobile-nav{display:none}}
 
@@ -237,6 +488,23 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 </head>
 <body>
 
+<!-- AUTH GATE -->
+<div class="auth-overlay" id="auth-overlay">
+  <div class="auth-box">
+    <div class="auth-icon">🔐</div>
+    <div class="auth-title" id="auth-title">Set Passphrase</div>
+    <div class="auth-sub" id="auth-sub">Create a passphrase to secure your briefings</div>
+    <input type="password" id="auth-input" placeholder="Enter passphrase" autocomplete="off">
+    <input type="password" id="auth-confirm" placeholder="Confirm passphrase" autocomplete="off">
+    <button class="auth-btn" id="auth-btn" onclick="handleAuth()">SET PASSPHRASE</button>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-mode-link" id="auth-reset-link" style="display:none" onclick="resetPassphrase()">Forgot passphrase? Reset (clears local data)</div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-brand">INTELLIGENCE <span>// BOB</span></div>
@@ -246,11 +514,14 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab" data-page="ph" onclick="switchPage('ph',this)">🇵🇭 Philippines</button>
     <button class="ntab" data-page="ai" onclick="switchPage('ai',this)">🤖 AI & Markets</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
+    <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
   </div>
   <div class="nav-right">
     <div class="nav-clock" id="nav-clock">--:--</div>
     <div id="sync-status">○ Loading...</div>
+    <button class="lock-btn unlocked" id="lock-btn" onclick="lockSession()" title="Lock session">🔓</button>
     <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">🌙</button>
+    <button class="nav-btn" onclick="copyAsText()">📋 Copy</button>
     <button class="nav-btn" onclick="exportPDF()">⬇ PDF</button>
   </div>
 </nav>
@@ -262,6 +533,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div class="hero-eyebrow">Daily Intelligence Briefing</div>
     <div class="hero-date" id="hero-date">Paste briefing to begin</div>
     <div class="hero-sub">FORENSIC BI · AUSTRALIAN INSURANCE · PH CONSULTING</div>
+    <div class="hero-timestamp" id="hero-timestamp"></div>
     <div class="hero-divider"></div>
   </div>
 
@@ -271,15 +543,22 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div class="tick"><div class="tick-label">S&P 500</div><div class="tick-val" id="t-sp">—</div><div class="tick-move tick-flat" id="t-sp-m">—</div><div class="tick-bar" style="background:#2DB87A"></div></div>
   </div>
 
+  <div id="auto-load-banner"></div>
+
   <div class="paste-zone">
     <div class="paste-label">Paste Gemini Briefing JSON Here</div>
     <textarea id="raw-input" placeholder="Paste your Gemini daily briefing JSON here..."></textarea>
     <div class="paste-actions">
-      <span class="paste-hint">JSON → RENDER → AUTO-SAVE ↗</span>
+      <span class="paste-hint">JSON → RENDER → AUTO-SAVE ↗ <span class="kbd-hint">(<span class="kbd">Ctrl+Enter</span> to render)</span></span>
       <div class="btn-row">
+        <span class="prompt-toggle" onclick="togglePrompt()">📝 Gemini Prompt</span>
         <button class="btn-sec" onclick="clearBriefing()">CLEAR</button>
         <button class="btn-primary" onclick="renderBriefing()">RENDER ↗</button>
       </div>
+    </div>
+    <div class="prompt-box" id="prompt-box">
+      <button class="prompt-copy-btn" onclick="copyPrompt()">COPY PROMPT</button>
+      <div class="prompt-text" id="prompt-text"></div>
     </div>
   </div>
 
@@ -352,6 +631,25 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div id="history-out"><div class="empty-state">LOADING HISTORY...</div></div>
 </div>
 
+<!-- ═══════════════ TRENDS PAGE ═══════════════ -->
+<div class="page" id="page-trends">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Intelligence Analytics</div>
+    <div class="hero-date" style="font-size:22px">📈 Trend Tracker</div>
+    <div class="hero-sub" id="trends-sub">Recurring topics across briefings</div>
+    <div class="hero-divider"></div>
+  </div>
+
+  <div class="trend-period-toggle" id="trend-period-toggle">
+    <button class="trend-period-btn active" data-days="7" onclick="renderTrends(7,this)">7 DAYS</button>
+    <button class="trend-period-btn" data-days="14" onclick="renderTrends(14,this)">14 DAYS</button>
+    <button class="trend-period-btn" data-days="30" onclick="renderTrends(30,this)">30 DAYS</button>
+    <button class="trend-period-btn" data-days="0" onclick="renderTrends(0,this)">ALL TIME</button>
+  </div>
+
+  <div id="trends-out"><div class="empty-state">LOADING TRENDS...</div></div>
+</div>
+
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
@@ -359,6 +657,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <button class="mob-tab" id="mob-ph" onclick="switchPageMobile('ph',this)"><span class="mob-tab-icon">🇵🇭</span>PH</button>
   <button class="mob-tab" id="mob-ai" onclick="switchPageMobile('ai',this)"><span class="mob-tab-icon">🤖</span>AI</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
+  <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
 </div>
 
 <script>
@@ -374,7 +673,240 @@ var SEC_META = {
 var HIGH_KEYS = ['insurance','claim','forensic','business interruption','bsp','consulting','audit','cpa','underwriting','indemnity','assessment','reinsurance','aud','asx'];
 var MED_KEYS  = ['market','economy','inflation','trade','technology','gdp','rate','central bank','supply chain','disruption','peso','currency'];
 var _currentData = null;
+var _renderTimestamp = null;
 window._briefingHistory = [];
+window._sessionPhash = null;
+
+// ── AUTH GATE ──
+var AUTH_HASH_KEY = 'briefing_ph';
+var AUTH_SESSION_KEY = 'briefing_session';
+
+async function hashPassphrase(pass) {
+  var encoder = new TextEncoder();
+  var data = encoder.encode(pass + '_bob_briefing_salt_2026');
+  var hashBuf = await crypto.subtle.digest('SHA-256', data);
+  var hashArr = Array.from(new Uint8Array(hashBuf));
+  return hashArr.map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
+
+function initAuthGate() {
+  var storedHash = localStorage.getItem(AUTH_HASH_KEY);
+  var overlay = document.getElementById('auth-overlay');
+  var titleEl = document.getElementById('auth-title');
+  var subEl = document.getElementById('auth-sub');
+  var btnEl = document.getElementById('auth-btn');
+  var confirmEl = document.getElementById('auth-confirm');
+  var resetLink = document.getElementById('auth-reset-link');
+
+  if (storedHash) {
+    // Returning user — unlock mode
+    titleEl.textContent = 'Unlock Briefings';
+    subEl.textContent = 'Enter your passphrase to access your briefings';
+    btnEl.textContent = 'UNLOCK';
+    confirmEl.style.display = 'none';
+    resetLink.style.display = 'block';
+  } else {
+    // First time — set passphrase mode
+    titleEl.textContent = 'Set Passphrase';
+    subEl.textContent = 'Create a passphrase to secure your briefings';
+    btnEl.textContent = 'SET PASSPHRASE';
+    confirmEl.style.display = '';
+    resetLink.style.display = 'none';
+  }
+  overlay.classList.remove('hidden');
+
+  // Auto-focus input
+  document.getElementById('auth-input').focus();
+
+  // Enter key to submit
+  document.getElementById('auth-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') handleAuth();
+  });
+  document.getElementById('auth-confirm').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') handleAuth();
+  });
+}
+
+async function handleAuth() {
+  var storedHash = localStorage.getItem(AUTH_HASH_KEY);
+  var input = document.getElementById('auth-input').value;
+  var confirm = document.getElementById('auth-confirm').value;
+  var errorEl = document.getElementById('auth-error');
+  errorEl.textContent = '';
+
+  if (!input || input.length < 4) {
+    errorEl.textContent = 'Passphrase must be at least 4 characters';
+    return;
+  }
+
+  var hash = await hashPassphrase(input);
+
+  if (storedHash) {
+    // Verify mode
+    if (hash !== storedHash) {
+      errorEl.textContent = 'Incorrect passphrase';
+      document.getElementById('auth-input').value = '';
+      document.getElementById('auth-input').focus();
+      return;
+    }
+  } else {
+    // Set mode — need confirmation
+    if (input !== confirm) {
+      errorEl.textContent = 'Passphrases do not match';
+      return;
+    }
+    localStorage.setItem(AUTH_HASH_KEY, hash);
+  }
+
+  // Authenticated — store session hash and proceed
+  window._sessionPhash = hash;
+  document.getElementById('auth-overlay').classList.add('hidden');
+  document.getElementById('lock-btn').classList.add('unlocked');
+  document.getElementById('lock-btn').textContent = '🔓';
+
+  // Sign in with Firebase Anonymous Auth, then load data
+  if (window.fbSignIn) {
+    window.fbSignIn().then(function(uid) {
+      if (uid && window.fbLoadHistory) {
+        window.fbLoadHistory();
+      } else if (window.lsLoadHistory) {
+        window.lsLoadHistory();
+      }
+    });
+  } else if (window._fbReady && window.fbLoadHistory) {
+    window.fbLoadHistory();
+  }
+}
+
+function lockSession() {
+  window._sessionPhash = null;
+  window._firebaseUid = null;
+  window._briefingHistory = [];
+  _currentData = null;
+  document.getElementById('lock-btn').classList.remove('unlocked');
+  document.getElementById('lock-btn').textContent = '🔒';
+  document.getElementById('auth-input').value = '';
+  document.getElementById('auth-error').textContent = '';
+  // Reset UI
+  document.getElementById('today-out').innerHTML = '<div class="empty-state">AWAITING BRIEFING INPUT</div>';
+  document.getElementById('hero-date').textContent = 'Paste briefing to begin';
+  document.getElementById('hero-timestamp').textContent = '';
+  document.getElementById('score-bar').style.display = 'none';
+  document.getElementById('history-out').innerHTML = '<div class="empty-state">LOCKED</div>';
+  clearTabBadges();
+  // Show auth gate
+  initAuthGate();
+}
+
+function resetPassphrase() {
+  if (!confirm('This will clear your stored passphrase and local briefing cache. Firebase data will remain but you will need to set a new passphrase. Continue?')) return;
+  localStorage.removeItem(AUTH_HASH_KEY);
+  localStorage.removeItem('briefings_bob_cache');
+  window._sessionPhash = null;
+  window._briefingHistory = [];
+  // Reinitialize auth gate in set mode
+  initAuthGate();
+  document.getElementById('auth-error').textContent = '';
+}
+
+// ── JSON SCHEMA VALIDATION ──
+function validateBriefingSchema(data) {
+  var errors = [];
+  if (!data || typeof data !== 'object') {
+    return ['Data is not a valid object'];
+  }
+  if (!data.date || typeof data.date !== 'string') {
+    errors.push('Missing or invalid "date" field (expected string)');
+  }
+  if (!data.sections || typeof data.sections !== 'object') {
+    errors.push('Missing or invalid "sections" field');
+  } else {
+    var secs = Array.isArray(data.sections) ? data.sections : Object.keys(data.sections).map(function(k){ return {id:k,stories:data.sections[k]}; });
+    if (secs.length === 0) {
+      errors.push('No sections found in briefing');
+    }
+    secs.forEach(function(sec, i) {
+      var stories = sec.stories || [];
+      stories.forEach(function(st, j) {
+        if (!st.headline || typeof st.headline !== 'string' || !st.headline.trim()) {
+          errors.push('Section "' + (sec.id||i) + '" story ' + (j+1) + ': missing headline');
+        }
+        if (!st.body || typeof st.body !== 'string' || !st.body.trim()) {
+          errors.push('Section "' + (sec.id||i) + '" story ' + (j+1) + ': missing body');
+        }
+      });
+    });
+  }
+  if (data.markets && typeof data.markets === 'object') {
+    // Markets are optional but if present should have at least one value
+    var hasVal = data.markets.psei || data.markets.asx || data.markets.sp500;
+    if (!hasVal) {
+      errors.push('Markets object present but contains no values (psei/asx/sp500)');
+    }
+  }
+  return errors;
+}
+
+// Initialize auth on page load
+initAuthGate();
+
+// ── TOAST SYSTEM ──
+window.showToast = function(msg, type) {
+  type = type || 'info';
+  var toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = msg;
+  document.getElementById('toast-container').appendChild(toast);
+  requestAnimationFrame(function(){
+    toast.classList.add('show');
+  });
+  setTimeout(function(){
+    toast.classList.remove('show');
+    setTimeout(function(){ toast.remove(); }, 300);
+  }, 3000);
+};
+
+// ── LOCALSTORAGE FALLBACK ──
+var LS_KEY = 'briefings_bob_cache';
+
+window.lsSaveBriefing = function(dateKey, data) {
+  try {
+    var cache = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    cache[dateKey] = { data: data, saved: Date.now() };
+    localStorage.setItem(LS_KEY, JSON.stringify(cache));
+  } catch(e) { console.warn('localStorage save failed:', e); }
+};
+
+window.lsDeleteBriefing = function(dateKey) {
+  try {
+    var cache = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    delete cache[dateKey];
+    localStorage.setItem(LS_KEY, JSON.stringify(cache));
+  } catch(e) { console.warn('localStorage delete failed:', e); }
+};
+
+window.lsLoadHistory = function() {
+  try {
+    var cache = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    var history = [];
+    Object.keys(cache).forEach(function(key) {
+      history.push({ key: key, saved: cache[key].saved, data: cache[key].data });
+    });
+    history.sort(function(a,b){ return b.saved - a.saved; });
+    window._briefingHistory = history;
+    if (window.renderHistory) window.renderHistory();
+  } catch(e) { console.warn('localStorage load failed:', e); }
+};
+
+window.lsSyncFromFirebase = function() {
+  try {
+    var cache = {};
+    (window._briefingHistory || []).forEach(function(h) {
+      cache[h.key] = { data: h.data, saved: h.saved };
+    });
+    localStorage.setItem(LS_KEY, JSON.stringify(cache));
+  } catch(e) { console.warn('localStorage sync failed:', e); }
+};
 
 // ── CLOCK ──
 function tickClock() {
@@ -406,6 +938,7 @@ function switchPage(id, el) {
   var mob = document.getElementById('mob-'+id);
   if (mob) mob.classList.add('active');
   if (id==='history') renderHistory();
+  if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   window.scrollTo(0,0);
 }
 function switchPageMobile(id, el) {
@@ -418,12 +951,23 @@ function switchPageMobile(id, el) {
     if (t.getAttribute('data-page')===id) t.classList.add('active');
   });
   if (id==='history') renderHistory();
+  if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   window.scrollTo(0,0);
 }
 
 // ── SCORE ──
-function scoreRelevance(rel) {
-  if (!rel||!rel.trim()) return 'none';
+function scoreRelevance(st) {
+  // Support explicit relevance_level from Gemini JSON
+  if (st.relevance_level) {
+    var lvl = st.relevance_level.toLowerCase().trim();
+    if (lvl === 'high') return 'high';
+    if (lvl === 'med' || lvl === 'medium') return 'med';
+    if (lvl === 'low') return 'low';
+    if (lvl === 'none') return 'none';
+  }
+  // Fallback to keyword matching on relevance text
+  var rel = st.relevance || '';
+  if (!rel || !rel.trim()) return 'none';
   var r = rel.toLowerCase();
   if (r.includes('no direct relevance')) return 'none';
   if (HIGH_KEYS.some(function(k){ return r.includes(k); })) return 'high';
@@ -448,7 +992,13 @@ function normalise(d) {
   var secs = Array.isArray(d.sections) ? d.sections : Object.keys(d.sections).map(function(k){ return {id:k,stories:d.sections[k]}; });
   secs.forEach(function(sec) {
     r.sections[sec.id] = (sec.stories||[]).map(function(st) {
-      return {headline:st.headline||'', body:st.body||'', source:st.source||'', relevance:st.relevant===false?'':(st.relevance||'')};
+      return {
+        headline:st.headline||'',
+        body:st.body||'',
+        source:st.source||'',
+        relevance:st.relevant===false?'':(st.relevance||''),
+        relevance_level:st.relevance_level||''
+      };
     });
   });
   return r;
@@ -457,10 +1007,28 @@ function normalise(d) {
 // ── RENDER ──
 function renderBriefing() {
   var raw = document.getElementById('raw-input').value.trim();
-  if (!raw) return;
+  if (!raw) { showToast('Paste JSON first','warn'); return; }
   var data = parseInput(raw);
-  if (!data) { alert('Could not parse JSON. Check your Gemini output.'); return; }
+  if (!data) { showToast('Could not parse JSON — check your Gemini output','error'); return; }
+
+  // Schema validation
+  var schemaErrors = validateBriefingSchema(data);
+  if (schemaErrors.length > 0) {
+    showToast('Schema issues: ' + schemaErrors[0] + (schemaErrors.length > 1 ? ' (+' + (schemaErrors.length-1) + ' more)' : ''), 'warn');
+    // Allow render with warnings (non-blocking) but log all
+    console.warn('Briefing schema validation:', schemaErrors);
+  }
+
+  // Validate: count sections and stories
+  var secCount = Object.keys(data.sections).length;
+  var storyCount = Object.values(data.sections).reduce(function(a,b){ return a+(b||[]).length; },0);
+  if (secCount === 0 || storyCount === 0) {
+    showToast('JSON parsed but contains no sections/stories','warn');
+    return;
+  }
+
   _currentData = data;
+  _renderTimestamp = new Date();
 
   // Hero date
   if (data.date) {
@@ -469,6 +1037,12 @@ function renderBriefing() {
       var el = document.getElementById(id);
       if (el) el.textContent = data.date;
     });
+  }
+
+  // Timestamp
+  var tsEl = document.getElementById('hero-timestamp');
+  if (tsEl) {
+    tsEl.textContent = 'Rendered at ' + _renderTimestamp.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) + ' PHT · ' + secCount + ' sections · ' + storyCount + ' stories';
   }
 
   // Ticker
@@ -484,13 +1058,13 @@ function renderBriefing() {
 
   Object.keys(SEC_META).forEach(function(id) {
     var meta = SEC_META[id];
-    if (id==='watch') return; // handled separately
+    if (id==='watch') return;
     var stories = data.sections[id] || [];
     if (!stories.length) return;
 
     var secHTML = '<div class="sec-hdr"><div class="sec-pip" style="background:'+meta.pip+'"></div><div class="sec-name">'+meta.label+'</div></div>';
     stories.forEach(function(st) {
-      var score = scoreRelevance(st.relevance);
+      var score = scoreRelevance(st);
       counts[score]++;
       var bc = {high:'rel-high',med:'rel-med',low:'rel-low',none:'rel-none-b'}[score];
       secHTML += '<div class="card"><div class="card-accent" style="background:'+meta.pip+'"></div>';
@@ -527,6 +1101,16 @@ function renderBriefing() {
   });
   document.getElementById('score-bar').style.display = 'flex';
 
+  showToast(storyCount + ' stories rendered across ' + secCount + ' sections', 'ok');
+
+  // Update tab badges with story counts
+  updateTabBadges(data);
+
+  // Make sections collapsible (all pages including sub-pages)
+  setTimeout(function(){
+    attachCollapsible();
+  }, 50);
+
   // Auto-save to Firebase
   autoSave(data);
 }
@@ -541,25 +1125,46 @@ function setTick(vi,mi,val,mov) {
   }
 }
 
-function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function clearBriefing() {
   document.getElementById('raw-input').value='';
   document.getElementById('hero-date').textContent='Paste briefing to begin';
+  document.getElementById('hero-timestamp').textContent='';
   document.getElementById('today-out').innerHTML='<div class="empty-state">AWAITING BRIEFING INPUT</div>';
   document.getElementById('score-bar').style.display='none';
   ['t-psei','t-asx','t-sp'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent='—'; });
   ['t-psei-m','t-asx-m','t-sp-m'].forEach(function(id){ var e=document.getElementById(id); if(e){e.textContent='—';e.className='tick-move tick-flat';} });
   _currentData=null;
+  _renderTimestamp=null;
+  clearTabBadges();
 }
+
+// ── KEYBOARD SHORTCUTS ──
+document.addEventListener('keydown', function(e) {
+  // Ctrl+Enter or Cmd+Enter to render
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    var active = document.activeElement;
+    if (active && active.id === 'raw-input') {
+      e.preventDefault();
+      renderBriefing();
+    }
+  }
+});
 
 // ── AUTO SAVE TO FIREBASE ──
 function autoSave(data) {
-  if (!window.fbSaveBriefing) return;
   var key = (data.date||new Date().toISOString().split('T')[0]).replace(/[^a-zA-Z0-9]/g,'-');
-  window.fbSaveBriefing(key, data);
-  // Refresh history cache
-  setTimeout(function(){ if(window.fbLoadHistory) window.fbLoadHistory(); }, 1500);
+  // Always save to localStorage first (instant)
+  if (window.lsSaveBriefing) window.lsSaveBriefing(key, data);
+  // Only save to Firebase if authenticated with UID
+  if (window._firebaseUid && window.fbSaveBriefing) {
+    window.fbSaveBriefing(key, data).then(function() {
+      if (window.fbLoadHistory) window.fbLoadHistory();
+    });
+  } else if (!window._firebaseUid) {
+    showToast('Saved locally only — unlock to sync to cloud','warn');
+  }
 }
 
 // ── HISTORY ──
@@ -568,7 +1173,7 @@ window.renderHistory = function() {
   var countEl = document.getElementById('hist-count-sub');
   if (countEl) countEl.textContent = history.length+' briefing'+(history.length!==1?'s':'')+' saved';
 
-  // Show digest button if 5+ this week
+  // Show digest button if 2+ this week
   var now = new Date();
   var weekStart = new Date(now); weekStart.setDate(now.getDate()-7);
   var thisWeek = history.filter(function(h){ return new Date(h.saved) >= weekStart; });
@@ -613,7 +1218,9 @@ function renderHistoryList(history, search) {
     }
     var storyCount = Object.values(d.sections||{}).reduce(function(a,b){ return a+(b||[]).length; },0);
     var saved = new Date(h.saved).toLocaleDateString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-    html += '<div class="hist-card" onclick="loadBriefing(\''+h.key+'\')">';
+    // Use data-key attribute instead of inline onclick to prevent XSS
+    html += '<div class="hist-card" data-key="'+esc(h.key)+'">';
+    html += '<button class="hist-delete" data-delete-key="'+esc(h.key)+'" title="Delete briefing">✕</button>';
     html += '<div class="hist-date">'+esc(d.date||h.key)+'</div>';
     html += '<div class="hist-meta">Saved '+saved+' PHT</div>';
     if (preview) html += '<div class="hist-preview">'+esc(preview)+(preview.length>=80?'...':'')+'</div>';
@@ -622,22 +1229,63 @@ function renderHistoryList(history, search) {
     html += '</div></div>';
   });
   html += '</div>';
+
+  // Load more button (pagination)
+  if (!window._allLoaded && !search.trim()) {
+    html += '<div class="load-more-wrap"><button class="btn-sec" onclick="loadMoreHistory()">LOAD MORE</button></div>';
+  }
+
   el.innerHTML = html;
+
+  // Attach click handlers via event delegation (XSS-safe)
+  el.querySelectorAll('.hist-card').forEach(function(card) {
+    card.addEventListener('click', function(e) {
+      // Don't load briefing if delete button was clicked
+      if (e.target.closest('.hist-delete')) return;
+      var key = card.getAttribute('data-key');
+      if (key) loadBriefing(key);
+    });
+  });
+  el.querySelectorAll('.hist-delete').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var key = btn.getAttribute('data-delete-key');
+      if (key) deleteBriefing(key);
+    });
+  });
 }
 
 function searchBriefings(q) {
   renderHistoryList(window._briefingHistory||[], q);
 }
 
+function loadMoreHistory() {
+  if (window.fbLoadHistory) window.fbLoadHistory(true);
+}
+
 function loadBriefing(key) {
   var h = (window._briefingHistory||[]).find(function(x){ return x.key===key; });
   if (!h) return;
   _currentData = h.data;
-  // Simulate render without re-pasting
   var fakeRaw = JSON.stringify(h.data);
   document.getElementById('raw-input').value = fakeRaw;
   renderBriefing();
   switchPage('today', document.querySelector('.ntab[data-page="today"]'));
+}
+
+function deleteBriefing(key) {
+  var h = (window._briefingHistory||[]).find(function(x){ return x.key===key; });
+  var label = h ? (h.data.date || key) : key;
+  if (!confirm('Delete briefing "' + label + '"?')) return;
+  if (window.fbDeleteBriefing) {
+    window.fbDeleteBriefing(key);
+  } else {
+    // Offline: delete from localStorage only
+    window.lsDeleteBriefing(key);
+    window._briefingHistory = (window._briefingHistory||[]).filter(function(x){ return x.key !== key; });
+    renderHistory();
+    showToast('Briefing deleted (local only)','ok');
+  }
 }
 
 // ── WEEKLY DIGEST ──
@@ -646,7 +1294,7 @@ function generateDigest() {
   var now = new Date();
   var weekStart = new Date(now); weekStart.setDate(now.getDate()-7);
   var thisWeek = history.filter(function(h){ return new Date(h.saved)>=weekStart; });
-  if (!thisWeek.length) { alert('No briefings from this week to digest.'); return; }
+  if (!thisWeek.length) { showToast('No briefings from this week to digest','warn'); return; }
 
   var digest = {global:[], ph:[], ai:[], markets:[], ev:[], watch:[]};
   thisWeek.forEach(function(h) {
@@ -654,7 +1302,7 @@ function generateDigest() {
     Object.keys(d.sections||{}).forEach(function(k) {
       if (digest[k]) {
         (d.sections[k]||[]).filter(function(st){
-          return scoreRelevance(st.relevance)==='high';
+          return scoreRelevance(st)==='high';
         }).forEach(function(st){
           digest[k].push({date:d.date, headline:st.headline, body:st.body});
         });
@@ -668,8 +1316,10 @@ function generateDigest() {
   html += '<div style="font-family:var(--mono);font-size:10px;color:var(--txt3);margin-bottom:1rem">'+thisWeek.length+' briefings · '+new Date(thisWeek[thisWeek.length-1].saved).toLocaleDateString()+' – '+new Date(thisWeek[0].saved).toLocaleDateString()+'</div>';
 
   var labels = {global:'🌍 Global',ph:'🇵🇭 Philippines',ai:'🤖 AI & Tech',markets:'📈 Markets',ev:'⚡ EV Industry',watch:'🔭 Watch Items'};
+  var hasContent = false;
   Object.keys(labels).forEach(function(k) {
     if (!digest[k] || !digest[k].length) return;
+    hasContent = true;
     html += '<div class="digest-section">';
     html += '<div class="digest-section-name">'+labels[k]+'</div>';
     digest[k].slice(0,5).forEach(function(item) {
@@ -677,40 +1327,69 @@ function generateDigest() {
     });
     html += '</div>';
   });
+  if (!hasContent) {
+    html += '<div class="empty-state" style="padding:1rem">No high-relevance items this week</div>';
+  }
   html += '</div>';
 
   document.getElementById('digest-out').innerHTML = html;
   document.getElementById('digest-out').scrollIntoView({behavior:'smooth'});
 }
 
+// ── UNICODE HELPERS FOR PDF ──
+function pdfSafe(s) {
+  // Replace common Unicode symbols with ASCII equivalents for PDF
+  return (s||'')
+    .replace(/[\u2018\u2019\u201A]/g, "'")
+    .replace(/[\u201C\u201D\u201E]/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2022/g, '*')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\u20B1/g, 'PHP ')
+    .replace(/\u00F1/g, 'n').replace(/\u00D1/g, 'N')
+    .replace(/[\u00E0-\u00E5]/g, 'a').replace(/[\u00C0-\u00C5]/g, 'A')
+    .replace(/[\u00E8-\u00EB]/g, 'e').replace(/[\u00C8-\u00CB]/g, 'E')
+    .replace(/[\u00EC-\u00EF]/g, 'i').replace(/[\u00CC-\u00CF]/g, 'I')
+    .replace(/[\u00F2-\u00F6]/g, 'o').replace(/[\u00D2-\u00D6]/g, 'O')
+    .replace(/[\u00F9-\u00FC]/g, 'u').replace(/[\u00D9-\u00DC]/g, 'U')
+    .replace(/[^\x00-\x7F]/g, '');
+}
+
 // ── PDF EXPORT ──
 function exportPDF() {
-  if (!_currentData) { alert('Render a briefing first.'); return; }
+  if (!_currentData) { showToast('Render a briefing first','warn'); return; }
   try {
     var doc = new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
     var ML=15,CW=180,y=16;
-    function chk(h){ if(y+h>282){doc.addPage();y=16;} }
-    function ln(text,size,color,bold,x,w){
-      doc.setFontSize(size); doc.setTextColor(color[0],color[1],color[2]); doc.setFont('helvetica',bold?'bold':'normal');
-      var lines=doc.splitTextToSize((text||'').replace(/[^\x00-\x7F]/g,''),w||CW);
-      return lines;
+    var pageCount = 1;
+    function chk(h){
+      if(y+h>275){
+        addPageFooter(doc, pageCount, ML, CW);
+        doc.addPage();
+        pageCount++;
+        y=16;
+      }
     }
-    function draw(lines,x,yy,lh){ lines.forEach(function(l){doc.text(l,x,yy);yy+=lh;}); return yy; }
 
     // Header
     doc.setFillColor(201,168,76); doc.rect(ML,y,CW,.5,'F'); y+=4;
-    y=draw(ln('DAILY INTELLIGENCE BRIEFING',9,[170,130,30],true),ML,y,5); y+=2;
-    y=draw(ln(_currentData.date||'',18,[13,15,20],true),ML,y,9); y+=2;
-    y=draw(ln('FORENSIC BI — AUSTRALIAN INSURANCE — PH CONSULTING',8,[140,140,140]),ML,y,4); y+=2;
+    doc.setFontSize(9); doc.setTextColor(170,130,30); doc.setFont('helvetica','bold');
+    doc.text('DAILY INTELLIGENCE BRIEFING',ML,y); y+=5;
+    doc.setFontSize(18); doc.setTextColor(13,15,20);
+    var dateLines=doc.splitTextToSize(pdfSafe(_currentData.date||''),CW);
+    dateLines.forEach(function(l){doc.text(l,ML,y);y+=9;}); y+=2;
+    doc.setFontSize(8); doc.setTextColor(140,140,140); doc.setFont('helvetica','normal');
+    doc.text('FORENSIC BI  -  AUSTRALIAN INSURANCE  -  PH CONSULTING',ML,y); y+=2;
     doc.setFillColor(201,168,76); doc.rect(ML,y,CW,.5,'F'); y+=6;
 
     // Ticker
     if (_currentData.markets) {
       var m=_currentData.markets;
       doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
-      doc.text('PSEi: '+(m.psei||'—')+' '+(m.psei_move||''), ML, y);
-      doc.text('ASX 200: '+(m.asx||'—')+' '+(m.asx_move||''), ML+62, y);
-      doc.text('S&P 500: '+(m.sp500||'—')+' '+(m.sp500_move||''), ML+124, y);
+      doc.text('PSEi: '+pdfSafe(m.psei||'—')+' '+pdfSafe(m.psei_move||''), ML, y);
+      doc.text('ASX 200: '+pdfSafe(m.asx||'—')+' '+pdfSafe(m.asx_move||''), ML+62, y);
+      doc.text('S&P 500: '+pdfSafe(m.sp500||'—')+' '+pdfSafe(m.sp500_move||''), ML+124, y);
       y+=8;
     }
 
@@ -727,9 +1406,9 @@ function exportPDF() {
       doc.text(meta.label, ML, y); y+=6;
 
       stories.forEach(function(st) {
-        var hlLines=doc.splitTextToSize((st.headline||'').replace(/[^\x00-\x7F]/g,''),CW-4);
-        var bdLines=doc.splitTextToSize((st.body||'').replace(/[^\x00-\x7F]/g,''),CW-4);
-        var relTxt=(st.relevance||'').replace(/[^\x00-\x7F]/g,'');
+        var hlLines=doc.splitTextToSize(pdfSafe(st.headline),CW-4);
+        var bdLines=doc.splitTextToSize(pdfSafe(st.body),CW-4);
+        var relTxt=pdfSafe(st.relevance);
         var relLines=relTxt?doc.splitTextToSize('Bob: '+relTxt,CW-4):[];
         var cardH=hlLines.length*5+3+bdLines.length*4+2+(st.source?4:0)+(relLines.length?relLines.length*3.5+3:0)+8;
         chk(cardH);
@@ -741,7 +1420,7 @@ function exportPDF() {
         hlLines.forEach(function(l){doc.text(l,ML+5,cy);cy+=5;}); cy+=2;
         doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(70,70,70);
         bdLines.forEach(function(l){doc.text(l,ML+5,cy);cy+=4;}); cy+=1;
-        if (st.source){doc.setFontSize(7);doc.setTextColor(150,150,150);doc.text(st.source.replace(/[^\x00-\x7F]/g,''),ML+5,cy);cy+=4;}
+        if (st.source){doc.setFontSize(7);doc.setTextColor(150,150,150);doc.text(pdfSafe(st.source),ML+5,cy);cy+=4;}
         if (relLines.length){doc.setDrawColor(230,230,230);doc.line(ML+5,cy,ML+CW-5,cy);cy+=2.5;doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(140,112,30);relLines.forEach(function(l){doc.text(l,ML+5,cy);cy+=3.5;});}
         y+=cardH+4;
       });
@@ -754,7 +1433,7 @@ function exportPDF() {
       doc.setFillColor(232,92,92); doc.rect(ML,y,CW,.5,'F'); y+=3;
       doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(80,80,80);
       doc.text('ONE THING TO WATCH', ML, y); y+=5;
-      var wLines=doc.splitTextToSize((_currentData.watch).replace(/[^\x00-\x7F]/g,''),CW-4);
+      var wLines=doc.splitTextToSize(pdfSafe(_currentData.watch),CW-4);
       var wH=wLines.length*4+8;
       doc.setFillColor(255,248,248); doc.setDrawColor(232,92,92);
       doc.roundedRect(ML,y,CW,wH,2,2,'FD');
@@ -764,10 +1443,486 @@ function exportPDF() {
       y+=wH+5;
     }
 
-    var fname='Bob_Briefing_'+(_currentData.date||'').replace(/[^\w]/g,'_').replace(/[^\x00-\x7F]/g,'')+'.pdf';
+    // Add footer to last page
+    addPageFooter(doc, pageCount, ML, CW);
+
+    var fname='Bob_Briefing_'+pdfSafe(_currentData.date||'').replace(/[^\w]/g,'_')+'.pdf';
     doc.save(fname);
-  } catch(err){ alert('PDF error: '+err.message); }
+    showToast('PDF exported: '+fname,'ok');
+  } catch(err){ showToast('PDF error: '+err.message,'error'); }
 }
+
+function addPageFooter(doc, pageNum, ml, cw) {
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7);
+  doc.setTextColor(180,180,180);
+  doc.text('Bob\'s Daily Intelligence Briefing', ml, 290);
+  doc.text('Page ' + pageNum, ml + cw - doc.getTextWidth('Page ' + pageNum), 290);
+}
+
+// ── TAB BADGES (story counts) ──
+function updateTabBadges(data) {
+  var pageCounts = {today:0, global:0, ph:0, ai:0};
+  Object.keys(SEC_META).forEach(function(id) {
+    if (id==='watch') return;
+    var count = (data.sections[id]||[]).length;
+    var pg = SEC_META[id].page;
+    if (pageCounts[pg] !== undefined) pageCounts[pg] += count;
+    pageCounts.today += count;
+  });
+  // Update desktop tabs
+  document.querySelectorAll('.ntab[data-page]').forEach(function(tab) {
+    var pg = tab.getAttribute('data-page');
+    var existing = tab.querySelector('.tab-badge');
+    if (existing) existing.remove();
+    if (pageCounts[pg] !== undefined && pageCounts[pg] > 0) {
+      var badge = document.createElement('span');
+      badge.className = 'tab-badge';
+      badge.textContent = pageCounts[pg];
+      tab.appendChild(badge);
+    }
+  });
+  // Update mobile tabs
+  document.querySelectorAll('.mob-tab[id]').forEach(function(tab) {
+    var pg = tab.id.replace('mob-','');
+    var existing = tab.querySelector('.tab-badge');
+    if (existing) existing.remove();
+    if (pageCounts[pg] !== undefined && pageCounts[pg] > 0) {
+      var badge = document.createElement('span');
+      badge.className = 'tab-badge';
+      badge.textContent = pageCounts[pg];
+      tab.appendChild(badge);
+    }
+  });
+}
+
+function clearTabBadges() {
+  document.querySelectorAll('.tab-badge').forEach(function(b){ b.remove(); });
+}
+
+// ── COLLAPSIBLE SECTIONS ──
+function attachCollapsible() {
+  document.querySelectorAll('.sec-hdr').forEach(function(hdr) {
+    // Skip if already has toggle
+    if (hdr.querySelector('.sec-toggle')) return;
+    var toggle = document.createElement('span');
+    toggle.className = 'sec-toggle';
+    toggle.textContent = '▼';
+    hdr.appendChild(toggle);
+    hdr.addEventListener('click', function() {
+      var parent = hdr.parentElement;
+      var stories = parent.querySelectorAll('.card, .watch-card');
+      var isCollapsed = hdr.classList.contains('collapsed');
+      if (isCollapsed) {
+        hdr.classList.remove('collapsed');
+        stories.forEach(function(s){ s.style.display=''; });
+      } else {
+        hdr.classList.add('collapsed');
+        stories.forEach(function(s){ s.style.display='none'; });
+      }
+    });
+  });
+}
+
+// ── COPY AS TEXT/MARKDOWN ──
+function copyAsText() {
+  if (!_currentData) { showToast('Render a briefing first','warn'); return; }
+  var d = _currentData;
+  var lines = [];
+  lines.push('# ' + (d.date || 'Daily Intelligence Briefing'));
+  lines.push('FORENSIC BI | AUSTRALIAN INSURANCE | PH CONSULTING');
+  lines.push('');
+
+  // Markets
+  if (d.markets) {
+    lines.push('## Markets');
+    if (d.markets.psei) lines.push('- PSEi: ' + d.markets.psei + ' ' + (d.markets.psei_move||''));
+    if (d.markets.asx) lines.push('- ASX 200: ' + d.markets.asx + ' ' + (d.markets.asx_move||''));
+    if (d.markets.sp500) lines.push('- S&P 500: ' + d.markets.sp500 + ' ' + (d.markets.sp500_move||''));
+    lines.push('');
+  }
+
+  // Sections
+  var secOrder = ['global','ph','ai','markets','ev'];
+  secOrder.forEach(function(id) {
+    var stories = (d.sections[id]||[]);
+    if (!stories.length) return;
+    var meta = SEC_META[id];
+    lines.push('## ' + meta.label);
+    stories.forEach(function(st) {
+      var score = scoreRelevance(st);
+      lines.push('### ' + st.headline + ' [' + score.toUpperCase() + ']');
+      lines.push(st.body);
+      if (st.source) lines.push('Source: ' + st.source);
+      if (st.relevance && score !== 'none') lines.push('> Bob: ' + st.relevance);
+      lines.push('');
+    });
+  });
+
+  // Watch
+  if (d.watch) {
+    lines.push('## ONE THING TO WATCH');
+    lines.push(d.watch);
+    if (d.watch_source) lines.push('Source: ' + d.watch_source);
+    lines.push('');
+  }
+
+  var text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Briefing copied to clipboard as markdown','ok');
+  }).catch(function() {
+    // Fallback for older browsers
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Briefing copied to clipboard','ok');
+  });
+}
+
+// ── TREND TRACKER ──
+function renderTrends(days, btnEl) {
+  // Update active button
+  if (btnEl) {
+    document.querySelectorAll('.trend-period-btn').forEach(function(b){ b.classList.remove('active'); });
+    btnEl.classList.add('active');
+  }
+
+  var history = window._briefingHistory || [];
+  if (!history.length) {
+    document.getElementById('trends-out').innerHTML = '<div class="empty-state">NO BRIEFING HISTORY FOR TRENDS</div>';
+    return;
+  }
+
+  var now = new Date();
+  var cutoff = days > 0 ? new Date(now.getTime() - days * 86400000) : new Date(0);
+  var filtered = history.filter(function(h){ return new Date(h.saved) >= cutoff; });
+
+  if (!filtered.length) {
+    document.getElementById('trends-out').innerHTML = '<div class="empty-state">NO BRIEFINGS IN THIS PERIOD</div>';
+    return;
+  }
+
+  var stopWords = ['the','a','an','to','of','in','for','and','is','on','at','by','with','from','as','it','its','that','this','are','was','be','has','have','had','will','been','or','but','not','all','also','than','into','over','new','more','no','up','out','after','about','could','would','may','can','one','two','said','says','they','their','he','she','we','our','you','which','what','when','how','who','where','why','other','some','between','under','during','through','while','because','per','year','been','most','being','still','just','set','below','above','around','since','last','next','first','among','three','four','five','six','billion','million','percent','according','expected','growth','including'];
+
+  // Build per-day date keys for sparklines
+  var dayKeys = [];
+  var numDays = days > 0 ? Math.min(days, 30) : 30;
+  for (var di = numDays - 1; di >= 0; di--) {
+    var dd = new Date(now.getTime() - di * 86400000);
+    dayKeys.push(dd.toISOString().split('T')[0]);
+  }
+
+  // Count keyword frequency + per-day tracking
+  var wordFreq = {};
+  var wordDays = {}; // word -> { 'YYYY-MM-DD': count }
+
+  function extractWords(text) {
+    return text.toLowerCase().replace(/[^a-z\s]/g,' ').split(/\s+/).filter(function(w){ return w.length >= 3 && stopWords.indexOf(w)===-1; });
+  }
+
+  filtered.forEach(function(h) {
+    var d = h.data;
+    var dateKey = new Date(h.saved).toISOString().split('T')[0];
+    Object.keys(d.sections||{}).forEach(function(k) {
+      (d.sections[k]||[]).forEach(function(st) {
+        var text = (st.headline||'') + ' ' + (st.body||'');
+        var words = extractWords(text);
+        // 2-word phrases from headlines
+        var hlWords = (st.headline||'').toLowerCase().replace(/[^a-z\s]/g,' ').split(/\s+/).filter(function(w){ return w.length >= 3 && stopWords.indexOf(w)===-1; });
+        for (var i=0; i<hlWords.length-1; i++) {
+          var phrase = hlWords[i]+' '+hlWords[i+1];
+          wordFreq[phrase] = (wordFreq[phrase]||0) + 2;
+          if (!wordDays[phrase]) wordDays[phrase] = {};
+          wordDays[phrase][dateKey] = (wordDays[phrase][dateKey]||0) + 2;
+        }
+        words.forEach(function(w) {
+          wordFreq[w] = (wordFreq[w]||0) + 1;
+          if (!wordDays[w]) wordDays[w] = {};
+          wordDays[w][dateKey] = (wordDays[w][dateKey]||0) + 1;
+        });
+      });
+    });
+  });
+
+  // Sort by frequency, take top 25
+  var sorted = Object.keys(wordFreq).map(function(k){ return {word:k,count:wordFreq[k]}; })
+    .sort(function(a,b){ return b.count - a.count; })
+    .slice(0, 25);
+
+  if (!sorted.length) {
+    document.getElementById('trends-out').innerHTML = '<div class="empty-state">NO KEYWORD DATA</div>';
+    return;
+  }
+
+  var maxCount = sorted[0].count;
+
+  // Previous period comparison
+  var prevCutoff = days > 0 ? new Date(cutoff.getTime() - days * 86400000) : new Date(0);
+  var prevFiltered = days > 0 ? history.filter(function(h){ var s=new Date(h.saved); return s >= prevCutoff && s < cutoff; }) : [];
+  var prevFreq = {};
+  prevFiltered.forEach(function(h) {
+    var d = h.data;
+    Object.keys(d.sections||{}).forEach(function(k) {
+      (d.sections[k]||[]).forEach(function(st) {
+        extractWords((st.headline||'')+' '+(st.body||'')).forEach(function(w){
+          prevFreq[w] = (prevFreq[w]||0) + 1;
+        });
+      });
+    });
+  });
+  var hasPrev = days > 0 && prevFiltered.length > 0;
+
+  // ── RELEVANCE BREAKDOWN ──
+  var relCounts = {high:0, med:0, low:0, none:0};
+  var totalStories = 0;
+  filtered.forEach(function(h) {
+    Object.keys(h.data.sections||{}).forEach(function(k) {
+      (h.data.sections[k]||[]).forEach(function(st) {
+        totalStories++;
+        var score = scoreRelevance(st);
+        relCounts[score]++;
+      });
+    });
+  });
+
+  var html = '';
+
+  // Relevance distribution card
+  html += '<div class="trend-card">';
+  html += '<div class="trend-card-title">Relevance Distribution · ' + totalStories + ' stories</div>';
+  html += '<div class="trend-rel-grid">';
+  var relMeta = [
+    {key:'high', label:'High', color:'var(--green)'},
+    {key:'med', label:'Medium', color:'#F0A832'},
+    {key:'low', label:'Low', color:'var(--purple)'},
+    {key:'none', label:'None', color:'var(--txt3)'}
+  ];
+  relMeta.forEach(function(rm) {
+    var pct = totalStories > 0 ? Math.round((relCounts[rm.key]/totalStories)*100) : 0;
+    html += '<div class="trend-rel-box">';
+    html += '<div class="trend-rel-num" style="color:'+rm.color+'">'+relCounts[rm.key]+'</div>';
+    html += '<div class="trend-rel-label">'+rm.label+'</div>';
+    html += '<div class="trend-rel-pct">'+pct+'%</div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  // ── TOP MOVERS (if previous period data exists) ──
+  if (hasPrev) {
+    // Calculate all deltas for words that appear in either period
+    var allWords = {};
+    sorted.forEach(function(item){ allWords[item.word] = true; });
+    Object.keys(prevFreq).forEach(function(w){ allWords[w] = true; });
+    var deltas = Object.keys(allWords).map(function(w) {
+      var curr = wordFreq[w] || 0;
+      var prev = prevFreq[w] || 0;
+      return {word:w, curr:curr, prev:prev, delta:curr-prev, isNew:prev===0 && curr>0};
+    }).filter(function(d){ return d.delta !== 0; });
+
+    var gainers = deltas.filter(function(d){ return d.delta > 0; }).sort(function(a,b){ return b.delta - a.delta; }).slice(0,5);
+    var droppers = deltas.filter(function(d){ return d.delta < 0; }).sort(function(a,b){ return a.delta - b.delta; }).slice(0,5);
+
+    if (gainers.length || droppers.length) {
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">';
+
+      // Gainers
+      html += '<div class="trend-card" style="margin-bottom:0">';
+      html += '<div class="trend-card-title">Trending Up</div>';
+      if (gainers.length) {
+        gainers.forEach(function(g) {
+          html += '<div class="trend-mover">';
+          html += '<div class="trend-mover-arrow" style="color:var(--green)">↑</div>';
+          html += '<div class="trend-mover-word">' + esc(g.word);
+          if (g.isNew) html += ' <span class="trend-new">NEW</span>';
+          html += '</div>';
+          html += '<div class="trend-mover-delta trend-up">+' + g.delta + '</div>';
+          html += '</div>';
+        });
+      } else {
+        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--txt3);padding:.5rem">No gainers</div>';
+      }
+      html += '</div>';
+
+      // Droppers
+      html += '<div class="trend-card" style="margin-bottom:0">';
+      html += '<div class="trend-card-title">Trending Down</div>';
+      if (droppers.length) {
+        droppers.forEach(function(g) {
+          html += '<div class="trend-mover">';
+          html += '<div class="trend-mover-arrow" style="color:var(--red)">↓</div>';
+          html += '<div class="trend-mover-word">' + esc(g.word) + '</div>';
+          html += '<div class="trend-mover-delta trend-down">' + g.delta + '</div>';
+          html += '</div>';
+        });
+      } else {
+        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--txt3);padding:.5rem">No drops</div>';
+      }
+      html += '</div>';
+      html += '</div>';
+    }
+  }
+
+  // ── TOP 25 KEYWORDS with sparklines ──
+  html += '<div class="trend-card">';
+  html += '<div class="trend-card-title">' + filtered.length + ' Briefings Analyzed · Top 25 Keywords</div>';
+  sorted.forEach(function(item) {
+    var pct = Math.round((item.count / maxCount) * 100);
+    var prev = prevFreq[item.word] || 0;
+    var delta = item.count - prev;
+    var isNew = hasPrev && prev === 0;
+    var deltaClass = delta > 0 ? 'trend-up' : delta < 0 ? 'trend-down' : 'trend-same';
+    var deltaArrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '–';
+    var deltaText = delta > 0 ? deltaArrow + ' +'+delta : delta < 0 ? deltaArrow + ' '+delta : deltaArrow;
+    var barColor = 'var(--blue)';
+    if (HIGH_KEYS.some(function(k){ return item.word.includes(k); })) barColor = 'var(--green)';
+    else if (MED_KEYS.some(function(k){ return item.word.includes(k); })) barColor = '#F0A832';
+
+    // Build sparkline data
+    var dayData = wordDays[item.word] || {};
+    var sparkMax = 0;
+    dayKeys.forEach(function(dk){ if ((dayData[dk]||0) > sparkMax) sparkMax = dayData[dk]; });
+
+    html += '<div class="trend-row">';
+    html += '<div class="trend-keyword">' + esc(item.word);
+    if (isNew) html += ' <span class="trend-new">NEW</span>';
+    html += '</div>';
+    // Sparkline
+    html += '<div class="trend-spark">';
+    dayKeys.forEach(function(dk) {
+      var val = dayData[dk] || 0;
+      var h = sparkMax > 0 ? Math.max(1, Math.round((val/sparkMax)*14)) : 0;
+      html += '<div class="trend-spark-bar'+(val>0?' active':'')+'" style="height:'+h+'px;background:'+barColor+'"></div>';
+    });
+    html += '</div>';
+    html += '<div class="trend-bar-wrap"><div class="trend-bar" style="width:'+pct+'%;background:'+barColor+'"></div></div>';
+    html += '<div class="trend-count">' + item.count + '</div>';
+    if (hasPrev) {
+      html += '<div class="trend-delta '+deltaClass+'" title="vs previous '+days+' days">' + deltaText + '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // ── SECTION COVERAGE ──
+  html += '<div class="trend-card">';
+  html += '<div class="trend-card-title">Section Coverage</div>';
+  var secCounts = {};
+  filtered.forEach(function(h) {
+    Object.keys(h.data.sections||{}).forEach(function(k) {
+      secCounts[k] = (secCounts[k]||0) + (h.data.sections[k]||[]).length;
+    });
+  });
+  var secSorted = Object.keys(secCounts).map(function(k){ return {id:k,count:secCounts[k]}; })
+    .sort(function(a,b){ return b.count - a.count; });
+  var secMax = secSorted.length ? secSorted[0].count : 1;
+  secSorted.forEach(function(item) {
+    var meta = SEC_META[item.id];
+    if (!meta) return;
+    var pct = Math.round((item.count / secMax) * 100);
+    html += '<div class="trend-row">';
+    html += '<div class="trend-keyword">' + meta.label + '</div>';
+    html += '<div class="trend-bar-wrap"><div class="trend-bar" style="width:'+pct+'%;background:'+meta.pip+'"></div></div>';
+    html += '<div class="trend-count">' + item.count + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  document.getElementById('trends-out').innerHTML = html;
+  document.getElementById('trends-sub').textContent = filtered.length + ' briefings · ' + (days > 0 ? 'Last '+days+' days' : 'All time') + ' · ' + totalStories + ' stories';
+}
+
+// ── GEMINI PROMPT TEMPLATE ──
+function getGeminiPrompt() {
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  return 'You are an intelligence briefing analyst preparing a daily briefing for Bob, a forensic BI consultant who works with Australian insurance companies and Philippine consulting firms.\n\nGenerate today\'s briefing (' + dateStr + ') as a single JSON object with this EXACT schema:\n\n```json\n{\n  "date": "' + dateStr + '",\n  "markets": {\n    "psei": "6,450.23",\n    "psei_move": "+0.8% Up",\n    "asx": "8,102.50",\n    "asx_move": "-0.3% Down",\n    "sp500": "5,890.12",\n    "sp500_move": "+0.5% Up"\n  },\n  "sections": {\n    "global": [\n      {\n        "headline": "Story headline here",\n        "body": "2-3 sentence summary of the story and its implications.",\n        "source": "Reuters / Bloomberg / etc",\n        "relevance": "How this relates to Bob\'s work in forensic BI, insurance, or consulting. Write \'No direct relevance\' if none.",\n        "relevance_level": "high"\n      }\n    ],\n    "ph": [\n      {\n        "headline": "Philippine story headline",\n        "body": "Summary.",\n        "source": "Inquirer / Rappler / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "med"\n      }\n    ],\n    "ai": [\n      {\n        "headline": "AI/tech story",\n        "body": "Summary.",\n        "source": "TechCrunch / Wired / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "low"\n      }\n    ],\n    "markets": [\n      {\n        "headline": "Markets/economy story",\n        "body": "Summary.",\n        "source": "Financial Times / WSJ / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "none"\n      }\n    ],\n    "ev": [\n      {\n        "headline": "EV industry story",\n        "body": "Summary.",\n        "source": "Source",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "low"\n      }\n    ]\n  },\n  "watch": "One key development to monitor over the coming days. 2-3 sentences.",\n  "watch_source": "Source name"\n}\n```\n\nIMPORTANT RULES:\n- Output ONLY the JSON object, no markdown fences, no explanation before or after\n- Include 3-5 stories per section (global, ph, ai, markets, ev)\n- "relevance_level" MUST be one of: "high", "med", "low", "none"\n  - "high" = directly relevant to insurance, forensic BI, claims, consulting, audit, CPA, underwriting, BSP, ASX, AUD\n  - "med" = relevant to broader economy, markets, trade, inflation, supply chain, technology trends\n  - "low" = tangentially interesting but not directly actionable\n  - "none" = no direct relevance to Bob\'s work\n- "relevance" field should explain WHY it matters to Bob (or say "No direct relevance")\n- Market values should be current/realistic for today\n- Stories should be real, current news from today or yesterday\n- Each story body should be 2-3 sentences, informative and concise';
+}
+
+function togglePrompt() {
+  var box = document.getElementById('prompt-box');
+  var isOpen = box.classList.contains('open');
+  if (isOpen) {
+    box.classList.remove('open');
+  } else {
+    document.getElementById('prompt-text').textContent = getGeminiPrompt();
+    box.classList.add('open');
+  }
+}
+
+function copyPrompt() {
+  var text = getGeminiPrompt();
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Gemini prompt copied to clipboard','ok');
+  }).catch(function() {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Gemini prompt copied to clipboard','ok');
+  });
+}
+
+// ── AUTO-LOAD TODAY'S BRIEFING ──
+function autoLoadToday() {
+  var history = window._briefingHistory || [];
+  if (!history.length) return;
+
+  // Already have data rendered? Skip
+  if (_currentData) return;
+
+  // Find today's briefing by key or date field
+  var now = new Date();
+  var todayKeys = [];
+  // Generate possible key formats for today
+  var y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0'), d = String(now.getDate()).padStart(2,'0');
+  var todayISO = y + '-' + m + '-' + d;
+  // Also check common date string formats
+  var todayLong = now.toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  var match = history.find(function(h) {
+    // Check key match (keys are date strings with non-alphanumeric replaced by -)
+    var key = h.key.toLowerCase();
+    if (key.indexOf(todayISO) !== -1) return true;
+    if (key.indexOf(y + '-' + m + '-' + d) !== -1) return true;
+    // Check date field
+    var dateField = (h.data.date || '').toLowerCase();
+    if (dateField.indexOf(todayISO) !== -1) return true;
+    // Check if date field contains today's month+day in various formats
+    var monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+    var dayNum = now.getDate();
+    var monthName = monthNames[now.getMonth()];
+    if (dateField.indexOf(monthName) !== -1 && dateField.indexOf(String(dayNum)) !== -1 && dateField.indexOf(String(y)) !== -1) return true;
+    return false;
+  });
+
+  if (match) {
+    // Auto-render today's briefing
+    _currentData = match.data;
+    document.getElementById('raw-input').value = JSON.stringify(match.data);
+    renderBriefing();
+
+    // Show auto-load banner
+    var banner = document.getElementById('auto-load-banner');
+    banner.innerHTML = '<div class="auto-load-banner"><span class="alb-text">Today\'s briefing auto-loaded from ' + (match.saved ? new Date(match.saved).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:false}) + ' PHT' : 'cache') + '</span><button class="alb-dismiss" onclick="this.parentElement.remove()">✕</button></div>';
+  }
+}
+
+// Hook auto-load into the history render callback
+var _origRenderHistory = window.renderHistory;
+window.renderHistory = function() {
+  _origRenderHistory();
+  // Try auto-load after history is populated
+  autoLoadToday();
+};
 </script>
 </body>
 </html>

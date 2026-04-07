@@ -1,0 +1,56 @@
+rules_version = '2';
+
+// Shared Firebase project: pokerhq-a67e4
+// Hosts THREE apps — each gets its own collection rules below.
+// IMPORTANT: Firestore deploys ALL rules at once. Do not remove the
+// PokerHQ / SonicVault blocks unless you also update those apps.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────
+    // Bob's Daily Briefing — authenticated, uid-scoped
+    // ─────────────────────────────────────────────────────────────
+    match /briefings-bob/{docId} {
+      allow read: if request.auth != null
+        && (resource.data.uid == request.auth.uid || !('uid' in resource.data));
+
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+
+      allow update: if request.auth != null
+        && (resource.data.uid == request.auth.uid || !('uid' in resource.data))
+        && request.resource.data.uid == request.auth.uid;
+
+      allow delete: if request.auth != null
+        && (resource.data.uid == request.auth.uid || !('uid' in resource.data));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // PokerHQ — single-user app, no auth (preserve current behavior)
+    // ─────────────────────────────────────────────────────────────
+    match /pokerhq-bob/{docId} {
+      allow read, write: if true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SonicVault — single-user app + public catalogs, no auth
+    // ─────────────────────────────────────────────────────────────
+    match /sonicvault-bob/{docId} {
+      allow read, write: if true;
+    }
+    match /sonicvault-public-tracks/{docId} {
+      allow read, write: if true;
+    }
+    match /sonicvault-public-playlists/{docId} {
+      allow read, write: if true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Deny everything else (any unknown collection)
+    // ─────────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
