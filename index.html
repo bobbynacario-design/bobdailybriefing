@@ -151,12 +151,8 @@ window.fbLoadHistory = async function(loadMore) {
     }
     var snap = await getDocs(q);
     if (snap.empty && !loadMore) {
-      // Try loading legacy docs (no uid field) that match passphrase
-      await loadLegacyDocs(uid);
-      if (!window._briefingHistory.length) {
-        window.lsLoadHistory();
-        setSyncStatus('ok','From cache');
-      }
+      window.lsLoadHistory();
+      setSyncStatus('ok','From cache');
       return;
     }
     snap.forEach(function(d) {
@@ -180,42 +176,6 @@ window.fbLoadHistory = async function(loadMore) {
     window.lsLoadHistory();
   }
 };
-
-// Migrate legacy docs (pre-auth) — loads docs with matching _ph and stamps them with uid
-async function loadLegacyDocs(uid) {
-  try {
-    var ph = window._sessionPhash || '';
-    if (!ph) return;
-    // Load all docs and filter client-side for legacy ones
-    var q = query(collection(db, COLL), orderBy('saved','desc'), limit(100));
-    var snap = await getDocs(q);
-    var migrated = 0;
-    for (var i = 0; i < snap.docs.length; i++) {
-      var d = snap.docs[i];
-      var docData = d.data();
-      // Legacy doc: has _ph but no uid, or uid is empty
-      if ((!docData.uid || docData.uid === '') && docData._ph === ph) {
-        try {
-          var parsed = JSON.parse(docData.data);
-          window._briefingHistory.push({ key: d.id, saved: docData.saved, data: parsed });
-          // Migrate: stamp with uid for future server-side filtering
-          await setDoc(doc(db, COLL, d.id), { uid: uid }, { merge: true });
-          migrated++;
-        } catch(e) { console.warn('Skip legacy doc:', d.id); }
-      }
-    }
-    if (migrated > 0) {
-      if (window.showToast) window.showToast('Migrated ' + migrated + ' legacy briefing' + (migrated>1?'s':'') + ' to your account','info');
-    }
-    if (window._briefingHistory.length) {
-      window.lsSyncFromFirebase();
-      setSyncStatus('ok','Synced');
-      if (window.renderHistory) window.renderHistory();
-    }
-  } catch(e) {
-    console.warn('Legacy migration failed:', e);
-  }
-}
 
 // Deferred initial load — waits for auth gate
 window._fbReady = true;
