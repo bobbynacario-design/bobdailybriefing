@@ -1,0 +1,16 @@
+{
+  "name": "bobdailybriefing-functions",
+  "description": "Backend OpenAI generator for Bob's Daily Intelligence Briefing",
+  "scripts": {
+    "deploy": "firebase deploy --only functions:bobdailybriefing:generateBobDailyBriefing --project pokerhq-a67e4"
+  },
+  "engines": {
+    "node": "24"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0"
+  },
+  "private": true
+}

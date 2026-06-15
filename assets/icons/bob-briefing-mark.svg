@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Bob Briefing">
+  <rect width="512" height="512" rx="112" fill="#080A0E"/>
+  <rect x="70" y="330" width="372" height="24" rx="12" fill="#C9A84C"/>
+  <circle cx="256" cy="275" r="86" fill="#F4B860"/>
+  <path d="M256 93v58M126 274h58M328 274h58M154 145l41 41M358 145l-41 41" fill="none" stroke="#F4B860" stroke-width="26" stroke-linecap="round"/>
+  <path d="M144 382h224" fill="none" stroke="#E8C97A" stroke-width="20" stroke-linecap="round" opacity=".8"/>
+</svg>

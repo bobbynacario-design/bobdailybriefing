@@ -3,8 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%231a1410'/><circle cx='32' cy='38' r='12' fill='%23F4B860'/><line x1='8' y1='54' x2='56' y2='54' stroke='%23F4B860' stroke-width='3' stroke-linecap='round'/><g stroke='%23F4B860' stroke-width='3' stroke-linecap='round'><line x1='32' y1='14' x2='32' y2='20'/><line x1='14' y1='38' x2='20' y2='38'/><line x1='44' y1='38' x2='50' y2='38'/><line x1='18' y1='24' x2='22' y2='28'/><line x1='42' y1='28' x2='46' y2='24'/></g></svg>">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%231a1410'/><circle cx='32' cy='38' r='12' fill='%23F4B860'/><line x1='8' y1='54' x2='56' y2='54' stroke='%23F4B860' stroke-width='3' stroke-linecap='round'/><g stroke='%23F4B860' stroke-width='3' stroke-linecap='round'><line x1='32' y1='14' x2='32' y2='20'/><line x1='14' y1='38' x2='20' y2='38'/><line x1='44' y1='38' x2='50' y2='38'/><line x1='18' y1='24' x2='22' y2='28'/><line x1='42' y1='28' x2='46' y2='24'/></g></svg>">
+<meta name="theme-color" content="#080A0E">
+<meta name="description" content="Bob's private daily intelligence briefing desk for forensic BI, Australian insurance, and Philippine consulting signals.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bob Briefing">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./assets/icons/bob-briefing-mark.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon-180.png">
 <title>Bob's Daily Intelligence Briefing</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -14,6 +21,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, orderBy, limit, startAfter, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_6PnXWdtpR-x-jcJIuzOaROoVRplY5SM",
@@ -27,6 +35,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db  = getFirestore(app);
+const functions = getFunctions(app, "asia-southeast1");
 const COLL = 'briefings-bob';
 const PAGE_SIZE = 30;
 
@@ -183,6 +192,26 @@ window.fbLoadHistory = async function(loadMore) {
 };
 
 // Deferred initial load — waits for auth gate
+window.fbGenerateBriefing = async function(dateLabel) {
+  var uid = getUid();
+  if (!uid) { setSyncStatus('error','Sign in first'); throw new Error('Sign in first'); }
+  try {
+    setSyncStatus('syncing','Generating...');
+    var generate = httpsCallable(functions, 'generateBobDailyBriefing');
+    var res = await generate({
+      date: dateLabel || '',
+      timezone: 'Asia/Manila',
+      audience: 'Bob'
+    });
+    setSyncStatus('ok','Generated');
+    return res.data;
+  } catch(e) {
+    setSyncStatus('error','Generate failed');
+    console.error(e);
+    throw e;
+  }
+};
+
 window._fbReady = true;
 </script>
 
@@ -211,6 +240,9 @@ body.light{
   --txt:#1A1A1A;--txt2:rgba(0,0,0,.6);--txt3:rgba(0,0,0,.35);
 }
 html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh}
+body{background:linear-gradient(180deg,rgba(201,168,76,.035),transparent 220px),var(--bg)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+::selection{background:var(--gold-dim);color:var(--txt)}
 
 /* ── NAV ── */
 .nav{background:var(--bg2);border-bottom:1px solid var(--rim);padding:.7rem 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:.5rem}
@@ -225,6 +257,8 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-heig
 #sync-status{font-family:var(--mono);font-size:11px;color:var(--txt3);transition:color .3s;white-space:nowrap}
 .nav-btn{font-family:var(--mono);font-size:10px;padding:.35rem .8rem;border-radius:6px;border:1px solid var(--rim2);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
 .nav-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.install-btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;font-family:var(--mono);font-size:10px;padding:.35rem .8rem;border-radius:6px;border:1px solid rgba(201,168,76,.35);background:var(--gold-dim);color:var(--gold);cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.install-btn:hover{background:var(--gold);color:var(--bg)}
 .theme-btn{background:transparent;border:1px solid var(--rim2);border-radius:6px;padding:.35rem .6rem;cursor:pointer;font-size:14px;transition:all .15s}
 .theme-btn:hover{border-color:var(--gold);background:var(--gold-dim)}
 
@@ -240,6 +274,10 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-heig
 .toast.error{background:#E85C5C;border:1px solid rgba(232,92,92,.4)}
 .toast.info{background:#3498DB;border:1px solid rgba(52,152,219,.4)}
 .toast.warn{background:#F0A832;border:1px solid rgba(240,168,50,.4);color:#1A1A1A}
+.update-banner{position:fixed;left:50%;bottom:1rem;transform:translate(-50%,120%);z-index:9998;background:var(--bg2);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:.65rem .8rem;display:flex;align-items:center;gap:.75rem;box-shadow:0 18px 60px rgba(0,0,0,.35);transition:transform .25s ease}
+.update-banner.show{transform:translate(-50%,0)}
+.update-banner span{font-family:var(--mono);font-size:11px;color:var(--txt2);letter-spacing:.04em}
+.update-banner button{font-family:var(--mono);font-size:10px;padding:.35rem .65rem;border-radius:6px;border:1px solid var(--gold);background:var(--gold);color:var(--bg);cursor:pointer;text-transform:uppercase;letter-spacing:.06em}
 
 /* ── AUTH GATE ── */
 .auth-overlay{position:fixed;inset:0;z-index:10000;background:var(--bg);display:flex;align-items:center;justify-content:center;animation:fadeIn .3s ease}
@@ -253,6 +291,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-heig
 .auth-box input::placeholder{color:var(--txt3);letter-spacing:.06em}
 .auth-box .auth-btn{width:100%;font-family:var(--sans,system-ui,sans-serif);font-size:14px;padding:.75rem 1rem;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:8px;cursor:pointer;font-weight:500;letter-spacing:.02em;transition:box-shadow .15s,background .15s;display:flex;align-items:center;justify-content:center;gap:8px}
 .auth-box .auth-btn:hover{background:#f8f9fa;box-shadow:0 1px 3px rgba(60,64,67,.3)}
+.auth-box .install-btn{width:100%;margin-top:.75rem;padding:.7rem 1rem}
 .auth-error{font-family:var(--mono);font-size:11px;color:var(--red);margin-top:.5rem;min-height:1.2em}
 .auth-mode-link{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:1rem;cursor:pointer;transition:color .15s}
 .auth-mode-link:hover{color:var(--gold)}
@@ -279,6 +318,43 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-heig
 .tick-up{color:var(--green)}.tick-down{color:var(--red)}.tick-flat{color:var(--txt3)}
 .tick-bar{position:absolute;bottom:0;left:0;height:2px;width:100%;opacity:.2}
 
+.brief-summary{display:grid;grid-template-columns:1.25fr repeat(3,1fr);gap:.75rem;margin-bottom:1.5rem}
+.summary-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;min-height:100px;display:flex;flex-direction:column;justify-content:space-between;transition:border-color .2s,transform .15s}
+.summary-card:hover{border-color:var(--rim2);transform:translateY(-1px)}
+.summary-kicker{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:.45rem}
+.summary-value{font-family:var(--serif);font-size:25px;line-height:1.05;color:var(--txt);font-weight:700}
+.summary-copy{font-size:12px;color:var(--txt2);line-height:1.45;margin-top:.45rem}
+.summary-accent{color:var(--gold)}
+.summary-meter{height:5px;background:var(--bg3);border-radius:999px;overflow:hidden;margin-top:.65rem;border:1px solid var(--rim)}
+.summary-meter span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--green));transition:width .35s ease}
+.brief-desk{display:none;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:1rem;margin-bottom:1.5rem}
+.brief-desk.active{display:grid}
+.desk-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem}
+.desk-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.85rem}
+.desk-title{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.12em;text-transform:uppercase}
+.desk-actions{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end}
+.tool-chip,.filter-chip{font-family:var(--mono);font-size:10px;padding:.35rem .65rem;border-radius:7px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.05em}
+.tool-chip:hover,.filter-chip:hover{border-color:var(--rim2);color:var(--txt)}
+.filter-chip.active,.tool-chip.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.25)}
+.priority-list{display:grid;gap:.55rem}
+.priority-item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:.6rem;padding:.75rem;background:var(--bg3);border:1px solid var(--rim);border-radius:9px}
+.priority-rank{font-family:var(--mono);font-size:10px;color:var(--gold);padding-top:.1rem}
+.priority-headline{font-size:13px;color:var(--txt);font-weight:700;line-height:1.35}
+.priority-meta{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.05em;text-transform:uppercase;margin-top:.25rem}
+.coverage-grid{display:grid;gap:.65rem}
+.coverage-row{display:grid;grid-template-columns:110px minmax(0,1fr) 36px;align-items:center;gap:.6rem}
+.coverage-name{font-family:var(--mono);font-size:10px;color:var(--txt3);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.coverage-track{height:8px;background:var(--bg3);border-radius:99px;overflow:hidden;border:1px solid var(--rim)}
+.coverage-fill{height:100%;border-radius:99px;min-width:2px}
+.coverage-count{font-family:var(--mono);font-size:10px;color:var(--txt3);text-align:right}
+.qa-line{font-size:12px;color:var(--txt2);line-height:1.55;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--rim)}
+.qa-line.ok{color:var(--green)}
+.qa-line.warn{color:#F0A832}
+body.compact .card{padding:.8rem 1rem;margin-bottom:.5rem}
+body.compact .card-body{line-height:1.55;margin-bottom:.45rem}
+body.compact .card-footer{display:none}
+body.compact .hero{padding:1rem 1.35rem}
+
 /* ── PASTE ZONE ── */
 .paste-zone{background:var(--bg2);border:1px dashed rgba(201,168,76,.4);border-radius:14px;padding:1.25rem;margin-bottom:1.5rem}
 .paste-label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--txt3);margin-bottom:.5rem;text-transform:uppercase}
@@ -303,6 +379,10 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sc-med{background:rgba(240,168,50,.1);color:#F0A832;border:1px solid rgba(240,168,50,.25)}
 .sc-low{background:var(--purple-dim);color:var(--purple);border:1px solid rgba(155,111,232,.25)}
 .sc-none{background:var(--rim);color:var(--txt3);border:1px solid var(--rim)}
+.reader-tools{display:none;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.65rem .8rem;flex-wrap:wrap}
+.reader-tools.active{display:flex}
+.reader-filter-row{display:flex;gap:.35rem;flex-wrap:wrap}
+.reader-meta{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;text-transform:uppercase}
 
 /* ── STORY CARDS ── */
 .sec-pip{width:4px;height:20px;border-radius:3px;flex-shrink:0}
@@ -347,6 +427,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .hist-preview{font-size:12px;color:var(--txt2);line-height:1.55}
 .hist-chips{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.5rem}
 .hist-chip{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:20px;background:var(--bg3);color:var(--txt3);border:1px solid var(--rim)}
+.hist-chip.high{background:var(--green-dim);color:var(--green);border-color:rgba(45,184,122,.25)}
+.hist-chip.med{background:rgba(240,168,50,.1);color:#F0A832;border-color:rgba(240,168,50,.25)}
 .hist-delete{position:absolute;top:.75rem;right:.75rem;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--txt3);cursor:pointer;font-size:14px;padding:2px 6px;transition:all .15s;opacity:0}
 .hist-card:hover .hist-delete{opacity:1}
 .hist-delete:hover{color:var(--red);border-color:var(--red);background:var(--red-dim)}
@@ -355,6 +437,10 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
 /* ── WEEKLY DIGEST ── */
 .digest-btn-wrap{margin-bottom:1.25rem}
+.archive-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem}
+.archive-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:.9rem 1rem}
+.archive-value{font-family:var(--mono);font-size:22px;color:var(--txt);line-height:1.1}
+.archive-label{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.1em;text-transform:uppercase;margin-top:.35rem}
 .digest-card{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid rgba(201,168,76,.2);border-radius:14px;padding:1.5rem;margin-bottom:1.5rem}
 .digest-title{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--gold);margin-bottom:1rem}
 .digest-section{margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--rim)}
@@ -432,6 +518,9 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   .ticker{flex-wrap:wrap}
   .tick{min-width:33%;border-bottom:1px solid var(--rim)}
   .hist-grid{grid-template-columns:1fr}
+  .brief-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .brief-desk{grid-template-columns:1fr}
+  .archive-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
   .mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--rim);z-index:200;padding:.5rem 0 calc(.5rem + env(safe-area-inset-bottom))}
   .mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:.35rem .2rem;border:none;background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;transition:color .15s}
   .mob-tab.active{color:var(--gold)}
@@ -442,6 +531,12 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   .card-hl{font-size:14px}
   .search-input{font-size:16px}
   .hist-delete{opacity:1}
+}
+@media(max-width:520px){
+  .brief-summary{grid-template-columns:1fr}
+  .summary-card{min-height:86px}
+  .desk-head{align-items:flex-start;flex-direction:column}
+  .coverage-row{grid-template-columns:92px minmax(0,1fr) 30px}
 }
 @media(min-width:769px){.mobile-nav{display:none}}
 
@@ -463,6 +558,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle;margin-right:8px"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
       Sign in with Google
     </button>
+    <button class="install-btn" id="login-install-btn" onclick="installBriefingApp()">INSTALL DESKTOP APP</button>
     <div class="auth-error" id="auth-error"></div>
   </div>
 </div>
@@ -486,10 +582,16 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div id="sync-status">○ Loading...</div>
     <button class="lock-btn unlocked" id="lock-btn" onclick="lockSession()" title="Lock session">🔓</button>
     <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">🌙</button>
+    <button class="install-btn" id="install-app-btn" onclick="installBriefingApp()" title="Install Bob's Daily Briefing as a desktop app">INSTALL APP</button>
     <button class="nav-btn" onclick="copyAsText()">📋 Copy</button>
     <button class="nav-btn" onclick="exportPDF()">⬇ PDF</button>
   </div>
 </nav>
+
+<div class="update-banner" id="update-banner">
+  <span>New briefing app version available</span>
+  <button id="update-banner-btn" onclick="applyAppUpdate()">Reload</button>
+</div>
 
 <!-- ═══════════════ TODAY PAGE ═══════════════ -->
 <div class="page active" id="page-today">
@@ -504,19 +606,53 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
   <div class="ticker">
     <div class="tick"><div class="tick-label">PSEi</div><div class="tick-val" id="t-psei">—</div><div class="tick-move tick-flat" id="t-psei-m">—</div><div class="tick-bar" style="background:#3498DB"></div></div>
+    <div class="tick"><div class="tick-label">USD/PHP</div><div class="tick-val" id="t-usdphp">—</div><div class="tick-move tick-flat" id="t-usdphp-m">—</div><div class="tick-bar" style="background:#C9A84C"></div></div>
     <div class="tick"><div class="tick-label">ASX 200</div><div class="tick-val" id="t-asx">—</div><div class="tick-move tick-flat" id="t-asx-m">—</div><div class="tick-bar" style="background:#F0A832"></div></div>
     <div class="tick"><div class="tick-label">S&P 500</div><div class="tick-val" id="t-sp">—</div><div class="tick-move tick-flat" id="t-sp-m">—</div><div class="tick-bar" style="background:#2DB87A"></div></div>
+    <div class="tick"><div class="tick-label">Manila Weather</div><div class="tick-val" id="t-weather">—</div><div class="tick-move tick-flat" id="t-weather-m">—</div><div class="tick-bar" style="background:#1EC8C8"></div></div>
+  </div>
+
+  <div class="brief-summary" id="brief-summary">
+    <div class="summary-card">
+      <div>
+        <div class="summary-kicker">Briefing State</div>
+        <div class="summary-value" id="sum-state">Ready</div>
+      </div>
+      <div class="summary-copy" id="sum-state-copy">Paste a JSON briefing to open the desk.</div>
+    </div>
+    <div class="summary-card">
+      <div>
+        <div class="summary-kicker">Stories</div>
+        <div class="summary-value" id="sum-stories">0</div>
+      </div>
+      <div class="summary-copy" id="sum-sections">0 sections loaded</div>
+    </div>
+    <div class="summary-card">
+      <div>
+        <div class="summary-kicker">High Relevance</div>
+        <div class="summary-value summary-accent" id="sum-high">0</div>
+      </div>
+      <div class="summary-meter"><span id="sum-high-meter"></span></div>
+    </div>
+    <div class="summary-card">
+      <div>
+        <div class="summary-kicker">Actionable</div>
+        <div class="summary-value" id="sum-actionable">0</div>
+      </div>
+      <div class="summary-copy" id="sum-actionable-copy">High + medium items</div>
+    </div>
   </div>
 
   <div id="auto-load-banner"></div>
 
   <div class="paste-zone">
-    <div class="paste-label">Paste Gemini Briefing JSON Here</div>
-    <textarea id="raw-input" placeholder="Paste your Gemini daily briefing JSON here..."></textarea>
+    <div class="paste-label">Generate or Paste Briefing JSON Here</div>
+    <textarea id="raw-input" placeholder="Generate with OpenAI or paste your daily briefing JSON here..."></textarea>
     <div class="paste-actions">
       <span class="paste-hint">JSON → RENDER → AUTO-SAVE ↗ <span class="kbd-hint">(<span class="kbd">Ctrl+Enter</span> to render)</span></span>
       <div class="btn-row">
-        <span class="prompt-toggle" onclick="togglePrompt()">📝 Gemini Prompt</span>
+        <span class="prompt-toggle" onclick="togglePrompt()">📝 AI Prompt</span>
+        <button class="btn-sec" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button>
         <button class="btn-sec" onclick="clearBriefing()">CLEAR</button>
         <button class="btn-primary" onclick="renderBriefing()">RENDER ↗</button>
       </div>
@@ -533,6 +669,40 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <span class="score-chip sc-med" id="sc-med">● MED: 0</span>
     <span class="score-chip sc-low" id="sc-low">● LOW: 0</span>
     <span class="score-chip sc-none" id="sc-none">● NONE: 0</span>
+  </div>
+
+  <div class="brief-desk" id="brief-desk">
+    <div class="desk-panel">
+      <div class="desk-head">
+        <div class="desk-title">Priority Stack</div>
+        <div class="desk-actions">
+          <button class="tool-chip" onclick="copyActionQueue()">Copy actions</button>
+          <button class="tool-chip" onclick="expandAllSections()">Expand all</button>
+          <button class="tool-chip" onclick="collapseAllSections()">Collapse all</button>
+        </div>
+      </div>
+      <div class="priority-list" id="priority-list"></div>
+    </div>
+    <div class="desk-panel">
+      <div class="desk-head">
+        <div class="desk-title">Coverage</div>
+        <button class="tool-chip" id="compact-toggle" onclick="toggleCompactMode()">Compact</button>
+      </div>
+      <div class="coverage-grid" id="coverage-grid"></div>
+      <div class="qa-line ok" id="qa-line">Schema check waiting for briefing.</div>
+    </div>
+  </div>
+
+  <div class="reader-tools" id="reader-tools">
+    <div class="reader-filter-row">
+      <button class="filter-chip active" data-filter="all" onclick="setRelevanceFilter('all',this)">All</button>
+      <button class="filter-chip" data-filter="actionable" onclick="setRelevanceFilter('actionable',this)">Actionable</button>
+      <button class="filter-chip" data-filter="high" onclick="setRelevanceFilter('high',this)">High</button>
+      <button class="filter-chip" data-filter="med" onclick="setRelevanceFilter('med',this)">Medium</button>
+      <button class="filter-chip" data-filter="low" onclick="setRelevanceFilter('low',this)">Low</button>
+      <button class="filter-chip" data-filter="none" onclick="setRelevanceFilter('none',this)">None</button>
+    </div>
+    <div class="reader-meta" id="reader-meta">All stories visible</div>
   </div>
 
   <div id="today-out">
@@ -588,6 +758,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
   <div id="digest-out"></div>
 
+  <div class="archive-summary" id="archive-summary">
+    <div class="archive-card"><div class="archive-value" id="arch-briefings">0</div><div class="archive-label">Briefings</div></div>
+    <div class="archive-card"><div class="archive-value" id="arch-stories">0</div><div class="archive-label">Stories</div></div>
+    <div class="archive-card"><div class="archive-value" id="arch-high">0</div><div class="archive-label">High relevance</div></div>
+    <div class="archive-card"><div class="archive-value" id="arch-latest">-</div><div class="archive-label">Latest save</div></div>
+  </div>
+
   <div class="search-bar">
     <span class="search-icon">🔍</span>
     <input class="search-input" type="text" id="search-input" placeholder="Search briefings by keyword..." oninput="searchBriefings(this.value)">
@@ -630,16 +807,21 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 var SEC_META = {
   global:  {pip:'#3498DB', label:'GLOBAL NEWS',      page:'global'},
   ph:      {pip:'#2DB87A', label:'PHILIPPINES',       page:'ph'},
+  insurance:{pip:'#78D0A4', label:'INSURANCE SIGNALS', page:'today'},
+  interruptions:{pip:'#E85C5C', label:'INTERRUPTIONS WATCH', page:'today'},
   ai:      {pip:'#9B6FE8', label:'AI & TECHNOLOGY',   page:'ai'},
   markets: {pip:'#F0A832', label:'MARKETS & ECONOMY', page:'ai'},
   ev:      {pip:'#1EC8C8', label:'EV INDUSTRY',       page:'ai'},
   watch:   {pip:'#E85C5C', label:'ONE THING TO WATCH',page:'today'}
 };
-var HIGH_KEYS = ['insurance','claim','forensic','business interruption','bsp','consulting','audit','cpa','underwriting','indemnity','assessment','reinsurance','aud','asx'];
-var MED_KEYS  = ['market','economy','inflation','trade','technology','gdp','rate','central bank','supply chain','disruption','peso','currency'];
+var HIGH_KEYS = ['insurance','claim','claims','forensic','business interruption','interruption','bsp','consulting','audit','cpa','underwriting','indemnity','assessment','reinsurance','catastrophe','loss adjust','loss adjusting','supply chain','outage','port closure','power interruption','typhoon','flood','aud','asx'];
+var MED_KEYS  = ['market','economy','inflation','trade','technology','gdp','rate','central bank','supply chain','disruption','peso','currency','weather','rain','storm'];
 var _currentData = null;
 var _renderTimestamp = null;
+var _relFilter = 'all';
+var _compactMode = localStorage.getItem('briefing_compact') === 'true';
 window._briefingHistory = [];
+if (_compactMode) document.body.classList.add('compact');
 // ── GOOGLE AUTH GATE ──
 function initAuthGate() {
   var overlay = document.getElementById('auth-overlay');
@@ -689,7 +871,9 @@ function lockSession() {
   document.getElementById('hero-timestamp').textContent = '';
   var sb = document.getElementById('score-bar'); if (sb) sb.style.display = 'none';
   document.getElementById('history-out').innerHTML = '<div class="empty-state">SIGNED OUT</div>';
+  updateArchiveSummary([]);
   if (typeof clearTabBadges === 'function') clearTabBadges();
+  resetBriefConsole();
   initAuthGate();
 }
 
@@ -867,6 +1051,173 @@ function scoreRelevance(st) {
 }
 
 // ── PARSER ──
+function getAllStories(data) {
+  var out = [];
+  if (!data || !data.sections) return out;
+  Object.keys(SEC_META).forEach(function(id) {
+    if (id === 'watch') return;
+    var meta = SEC_META[id];
+    (data.sections[id] || []).forEach(function(st, idx) {
+      out.push({ section:id, meta:meta, story:st, score:scoreRelevance(st), index:idx });
+    });
+  });
+  return out;
+}
+
+function getStoryStats(data) {
+  var stories = getAllStories(data);
+  var counts = {high:0, med:0, low:0, none:0};
+  var sections = {};
+  stories.forEach(function(item) {
+    counts[item.score] = (counts[item.score] || 0) + 1;
+    sections[item.section] = (sections[item.section] || 0) + 1;
+  });
+  return { stories:stories, counts:counts, sections:sections, total:stories.length };
+}
+
+function setText(id, text) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function resetBriefConsole() {
+  setText('sum-state', 'Ready');
+  setText('sum-state-copy', 'Paste a JSON briefing to open the desk.');
+  setText('sum-stories', '0');
+  setText('sum-sections', '0 sections loaded');
+  setText('sum-high', '0');
+  setText('sum-actionable', '0');
+  setText('sum-actionable-copy', 'High + medium items');
+  var meter = document.getElementById('sum-high-meter');
+  if (meter) meter.style.width = '0%';
+  var desk = document.getElementById('brief-desk');
+  var tools = document.getElementById('reader-tools');
+  if (desk) desk.classList.remove('active');
+  if (tools) tools.classList.remove('active');
+  var priority = document.getElementById('priority-list');
+  var coverage = document.getElementById('coverage-grid');
+  if (priority) priority.innerHTML = '';
+  if (coverage) coverage.innerHTML = '';
+  setText('reader-meta', 'All stories visible');
+}
+
+function renderBriefConsole(data, schemaErrors) {
+  var stats = getStoryStats(data);
+  var counts = stats.counts;
+  var actionable = counts.high + counts.med;
+  var sectionCount = Object.keys(stats.sections).length;
+  var highPct = stats.total ? Math.round((counts.high / stats.total) * 100) : 0;
+
+  setText('sum-state', data.date || 'Loaded');
+  setText('sum-state-copy', 'Rendered ' + (_renderTimestamp ? _renderTimestamp.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:false}) + ' PHT' : 'now'));
+  setText('sum-stories', stats.total);
+  setText('sum-sections', sectionCount + ' section' + (sectionCount !== 1 ? 's' : '') + ' loaded');
+  setText('sum-high', counts.high);
+  setText('sum-actionable', actionable);
+  setText('sum-actionable-copy', actionable + ' items to scan before client work');
+  var meter = document.getElementById('sum-high-meter');
+  if (meter) meter.style.width = highPct + '%';
+
+  var desk = document.getElementById('brief-desk');
+  var tools = document.getElementById('reader-tools');
+  if (desk) desk.classList.add('active');
+  if (tools) tools.classList.add('active');
+
+  var priorityItems = stats.stories.filter(function(item){ return item.score === 'high' || item.score === 'med'; }).slice(0, 6);
+  var priorityEl = document.getElementById('priority-list');
+  if (priorityEl) {
+    priorityEl.innerHTML = priorityItems.length ? priorityItems.map(function(item, idx) {
+      return '<div class="priority-item"><div class="priority-rank">#' + (idx + 1) + '</div><div><div class="priority-headline">' + esc(item.story.headline) + '</div><div class="priority-meta">' + esc(item.meta.label) + ' / ' + item.score.toUpperCase() + (item.story.source ? ' / ' + esc(item.story.source) : '') + '</div></div></div>';
+    }).join('') : '<div class="empty-state" style="padding:1rem">NO HIGH OR MEDIUM ITEMS</div>';
+  }
+
+  var coverageEl = document.getElementById('coverage-grid');
+  if (coverageEl) {
+    var max = Math.max.apply(null, Object.keys(stats.sections).map(function(k){ return stats.sections[k]; }).concat([1]));
+    coverageEl.innerHTML = Object.keys(SEC_META).filter(function(id){ return id !== 'watch'; }).map(function(id) {
+      var meta = SEC_META[id];
+      var count = stats.sections[id] || 0;
+      var pct = Math.round((count / max) * 100);
+      return '<div class="coverage-row"><div class="coverage-name">' + esc(meta.label) + '</div><div class="coverage-track"><div class="coverage-fill" style="width:' + pct + '%;background:' + meta.pip + '"></div></div><div class="coverage-count">' + count + '</div></div>';
+    }).join('');
+  }
+
+  var qa = document.getElementById('qa-line');
+  if (qa) {
+    qa.className = 'qa-line ' + (schemaErrors && schemaErrors.length ? 'warn' : 'ok');
+    qa.textContent = schemaErrors && schemaErrors.length ? ('Schema warnings: ' + schemaErrors.slice(0, 2).join(' / ')) : 'Schema check passed for required briefing fields.';
+  }
+  updateCompactButton();
+  applyRelevanceFilter();
+}
+
+function updateCompactButton() {
+  var btn = document.getElementById('compact-toggle');
+  if (!btn) return;
+  btn.classList.toggle('active', _compactMode);
+  btn.textContent = _compactMode ? 'Comfort' : 'Compact';
+}
+
+function toggleCompactMode() {
+  _compactMode = !_compactMode;
+  document.body.classList.toggle('compact', _compactMode);
+  localStorage.setItem('briefing_compact', _compactMode ? 'true' : 'false');
+  updateCompactButton();
+}
+
+function setRelevanceFilter(filter, el) {
+  _relFilter = filter || 'all';
+  document.querySelectorAll('.filter-chip').forEach(function(btn){
+    btn.classList.toggle('active', btn.getAttribute('data-filter') === _relFilter);
+  });
+  if (el) el.classList.add('active');
+  applyRelevanceFilter();
+}
+
+function applyRelevanceFilter() {
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card[data-rel]'));
+  cards.forEach(function(card) {
+    var rel = card.getAttribute('data-rel');
+    var show = _relFilter === 'all' || rel === _relFilter || (_relFilter === 'actionable' && (rel === 'high' || rel === 'med'));
+    card.style.display = show ? '' : 'none';
+  });
+  var visibleToday = Array.prototype.slice.call(document.querySelectorAll('#today-out .card[data-rel]')).filter(function(card){
+    return card.style.display !== 'none';
+  }).length;
+  var totalToday = document.querySelectorAll('#today-out .card[data-rel]').length;
+  var label = _relFilter === 'all' ? 'All stories visible' : (visibleToday + ' of ' + totalToday + ' stories visible / ' + _relFilter.toUpperCase());
+  setText('reader-meta', label);
+}
+
+function expandAllSections() {
+  document.querySelectorAll('.sec-hdr').forEach(function(hdr){ hdr.classList.remove('collapsed'); });
+  document.querySelectorAll('.card,.watch-card').forEach(function(card){ card.style.display = ''; });
+  applyRelevanceFilter();
+}
+
+function collapseAllSections() {
+  document.querySelectorAll('.sec-hdr').forEach(function(hdr){ hdr.classList.add('collapsed'); });
+  document.querySelectorAll('.card,.watch-card').forEach(function(card){ card.style.display = 'none'; });
+  setText('reader-meta', 'Sections collapsed');
+}
+
+function copyActionQueue() {
+  if (!_currentData) { showToast('Render a briefing first','warn'); return; }
+  var items = getAllStories(_currentData).filter(function(item){ return item.score === 'high' || item.score === 'med'; });
+  if (!items.length) { showToast('No actionable items to copy','warn'); return; }
+  var lines = ['Action queue - ' + (_currentData.date || 'Daily Briefing'), ''];
+  items.forEach(function(item, idx) {
+    lines.push((idx + 1) + '. [' + item.score.toUpperCase() + '] ' + item.story.headline);
+    if (item.story.relevance) lines.push('   Bob: ' + item.story.relevance);
+    if (item.story.source) lines.push('   Source: ' + item.story.source);
+  });
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){
+    showToast('Action queue copied','ok');
+  }).catch(function(){
+    showToast('Clipboard unavailable','error');
+  });
+}
+
 function parseInput(raw) {
   var js = raw.indexOf('{'), je = raw.lastIndexOf('}');
   if (js!==-1 && je!==-1) {
@@ -879,7 +1230,7 @@ function parseInput(raw) {
 }
 
 function normalise(d) {
-  var r = {date:d.date||'', markets:d.markets||null, watch:d.watch||'', watch_source:d.watch_source||'', sections:{}};
+  var r = {date:d.date||'', markets:d.markets||null, peso:d.peso||d.fx||null, weather:d.weather||null, watch:d.watch||'', watch_source:d.watch_source||'', sections:{}};
   var secs = Array.isArray(d.sections) ? d.sections : Object.keys(d.sections).map(function(k){ return {id:k,stories:d.sections[k]}; });
   secs.forEach(function(sec) {
     r.sections[sec.id] = (sec.stories||[]).map(function(st) {
@@ -896,6 +1247,38 @@ function normalise(d) {
 }
 
 // ── RENDER ──
+function getTodayBriefingDateLabel() {
+  return new Date().toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+}
+
+async function generateWithOpenAI() {
+  var btn = document.getElementById('openai-generate-btn');
+  if (!window._firebaseUid) {
+    showToast('Sign in before generating with OpenAI','warn');
+    return;
+  }
+  if (!window.fbGenerateBriefing) {
+    showToast('OpenAI generator is not ready yet','warn');
+    return;
+  }
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'GENERATING...'; }
+    var result = await window.fbGenerateBriefing(getTodayBriefingDateLabel());
+    var raw = result && (result.raw || result.text || '');
+    var briefing = result && result.briefing;
+    if (briefing && !raw) raw = JSON.stringify(briefing, null, 2);
+    if (!raw) throw new Error('OpenAI returned no briefing JSON');
+    document.getElementById('raw-input').value = raw;
+    renderBriefing();
+    showToast('OpenAI briefing generated','ok');
+  } catch(e) {
+    console.error(e);
+    showToast('OpenAI generation failed: ' + (e && e.message ? e.message : 'check function logs'), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'OPENAI GENERATE'; }
+  }
+}
+
 function renderBriefing() {
   var raw = document.getElementById('raw-input').value.trim();
   if (!raw) { showToast('Paste JSON first','warn'); return; }
@@ -937,10 +1320,18 @@ function renderBriefing() {
   }
 
   // Ticker
+  resetTicker();
   if (data.markets) {
     setTick('t-psei','t-psei-m', data.markets.psei, data.markets.psei_move);
     setTick('t-asx', 't-asx-m',  data.markets.asx,  data.markets.asx_move);
     setTick('t-sp',  't-sp-m',   data.markets.sp500, data.markets.sp500_move);
+  }
+  var peso = data.peso || (data.markets ? {usdphp:data.markets.usdphp, usdphp_move:data.markets.usdphp_move} : null);
+  if (peso) {
+    setTick('t-usdphp','t-usdphp-m', peso.usdphp || peso.rate || peso.value, peso.usdphp_move || peso.move || peso.change);
+  }
+  if (data.weather) {
+    setWeatherTick(data.weather);
   }
 
   // Render all sections
@@ -958,7 +1349,7 @@ function renderBriefing() {
       var score = scoreRelevance(st);
       counts[score]++;
       var bc = {high:'rel-high',med:'rel-med',low:'rel-low',none:'rel-none-b'}[score];
-      secHTML += '<div class="card"><div class="card-accent" style="background:'+meta.pip+'"></div>';
+      secHTML += '<div class="card" data-rel="'+score+'" data-section="'+esc(id)+'"><div class="card-accent" style="background:'+meta.pip+'"></div>';
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
       secHTML += '<div class="card-footer">';
@@ -991,6 +1382,7 @@ function renderBriefing() {
     if (el) el.textContent = '● '+s.toUpperCase()+': '+counts[s];
   });
   document.getElementById('score-bar').style.display = 'flex';
+  renderBriefConsole(data, schemaErrors);
 
   showToast(storyCount + ' stories rendered across ' + secCount + ' sections', 'ok');
 
@@ -1000,6 +1392,7 @@ function renderBriefing() {
   // Make sections collapsible (all pages including sub-pages)
   setTimeout(function(){
     attachCollapsible();
+    applyRelevanceFilter();
   }, 50);
 
   // Auto-save to Firebase
@@ -1024,11 +1417,17 @@ function clearBriefing() {
   document.getElementById('hero-timestamp').textContent='';
   document.getElementById('today-out').innerHTML='<div class="empty-state">AWAITING BRIEFING INPUT</div>';
   document.getElementById('score-bar').style.display='none';
-  ['t-psei','t-asx','t-sp'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent='—'; });
-  ['t-psei-m','t-asx-m','t-sp-m'].forEach(function(id){ var e=document.getElementById(id); if(e){e.textContent='—';e.className='tick-move tick-flat';} });
+  ['t-psei','t-usdphp','t-asx','t-sp','t-weather'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent='—'; });
+  ['t-psei-m','t-usdphp-m','t-asx-m','t-sp-m','t-weather-m'].forEach(function(id){ var e=document.getElementById(id); if(e){e.textContent='—';e.className='tick-move tick-flat';} });
   _currentData=null;
   _renderTimestamp=null;
   clearTabBadges();
+  resetBriefConsole();
+}
+
+function resetTicker() {
+  ['t-psei','t-usdphp','t-asx','t-sp','t-weather'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent='—'; });
+  ['t-psei-m','t-usdphp-m','t-asx-m','t-sp-m','t-weather-m'].forEach(function(id){ var e=document.getElementById(id); if(e){e.textContent='—';e.className='tick-move tick-flat';} });
 }
 
 // ── KEYBOARD SHORTCUTS ──
@@ -1059,10 +1458,42 @@ function autoSave(data) {
 }
 
 // ── HISTORY ──
+function updateArchiveSummary(history) {
+  history = history || [];
+  var storyTotal = 0;
+  var highTotal = 0;
+  history.forEach(function(h) {
+    var stats = getStoryStats(h.data);
+    storyTotal += stats.total;
+    highTotal += stats.counts.high;
+  });
+  setText('arch-briefings', history.length);
+  setText('arch-stories', storyTotal);
+  setText('arch-high', highTotal);
+  if (history.length && history[0].saved) {
+    setText('arch-latest', new Date(history[0].saved).toLocaleDateString('en-PH',{month:'short',day:'numeric'}));
+  } else {
+    setText('arch-latest', '-');
+  }
+}
+
+function setWeatherTick(weather) {
+  var valEl = document.getElementById('t-weather');
+  var moveEl = document.getElementById('t-weather-m');
+  if (!weather || !valEl || !moveEl) return;
+  var summary = weather.summary || weather.condition || weather.forecast || 'Forecast';
+  var temp = weather.temp_c || weather.temperature_c || weather.temp || '';
+  var rain = weather.rain_chance || weather.rain || weather.precipitation || '';
+  valEl.textContent = temp ? (temp + ' / ' + summary) : summary;
+  moveEl.textContent = rain ? ('Rain ' + rain) : (weather.advisory || weather.impact || 'Today');
+  moveEl.className = 'tick-move tick-flat';
+}
+
 window.renderHistory = function() {
   var history = window._briefingHistory || [];
   var countEl = document.getElementById('hist-count-sub');
   if (countEl) countEl.textContent = history.length+' briefing'+(history.length!==1?'s':'')+' saved';
+  updateArchiveSummary(history);
 
   // Show digest button if 2+ this week
   var now = new Date();
@@ -1107,7 +1538,8 @@ function renderHistoryList(history, search) {
     if (firstSec && d.sections[firstSec] && d.sections[firstSec][0]) {
       preview = (d.sections[firstSec][0].headline||'').substring(0,80);
     }
-    var storyCount = Object.values(d.sections||{}).reduce(function(a,b){ return a+(b||[]).length; },0);
+    var cardStats = getStoryStats(d);
+    var storyCount = cardStats.total;
     var saved = new Date(h.saved).toLocaleDateString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
     // Use data-key attribute instead of inline onclick to prevent XSS
     html += '<div class="hist-card" data-key="'+esc(h.key)+'">';
@@ -1116,6 +1548,9 @@ function renderHistoryList(history, search) {
     html += '<div class="hist-meta">Saved '+saved+' PHT</div>';
     if (preview) html += '<div class="hist-preview">'+esc(preview)+(preview.length>=80?'...':'')+'</div>';
     html += '<div class="hist-chips"><span class="hist-chip">'+storyCount+' stories</span>';
+    if (cardStats.counts.high) html += '<span class="hist-chip high">'+cardStats.counts.high+' high</span>';
+    if (cardStats.counts.med) html += '<span class="hist-chip med">'+cardStats.counts.med+' med</span>';
+    if (d.watch) html += '<span class="hist-chip">watch</span>';
     if (d.markets && d.markets.psei) html += '<span class="hist-chip">PSEi '+esc(d.markets.psei)+'</span>';
     html += '</div></div>';
   });
@@ -1187,7 +1622,7 @@ function generateDigest() {
   var thisWeek = history.filter(function(h){ return new Date(h.saved)>=weekStart; });
   if (!thisWeek.length) { showToast('No briefings from this week to digest','warn'); return; }
 
-  var digest = {global:[], ph:[], ai:[], markets:[], ev:[], watch:[]};
+  var digest = {global:[], ph:[], insurance:[], interruptions:[], ai:[], markets:[], ev:[], watch:[]};
   thisWeek.forEach(function(h) {
     var d = h.data;
     Object.keys(d.sections||{}).forEach(function(k) {
@@ -1206,7 +1641,7 @@ function generateDigest() {
   html += '<div class="digest-title">📋 Weekly Intelligence Digest</div>';
   html += '<div style="font-family:var(--mono);font-size:10px;color:var(--txt3);margin-bottom:1rem">'+thisWeek.length+' briefings · '+new Date(thisWeek[thisWeek.length-1].saved).toLocaleDateString()+' – '+new Date(thisWeek[0].saved).toLocaleDateString()+'</div>';
 
-  var labels = {global:'🌍 Global',ph:'🇵🇭 Philippines',ai:'🤖 AI & Tech',markets:'📈 Markets',ev:'⚡ EV Industry',watch:'🔭 Watch Items'};
+  var labels = {global:'🌍 Global',ph:'🇵🇭 Philippines',insurance:'🛡 Insurance',interruptions:'⚠ Interruptions',ai:'🤖 AI & Tech',markets:'📈 Markets',ev:'⚡ EV Industry',watch:'🔭 Watch Items'};
   var hasContent = false;
   Object.keys(labels).forEach(function(k) {
     if (!digest[k] || !digest[k].length) return;
@@ -1279,13 +1714,21 @@ function exportPDF() {
       var m=_currentData.markets;
       doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
       doc.text('PSEi: '+pdfSafe(m.psei||'—')+' '+pdfSafe(m.psei_move||''), ML, y);
-      doc.text('ASX 200: '+pdfSafe(m.asx||'—')+' '+pdfSafe(m.asx_move||''), ML+62, y);
-      doc.text('S&P 500: '+pdfSafe(m.sp500||'—')+' '+pdfSafe(m.sp500_move||''), ML+124, y);
+      var p=_currentData.peso||{};
+      doc.text('USD/PHP: '+pdfSafe(p.usdphp||p.rate||m.usdphp||'—')+' '+pdfSafe(p.usdphp_move||p.move||m.usdphp_move||''), ML+45, y);
+      doc.text('ASX 200: '+pdfSafe(m.asx||'—')+' '+pdfSafe(m.asx_move||''), ML+96, y);
+      doc.text('S&P 500: '+pdfSafe(m.sp500||'—')+' '+pdfSafe(m.sp500_move||''), ML+142, y);
+      y+=8;
+    }
+    if (_currentData.weather) {
+      var w=_currentData.weather;
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+      doc.text('Manila weather: '+pdfSafe(w.summary||w.condition||w.forecast||'')+' '+pdfSafe(w.temp_c||w.temperature_c||w.temp||'')+' '+pdfSafe(w.rain_chance||w.rain||''), ML, y);
       y+=8;
     }
 
     // Sections
-    var secOrder = ['global','ph','ai','markets','ev'];
+    var secOrder = ['global','ph','insurance','interruptions','ai','markets','ev'];
     secOrder.forEach(function(id) {
       var stories=(_currentData.sections||{})[id]||[];
       if (!stories.length) return;
@@ -1407,9 +1850,11 @@ function attachCollapsible() {
       if (isCollapsed) {
         hdr.classList.remove('collapsed');
         stories.forEach(function(s){ s.style.display=''; });
+        applyRelevanceFilter();
       } else {
         hdr.classList.add('collapsed');
         stories.forEach(function(s){ s.style.display='none'; });
+        setText('reader-meta', 'Section collapsed');
       }
     });
   });
@@ -1428,13 +1873,23 @@ function copyAsText() {
   if (d.markets) {
     lines.push('## Markets');
     if (d.markets.psei) lines.push('- PSEi: ' + d.markets.psei + ' ' + (d.markets.psei_move||''));
+    if (d.peso || d.markets.usdphp) {
+      var p = d.peso || {};
+      lines.push('- USD/PHP: ' + (p.usdphp || p.rate || d.markets.usdphp || '') + ' ' + (p.usdphp_move || p.move || d.markets.usdphp_move || ''));
+    }
     if (d.markets.asx) lines.push('- ASX 200: ' + d.markets.asx + ' ' + (d.markets.asx_move||''));
     if (d.markets.sp500) lines.push('- S&P 500: ' + d.markets.sp500 + ' ' + (d.markets.sp500_move||''));
     lines.push('');
   }
+  if (d.weather) {
+    lines.push('## Manila Weather');
+    lines.push([d.weather.summary || d.weather.condition || d.weather.forecast || '', d.weather.temp_c || d.weather.temperature_c || d.weather.temp || '', d.weather.rain_chance || d.weather.rain || ''].filter(Boolean).join(' | '));
+    if (d.weather.impact) lines.push('Impact: ' + d.weather.impact);
+    lines.push('');
+  }
 
   // Sections
-  var secOrder = ['global','ph','ai','markets','ev'];
+  var secOrder = ['global','ph','insurance','interruptions','ai','markets','ev'];
   secOrder.forEach(function(id) {
     var stories = (d.sections[id]||[]);
     if (!stories.length) return;
@@ -1734,6 +2189,36 @@ function getGeminiPrompt() {
   return 'You are an intelligence briefing analyst preparing a daily briefing for Bob, a forensic BI consultant who works with Australian insurance companies and Philippine consulting firms.\n\nGenerate today\'s briefing (' + dateStr + ') as a single JSON object with this EXACT schema:\n\n```json\n{\n  "date": "' + dateStr + '",\n  "markets": {\n    "psei": "6,450.23",\n    "psei_move": "+0.8% Up",\n    "asx": "8,102.50",\n    "asx_move": "-0.3% Down",\n    "sp500": "5,890.12",\n    "sp500_move": "+0.5% Up"\n  },\n  "sections": {\n    "global": [\n      {\n        "headline": "Story headline here",\n        "body": "2-3 sentence summary of the story and its implications.",\n        "source": "Reuters / Bloomberg / etc",\n        "relevance": "How this relates to Bob\'s work in forensic BI, insurance, or consulting. Write \'No direct relevance\' if none.",\n        "relevance_level": "high"\n      }\n    ],\n    "ph": [\n      {\n        "headline": "Philippine story headline",\n        "body": "Summary.",\n        "source": "Inquirer / Rappler / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "med"\n      }\n    ],\n    "ai": [\n      {\n        "headline": "AI/tech story",\n        "body": "Summary.",\n        "source": "TechCrunch / Wired / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "low"\n      }\n    ],\n    "markets": [\n      {\n        "headline": "Markets/economy story",\n        "body": "Summary.",\n        "source": "Financial Times / WSJ / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "none"\n      }\n    ],\n    "ev": [\n      {\n        "headline": "EV industry story",\n        "body": "Summary.",\n        "source": "Source",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "low"\n      }\n    ]\n  },\n  "watch": "One key development to monitor over the coming days. 2-3 sentences.",\n  "watch_source": "Source name"\n}\n```\n\nIMPORTANT RULES:\n- Output ONLY the JSON object, no markdown fences, no explanation before or after\n- Include 3-5 stories per section (global, ph, ai, markets, ev)\n- "relevance_level" MUST be one of: "high", "med", "low", "none"\n  - "high" = directly relevant to insurance, forensic BI, claims, consulting, audit, CPA, underwriting, BSP, ASX, AUD\n  - "med" = relevant to broader economy, markets, trade, inflation, supply chain, technology trends\n  - "low" = tangentially interesting but not directly actionable\n  - "none" = no direct relevance to Bob\'s work\n- "relevance" field should explain WHY it matters to Bob (or say "No direct relevance")\n- Market values should be current/realistic for today\n- Stories should be real, current news from today or yesterday\n- Each story body should be 2-3 sentences, informative and concise';
 }
 
+function getGeminiPrompt() {
+  var dateStr = getTodayBriefingDateLabel();
+  return [
+    'You are an intelligence briefing analyst preparing a daily briefing for Bob, a forensic BI consultant working with Australian insurance companies and Philippine consulting firms.',
+    '',
+    "Generate today's briefing (" + dateStr + ") as strict JSON only. Include top-level date, markets, peso, weather, sections, watch, and watch_source.",
+    '',
+    'Required top-level context:',
+    '- markets: psei, psei_move, asx, asx_move, sp500, sp500_move',
+    '- peso: usdphp, usdphp_move, driver',
+    '- weather: location, summary, temp_c, rain_chance, impact',
+    '',
+    'Required sections with 3-5 real current stories each:',
+    '- global',
+    '- ph',
+    '- insurance',
+    '- interruptions',
+    '- ai',
+    '- markets',
+    '- ev',
+    '',
+    'For every story include headline, body, source, relevance, and relevance_level.',
+    'The insurance section must focus on claims, underwriting, catastrophe exposure, reinsurance, regulatory movement, claims inflation, audit, and forensic BI implications.',
+    'The interruptions section must focus on business interruption, supply chains, transport/ports, power outages, weather events, cyber outages, plant closures, and affected industries.',
+    'Every insurance and interruption item must include a Bob-facing insight: likely claims angle, BI exposure, data to monitor, or consulting opportunity.',
+    'relevance_level must be high, med, low, or none.',
+    'Output JSON only, no markdown fences.'
+  ].join('\\n');
+}
+
 function togglePrompt() {
   var box = document.getElementById('prompt-box');
   var isOpen = box.classList.contains('open');
@@ -1748,7 +2233,7 @@ function togglePrompt() {
 function copyPrompt() {
   var text = getGeminiPrompt();
   navigator.clipboard.writeText(text).then(function() {
-    showToast('Gemini prompt copied to clipboard','ok');
+    showToast('AI prompt copied to clipboard','ok');
   }).catch(function() {
     var ta = document.createElement('textarea');
     ta.value = text;
@@ -1758,11 +2243,93 @@ function copyPrompt() {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    showToast('Gemini prompt copied to clipboard','ok');
+    showToast('AI prompt copied to clipboard','ok');
   });
 }
 
 // ── AUTO-LOAD TODAY'S BRIEFING ──
+var _deferredInstallPrompt = null;
+
+function isBriefingStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function refreshInstallButton() {
+  var standalone = isBriefingStandalone();
+  ['install-app-btn','login-install-btn'].forEach(function(id) {
+    var btn = document.getElementById(id);
+    if (btn) btn.style.display = standalone ? 'none' : '';
+  });
+}
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  refreshInstallButton();
+});
+
+window.addEventListener('appinstalled', function() {
+  _deferredInstallPrompt = null;
+  refreshInstallButton();
+  showToast('Briefing app installed','ok');
+});
+
+function installBriefingApp() {
+  if (!_deferredInstallPrompt || typeof _deferredInstallPrompt.prompt !== 'function') {
+    showToast('Use Chrome/Edge menu > Install Bob Briefing after opening the hosted or localhost app','info');
+    return;
+  }
+  _deferredInstallPrompt.prompt();
+  _deferredInstallPrompt.userChoice.then(function() {
+    _deferredInstallPrompt = null;
+    refreshInstallButton();
+  });
+}
+
+function showUpdateBanner() {
+  var el = document.getElementById('update-banner');
+  if (el) el.classList.add('show');
+}
+
+function applyAppUpdate() {
+  var btn = document.getElementById('update-banner-btn');
+  if (btn) { btn.textContent = 'Updating...'; btn.disabled = true; }
+  window.__briefingUpdateReloading = true;
+  if (window.__briefingSwWaiting) window.__briefingSwWaiting.postMessage({ type: 'SKIP_WAITING' });
+  else window.location.reload();
+}
+
+function registerBriefingServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  var canRegister = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (!canRegister) return;
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (window.__briefingUpdateReloading) window.location.reload();
+  });
+  navigator.serviceWorker.register('./sw.js').then(function(reg) {
+    function watch(worker) {
+      if (!worker) return;
+      worker.addEventListener('statechange', function() {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          window.__briefingSwWaiting = worker;
+          showUpdateBanner();
+        }
+      });
+    }
+    if (reg.waiting && navigator.serviceWorker.controller) {
+      window.__briefingSwWaiting = reg.waiting;
+      showUpdateBanner();
+    }
+    reg.addEventListener('updatefound', function() { watch(reg.installing); });
+    setInterval(function() { reg.update().catch(function() {}); }, 60 * 60 * 1000);
+  }).catch(function(err) {
+    console.warn('[BobBriefing] Service worker registration failed:', err);
+  });
+}
+
+refreshInstallButton();
+registerBriefingServiceWorker();
+
 function autoLoadToday() {
   var history = window._briefingHistory || [];
   if (!history.length) return;

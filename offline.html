@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#080A0E">
+<title>Bob Briefing Offline</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#080A0E;color:#fff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}
+.shell{width:min(460px,100%);border:1px solid rgba(255,255,255,.12);background:#0F1218;border-radius:14px;padding:28px}
+.kicker{font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:#C9A84C;margin-bottom:10px}
+h1{font-family:Georgia,serif;font-size:28px;line-height:1.1;margin:0 0 12px}
+p{color:rgba(255,255,255,.68);line-height:1.6;margin:0 0 18px;font-size:14px}
+button{border:1px solid rgba(201,168,76,.45);background:rgba(201,168,76,.14);color:#E8C97A;border-radius:8px;padding:10px 14px;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.08em;cursor:pointer}
+</style>
+</head>
+<body>
+  <main class="shell">
+    <div class="kicker">Offline</div>
+    <h1>Briefing desk is waiting for a connection.</h1>
+    <p>The app shell is installed, but sign-in, cloud sync, and fresh news inputs need the network. Reconnect and reload to continue.</p>
+    <button onclick="window.location.reload()">Reload</button>
+  </main>
+</body>
+</html>
