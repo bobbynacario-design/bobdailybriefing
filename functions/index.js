@@ -126,11 +126,6 @@ exports.generateBobDailyBriefing = onCall(
           content: prompt,
         },
       ],
-      text: {
-        format: {
-          type: "json_object",
-        },
-      },
       tools: [
         {
           type: "web_search",
