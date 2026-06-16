@@ -102,7 +102,7 @@ function parseBriefing(raw) {
 exports.generateBobDailyBriefing = onCall(
   {
     region: "asia-southeast1",
-    timeoutSeconds: 120,
+    timeoutSeconds: 540,
     memory: "512MiB",
     secrets: [OPENAI_API_KEY],
   },
@@ -129,7 +129,7 @@ exports.generateBobDailyBriefing = onCall(
       tools: [
         {
           type: "web_search",
-          search_context_size: "medium",
+          search_context_size: "low",
           user_location: {
             type: "approximate",
             country: "PH",

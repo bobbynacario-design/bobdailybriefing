@@ -197,7 +197,7 @@ window.fbGenerateBriefing = async function(dateLabel) {
   if (!uid) { setSyncStatus('error','Sign in first'); throw new Error('Sign in first'); }
   try {
     setSyncStatus('syncing','Generating...');
-    var generate = httpsCallable(functions, 'generateBobDailyBriefing');
+    var generate = httpsCallable(functions, 'generateBobDailyBriefing', { timeout: 540000 });
     var res = await generate({
       date: dateLabel || '',
       timezone: 'Asia/Manila',
