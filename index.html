@@ -301,8 +301,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
 /* ── HERO ── */
 .hero{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid var(--rim);border-radius:14px;padding:1.5rem 2rem;margin-bottom:1.5rem;position:relative;overflow:hidden}
-.hero::after{content:'📰';position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);font-size:80px;opacity:.2;pointer-events:none}
-body.light .hero::after{opacity:.06}
+.hero::after{content:'';position:absolute;right:2rem;top:50%;transform:translateY(-50%);width:124px;height:124px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%23C9A84C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='11' y='10' width='42' height='44' rx='3'/%3E%3Cline x1='17' y1='18' x2='47' y2='18' stroke-width='3.5'/%3E%3Cline x1='17' y1='24' x2='47' y2='24' stroke-width='1.2'/%3E%3Crect x='17' y='30' width='14' height='12' rx='1.5'/%3E%3Cline x1='35' y1='31' x2='47' y2='31' stroke-width='1.4'/%3E%3Cline x1='35' y1='35' x2='47' y2='35' stroke-width='1.4'/%3E%3Cline x1='35' y1='39' x2='47' y2='39' stroke-width='1.4'/%3E%3Cline x1='17' y1='47' x2='47' y2='47' stroke-width='1.4'/%3E%3Cline x1='17' y1='51' x2='40' y2='51' stroke-width='1.4'/%3E%3C/svg%3E") center/contain no-repeat;opacity:.55;pointer-events:none}
+body.light .hero::after{opacity:.42}
 .hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--gold);margin-bottom:.4rem;text-transform:uppercase}
 .hero-date{font-family:var(--serif);font-size:28px;font-weight:700;color:var(--txt);line-height:1.2;margin-bottom:.35rem}
 .hero-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em}
