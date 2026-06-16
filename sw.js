@@ -38,7 +38,9 @@ self.addEventListener('activate', function(event) {
   event.waitUntil(
     caches.keys().then(function(keys) {
       return Promise.all(keys.filter(function(key) {
-        return key !== CACHE_NAME;
+        // Only clean up THIS app's own old caches. caches is per-origin and shared
+        // with sibling apps (pokerhq, enclave) on github.io — never delete theirs.
+        return key.indexOf('bob-briefing-shell-') === 0 && key !== CACHE_NAME;
       }).map(function(key) {
         return caches.delete(key);
       }));
