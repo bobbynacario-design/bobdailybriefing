@@ -301,7 +301,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
 /* ── HERO ── */
 .hero{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid var(--rim);border-radius:14px;padding:1.5rem 2rem;margin-bottom:1.5rem;position:relative;overflow:hidden}
-.hero::after{content:'📰';position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);font-size:80px;opacity:.04;pointer-events:none}
+.hero::after{content:'📰';position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);font-size:80px;opacity:.2;pointer-events:none}
+body.light .hero::after{opacity:.06}
 .hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--gold);margin-bottom:.4rem;text-transform:uppercase}
 .hero-date{font-family:var(--serif);font-size:28px;font-weight:700;color:var(--txt);line-height:1.2;margin-bottom:.35rem}
 .hero-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em}
@@ -314,6 +315,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .tick:last-child{border-right:none}
 .tick-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--txt3);text-transform:uppercase;margin-bottom:.25rem}
 .tick-val{font-family:var(--mono);font-size:18px;font-weight:500;color:var(--txt)}
+.tick-val .wx-temp{display:block;line-height:1.15}
+.tick-val .wx-cond{display:block;font-family:var(--sans);font-size:11px;font-weight:400;color:var(--txt2);line-height:1.4;margin-top:.3rem;letter-spacing:.01em}
 .tick-move{font-family:var(--mono);font-size:11px;margin-top:.15rem}
 .tick-up{color:var(--green)}.tick-down{color:var(--red)}.tick-flat{color:var(--txt3)}
 .tick-bar{position:absolute;bottom:0;left:0;height:2px;width:100%;opacity:.2}
@@ -1484,7 +1487,9 @@ function setWeatherTick(weather) {
   var summary = weather.summary || weather.condition || weather.forecast || 'Forecast';
   var temp = weather.temp_c || weather.temperature_c || weather.temp || '';
   var rain = weather.rain_chance || weather.rain || weather.precipitation || '';
-  valEl.textContent = temp ? (temp + ' / ' + summary) : summary;
+  valEl.innerHTML = temp
+    ? '<span class="wx-temp">' + esc(temp) + '</span><span class="wx-cond">' + esc(summary) + '</span>'
+    : '<span class="wx-cond">' + esc(summary) + '</span>';
   moveEl.textContent = rain ? ('Rain ' + rain) : (weather.advisory || weather.impact || 'Today');
   moveEl.className = 'tick-move tick-flat';
 }
