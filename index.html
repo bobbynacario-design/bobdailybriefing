@@ -508,6 +508,9 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .research-upload-row{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;flex-wrap:wrap}
 .research-file-name{font-family:var(--mono);font-size:10px;color:var(--green);letter-spacing:.03em}
 .report-badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:20px;background:var(--purple-dim);color:var(--purple);border:1px solid rgba(155,111,232,.25)}
+/* Reports keep the delete control visible (History hides it until hover) */
+#research-out .hist-delete{opacity:.7;border-color:var(--rim2)}
+#research-out .hist-card:hover .hist-delete{opacity:1}
 @media(max-width:768px){.research-frame{height:calc(100vh - 210px)}}
 
 /* ── WEEKLY DIGEST ── */
