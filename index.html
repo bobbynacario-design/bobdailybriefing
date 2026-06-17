@@ -226,7 +226,9 @@ window.fbSaveReport = async function(report) {
       dateLabel: report.dateLabel || '',
       dek: report.dek || '',
       tags: report.tags || [],
+      format: report.format || 'html',
       html: report.html || '',
+      md: report.md || '',
       saved: Date.now(),
       uid: uid
     });
@@ -248,7 +250,7 @@ window.fbLoadReports = async function() {
     var out = [];
     snap.forEach(function(d) {
       var data = d.data();
-      out.push({ id:d.id, title:data.title, dateLabel:data.dateLabel, dek:data.dek||'', tags:data.tags||[], html:data.html, saved:data.saved });
+      out.push({ id:d.id, title:data.title, dateLabel:data.dateLabel, dek:data.dek||'', tags:data.tags||[], format:data.format||'html', html:data.html, md:data.md||'', saved:data.saved });
     });
     return out;
   } catch(e) {
@@ -888,17 +890,17 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     </div>
 
     <div class="paste-zone" id="research-import" style="display:none">
-      <div class="paste-label">Add Report — upload an .html file or paste a complete standalone document</div>
+      <div class="paste-label">Add Report — upload a Markdown (.md) or standalone .html file, or paste below</div>
       <div class="research-upload-row">
-        <input type="file" id="research-file" accept=".html,.htm,text/html" style="display:none" onchange="handleReportFileUpload(this)">
-        <button class="btn-sec" onclick="document.getElementById('research-file').click()">⬆ UPLOAD HTML FILE</button>
+        <input type="file" id="research-file" accept=".md,.markdown,.html,.htm,text/markdown,text/html" style="display:none" onchange="handleReportFileUpload(this)">
+        <button class="btn-sec" onclick="document.getElementById('research-file').click()">⬆ UPLOAD .MD / .HTML</button>
         <span class="research-file-name" id="research-file-name"></span>
       </div>
       <input id="research-title" class="research-input" placeholder="Report title (auto-filled from the file)">
       <input id="research-dek" class="research-input" placeholder="Short description (auto-filled from the file's meta description)">
       <input id="research-date" class="research-input" placeholder="Date label (e.g. 17 Jun 2026) — optional">
       <input id="research-tags" class="research-input" placeholder="Tags, comma-separated (optional)">
-      <textarea id="research-html" placeholder="…or paste the full &lt;!DOCTYPE html&gt;… report here. It renders isolated, so its own styling is preserved."></textarea>
+      <textarea id="research-html" oninput="window._pendingReportFormat=null" placeholder="…or paste Markdown (# heading…) or a full &lt;!DOCTYPE html&gt;… document here. Markdown renders to the rich report format; HTML renders as-is."></textarea>
       <div class="paste-actions">
         <span class="paste-hint">Full standalone HTML → saved privately to your feed</span>
         <div class="btn-row">
@@ -1772,6 +1774,167 @@ var BUILTIN_REPORTS = [
 window._reportFeed = [];
 var _currentReportUrl = null;
 
+// ═══ MARKDOWN → RICH REPORT (deterministic, no LLM) ═══
+// Lazily loads marked + the editorial template, then assembles a full
+// standalone report document identical in look to the hand-built reports.
+var _markedLoading = null;
+function loadMarked() {
+  if (window.marked) return Promise.resolve(window.marked);
+  if (_markedLoading) return _markedLoading;
+  _markedLoading = new Promise(function(resolve, reject) {
+    var sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js';
+    sc.onload = function() { resolve(window.marked); };
+    sc.onerror = function() { reject(new Error('Could not load the Markdown engine (offline?)')); };
+    document.head.appendChild(sc);
+  });
+  return _markedLoading;
+}
+
+var _reportTpl = null;
+function loadReportTemplate() {
+  if (_reportTpl) return Promise.resolve(_reportTpl);
+  return fetch('./reports/_report-template.html').then(function(r){ return r.text(); }).then(function(t){ _reportTpl = t; return t; });
+}
+
+function pad2(n){ return (n<10?'0':'')+n; }
+
+// Strip OpenAI deep-research citation tokens (citeturn31search0…) plus their
+// private-use delimiter glyphs — but never touch fenced code / mermaid blocks.
+function stripCites(md) {
+  return (md||'').split(/(```[\s\S]*?```)/g).map(function(seg) {
+    if (seg.indexOf('```') === 0) return seg;
+    return seg
+      .replace(/[-]/g, '')
+      .replace(/cite[\w]+/gi, '')
+      .replace(/ +([.,;:)])/g, '$1')
+      .replace(/\(\s*\)/g, '')
+      .replace(/[ \t]{2,}/g, ' ');
+  }).join('');
+}
+
+// Minimal YAML-ish front-matter: leading ---\n key: value (and "- item" lists) \n---
+function parseFrontMatter(md) {
+  var meta = {};
+  var m = (md||'').match(/^﻿?---\s*\n([\s\S]*?)\n---\s*\n?/);
+  if (!m) return { meta: meta, body: (md||'') };
+  var body = md.slice(m[0].length);
+  var curKey = null;
+  m[1].split(/\r?\n/).forEach(function(line) {
+    var kv = line.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
+    if (kv) {
+      curKey = kv[1].toLowerCase();
+      var val = kv[2].trim();
+      if (curKey === 'tags') meta.tags = val ? val.split(',').map(function(t){return t.trim();}).filter(Boolean) : [];
+      else if (curKey === 'ticker' && !val) meta.ticker = [];
+      else meta[curKey] = val;
+    } else if (curKey && /^\s*-\s+/.test(line)) {
+      if (!Array.isArray(meta[curKey])) meta[curKey] = [];
+      meta[curKey].push(line.replace(/^\s*-\s+/, '').trim());
+    }
+  });
+  return { meta: meta, body: body };
+}
+
+function buildTickerHtml(items) {
+  if (!items || !items.length) return '';
+  var cells = items.slice(0,7).map(function(it) {
+    var p = it.split('|').map(function(x){ return x.trim(); });
+    var valHtml = esc(p[1]||'').replace(/(\s?)([MB%]|bn|billion)$/i, '<small>$2</small>');
+    return '<div class="tick"><div class="lab">'+esc(p[0]||'')+'</div><div class="val">'+valHtml+'</div>'+(p[2]?'<div class="sub">'+esc(p[2])+'</div>':'')+'</div>';
+  }).join('');
+  return '<div class="ticker">'+cells+'</div>';
+}
+
+function mdToReportHtml(rawMd) {
+  return Promise.all([loadMarked(), loadReportTemplate()]).then(function(res) {
+    var marked = res[0], tpl = res[1];
+    var fm = parseFrontMatter(rawMd);
+    var bodyHtml = marked.parse(stripCites(fm.body), { gfm:true, breaks:false });
+
+    var pdoc = new DOMParser().parseFromString('<div id="rt-root">'+bodyHtml+'</div>', 'text/html');
+    var root = pdoc.getElementById('rt-root');
+
+    // Title from front-matter or the first H1
+    var h1 = root.querySelector('h1');
+    var title = fm.meta.title || (h1 ? h1.textContent.trim() : '') || 'Untitled report';
+    if (h1) h1.remove();
+
+    // Mermaid fences → figure.diagram > pre.mermaid (raw, unescaped)
+    root.querySelectorAll('pre > code').forEach(function(code) {
+      if (/language-mermaid/.test(code.className)) {
+        var src = code.textContent;
+        // mermaid timelines treat ':' as a separator, so HH:MM time labels
+        // (common in generated reports) break the parser — soften them.
+        if (/^\s*timeline\b/.test(src)) src = src.replace(/(\d):(\d\d)\b/g, '$1.$2');
+        var fig = pdoc.createElement('figure'); fig.className = 'diagram';
+        var pre = pdoc.createElement('pre'); pre.className = 'mermaid'; pre.textContent = src;
+        fig.appendChild(pre);
+        code.parentElement.replaceWith(fig);
+      }
+    });
+    // GFM tables → scroll-wrapped + styled
+    root.querySelectorAll('table').forEach(function(t) {
+      t.classList.add('data');
+      var wrap = pdoc.createElement('div'); wrap.className = 'table-scroll';
+      t.replaceWith(wrap); wrap.appendChild(t);
+    });
+    // Editorial bullet lists
+    root.querySelectorAll('ul').forEach(function(u){ u.classList.add('clean'); });
+
+    // Group flat stream into numbered sections at each H2
+    var toc = [], sections = '', lead = '', cur = null;
+    function flush() {
+      if (!cur) return;
+      sections += '<section id="'+cur.id+'"><div class="sec-head"><span class="sec-num">'+cur.num+'</span><h2 class="sec-title">'+esc(cur.title)+'</h2></div>'+cur.html+'</section>';
+      cur = null;
+    }
+    Array.prototype.forEach.call(root.childNodes, function(node) {
+      if (node.nodeType === 1 && node.tagName === 'H2') {
+        flush();
+        var n = toc.length + 1, id = 'sec-'+n;
+        toc.push({ id:id, title:node.textContent.trim() });
+        cur = { id:id, num:pad2(n), title:node.textContent.trim(), html:'' };
+      } else {
+        var frag = node.nodeType === 1 ? node.outerHTML : (node.textContent.trim() ? '<p>'+esc(node.textContent.trim())+'</p>' : '');
+        if (cur) cur.html += frag; else lead += frag;
+      }
+    });
+    flush();
+
+    // Dek (front-matter or first paragraph), trimmed
+    var dek = fm.meta.dek || '';
+    if (!dek) { var fp = root.querySelector('p'); dek = fp ? fp.textContent.trim() : ''; }
+    if (dek.length > 320) dek = dek.slice(0,317).replace(/\s+\S*$/, '') + '…';
+
+    var words = (root.textContent || '').split(/\s+/).filter(Boolean).length;
+    var readMin = Math.max(1, Math.round(words/200));
+
+    var date = fm.meta.date || '', tags = fm.meta.tags || [];
+    var tocHtml = toc.map(function(t,i){ return '<a href="#'+t.id+'"><span>'+pad2(i+1)+'</span> '+esc(t.title)+'</a>'; }).join('\n      ');
+    var metaRows = '<div class="row"><span class="k">Status</span><span class="v">Deep research</span></div>'
+      + (date ? '<div class="row"><span class="k">As of</span><span class="v">'+esc(date)+'</span></div>' : '')
+      + '<div class="row"><span class="k">Read</span><span class="v">~'+readMin+' min</span></div>';
+    var byline = '<span class="chip live">● Deep research</span>'
+      + (date ? '<span class="chip">As of <b>'+esc(date)+'</b></span>' : '')
+      + tags.map(function(t){ return '<span class="chip">'+esc(t)+'</span>'; }).join('')
+      + '<span class="chip">~'+readMin+' min read</span>';
+    var eyebrow = esc(fm.meta.eyebrow || ('Deep-research report' + (date ? ' · ' + date : '')));
+    var ticker = buildTickerHtml(fm.meta.ticker);
+
+    // split/join (not replace) so $ in content isn't treated as a backreference
+    return tpl
+      .split('{{TITLE}}').join(esc(title))
+      .split('{{EYEBROW}}').join(eyebrow)
+      .split('{{DEK}}').join(esc(dek))
+      .split('{{BYLINE}}').join(byline)
+      .split('{{TOC}}').join(tocHtml)
+      .split('{{META}}').join(metaRows)
+      .split('{{TICKER}}').join(ticker)
+      .split('{{BODY}}').join(lead + sections);
+  });
+}
+
 // Entry point: show the list, paint instantly from built-ins + cache, then
 // refresh from Firestore and repaint.
 function renderResearchList() {
@@ -1789,7 +1952,7 @@ function paintResearchList() {
   var el = document.getElementById('research-out');
   if (!el) return;
   var all = BUILTIN_REPORTS.concat((window._reportFeed||[]).map(function(r) {
-    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:r.dek||'', tags:r.tags||[], html:r.html, builtin:false, saved:r.saved };
+    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:r.dek||'', tags:r.tags||[], format:r.format||'html', html:r.html, md:r.md, builtin:false, saved:r.saved };
   }));
 
   var subEl = document.getElementById('research-sub');
@@ -1818,7 +1981,7 @@ function paintResearchList() {
     if (r.dek) html += '<div class="hist-preview">'+esc(r.dek)+'</div>';
     html += '<div class="hist-chips">';
     (r.tags||[]).forEach(function(t){ html += '<span class="hist-chip">'+esc(t)+'</span>'; });
-    html += '<span class="report-badge">📄 Full report</span>';
+    html += '<span class="report-badge">'+(r.format==='md' ? '📝 Markdown' : '📄 Full report')+'</span>';
     html += '</div></div>';
   });
   html += '</div>';
@@ -1849,17 +2012,25 @@ function openReport(id) {
   if (!r) return;
   var frame = document.getElementById('research-frame');
   _currentReportUrl = r.url || null;
-  if (r.url) {
-    frame.removeAttribute('srcdoc');
-    frame.src = r.url;
-  } else {
-    frame.removeAttribute('src');
-    frame.srcdoc = r.html || '<p style="font-family:sans-serif;padding:2rem">This report has no content.</p>';
-  }
   document.getElementById('research-reader-title').textContent = r.title || 'Report';
   document.getElementById('research-list-view').style.display = 'none';
   document.getElementById('research-reader-view').style.display = 'block';
   window.scrollTo(0,0);
+  if (r.url) {                                  // built-in static file
+    frame.removeAttribute('srcdoc');
+    frame.src = r.url;
+  } else if (r.format === 'md') {               // markdown → render to rich HTML on open
+    frame.removeAttribute('src');
+    frame.srcdoc = '<!doctype html><body style="margin:0;font-family:system-ui;color:#8a6a16;padding:2.2rem 2rem;font-size:14px">Rendering report…</body>';
+    mdToReportHtml(r.md || '').then(function(htmlDoc) {
+      frame.srcdoc = htmlDoc;
+    }).catch(function(e) {
+      frame.srcdoc = '<!doctype html><body style="margin:0;font-family:system-ui;color:#bc3b2c;padding:2.2rem 2rem;font-size:14px">Could not render markdown: '+esc(e.message)+'</body>';
+    });
+  } else {                                      // stored full HTML
+    frame.removeAttribute('src');
+    frame.srcdoc = r.html || '<p style="font-family:sans-serif;padding:2rem">This report has no content.</p>';
+  }
 }
 
 function closeReport() {
@@ -1903,33 +2074,71 @@ function handleReportFileUpload(input) {
     input.value = '';
     return;
   }
+  var isMd = /\.(md|markdown)$/i.test(file.name) || file.type === 'text/markdown';
   var reader = new FileReader();
   reader.onload = function(e) {
-    var html = (e.target.result || '').toString();
-    document.getElementById('research-html').value = html;
-    // Parse once (no scripts run) to harvest title + description for the card.
-    var pdoc = null;
-    try { pdoc = new DOMParser().parseFromString(html, 'text/html'); } catch(err) { pdoc = null; }
-    var titleEl = document.getElementById('research-title');
-    if (!titleEl.value.trim()) {
-      var parsedTitle = (pdoc && pdoc.querySelector('title')) ? pdoc.querySelector('title').textContent.trim() : '';
-      // Drop a trailing "— Deep Research" style suffix for a cleaner card title.
-      parsedTitle = parsedTitle.replace(/\s*[—–-]\s*Deep Research\s*$/i, '');
-      titleEl.value = parsedTitle || file.name.replace(/\.html?$/i, '');
-    }
-    var dekEl = document.getElementById('research-dek');
-    if (dekEl && !dekEl.value.trim() && pdoc) {
-      var metaDesc = pdoc.querySelector('meta[name="description"]');
-      var desc = metaDesc ? (metaDesc.getAttribute('content') || '').trim() : '';
-      if (desc) dekEl.value = desc;
-    }
+    var text = (e.target.result || '').toString();
+    document.getElementById('research-html').value = text;
+    window._pendingReportFormat = isMd ? 'md' : 'html';
+    if (isMd) fillMetaFromMarkdown(text, file); else fillMetaFromHtml(text, file);
     var nameEl = document.getElementById('research-file-name');
-    if (nameEl) nameEl.textContent = '✓ ' + file.name + ' · ' + Math.round(file.size/1024) + ' KB loaded';
-    showToast('File loaded — review the details, then Save Report','ok');
+    if (nameEl) nameEl.textContent = '✓ ' + file.name + ' · ' + Math.round(file.size/1024) + ' KB' + (isMd ? ' · Markdown → renders to rich format' : ' loaded');
+    showToast(isMd ? 'Markdown loaded — it renders to the rich report on open. Review & Save.' : 'File loaded — review the details, then Save Report', 'ok');
   };
   reader.onerror = function() { showToast('Could not read that file','error'); };
   reader.readAsText(file);
   input.value = ''; // allow re-selecting the same file later
+}
+
+// Auto-fill card fields from an uploaded standalone HTML report.
+function fillMetaFromHtml(html, file) {
+  var pdoc = null;
+  try { pdoc = new DOMParser().parseFromString(html, 'text/html'); } catch(err) { pdoc = null; }
+  var titleEl = document.getElementById('research-title');
+  if (!titleEl.value.trim()) {
+    var t = (pdoc && pdoc.querySelector('title')) ? pdoc.querySelector('title').textContent.trim() : '';
+    t = t.replace(/\s*[—–-]\s*Deep Research\s*$/i, '');
+    titleEl.value = t || file.name.replace(/\.html?$/i, '');
+  }
+  var dekEl = document.getElementById('research-dek');
+  if (dekEl && !dekEl.value.trim() && pdoc) {
+    var m = pdoc.querySelector('meta[name="description"]');
+    if (m) dekEl.value = (m.getAttribute('content') || '').trim();
+  }
+}
+
+// Auto-fill card fields from uploaded markdown (front-matter or headings/first para).
+function fillMetaFromMarkdown(md, file) {
+  var fm = parseFrontMatter(md);
+  var clean = stripCites(fm.body);
+  var titleEl = document.getElementById('research-title');
+  if (!titleEl.value.trim()) {
+    var t = fm.meta.title || '';
+    if (!t) { var hm = clean.match(/^\s*#\s+(.+)$/m); t = hm ? hm[1].trim() : ''; }
+    titleEl.value = t || file.name.replace(/\.(md|markdown)$/i, '');
+  }
+  var dekEl = document.getElementById('research-dek');
+  if (dekEl && !dekEl.value.trim()) {
+    var d = fm.meta.dek || '';
+    if (!d) {
+      var para = clean.replace(/^\s*#.+$/m, '').split(/\n\s*\n/).map(function(s){ return s.trim(); })
+        .filter(function(s){ return s && !/^[#>|`\-*]/.test(s); })[0] || '';
+      d = para.replace(/\*\*/g, '').replace(/[*_`]/g, '');
+    }
+    if (d.length > 320) d = d.slice(0,317).replace(/\s+\S*$/, '') + '…';
+    dekEl.value = d;
+  }
+  var dateEl = document.getElementById('research-date');
+  if (dateEl && !dateEl.value.trim() && fm.meta.date) dateEl.value = fm.meta.date;
+  var tagsEl = document.getElementById('research-tags');
+  if (tagsEl && !tagsEl.value.trim() && fm.meta.tags && fm.meta.tags.length) tagsEl.value = fm.meta.tags.join(', ');
+}
+
+// Markdown vs full-HTML: trust the upload's format, else sniff the content.
+function detectFormat(src) {
+  var t = src.replace(/^﻿/, '').replace(/^\s+/, '').slice(0,200).toLowerCase();
+  if (t.indexOf('<') === 0) return 'html';
+  return 'md';
 }
 
 async function saveResearchReport() {
@@ -1938,16 +2147,20 @@ async function saveResearchReport() {
   var dateLabel = (document.getElementById('research-date').value||'').trim();
   var tagsRaw = (document.getElementById('research-tags').value||'').trim();
   var tags = tagsRaw ? tagsRaw.split(',').map(function(t){ return t.trim(); }).filter(Boolean).slice(0,6) : [];
-  var html = (document.getElementById('research-html').value||'').trim();
+  var src = (document.getElementById('research-html').value||'').trim();
+  var format = window._pendingReportFormat || detectFormat(src);
   if (!title) { showToast('Add a report title','warn'); return; }
-  if (html.length < 50) { showToast('Paste the full report HTML','warn'); return; }
+  if (src.length < 30) { showToast('Add the report content (upload or paste)','warn'); return; }
   if (!window.fbSaveReport) { showToast('Sign in to save reports','error'); return; }
   try {
-    await window.fbSaveReport({ title:title, dateLabel:dateLabel, dek:dek, tags:tags, html:html });
+    var payload = { title:title, dateLabel:dateLabel, dek:dek, tags:tags, format:format };
+    if (format === 'md') payload.md = src; else payload.html = src;
+    await window.fbSaveReport(payload);
     showToast('Report saved to your feed','ok');
     ['research-title','research-dek','research-date','research-tags','research-html'].forEach(function(id){
       var el = document.getElementById(id); if (el) el.value = '';
     });
+    window._pendingReportFormat = null;
     var fnEl = document.getElementById('research-file-name');
     if (fnEl) fnEl.textContent = '';
     toggleResearchImport();
