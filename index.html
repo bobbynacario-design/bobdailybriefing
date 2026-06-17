@@ -503,6 +503,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .research-input{width:100%;background:var(--bg3);border:1px solid var(--rim2);border-radius:8px;padding:.6rem .9rem;font-family:var(--mono);font-size:12px;color:var(--txt);outline:none;margin-bottom:.5rem}
 .research-input:focus{border-color:var(--gold)}
 .research-input::placeholder{color:var(--txt3)}
+.research-upload-row{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;flex-wrap:wrap}
+.research-file-name{font-family:var(--mono);font-size:10px;color:var(--green);letter-spacing:.03em}
 .report-badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:20px;background:var(--purple-dim);color:var(--purple);border:1px solid rgba(155,111,232,.25)}
 @media(max-width:768px){.research-frame{height:calc(100vh - 210px)}}
 
@@ -881,10 +883,15 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     </div>
 
     <div class="paste-zone" id="research-import" style="display:none">
-      <div class="paste-label">Add Report — paste a complete standalone report document</div>
-      <input id="research-title" class="research-input" placeholder="Report title">
+      <div class="paste-label">Add Report — upload an .html file or paste a complete standalone document</div>
+      <input id="research-title" class="research-input" placeholder="Report title (auto-filled from the file)">
       <input id="research-date" class="research-input" placeholder="Date label (e.g. 17 Jun 2026)">
-      <textarea id="research-html" placeholder="Paste the full &lt;!DOCTYPE html&gt;… report here. It renders isolated, so its own styling is preserved."></textarea>
+      <div class="research-upload-row">
+        <input type="file" id="research-file" accept=".html,.htm,text/html" style="display:none" onchange="handleReportFileUpload(this)">
+        <button class="btn-sec" onclick="document.getElementById('research-file').click()">⬆ UPLOAD HTML FILE</button>
+        <span class="research-file-name" id="research-file-name"></span>
+      </div>
+      <textarea id="research-html" placeholder="…or paste the full &lt;!DOCTYPE html&gt;… report here. It renders isolated, so its own styling is preserved."></textarea>
       <div class="paste-actions">
         <span class="paste-hint">Full standalone HTML → saved privately to your feed</span>
         <div class="btn-row">
@@ -1876,6 +1883,39 @@ function toggleResearchImport() {
   box.style.display = (box.style.display==='none' || !box.style.display) ? 'block' : 'none';
 }
 
+// Read a chosen .html file into the form. Auto-fills the title from the
+// document's <title> (falling back to the filename) when title is empty.
+function handleReportFileUpload(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  // Firestore caps a doc at ~1 MB; leave headroom for the other fields.
+  if (file.size > 900000) {
+    showToast('File too large ('+Math.round(file.size/1024)+' KB). Max ~900 KB.','error');
+    input.value = '';
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var html = (e.target.result || '').toString();
+    document.getElementById('research-html').value = html;
+    var titleEl = document.getElementById('research-title');
+    if (!titleEl.value.trim()) {
+      var parsedTitle = '';
+      try {
+        var pdoc = new DOMParser().parseFromString(html, 'text/html');
+        if (pdoc && pdoc.querySelector('title')) parsedTitle = pdoc.querySelector('title').textContent.trim();
+      } catch(err) { parsedTitle = ''; }
+      titleEl.value = parsedTitle || file.name.replace(/\.html?$/i, '');
+    }
+    var nameEl = document.getElementById('research-file-name');
+    if (nameEl) nameEl.textContent = '✓ ' + file.name + ' · ' + Math.round(file.size/1024) + ' KB loaded';
+    showToast('File loaded — review the title, then Save Report','ok');
+  };
+  reader.onerror = function() { showToast('Could not read that file','error'); };
+  reader.readAsText(file);
+  input.value = ''; // allow re-selecting the same file later
+}
+
 async function saveResearchReport() {
   var title = (document.getElementById('research-title').value||'').trim();
   var dateLabel = (document.getElementById('research-date').value||'').trim();
@@ -1889,6 +1929,8 @@ async function saveResearchReport() {
     document.getElementById('research-title').value = '';
     document.getElementById('research-date').value = '';
     document.getElementById('research-html').value = '';
+    var fnEl = document.getElementById('research-file-name');
+    if (fnEl) fnEl.textContent = '';
     toggleResearchImport();
     renderResearchList();
   } catch(e) {
