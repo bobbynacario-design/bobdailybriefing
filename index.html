@@ -224,6 +224,8 @@ window.fbSaveReport = async function(report) {
     await setDoc(doc(db, RCOLL, id), {
       title: report.title || 'Untitled report',
       dateLabel: report.dateLabel || '',
+      dek: report.dek || '',
+      tags: report.tags || [],
       html: report.html || '',
       saved: Date.now(),
       uid: uid
@@ -246,7 +248,7 @@ window.fbLoadReports = async function() {
     var out = [];
     snap.forEach(function(d) {
       var data = d.data();
-      out.push({ id:d.id, title:data.title, dateLabel:data.dateLabel, html:data.html, saved:data.saved });
+      out.push({ id:d.id, title:data.title, dateLabel:data.dateLabel, dek:data.dek||'', tags:data.tags||[], html:data.html, saved:data.saved });
     });
     return out;
   } catch(e) {
@@ -884,13 +886,15 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
     <div class="paste-zone" id="research-import" style="display:none">
       <div class="paste-label">Add Report — upload an .html file or paste a complete standalone document</div>
-      <input id="research-title" class="research-input" placeholder="Report title (auto-filled from the file)">
-      <input id="research-date" class="research-input" placeholder="Date label (e.g. 17 Jun 2026)">
       <div class="research-upload-row">
         <input type="file" id="research-file" accept=".html,.htm,text/html" style="display:none" onchange="handleReportFileUpload(this)">
         <button class="btn-sec" onclick="document.getElementById('research-file').click()">⬆ UPLOAD HTML FILE</button>
         <span class="research-file-name" id="research-file-name"></span>
       </div>
+      <input id="research-title" class="research-input" placeholder="Report title (auto-filled from the file)">
+      <input id="research-dek" class="research-input" placeholder="Short description (auto-filled from the file's meta description)">
+      <input id="research-date" class="research-input" placeholder="Date label (e.g. 17 Jun 2026) — optional">
+      <input id="research-tags" class="research-input" placeholder="Tags, comma-separated (optional)">
       <textarea id="research-html" placeholder="…or paste the full &lt;!DOCTYPE html&gt;… report here. It renders isolated, so its own styling is preserved."></textarea>
       <div class="paste-actions">
         <span class="paste-hint">Full standalone HTML → saved privately to your feed</span>
@@ -1782,7 +1786,7 @@ function paintResearchList() {
   var el = document.getElementById('research-out');
   if (!el) return;
   var all = BUILTIN_REPORTS.concat((window._reportFeed||[]).map(function(r) {
-    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:'', tags:[], html:r.html, builtin:false, saved:r.saved };
+    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:r.dek||'', tags:r.tags||[], html:r.html, builtin:false, saved:r.saved };
   }));
 
   var subEl = document.getElementById('research-sub');
@@ -1805,7 +1809,9 @@ function paintResearchList() {
     html += '<div class="hist-card" data-report="'+esc(r.id)+'">';
     if (!r.builtin) html += '<button class="hist-delete" data-delete-report="'+esc(r.id)+'" title="Delete report">✕</button>';
     html += '<div class="hist-date">'+esc(r.title)+'</div>';
-    html += '<div class="hist-meta">'+esc(r.dateLabel||'')+(r.builtin?' · BUILT-IN':'')+'</div>';
+    var metaText = r.dateLabel || (r.saved ? new Date(r.saved).toLocaleDateString('en-PH',{day:'numeric',month:'short',year:'numeric'}) : '');
+    if (r.builtin) metaText += ' · BUILT-IN';
+    html += '<div class="hist-meta">'+esc(metaText)+'</div>';
     if (r.dek) html += '<div class="hist-preview">'+esc(r.dek)+'</div>';
     html += '<div class="hist-chips">';
     (r.tags||[]).forEach(function(t){ html += '<span class="hist-chip">'+esc(t)+'</span>'; });
@@ -1898,18 +1904,25 @@ function handleReportFileUpload(input) {
   reader.onload = function(e) {
     var html = (e.target.result || '').toString();
     document.getElementById('research-html').value = html;
+    // Parse once (no scripts run) to harvest title + description for the card.
+    var pdoc = null;
+    try { pdoc = new DOMParser().parseFromString(html, 'text/html'); } catch(err) { pdoc = null; }
     var titleEl = document.getElementById('research-title');
     if (!titleEl.value.trim()) {
-      var parsedTitle = '';
-      try {
-        var pdoc = new DOMParser().parseFromString(html, 'text/html');
-        if (pdoc && pdoc.querySelector('title')) parsedTitle = pdoc.querySelector('title').textContent.trim();
-      } catch(err) { parsedTitle = ''; }
+      var parsedTitle = (pdoc && pdoc.querySelector('title')) ? pdoc.querySelector('title').textContent.trim() : '';
+      // Drop a trailing "— Deep Research" style suffix for a cleaner card title.
+      parsedTitle = parsedTitle.replace(/\s*[—–-]\s*Deep Research\s*$/i, '');
       titleEl.value = parsedTitle || file.name.replace(/\.html?$/i, '');
+    }
+    var dekEl = document.getElementById('research-dek');
+    if (dekEl && !dekEl.value.trim() && pdoc) {
+      var metaDesc = pdoc.querySelector('meta[name="description"]');
+      var desc = metaDesc ? (metaDesc.getAttribute('content') || '').trim() : '';
+      if (desc) dekEl.value = desc;
     }
     var nameEl = document.getElementById('research-file-name');
     if (nameEl) nameEl.textContent = '✓ ' + file.name + ' · ' + Math.round(file.size/1024) + ' KB loaded';
-    showToast('File loaded — review the title, then Save Report','ok');
+    showToast('File loaded — review the details, then Save Report','ok');
   };
   reader.onerror = function() { showToast('Could not read that file','error'); };
   reader.readAsText(file);
@@ -1918,17 +1931,20 @@ function handleReportFileUpload(input) {
 
 async function saveResearchReport() {
   var title = (document.getElementById('research-title').value||'').trim();
+  var dek = (document.getElementById('research-dek').value||'').trim();
   var dateLabel = (document.getElementById('research-date').value||'').trim();
+  var tagsRaw = (document.getElementById('research-tags').value||'').trim();
+  var tags = tagsRaw ? tagsRaw.split(',').map(function(t){ return t.trim(); }).filter(Boolean).slice(0,6) : [];
   var html = (document.getElementById('research-html').value||'').trim();
   if (!title) { showToast('Add a report title','warn'); return; }
   if (html.length < 50) { showToast('Paste the full report HTML','warn'); return; }
   if (!window.fbSaveReport) { showToast('Sign in to save reports','error'); return; }
   try {
-    await window.fbSaveReport({ title:title, dateLabel:dateLabel, html:html });
+    await window.fbSaveReport({ title:title, dateLabel:dateLabel, dek:dek, tags:tags, html:html });
     showToast('Report saved to your feed','ok');
-    document.getElementById('research-title').value = '';
-    document.getElementById('research-date').value = '';
-    document.getElementById('research-html').value = '';
+    ['research-title','research-dek','research-date','research-tags','research-html'].forEach(function(id){
+      var el = document.getElementById(id); if (el) el.value = '';
+    });
     var fnEl = document.getElementById('research-file-name');
     if (fnEl) fnEl.textContent = '';
     toggleResearchImport();
