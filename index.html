@@ -212,6 +212,64 @@ window.fbGenerateBriefing = async function(dateLabel) {
   }
 };
 
+// ── DEEP RESEARCH REPORTS (reports-bob, uid-scoped — mirrors briefings) ──
+const RCOLL = 'reports-bob';
+
+window.fbSaveReport = async function(report) {
+  var uid = getUid();
+  if (!uid) { setSyncStatus('error','Not authenticated'); throw new Error('Not authenticated'); }
+  var id = report.id || ('rpt-' + Date.now());
+  try {
+    setSyncStatus('syncing','Saving report...');
+    await setDoc(doc(db, RCOLL, id), {
+      title: report.title || 'Untitled report',
+      dateLabel: report.dateLabel || '',
+      html: report.html || '',
+      saved: Date.now(),
+      uid: uid
+    });
+    setSyncStatus('ok','Report saved');
+    return id;
+  } catch(e) {
+    setSyncStatus('error','Report save failed');
+    console.error(e);
+    throw e;
+  }
+};
+
+window.fbLoadReports = async function() {
+  var uid = getUid();
+  if (!uid) return [];
+  try {
+    var q = query(collection(db, RCOLL), where('uid','==',uid), orderBy('saved','desc'), limit(50));
+    var snap = await getDocs(q);
+    var out = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      out.push({ id:d.id, title:data.title, dateLabel:data.dateLabel, html:data.html, saved:data.saved });
+    });
+    return out;
+  } catch(e) {
+    setSyncStatus('error','Reports load failed');
+    console.error(e);
+    return [];
+  }
+};
+
+window.fbDeleteReport = async function(id) {
+  var uid = getUid();
+  if (!uid) { setSyncStatus('error','Not authenticated'); throw new Error('Not authenticated'); }
+  try {
+    setSyncStatus('syncing','Deleting...');
+    await deleteDoc(doc(db, RCOLL, id));
+    setSyncStatus('ok','Deleted');
+  } catch(e) {
+    setSyncStatus('error','Delete failed');
+    console.error(e);
+    throw e;
+  }
+};
+
 window._fbReady = true;
 </script>
 
@@ -438,6 +496,16 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .empty-state{padding:3rem;text-align:center;color:var(--txt3);font-family:var(--mono);font-size:13px;letter-spacing:.06em}
 .load-more-wrap{text-align:center;margin-top:1.25rem}
 
+/* ── RESEARCH TAB ── */
+.research-reader-bar{display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap}
+.research-reader-title{flex:1;font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.research-frame{width:100%;height:calc(100vh - 150px);min-height:560px;border:1px solid var(--rim);border-radius:12px;background:var(--bg2);display:block}
+.research-input{width:100%;background:var(--bg3);border:1px solid var(--rim2);border-radius:8px;padding:.6rem .9rem;font-family:var(--mono);font-size:12px;color:var(--txt);outline:none;margin-bottom:.5rem}
+.research-input:focus{border-color:var(--gold)}
+.research-input::placeholder{color:var(--txt3)}
+.report-badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:20px;background:var(--purple-dim);color:var(--purple);border:1px solid rgba(155,111,232,.25)}
+@media(max-width:768px){.research-frame{height:calc(100vh - 210px)}}
+
 /* ── WEEKLY DIGEST ── */
 .digest-btn-wrap{margin-bottom:1.25rem}
 .archive-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem}
@@ -579,6 +647,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab" data-page="ai" onclick="switchPage('ai',this)">🤖 AI & Markets</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
     <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
+    <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
   </div>
   <div class="nav-right">
     <div class="nav-clock" id="nav-clock">--:--</div>
@@ -795,6 +864,55 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div id="trends-out"><div class="empty-state">LOADING TRENDS...</div></div>
 </div>
 
+<!-- ═══════════════ RESEARCH PAGE ═══════════════ -->
+<div class="page" id="page-research">
+
+  <!-- LIST VIEW -->
+  <div id="research-list-view">
+    <div class="hero" style="margin-bottom:1.25rem">
+      <div class="hero-eyebrow">Deep Research</div>
+      <div class="hero-date" style="font-size:22px">🔬 Research Reports</div>
+      <div class="hero-sub" id="research-sub">Long-form intelligence dossiers</div>
+      <div class="hero-divider"></div>
+    </div>
+
+    <div class="digest-btn-wrap">
+      <button class="btn-sec" onclick="toggleResearchImport()">＋ ADD REPORT</button>
+    </div>
+
+    <div class="paste-zone" id="research-import" style="display:none">
+      <div class="paste-label">Add Report — paste a complete standalone report document</div>
+      <input id="research-title" class="research-input" placeholder="Report title">
+      <input id="research-date" class="research-input" placeholder="Date label (e.g. 17 Jun 2026)">
+      <textarea id="research-html" placeholder="Paste the full &lt;!DOCTYPE html&gt;… report here. It renders isolated, so its own styling is preserved."></textarea>
+      <div class="paste-actions">
+        <span class="paste-hint">Full standalone HTML → saved privately to your feed</span>
+        <div class="btn-row">
+          <button class="btn-sec" onclick="toggleResearchImport()">CANCEL</button>
+          <button class="btn-primary" onclick="saveResearchReport()">SAVE REPORT ↗</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" type="text" id="research-search" placeholder="Search reports..." oninput="paintResearchList()">
+    </div>
+
+    <div id="research-out"><div class="empty-state">LOADING REPORTS...</div></div>
+  </div>
+
+  <!-- READER VIEW -->
+  <div id="research-reader-view" style="display:none">
+    <div class="research-reader-bar">
+      <button class="btn-sec" onclick="closeReport()">← All reports</button>
+      <div class="research-reader-title" id="research-reader-title"></div>
+      <button class="nav-btn" onclick="openReportNewTab()" title="Open report in a new browser tab">⤢ Full screen</button>
+    </div>
+    <iframe id="research-frame" class="research-frame" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer" title="Research report"></iframe>
+  </div>
+</div>
+
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
@@ -803,6 +921,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <button class="mob-tab" id="mob-ai" onclick="switchPageMobile('ai',this)"><span class="mob-tab-icon">🤖</span>AI</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
   <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
+  <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
 </div>
 
 <script>
@@ -1017,6 +1136,7 @@ function switchPage(id, el) {
   if (mob) mob.classList.add('active');
   if (id==='history') renderHistory();
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
+  if (id==='research') renderResearchList();
   window.scrollTo(0,0);
 }
 function switchPageMobile(id, el) {
@@ -1030,6 +1150,7 @@ function switchPageMobile(id, el) {
   });
   if (id==='history') renderHistory();
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
+  if (id==='research') renderResearchList();
   window.scrollTo(0,0);
 }
 
@@ -1617,6 +1738,176 @@ function deleteBriefing(key) {
     renderHistory();
     showToast('Briefing deleted (local only)','ok');
   }
+}
+
+// ── DEEP RESEARCH REPORTS ──
+// Built-in reports ship as static files and render via iframe src (their own
+// styling stays fully isolated). User-added reports live in Firestore and
+// render via iframe srcdoc. Both look exactly like the standalone document.
+var BUILTIN_REPORTS = [
+  {
+    id: 'mindanao-eq-2026',
+    title: 'Mindanao EQ-2026 · Insurance & BI Briefing',
+    dateLabel: '17 Jun 2026',
+    dek: 'Insurance and business-interruption exposure from the 08 June 2026 Mw 7.8 offshore Sarangani earthquake.',
+    tags: ['Insurance','Business Interruption','PHIVOLCS'],
+    url: './reports/mindanao-eq-2026.html',
+    builtin: true
+  }
+];
+window._reportFeed = [];
+var _currentReportUrl = null;
+
+// Entry point: show the list, paint instantly from built-ins + cache, then
+// refresh from Firestore and repaint.
+function renderResearchList() {
+  showResearchListView();
+  paintResearchList();
+  if (window.fbLoadReports) {
+    window.fbLoadReports().then(function(remote) {
+      window._reportFeed = remote || [];
+      paintResearchList();
+    }).catch(function() {});
+  }
+}
+
+function paintResearchList() {
+  var el = document.getElementById('research-out');
+  if (!el) return;
+  var all = BUILTIN_REPORTS.concat((window._reportFeed||[]).map(function(r) {
+    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:'', tags:[], html:r.html, builtin:false, saved:r.saved };
+  }));
+
+  var subEl = document.getElementById('research-sub');
+  if (subEl) subEl.textContent = all.length + ' report' + (all.length!==1?'s':'') + ' in your feed';
+
+  var search = ((document.getElementById('research-search')||{}).value||'').toLowerCase().trim();
+  var filtered = search ? all.filter(function(r) {
+    return (r.title||'').toLowerCase().includes(search)
+        || (r.dek||'').toLowerCase().includes(search)
+        || (r.dateLabel||'').toLowerCase().includes(search);
+  }) : all;
+
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-state">'+(search?'NO REPORTS MATCH "'+esc(search)+'"':'NO REPORTS YET — ADD ONE ABOVE')+'</div>';
+    return;
+  }
+
+  var html = '<div class="hist-grid">';
+  filtered.forEach(function(r) {
+    html += '<div class="hist-card" data-report="'+esc(r.id)+'">';
+    if (!r.builtin) html += '<button class="hist-delete" data-delete-report="'+esc(r.id)+'" title="Delete report">✕</button>';
+    html += '<div class="hist-date">'+esc(r.title)+'</div>';
+    html += '<div class="hist-meta">'+esc(r.dateLabel||'')+(r.builtin?' · BUILT-IN':'')+'</div>';
+    if (r.dek) html += '<div class="hist-preview">'+esc(r.dek)+'</div>';
+    html += '<div class="hist-chips">';
+    (r.tags||[]).forEach(function(t){ html += '<span class="hist-chip">'+esc(t)+'</span>'; });
+    html += '<span class="report-badge">📄 Full report</span>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+
+  el.querySelectorAll('.hist-card').forEach(function(card) {
+    card.addEventListener('click', function(e) {
+      if (e.target.closest('.hist-delete')) return;
+      openReport(card.getAttribute('data-report'));
+    });
+  });
+  el.querySelectorAll('.hist-delete').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      deleteResearchReport(btn.getAttribute('data-delete-report'));
+    });
+  });
+}
+
+function getReportById(id) {
+  var b = BUILTIN_REPORTS.find(function(r){ return r.id===id; });
+  if (b) return b;
+  return (window._reportFeed||[]).find(function(x){ return x.id===id; }) || null;
+}
+
+function openReport(id) {
+  var r = getReportById(id);
+  if (!r) return;
+  var frame = document.getElementById('research-frame');
+  _currentReportUrl = r.url || null;
+  if (r.url) {
+    frame.removeAttribute('srcdoc');
+    frame.src = r.url;
+  } else {
+    frame.removeAttribute('src');
+    frame.srcdoc = r.html || '<p style="font-family:sans-serif;padding:2rem">This report has no content.</p>';
+  }
+  document.getElementById('research-reader-title').textContent = r.title || 'Report';
+  document.getElementById('research-list-view').style.display = 'none';
+  document.getElementById('research-reader-view').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function closeReport() {
+  var frame = document.getElementById('research-frame');
+  frame.removeAttribute('src');
+  frame.removeAttribute('srcdoc');
+  _currentReportUrl = null;
+  showResearchListView();
+}
+
+function showResearchListView() {
+  var lv = document.getElementById('research-list-view');
+  var rv = document.getElementById('research-reader-view');
+  if (lv) lv.style.display = 'block';
+  if (rv) rv.style.display = 'none';
+}
+
+function openReportNewTab() {
+  if (_currentReportUrl) { window.open(_currentReportUrl, '_blank'); return; }
+  var frame = document.getElementById('research-frame');
+  var html = frame.getAttribute('srcdoc');
+  if (!html) return;
+  var w = window.open('', '_blank');
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+}
+
+function toggleResearchImport() {
+  var box = document.getElementById('research-import');
+  if (!box) return;
+  box.style.display = (box.style.display==='none' || !box.style.display) ? 'block' : 'none';
+}
+
+async function saveResearchReport() {
+  var title = (document.getElementById('research-title').value||'').trim();
+  var dateLabel = (document.getElementById('research-date').value||'').trim();
+  var html = (document.getElementById('research-html').value||'').trim();
+  if (!title) { showToast('Add a report title','warn'); return; }
+  if (html.length < 50) { showToast('Paste the full report HTML','warn'); return; }
+  if (!window.fbSaveReport) { showToast('Sign in to save reports','error'); return; }
+  try {
+    await window.fbSaveReport({ title:title, dateLabel:dateLabel, html:html });
+    showToast('Report saved to your feed','ok');
+    document.getElementById('research-title').value = '';
+    document.getElementById('research-date').value = '';
+    document.getElementById('research-html').value = '';
+    toggleResearchImport();
+    renderResearchList();
+  } catch(e) {
+    showToast('Save failed: '+e.message,'error');
+  }
+}
+
+function deleteResearchReport(id) {
+  var r = getReportById(id);
+  var label = r ? r.title : id;
+  if (!confirm('Delete report "'+label+'"?')) return;
+  if (!window.fbDeleteReport) { showToast('Not signed in','error'); return; }
+  window.fbDeleteReport(id).then(function() {
+    window._reportFeed = (window._reportFeed||[]).filter(function(x){ return x.id!==id; });
+    paintResearchList();
+    showToast('Report deleted','ok');
+  }).catch(function(e) {
+    showToast('Delete failed: '+e.message,'error');
+  });
 }
 
 // ── WEEKLY DIGEST ──

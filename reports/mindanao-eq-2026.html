@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#FAF8F3">
+<meta name="description" content="Deep-research briefing: insurance and business-interruption exposure from the 08 June 2026 Mw 7.8 offshore Sarangani earthquake, Mindanao, Philippines. Prepared for Bob.">
+<title>Mindanao EQ-2026 · Insurance &amp; BI Briefing — Deep Research</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* Light editorial (default) */
+  --paper:#FAF8F3;--surface:#FFFFFF;--surface2:#F3F0E7;
+  --ink:#1B1815;--ink2:rgba(27,24,21,.64);--ink3:rgba(27,24,21,.42);
+  --line:rgba(40,32,16,.10);--line2:rgba(40,32,16,.16);--line3:rgba(40,32,16,.30);
+  --gold:#8A6A16;--gold2:#A8842A;--gold-dim:rgba(138,106,22,.10);
+  --green:#1A7A40;--green-dim:rgba(26,122,64,.10);
+  --red:#BC3B2C;--red-dim:rgba(188,59,44,.09);
+  --blue:#1F6FA8;--blue-dim:rgba(31,111,168,.10);
+  --purple:#6C3FB0;--purple-dim:rgba(108,63,176,.10);
+  --teal:#0E8C8C;
+  --shadow:0 1px 2px rgba(30,24,12,.05),0 10px 30px rgba(30,24,12,.05);
+  --serif:'Playfair Display',Georgia,serif;
+  --mono:'DM Mono','Courier New',monospace;
+  --sans:'DM Sans',system-ui,sans-serif;
+}
+body.dark{
+  --paper:#080A0E;--surface:#0F1218;--surface2:#161B24;
+  --ink:#fff;--ink2:rgba(255,255,255,.62);--ink3:rgba(255,255,255,.4);
+  --line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.13);--line3:rgba(255,255,255,.24);
+  --gold:#C9A84C;--gold2:#E8C97A;--gold-dim:rgba(201,168,76,.14);
+  --green:#2DB87A;--green-dim:rgba(45,184,122,.14);
+  --red:#E85C5C;--red-dim:rgba(232,92,92,.14);
+  --blue:#3498DB;--blue-dim:rgba(52,152,219,.14);
+  --purple:#9B6FE8;--purple-dim:rgba(155,111,232,.14);
+  --teal:#1EC8C8;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 36px rgba(0,0,0,.4);
+}
+html{scroll-behavior:smooth}
+html,body{background:var(--paper);color:var(--ink);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased}
+body{line-height:1.58;font-weight:400}
+::selection{background:var(--gold-dim);color:var(--ink)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--gold),var(--gold2));z-index:200;transition:width .1s linear}
+
+/* topbar */
+.topbar{position:sticky;top:0;z-index:100;background:color-mix(in srgb,var(--paper) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line2);display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.7rem clamp(20px,4vw,44px)}
+.brand{font-family:var(--serif);font-size:18px;font-weight:800;color:var(--gold);white-space:nowrap}
+.brand span{font-family:var(--mono);font-size:9.5px;color:var(--ink3);margin-left:.55rem;letter-spacing:.14em;text-transform:uppercase}
+.tb-actions{display:flex;gap:.5rem;align-items:center}
+.tb-btn{font-family:var(--mono);font-size:10px;padding:.4rem .7rem;border-radius:7px;border:1px solid var(--line2);background:transparent;color:var(--ink2);cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.tb-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+@media(max-width:560px){.brand span{display:none}.tb-btn{padding:.35rem .55rem;letter-spacing:.05em}}
+
+/* page grid */
+.page{max-width:1580px;margin:0 auto;padding:1.6rem clamp(20px,3vw,44px) 4rem;display:grid;grid-template-columns:248px minmax(0,1fr);gap:clamp(30px,3.5vw,56px);align-items:start}
+main{grid-column:2;min-width:0}
+.sidebar{grid-column:1;grid-row:1;position:sticky;top:74px;display:flex;flex-direction:column;gap:1.5rem}
+@media(max-width:1080px){.page{grid-template-columns:1fr;padding-top:1rem;gap:0}main{grid-column:1}.sidebar{display:none}}
+
+/* sidebar blocks */
+.side-h{font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3);margin-bottom:.75rem}
+.toc a{display:flex;gap:.55rem;font-family:var(--mono);font-size:11.5px;color:var(--ink2);text-decoration:none;padding:.42rem 0 .42rem .8rem;border-left:2px solid var(--line2);transition:all .15s;line-height:1.3}
+.toc a span{color:var(--ink3);font-size:10px;min-width:14px}
+.toc a:hover{color:var(--ink)}
+.toc a.active{color:var(--gold);border-left-color:var(--gold);font-weight:500}
+.toc a.active span{color:var(--gold)}
+.side-meta .row{display:flex;flex-direction:column;gap:.12rem;padding:.5rem 0;border-top:1px solid var(--line)}
+.side-meta .row:first-of-type{border-top:none}
+.side-meta .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.side-meta .v{font-family:var(--mono);font-size:11px;color:var(--ink)}
+.side-legend{display:flex;flex-direction:column;gap:.45rem;align-items:flex-start}
+
+/* badges */
+.badge{display:inline-flex;align-items:center;gap:.4rem;padding:.28rem .6rem;border-radius:6px;font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase}
+.badge.fact{color:var(--green);background:var(--green-dim);border:1px solid color-mix(in srgb,var(--green) 35%,transparent)}
+.badge.est{color:var(--purple);background:var(--purple-dim);border:1px dashed color-mix(in srgb,var(--purple) 45%,transparent)}
+
+/* masthead */
+.masthead{position:relative;padding:.4rem 0 1.3rem;border-bottom:1px solid var(--line2);margin-bottom:1.3rem;overflow:hidden}
+.masthead .seis{position:absolute;right:0;bottom:14px;width:44%;height:74px;opacity:.2;pointer-events:none}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;position:relative}
+.eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 0 4px var(--red-dim);animation:pulse 2.4s ease-in-out infinite}
+h1.title{font-family:var(--serif);font-weight:800;font-size:clamp(1.7rem,3.2vw,2.65rem);line-height:1.08;letter-spacing:-.015em;margin:.65rem 0 .7rem;max-width:24ch;position:relative}
+.dek{font-size:1.02rem;color:var(--ink2);max-width:68ch;line-height:1.55;position:relative}
+.dek strong{color:var(--ink);font-weight:600}
+.byline{display:flex;flex-wrap:wrap;gap:.45rem .55rem;margin-top:1.05rem;position:relative}
+.chip{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink2);background:var(--surface);border:1px solid var(--line2);border-radius:999px;padding:.34rem .7rem;white-space:nowrap}
+.chip b{color:var(--gold);font-weight:500}
+.chip.live{color:var(--red);border-color:color-mix(in srgb,var(--red) 35%,transparent)}
+
+/* ticker */
+.ticker{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--line2);border-radius:12px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow);margin-bottom:1.9rem}
+.tick{padding:.85rem 1rem;border-right:1px solid var(--line)}
+.tick:last-child{border-right:none}
+.tick .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--ink3);text-transform:uppercase;margin-bottom:.35rem}
+.tick .val{font-family:var(--serif);font-size:1.5rem;font-weight:700;line-height:1;color:var(--ink)}
+.tick .val small{font-size:.9rem;color:var(--ink2);font-family:var(--mono);font-weight:400}
+.tick .sub{font-family:var(--mono);font-size:9.5px;color:var(--ink3);margin-top:.32rem}
+@media(max-width:880px){.ticker{grid-template-columns:repeat(3,1fr)}.tick{border-bottom:1px solid var(--line)}}
+@media(max-width:480px){.ticker{grid-template-columns:repeat(2,1fr)}}
+
+/* sections */
+section{scroll-margin-top:74px;margin-bottom:2.7rem}
+.sec-head{display:flex;align-items:baseline;gap:.8rem;border-bottom:2px solid var(--ink);padding-bottom:.5rem;margin-bottom:1.2rem}
+.sec-num{font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:500}
+h2.sec-title{font-family:var(--serif);font-weight:700;font-size:clamp(1.3rem,2vw,1.8rem);line-height:1.12;letter-spacing:-.01em}
+h3{font-family:var(--serif);font-weight:700;font-size:1.16rem;margin:1.6rem 0 .55rem;color:var(--ink)}
+
+article p{margin:0 0 .95rem;font-size:1rem;color:var(--ink);line-height:1.66;max-width:76ch}
+article p strong{font-weight:600}
+.lead{font-size:1.06rem}
+.lead.first::first-letter{font-family:var(--serif);font-weight:800;float:left;font-size:3.2rem;line-height:.82;padding:.35rem .55rem 0 0;color:var(--gold)}
+ul.clean{margin:0 0 1.1rem;padding:0;list-style:none;max-width:76ch}
+ul.clean li{position:relative;padding-left:1.4rem;margin-bottom:.55rem;font-size:1rem;line-height:1.6}
+ul.clean li::before{content:"";position:absolute;left:0;top:.6em;width:7px;height:7px;background:var(--gold);transform:rotate(45deg)}
+ul.clean li strong{font-weight:600}
+
+/* callouts */
+.callout{max-width:80ch;border-radius:11px;padding:1rem 1.2rem;margin:1.3rem 0;background:var(--surface);border:1px solid var(--line2);border-left:3px solid var(--gold);box-shadow:var(--shadow)}
+.callout .ck{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:.45rem}
+.callout p{margin:0;font-size:.98rem;line-height:1.6;max-width:none}
+.callout.quote p{font-family:var(--serif);font-style:italic;font-size:1.18rem;line-height:1.45;color:var(--ink)}
+.callout.estimate{border-left:3px dashed var(--purple)}
+.callout.estimate .ck{color:var(--purple)}
+.bottomline{border-radius:12px;padding:1.3rem 1.5rem;margin:1.8rem 0 1rem;background:linear-gradient(135deg,var(--gold-dim),transparent),var(--surface);border:1px solid color-mix(in srgb,var(--gold) 38%,transparent);box-shadow:var(--shadow)}
+.bottomline .ck{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:.55rem;display:flex;align-items:center;gap:.5rem}
+.bottomline p{margin:0;font-size:1.06rem;line-height:1.62;max-width:84ch}
+
+/* formula */
+.formula{font-family:var(--mono);font-size:.92rem;line-height:1.7;background:var(--surface2);border:1px solid var(--line2);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0;color:var(--ink2);max-width:90ch}
+.formula b{color:var(--gold);font-weight:500}
+
+/* diagrams — always-light figure panel (pairs with light mermaid theme) */
+.diagram{background:#FFFFFF;border:1px solid rgba(40,32,16,.14);border-radius:14px;padding:1.4rem 1rem .7rem;margin:1.5rem 0;overflow-x:auto;box-shadow:0 1px 2px rgba(30,24,12,.05),0 10px 30px rgba(30,24,12,.06)}
+.diagram .mermaid{display:flex;justify-content:center;min-width:460px}
+.diagram figcaption{font-family:var(--mono);font-size:10.5px;color:#6E665A;text-align:center;padding:.7rem 1rem 0;line-height:1.5;border-top:1px solid rgba(40,32,16,.1);margin:.6rem auto 0;max-width:84ch}
+.dlabel{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:#8A6A16;padding:0 .4rem .9rem}
+@media(max-width:560px){.diagram .mermaid{min-width:300px}}
+
+/* tables */
+.table-scroll{overflow-x:auto;border-radius:12px;border:1px solid var(--line2);margin:1.4rem 0;box-shadow:var(--shadow)}
+table.data{width:100%;border-collapse:collapse;font-size:.92rem;min-width:600px;background:var(--surface)}
+table.data caption{caption-side:top;text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);padding:.55rem .9rem}
+table.data th{font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink2);text-align:left;padding:.8rem 1rem;border-bottom:2px solid var(--line2);background:var(--surface2);font-weight:500;vertical-align:bottom}
+table.data td{padding:.8rem 1rem;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.5}
+table.data tbody tr:last-child td{border-bottom:none}
+table.data tbody tr:nth-child(even){background:var(--surface2)}
+table.data tbody tr:hover{background:var(--gold-dim)}
+table.data td.k{font-weight:600;color:var(--ink)}
+table.data td .fig{font-family:var(--mono);font-size:.9rem;color:var(--gold)}
+table.data td .src{font-family:var(--mono);font-size:10px;color:var(--ink3)}
+table.data strong{font-weight:600;color:var(--ink)}
+
+/* site cards */
+.grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));margin:1.4rem 0}
+.card{background:var(--surface);border:1px solid var(--line2);border-radius:13px;padding:1.1rem 1.2rem;box-shadow:var(--shadow);transition:border-color .2s,transform .15s,box-shadow .2s}
+.card:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 8px 26px rgba(30,24,12,.1)}
+.card .pri{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;padding:.24rem .55rem;border-radius:5px;display:inline-block;margin-bottom:.7rem;font-weight:500}
+.pri.vh{color:var(--red);background:var(--red-dim);border:1px solid color-mix(in srgb,var(--red) 32%,transparent)}
+.pri.h{color:var(--gold);background:var(--gold-dim);border:1px solid color-mix(in srgb,var(--gold) 32%,transparent)}
+.pri.mh{color:var(--blue);background:var(--blue-dim);border:1px solid color-mix(in srgb,var(--blue) 32%,transparent)}
+.pri.m{color:var(--teal);background:rgba(14,140,140,.08);border:1px solid rgba(14,140,140,.3)}
+.card h4{font-family:var(--serif);font-size:1.1rem;font-weight:700;line-height:1.2;margin-bottom:.2rem;color:var(--ink)}
+.card .loc{font-family:var(--mono);font-size:10px;color:var(--ink3);letter-spacing:.02em;margin-bottom:.7rem}
+.card .fld{margin-bottom:.6rem}
+.card .fld .fl{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.2rem}
+.card .fld p{font-size:.86rem;margin:0;line-height:1.5;color:var(--ink2);max-width:none}
+.card .fld p strong{color:var(--ink);font-weight:600}
+.srcs{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.6rem}
+.srcs .s{font-family:var(--mono);font-size:8.5px;color:var(--ink2);background:var(--surface2);border:1px solid var(--line);border-radius:4px;padding:.2rem .45rem}
+
+/* scenarios */
+.scen{display:grid;gap:1.1rem;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));margin:1.4rem 0}
+.scard{background:var(--surface);border:1px solid var(--line2);border-radius:14px;padding:1.2rem;border-top:4px solid var(--line3);box-shadow:var(--shadow)}
+.scard.best{border-top-color:var(--green)}
+.scard.likely{border-top-color:var(--gold)}
+.scard.worst{border-top-color:var(--red)}
+.scard .nm{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:.7rem}
+.scard.best .nm{color:var(--green)}.scard.likely .nm{color:var(--gold)}.scard.worst .nm{color:var(--red)}
+.scard .narr{font-size:.86rem;color:var(--ink2);line-height:1.5;margin-bottom:.9rem}
+.scard .row{display:flex;justify-content:space-between;align-items:baseline;padding:.45rem 0;border-top:1px solid var(--line)}
+.scard .row .l{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.scard .row .v{font-family:var(--mono);font-size:.95rem;color:var(--ink);font-weight:500}
+.scard .row .v.share{color:var(--gold)}
+.scard .ka{font-size:.82rem;color:var(--ink3);line-height:1.45;margin-top:.7rem;font-style:italic}
+
+/* footer */
+footer{border-top:2px solid var(--ink);padding:1.8rem 0 1rem;margin-top:1.6rem}
+footer .fk{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:1rem}
+footer p{font-size:.9rem;color:var(--ink2);max-width:80ch;margin-bottom:1rem;line-height:1.6}
+.agencies{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:1rem}
+.agencies .a{font-family:var(--mono);font-size:9.5px;color:var(--ink2);background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:.3rem .6rem;letter-spacing:.03em}
+.foot-meta{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:1.3rem;letter-spacing:.04em}
+
+@media print{
+  .topbar,#progress,.sidebar,.tb-btn{display:none!important}
+  .page{display:block;max-width:none;padding:0}
+  body{background:#fff}
+  .card,.scard,.callout,.bottomline,.diagram,.table-scroll{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<header class="topbar">
+  <div class="brand">Deep&nbsp;Research<span>Catastrophe &amp; BI Intelligence</span></div>
+  <div class="tb-actions">
+    <button class="tb-btn" id="themeBtn" title="Toggle theme">◐ Theme</button>
+    <button class="tb-btn" onclick="window.print()" title="Save as PDF / print">⎙ Save&nbsp;PDF</button>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <nav class="toc" aria-label="Contents">
+      <div class="side-h">Contents</div>
+      <a href="#summary"><span>01</span> Executive summary</a>
+      <a href="#event"><span>02</span> Event summary</a>
+      <a href="#insurance"><span>03</span> Insurance context</a>
+      <a href="#bi"><span>04</span> BI claim complexity</a>
+      <a href="#exposure"><span>05</span> Exposure mapping</a>
+      <a href="#monitoring"><span>06</span> Monitoring plan</a>
+      <a href="#lossgap"><span>07</span> Loss-gap &amp; recs</a>
+    </nav>
+    <div class="side-meta">
+      <div class="side-h">At a glance</div>
+      <div class="row"><span class="k">Status</span><span class="v">Analytical briefing</span></div>
+      <div class="row"><span class="k">As of</span><span class="v">16 Jun 2026 · DROMIC #17</span></div>
+      <div class="row"><span class="k">Event</span><span class="v">08 Jun 2026 · 07:37 PST</span></div>
+      <div class="row"><span class="k">Regions</span><span class="v">IX · XI · XII · BARMM</span></div>
+      <div class="row"><span class="k">Read</span><span class="v">~15 min</span></div>
+    </div>
+    <div class="side-legend">
+      <div class="side-h">Legend</div>
+      <span class="badge fact">● Official fact</span>
+      <span class="badge est">◆ Analytical estimate</span>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main>
+    <div class="masthead">
+      <svg class="seis" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true">
+        <polyline fill="none" stroke="#B89030" stroke-width="1.6" opacity="0.9"
+          points="0,60 90,60 130,58 170,62 210,40 230,92 250,18 268,104 286,52 320,60 360,59 400,61 440,30 458,98 476,12 494,110 512,48 540,60 600,60 660,59 700,61 740,44 758,88 776,26 794,100 812,54 850,60 920,60 980,59 1020,61 1060,50 1078,80 1096,38 1114,82 1132,56 1160,60 1200,60"/>
+      </svg>
+      <div class="eyebrow"><span class="dot"></span> Deep-research briefing · Mindanao EQ-2026 · Prepared for Bob</div>
+      <h1 class="title">Philippine Mindanao Earthquake: Insurance &amp; Business-Interruption Report</h1>
+      <p class="dek">An offshore <strong>Mw 7.8</strong> earthquake off Sarangani has affected <strong>1.4&nbsp;million people</strong> across four Mindanao regions. But in a market with <strong>1.78% insurance penetration</strong>, insured losses will stay concentrated in a narrow ring of large commercial accounts — and the real contest is the <strong>documentation burden</strong> behind every business-interruption claim.</p>
+      <div class="byline">
+        <span class="chip live">● Analytical briefing</span>
+        <span class="chip">As of <b>16 Jun 2026</b> · DROMIC&nbsp;#17</span>
+        <span class="chip">Event <b>08 Jun 2026</b> · 07:37 PST</span>
+        <span class="chip">Regions <b>IX · XI · XII · BARMM</b></span>
+        <span class="chip">~15 min read</span>
+      </div>
+    </div>
+
+    <div class="ticker">
+      <div class="tick"><div class="lab">Magnitude</div><div class="val">Mw 7.8</div><div class="sub">offshore Sarangani</div></div>
+      <div class="tick"><div class="lab">Persons affected</div><div class="val">1.42<small>M</small></div><div class="sub">339,254 families</div></div>
+      <div class="tick"><div class="lab">Still displaced</div><div class="val">83,142</div><div class="sub">21,137 families</div></div>
+      <div class="tick"><div class="lab">Damaged houses</div><div class="val">68,652</div><div class="sub">12,495 total loss</div></div>
+      <div class="tick"><div class="lab">Aid delivered</div><div class="val">₱229.53<small>M</small></div><div class="sub">DSWD assistance</div></div>
+      <div class="tick"><div class="lab">2025 penetration</div><div class="val">1.78<small>%</small></div><div class="sub">vs 1.67% in 2024</div></div>
+      <div class="tick"><div class="lab">Est. insured share</div><div class="val">~3–6<small>%</small></div><div class="sub">analytical estimate</div></div>
+    </div>
+
+    <article>
+
+      <!-- EXEC SUMMARY -->
+      <section id="summary">
+        <div class="sec-head"><span class="sec-num">01</span><h2 class="sec-title">Executive summary</h2></div>
+
+        <p class="lead first">The current event is the <strong>08 June 2026 Mw 7.8 offshore Sarangani earthquake</strong>, which PHIVOLCS says struck at <strong>07:37 AM PST</strong>, with an <strong>offshore epicenter 32 km west of Maasim, Sarangani</strong> and an <strong>estimated depth of 33 km</strong>. PHIVOLCS attributes the event to <strong>subduction along the Cotabato Trench</strong> and had already recorded <strong>138 aftershocks</strong> by <strong>11:00 AM</strong> on the day of the mainshock.</p>
+
+        <p>For official humanitarian impact, the most current indexed <strong>DSWD DROMIC Report #17</strong> dated <strong>16 June 2026, 6 PM</strong> reports <strong>339,254 affected families / 1,417,078 persons</strong> across <strong>528 barangays</strong> in <strong>Regions IX, XI, XII, and BARMM</strong>; <strong>21,137 families / 83,142 persons</strong> still displaced; and <strong>68,652 damaged houses</strong>, of which <strong>12,495 were totally damaged</strong>. DSWD also reports <strong>₱229.53 million</strong> in humanitarian assistance delivered. DROMIC&rsquo;s latest indexed report does <strong>not</strong> yet publish a consolidated economy-wide peso damage total, so any market-loss estimate still requires assumptions.</p>
+
+        <p>The insurance angle is clear: the Philippines remains a <strong>low-penetration</strong> market. The Insurance Commission reported <strong>insurance penetration of 1.67% in 2024</strong> and <strong>1.78% in 2025</strong>. Region-level commercial property penetration is not published in a way that allows direct Mindanao catastrophe benchmarking, but BSP survey evidence shows that even broad &ldquo;any insurance&rdquo; ownership in Mindanao is a poor proxy for quake-relevant indemnity cover because the 2021 figure is heavily inflated by the inclusion of <strong>PhilHealth</strong>. That is why the current event is likely to produce a <strong>large economic-versus-insured loss gap</strong>, consistent with AM Best&rsquo;s view that insured losses should be only a <strong>small fraction</strong> of economic damage.</p>
+
+        <div class="callout quote">
+          <div class="ck">AM Best — market view</div>
+          <p>Insured losses should amount to only a small fraction of total economic damage, because of the catastrophe protection gap in the Philippines.</p>
+        </div>
+
+        <p>For a Bob-facing insurer or analyst, the dominant technical issue is not only direct property damage; it is the <strong>documentation burden around business interruption</strong>. Commercial BI recoveries will turn on whether insureds can prove: the covered material-damage trigger; the exact period of interruption; utility failure or denial-of-access causation where relevant; and the counterfactual revenue/margin trajectory using reliable accounting records, production data, and repair critical-path evidence. Global adjuster and forensic-accounting practice consistently shows that BI claims become slower, noisier, and more disputed when contemporaneous financial records, outage certifications, and engineering timelines are weak.</p>
+
+        <p>The highest-priority exposure corridor is the <strong>Sarangani coast–General Santos–Polomolok/Koronadal</strong> axis: <strong>Makar Wharf / Port of General Santos</strong>, <strong>General Santos Fish Port Complex</strong>, the <strong>Tambler/Calumpang industrial and ecozone belt</strong>, the <strong>General Tuna/Century Pacific processing footprint</strong>, <strong>airport connectivity</strong>, and the <strong>South Cotabato agro-industrial belt</strong>. Those assets are disproportionately important because they combine high economic throughput with strong BI sensitivity to power, cold-chain, transport, labor availability, and government safety inspections.</p>
+
+        <p>Where current official data remain incomplete, this report states assumptions explicitly and separates <strong>official facts</strong> from <strong>analytical estimates</strong>.</p>
+      </section>
+
+      <!-- EVENT SUMMARY -->
+      <section id="event">
+        <div class="sec-head"><span class="sec-num">02</span><h2 class="sec-title">Event summary</h2></div>
+
+        <p>PHIVOLCS&rsquo; official primer states that the earthquake struck at <strong>07:37 AM PST on 08 June 2026</strong>, measured <strong>Mw 7.8</strong>, had an offshore epicenter <strong>32 km west of Maasim, Sarangani</strong>, and occurred at an estimated depth of <strong>33 km</strong>. PHIVOLCS further says the source mechanism is consistent with <strong>Cotabato Trench subduction</strong>, and that <strong>aftershocks were expected together with damage</strong>; by <strong>11:00 AM</strong> on the same day, the Philippine Seismic Network had recorded <strong>138 aftershocks</strong> ranging from <strong>M1.3 to M6.7</strong>.</p>
+
+        <p>The government response was immediate. The President publicly confirmed that a <strong>tsunami warning</strong> had been issued for several coastal provinces in Mindanao and directed national agencies to mobilize; DSWD and OCD activated response coordination, while local class and work suspensions followed in multiple affected areas. PIA also reported that <strong>General Santos International Airport was temporarily suspended</strong>, with flight cancellations, and PPA imposed safety measures and inspections at affected ports, including <strong>Baseport General Santos</strong>, where port officials conferred with cargo handling operators regarding restoration steps.</p>
+
+        <p>The most complete official area summary presently indexed is <strong>DSWD DROMIC Report #17</strong>. It shows that the earthquake affected <strong>Regions IX, XI, XII, and BARMM</strong>, with particularly material exposure in <strong>Sarangani</strong>, <strong>General Santos City</strong>, <strong>South Cotabato</strong>, <strong>Sultan Kudarat</strong>, <strong>Davao Occidental</strong>, and parts of nearby provinces and cities. DROMIC reports <strong>339,254 affected families / 1,417,078 persons</strong>, <strong>21,137 families / 83,142 persons</strong> still displaced, and <strong>68,652 damaged houses</strong> including <strong>12,495 totally damaged</strong>. It also reports <strong>45 evacuation centers previously used, 4,464 families / 19,791 persons currently inside ECs</strong>, and <strong>₱229.53 million</strong> in assistance delivered.</p>
+
+        <div class="callout">
+          <div class="ck">Casualty data — still moving in week one</div>
+          <p>DSWD DROMIC&rsquo;s latest indexed report is <strong>not</strong> the best casualty source. The clearest attributable government figure found is from <strong>OCD Region XII via PIA</strong>: as of <strong>10 June 2026</strong>, official regional reporting indicated <strong>at least 33 dead, 456 injured, and 4 missing</strong>. Another government update the same day said the <strong>missing count had risen to 8</strong> as retrieval operations continued. For claims reserving, the correct stance is that casualty data were still <strong>moving</strong> during the first post-event week.</p>
+        </div>
+
+        <p>DROMIC does, however, record meaningful operational indicators relevant to commercial loss assessment. DSWD Region XII established command centers in <strong>Makar Wharf, Alabel, and Glan</strong>; mobile command and kitchen assets were deployed in <strong>General Santos</strong> and <strong>Glan</strong>; and DSWD Region XII says it had already provided Assistance to Individuals in Crisis Situations to <strong>additional 422 casualties</strong> admitted to <strong>St. Elizabeth Hospital</strong> and <strong>Dr. Jorge Royeca Hospital</strong> on <strong>08 June</strong>. Those details matter because they corroborate substantial early disruption in the core urban and logistics corridor most relevant to insured commercial risks.</p>
+
+        <figure class="diagram">
+          <div class="dlabel">Fig. 1 — Response timeline</div>
+<pre class="mermaid">
+timeline
+    title Sarangani earthquake response timeline — June 2026
+    08 Jun mainshock : Mw 7.8 at 0737H PST, offshore W of Maasim : Tsunami warning and immediate national response
+    08 Jun midday : PHIVOLCS primer issued : 138 aftershocks recorded by 1100H
+    08-09 Jun : GenSan airport suspended, flights cancelled : Port safety inspections across affected Mindanao ports : DSWD and OCD command-and-relief deployment
+    10 Jun : OCD regional casualty briefing : RDANA deployment to Glan and Sarangani corridor
+    11 Jun : DILG orders structural inspections : PhilSA nighttime-light disruption analysis released
+    16 Jun : DSWD DROMIC Report #17 : 1.417M persons affected, 83,142 still displaced
+</pre>
+          <figcaption>Consolidates PHIVOLCS, PIA/PCO, PPA, PhilSA, and DSWD reporting into a claims-useful sequence.</figcaption>
+        </figure>
+
+        <div class="table-scroll">
+          <table class="data">
+            <caption>Official metrics — latest indexed figures (● Official fact)</caption>
+            <thead><tr><th>Metric</th><th>Latest indexed official figure</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Mainshock</td><td><span class="fig">Mw 7.8</span> · 08 Jun 2026, 07:37 AM PST</td><td><span class="src">PHIVOLCS primer</span></td></tr>
+              <tr><td class="k">Epicenter</td><td>32 km west of Maasim, Sarangani</td><td><span class="src">PHIVOLCS primer</span></td></tr>
+              <tr><td class="k">Depth</td><td><span class="fig">33 km</span></td><td><span class="src">PHIVOLCS primer</span></td></tr>
+              <tr><td class="k">Aftershocks by 11:00 AM, 08 Jun</td><td><span class="fig">138</span></td><td><span class="src">PHIVOLCS primer</span></td></tr>
+              <tr><td class="k">Affected families / persons</td><td><span class="fig">339,254 / 1,417,078</span></td><td><span class="src">DSWD DROMIC #17</span></td></tr>
+              <tr><td class="k">Still displaced families / persons</td><td><span class="fig">21,137 / 83,142</span></td><td><span class="src">DSWD DROMIC #17</span></td></tr>
+              <tr><td class="k">Damaged houses</td><td><span class="fig">68,652</span></td><td><span class="src">DSWD DROMIC #17</span></td></tr>
+              <tr><td class="k">Totally damaged houses</td><td><span class="fig">12,495</span></td><td><span class="src">DSWD DROMIC #17</span></td></tr>
+              <tr><td class="k">Humanitarian assistance delivered</td><td><span class="fig">₱229.53 million</span></td><td><span class="src">DSWD DROMIC #17</span></td></tr>
+              <tr><td class="k">Casualties (indexed govt briefing)</td><td>33 dead, 456 injured, 4 missing — later 8 missing in updated EOC reporting</td><td><span class="src">OCD via PIA, 10 Jun 2026</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- INSURANCE CONTEXT -->
+      <section id="insurance">
+        <div class="sec-head"><span class="sec-num">03</span><h2 class="sec-title">Insurance context</h2></div>
+
+        <p>The macro insurance constraint is straightforward. The Insurance Commission reported <strong>insurance penetration of 1.67% in 2024</strong> and <strong>1.78% in 2025</strong> for the Philippine insurance industry. In other words, total premiums remain a very small share of GDP, which is consistent with a large catastrophe protection gap by international standards.</p>
+
+        <p>There is no equally useful official publication of <strong>Mindanao commercial property catastrophe penetration</strong>. The best official regional proxy is the BSP&rsquo;s household-side Financial Inclusion Survey. In <strong>2019</strong>, BSP estimated that <strong>23%</strong> of Filipino adults nationally had insurance and that <strong>Mindanao</strong> was above that at <strong>30%</strong>. In <strong>2021</strong>, however, BSP changed the questionnaire to include <strong>PhilHealth</strong>; the national headline became <strong>48% with PhilHealth</strong> but only <strong>17% without PhilHealth</strong>, and Mindanao rose to <strong>62%</strong> with PhilHealth included. That means Mindanao&rsquo;s broad &ldquo;insurance ownership&rdquo; indicators are <strong>not a valid shortcut</strong> for corporate property-and-BI take-up. For quake loss modeling, indemnity protection remains much thinner than those household survey headlines suggest.</p>
+
+        <p>For commercial risks, Philippine market practice is still centered on <strong>property damage first, BI second</strong>. AIG Philippines&rsquo; property-all-risk materials explicitly note that interruption losses can be added to commercial property programs; its broader property pages also note optional add-ons such as <strong>machinery breakdown</strong>, <strong>electronic equipment</strong>, <strong>terrorism</strong>, and <strong>business interruption</strong>. This is consistent with the practical observation that BI is concentrated in larger corporates, export manufacturers, bigger retailers, and hotels rather than being broadly distributed across the entire affected economy.</p>
+
+        <p>Historical public evidence also points toward a persistently low insured share for Philippine earthquake losses. A public industry report citing EQECAT estimated that the <strong>2012 Visayas/Cebu earthquake</strong> would produce <strong>less than US$100 million in insured losses</strong> against roughly <strong>US$1 billion in economic losses</strong>, implying an insured share of <strong>under 10%</strong>. For the present June 2026 event, <strong>AM Best</strong> says insured losses should amount to only a <strong>small fraction of total economic damage</strong> because of the catastrophe protection gap in the Philippines. The World Bank&rsquo;s sovereign catastrophe-risk transfer program is relevant context but not a substitute for private indemnity penetration: it notes that the Philippines received <strong>US$26 million</strong> in payouts following <strong>typhoon and earthquake events</strong> during 2017–2018 sovereign coverage, which shows that public-sector parametric protection exists, but it is structurally separate from firm-level property and BI recovery.</p>
+
+        <p>For this event, that low penetration matters most where the economy is heavily physical and operational: fish landing, canning, cold storage, mall operations, hotels, agribusiness processing, utilities, and transport hubs. The likely result is a loss profile where <strong>economic damage is broad</strong>, <strong>insured property damage is concentrated</strong>, and <strong>insured BI is even more concentrated</strong> in those larger accounts able to buy material-damage BI extensions and maintain the documentation needed to prove them.</p>
+      </section>
+
+      <!-- BI COMPLEXITY -->
+      <section id="bi">
+        <div class="sec-head"><span class="sec-num">04</span><h2 class="sec-title">Business interruption claim complexity</h2></div>
+
+        <p>In practice, the key BI issue is not simply &ldquo;Was there an earthquake?&rdquo; but &ldquo;What exactly triggered the policy response, for how long, and how can it be proven?&rdquo; Crawford&rsquo;s forensic accounting materials list the most relevant commercial BI variants for this event: <strong>advanced loss of profits</strong>, <strong>public utilities</strong>, <strong>denial of access</strong>, and <strong>customer/supplier extension claims</strong>. That is exactly the combination most likely to arise in the Sarangani–GenSan corridor.</p>
+
+        <p>That means commercial insureds will normally need to assemble several distinct evidence packs:</p>
+
+        <div class="table-scroll">
+          <table class="data">
+            <caption>BI evidence packs by trigger type</caption>
+            <thead><tr><th>Evidence pack</th><th>What it must prove</th><th>Typical supporting records</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Coverage trigger</td><td>That a covered peril caused direct physical loss or a valid extension trigger</td><td>Policy schedule, endorsements, photos/video, incident report, engineering inspection, adjuster instructions, repair scope</td></tr>
+              <tr><td class="k">Operational interruption</td><td>What operations stopped, when, and why</td><td>Plant shutdown log, mall/hotel closure notices, security logs, generator logs, maintenance tickets, evacuation or structural inspection orders</td></tr>
+              <tr><td class="k">Utility interruption</td><td>Duration and cause of power, water, telecom outages</td><td>Utility advisories, feeder/substation restoration reports, internal meter logs, genset fuel records</td></tr>
+              <tr><td class="k">Access / civil authority</td><td>Whether authorities or unsafe infrastructure prevented access</td><td>LGU closure order, road/bridge advisories, port safety notices, airport suspension notices</td></tr>
+              <tr><td class="k">Contingent BI</td><td>Downstream or upstream dependence on damaged third parties</td><td>Supplier/customer notices, purchase orders, shipping schedules, vessel or trucking cancellations</td></tr>
+              <tr><td class="k">Financial quantum</td><td>Counterfactual revenue and margin absent the quake</td><td>Monthly management accounts, trial balance, sales by product/site/day, budget, forecast, payroll, variable cost savings, extra expense invoices</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>The documentary logic in that table is consistent with both the claims requirements seen in Philippine insurers&rsquo; property-style documentation and with forensic-accounting practice in large BI claims. Pioneer&rsquo;s property-claim requirements, for example, explicitly ask for <strong>incident reports</strong>, <strong>photos of damaged property</strong>, <strong>affidavits of loss</strong>, and <strong>value of damaged property</strong>. Crawford and Sedgwick then show how the BI layer adds <strong>historical trend analysis</strong>, <strong>budgets/forecasts</strong>, <strong>gross-profit calculations</strong>, <strong>payroll analysis</strong>, <strong>increased costs of working</strong>, and identification of <strong>insured cost savings</strong>.</p>
+
+        <p>The reason quake BI claims become complex so quickly is that the causation chain is often mixed. A tuna processor may have some direct shaking damage, but its larger loss may actually arise from <strong>power interruption</strong>, <strong>port controls</strong>, <strong>cold-chain degradation</strong>, or <strong>staff unavailability</strong>. A hotel may reopen physically but still suffer a slower recovery because conferences are cancelled and aftershocks reduce occupancy. A mall may lose only a few trading days physically, but tenant trading data, structural inspection timing, and customer-footfall shock may complicate the quantification of the actual insured BI period. McLarens notes precisely this need to distinguish operational realities from simplistic headline closure assumptions, especially in hospitality BI.</p>
+
+        <p>Current government reporting reinforces those concerns. DOE/NEA/NPC mobilized recovery for an estimated <strong>864,000 households</strong>, with only <strong>15 of 23 regional substations</strong> and <strong>41 of 68 major feeders</strong> re-energized early in the response; PPA activated port safety inspections; General Santos airport operations were temporarily suspended; and PhilSA detected nighttime-light reductions as a proxy for disruption and outages. In reserve terms, those are classic markers of BI complexity because they affect not just direct repairs but the wider operating environment needed to restart revenue generation.</p>
+
+        <figure class="diagram">
+          <div class="dlabel">Fig. 2 — BI claims sequence</div>
+<pre class="mermaid">
+flowchart TD
+    A[Mainshock or aftershock] --&gt; B[Property damage or valid extension trigger]
+    B --&gt; C[Immediate notice to insurer and adjuster]
+    C --&gt; D[Site evidence capture]
+    D --&gt; E[Engineering and repair critical path]
+    D --&gt; F[Utility and access evidence]
+    D --&gt; G[Supplier and customer disruption evidence]
+    E --&gt; H[Financial model of lost turnover or gross profit]
+    F --&gt; H
+    G --&gt; H
+    H --&gt; I[Forensic review of trends, savings, extra expense, payroll]
+    I --&gt; J[Interim reserve and partial payment]
+    J --&gt; K[Final BI proof and settlement]
+</pre>
+          <figcaption>The practical claims sequence implied by insurer, adjuster, and forensic-accounting materials.</figcaption>
+        </figure>
+
+        <div class="callout estimate">
+          <div class="ck">◆ Working assumptions — not official deadlines</div>
+          <p><strong>Assumed commercial timelines for this report.</strong> Because neither the Insurance Code nor the sources reviewed provide event-specific BI settlement benchmarks for this earthquake, I use the following working assumptions: same-day to 72-hour notice; 7–14 days for triage reserve setting on major accounts; 2–6 weeks for an initial quantified BI submission if records are available; and <strong>3–9+ months</strong> for settlement of large multi-site BI claims where repair critical path, utility causation, and seasonality all matter. Those assumptions are consistent with the complexity described by Crawford, Sedgwick, and McLarens, but they should be treated as operational planning assumptions rather than legal standards.</p>
+        </div>
+
+        <p>A final regulatory point is useful for Bob&rsquo;s communications posture: the Insurance Commission&rsquo;s <strong>2025 facilitated claims</strong> circular required insurers, in the context of major disasters, to <strong>expedite claims</strong>, <strong>relax documentary requirements where appropriate</strong>, and <strong>extend periods for notice and document submission</strong>. That circular is not event-specific to this earthquake unless separately invoked, but it is a strong regulatory precedent for pragmatic documentation handling after catastrophe events.</p>
+      </section>
+
+      <!-- EXPOSURE MAPPING -->
+      <section id="exposure">
+        <div class="sec-head"><span class="sec-num">05</span><h2 class="sec-title">Exposure mapping</h2></div>
+
+        <p>The loss-sensitive economic geography is not the whole of Mindanao equally. It is the corridor where strong shaking intersects with export logistics, utilities, dense retail, and continuous-process operations. DROMIC&rsquo;s area coverage and displacement data, combined with government and PhilSA reporting on port controls, airport suspension, power restoration, and nighttime-light disruptions, point to four priority bands: the <strong>Sarangani coast</strong>, <strong>General Santos maritime-industrial hub</strong>, <strong>South Cotabato agro-industrial belt</strong>, and <strong>Davao del Sur / Davao Occidental spillover zone</strong>.</p>
+
+        <figure class="diagram">
+          <div class="dlabel">Fig. 3 — Exposure corridor (schematic)</div>
+<pre class="mermaid">
+flowchart TD
+    A[Offshore epicenter west of Maasim] --&gt; B[Coastal Sarangani&lt;br/&gt;Glan • Maasim • Alabel • Malapatan]
+    B --&gt; C[General Santos logistics hub&lt;br/&gt;Makar Wharf • Fish Port • Airport • Tambler/Calumpang]
+    C --&gt; D[South Cotabato agro-industrial belt&lt;br/&gt;Polomolok • Koronadal • Tupi • Lake Sebu]
+    B --&gt; E[Davao Occidental spillover&lt;br/&gt;Jose Abad Santos • Malita • Sarangani Island]
+    D --&gt; F[Digos spillover / Metro Davao Ecozone]
+</pre>
+          <figcaption>A schematic exposure map, not a scale map — intended to show the business-interruption chain rather than geology.</figcaption>
+        </figure>
+
+        <p>The priority site list below focuses on assets likely to matter most for insured BI.</p>
+
+        <div class="grid">
+          <div class="card"><span class="pri vh">Very high</span><h4>Port of General Santos / Makar Wharf</h4><div class="loc">General Santos City</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>Core maritime gateway for the SOCCSKSARGEN corridor; DSWD established a command center at Makar Wharf after the quake.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Berth/yard restrictions, safety inspections, cargo backlog, feeder-road disruption, tsunami protocols.</p></div>
+            <div class="srcs"><span class="s">DSWD command-center note</span><span class="s">PPA · Baseport GenSan</span></div>
+          </div>
+
+          <div class="card"><span class="pri vh">Very high</span><h4>General Santos Fish Port Complex</h4><div class="loc">Tambler, General Santos City</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>PFDA shows heavy fish throughput; one official monthly report recorded <strong>25,531.63 MT</strong> in December and another <strong>21,982.81 MT</strong> in a later period.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Cold-chain interruption, ice/fuel shortage, vessel landing delays, export timing slippage, labor displacement.</p></div>
+            <div class="srcs"><span class="s">PFDA throughput</span><span class="s">BOI</span></div>
+          </div>
+
+          <div class="card"><span class="pri vh">Very high</span><h4>General Tuna Corp. / Century Pacific footprint</h4><div class="loc">Brgy. Tambler &amp; wider GenSan</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>Century Pacific says its tuna processing plant is in <strong>Purok Lansong, Brgy. Tambler</strong>; CPAVI is a major coconut producer in GenSan.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Power and water loss, port/fish landed-volume disruption, cold-storage stress, workforce access, packaging delay.</p></div>
+            <div class="srcs"><span class="s">Century Pacific</span></div>
+          </div>
+
+          <div class="card"><span class="pri h">High</span><h4>General Santos airport logistics node</h4><div class="loc">Fatima/Tambler, General Santos</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>Critical passenger and air-cargo node for Sarangani/South Cotabato; operations were temporarily suspended after the quake.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Flight cancellations, cargo handling interruption, apron/terminal inspection, downstream perishables delay.</p></div>
+            <div class="srcs"><span class="s">PIA/PCO</span></div>
+          </div>
+
+          <div class="card"><span class="pri h">High</span><h4>Millennium/Gensan special economic zone belt</h4><div class="loc">Brgys. Calumpang &amp; Tambler, GenSan</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>Official proclamations designate SEZ parcels in <strong>Calumpang and Tambler</strong> close to port-fishport-airport infrastructure.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Utility disruption, road access, structural screening, tenant restart lag, supplier/customer interruption.</p></div>
+            <div class="srcs"><span class="s">SC E-Library / Lawphil</span></div>
+          </div>
+
+          <div class="card"><span class="pri h">High</span><h4>Kamanga Agro-Industrial Economic Zone</h4><div class="loc">Brgy. Kamanga, Maasim, Sarangani</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>Presidential proclamation expanded the Maasim ecozone; MinDA describes agro-industrial and power-generation orientation.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Direct shaking, aftershock-triggered reinspection, coastal and road access issues, utility restoration lag.</p></div>
+            <div class="srcs"><span class="s">PCO</span><span class="s">Lawphil</span><span class="s">MinDA</span></div>
+          </div>
+
+          <div class="card"><span class="pri h">High</span><h4>Sarangani Agro-Industrial Eco Zone</h4><div class="loc">Brgy. Maribulan, Alabel, Sarangani</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>MinDA describes a <strong>317-hectare</strong> agro-industrial ecozone designed for export-oriented activity.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Utility failure, worker displacement, truck-to-port disruption, telecom interruption.</p></div>
+            <div class="srcs"><span class="s">MinDA</span></div>
+          </div>
+
+          <div class="card"><span class="pri mh">Medium-high</span><h4>Sarangani Economic Development Zone</h4><div class="loc">Brgy. Cannery, Polomolok, South Cotabato</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>Official proclamation places the zone in Polomolok; Polomolok itself brands as an agro-industrial hub.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Processing downtime, road/bridge access, packaging/cold-chain issues, workforce availability.</p></div>
+            <div class="srcs"><span class="s">Lawphil / Senate</span><span class="s">Polomolok LGU</span></div>
+          </div>
+
+          <div class="card"><span class="pri mh">Medium-high</span><h4>Polomolok pineapple &amp; packaging belt</h4><div class="loc">Polomolok, South Cotabato</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>Polomolok LGU describes itself as South Cotabato&rsquo;s <strong>agro-industrial hub</strong> and home to major pineapple activity.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Harvest/haul delay, plant restart lag, road access, refrigeration and packaging interruption.</p></div>
+            <div class="srcs"><span class="s">Polomolok LGU</span></div>
+          </div>
+
+          <div class="card"><span class="pri m">Medium</span><h4>Metro Davao Economic Zone</h4><div class="loc">Digos City, Davao del Sur</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>PEZA and Digos officials describe a <strong>38-hectare</strong> ecozone for light-medium manufacturing, assembly, warehousing.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Aftershock inspections, road logistics disruption, supplier/customer delays into the south corridor.</p></div>
+            <div class="srcs"><span class="s">PEZA</span><span class="s">Digos</span></div>
+          </div>
+
+          <div class="card"><span class="pri m">Medium</span><h4>KCC Mall of GenSan</h4><div class="loc">General Santos City</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>KCC is a major Mindanao retailer with a long-established GenSan branch.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Structural inspection, tenant downtime, reduced footfall, utilities and telecom, POS/data gaps.</p></div>
+            <div class="srcs"><span class="s">KCC</span></div>
+          </div>
+
+          <div class="card"><span class="pri m">Medium</span><h4>SM City General Santos</h4><div class="loc">General Santos City</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>SM official directory confirms the mall as a major retail anchor in GenSan.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Structural inspections, partial closure, tenant BI, customer-footfall shock.</p></div>
+            <div class="srcs"><span class="s">SM directory</span></div>
+          </div>
+
+          <div class="card"><span class="pri m">Medium</span><h4>Greenleaf Hotel Gensan</h4><div class="loc">San Miguel / J. Catolico, General Santos</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>Greenleaf describes itself as the city&rsquo;s <strong>4-star</strong> business hotel with meeting/banqueting exposure.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Occupancy shock, event cancellations, structural inspection, water/power dependence, reputational recovery after aftershocks.</p></div>
+            <div class="srcs"><span class="s">Greenleaf</span></div>
+          </div>
+
+          <div class="card"><span class="pri m">Medium</span><h4>KCC Mall of Marbel / Koronadal node</h4><div class="loc">Koronadal, South Cotabato</div>
+            <div class="fld"><div class="fl">Economic-value proxy</div><p>KCC official history confirms Marbel/Koronadal as a major KCC branch in the affected South Cotabato belt.</p></div>
+            <div class="fld"><div class="fl">Likely BI drivers</div><p>Structural inspection, mall-tenant downtime, reduced consumption during displacement.</p></div>
+            <div class="srcs"><span class="s">KCC</span><span class="s">DROMIC</span></div>
+          </div>
+        </div>
+
+        <div class="callout">
+          <div class="ck">Practical prioritization for claims triage</div>
+          <p>If Bob needs a first-pass ranking by both economic significance and BI sensitivity, the strongest candidates for immediate watchlisting are: <strong>Makar Wharf / Port of General Santos</strong>, <strong>General Santos Fish Port Complex</strong>, <strong>Century Pacific / General Tuna</strong>, <strong>the Tambler-Calumpang industrial / ecozone belt</strong>, <strong>the airport logistics node</strong>, and the <strong>Polomolok agro-industrial cluster</strong>. Retail and hospitality assets matter next because insured BI is often more clearly attached there, but aggregate economic spillover tends to be lower than in maritime, processing, and export logistics.</p>
+        </div>
+      </section>
+
+      <!-- MONITORING -->
+      <section id="monitoring">
+        <div class="sec-head"><span class="sec-num">06</span><h2 class="sec-title">Monitoring plan for Bob</h2></div>
+
+        <p>A useful Bob-facing monitoring plan needs to distinguish between signals that move <strong>reserves</strong>, signals that move <strong>BI duration</strong>, and signals that move <strong>coverage interpretation</strong>. The table below is designed for daily use during the first two weeks and then for twice-weekly refresh.</p>
+
+        <div class="table-scroll">
+          <table class="data">
+            <caption>Daily-use monitoring signals</caption>
+            <thead><tr><th>Signal</th><th>Why it matters for BI / reserve</th><th>Primary source</th><th>Cadence</th><th>Escalate when</th></tr></thead>
+            <tbody>
+              <tr><td class="k">Aftershock frequency &amp; magnitude near Sarangani–GenSan</td><td>Reinspection risk, delayed reopening, repair interruption, safety re-closures</td><td><span class="src">PHIVOLCS feed &amp; primer</span></td><td><span class="src">2–3×/day, 14 days</span></td><td>Any <strong>M5.5+</strong> aftershock near key insured sites, or operators re-close after inspections</td></tr>
+              <tr><td class="k">Displaced families/persons &amp; damaged houses</td><td>Workforce availability, shelter pressure, demand shock, prolonged disruption</td><td><span class="src">DSWD DROMIC</span></td><td><span class="src">Daily until stable</span></td><td>Still-displaced population above <strong>75,000 persons</strong> after 2 weeks</td></tr>
+              <tr><td class="k">Power restoration: substations, feeders, energization</td><td>Cold chain, processing restart, telecom uptime, mall/hotel occupancy, warehousing</td><td><span class="src">DOE/NEA/NPC</span></td><td><span class="src">Daily 7 days, then 2-daily</span></td><td>Industrial corridor not <strong>&gt;95% functionally energized</strong> by day 5</td></tr>
+              <tr><td class="k">Port operating restrictions &amp; cargo throughput</td><td>Shipping backlog, export delay, supplier/customer BI, fish landing disruption</td><td><span class="src">PPA · PFDA</span></td><td><span class="src">Daily ports / weekly throughput</span></td><td>Major berth/yard restriction <strong>&gt;48 h</strong>, or fish throughput below norm <strong>&gt;1 week</strong></td></tr>
+              <tr><td class="k">Airport operations &amp; cargo handling</td><td>Air-cargo continuity for perishables/high-value; business travel &amp; hotel demand</td><td><span class="src">PIA/PCO · CAAP</span></td><td><span class="src">Daily</span></td><td>Flight or cargo restrictions persist <strong>&gt;24 h</strong> after initial reopening</td></tr>
+              <tr><td class="k">Nighttime-light anomalies / telecom disruption</td><td>Fast proxy for unresolved utility &amp; access issues where formal reporting lags</td><td><span class="src">PhilSA · OCD/DICT</span></td><td><span class="src">Daily 3–7 days, then 2–3-daily</span></td><td>Industrial/coastal clusters visibly impaired for <strong>3 consecutive nights</strong></td></tr>
+              <tr><td class="k">Road &amp; bridge serviceability</td><td>Supplier/customer interruption, commuting, port feeder routes, agribusiness hauling</td><td><span class="src">OCD/PIA · DPWH/LGU</span></td><td><span class="src">Daily, first 10 days</span></td><td>Any key feeder route to port/plant load-restricted or closed <strong>&gt;24 h</strong></td></tr>
+              <tr><td class="k">Structural inspections of commercial buildings</td><td>Drives actual insured BI period for malls, hotels, offices, hospitals, warehouses</td><td><span class="src">DILG/LGU advisories</span></td><td><span class="src">Daily, first 2 weeks</span></td><td>&ldquo;Unsafe&rdquo; or &ldquo;restricted use&rdquo; notices issued for insured commercial assets</td></tr>
+              <tr><td class="k">Agribusiness harvesting &amp; processing continuity</td><td>Determines whether losses are physical-damage BI, utility BI, or contingent BI</td><td><span class="src">LGU agri / company disclosures</span></td><td><span class="src">Every 2–3 days</span></td><td>Processing or hauling suspension exceeds <strong>2 operating days</strong></td></tr>
+              <tr><td class="k">Retail &amp; hotel reopening status</td><td>Converts broad demand shock into named insured BI candidates</td><td><span class="src">Official mall/hotel pages · local advisories</span></td><td><span class="src">Daily first week, then 2-daily</span></td><td>A major mall or hotel remains closed or partially shut <strong>&gt;72 h</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>For Bob&rsquo;s workflow, I would operationalize that table into three outputs. First, a <strong>daily corridor status sheet</strong> for the first fourteen days, combining PHIVOLCS, DROMIC, DOE/NEA, PPA, PhilSA, and LGU structural-inspection updates. Second, a <strong>watchlist of named commercial accounts</strong> tagged by trigger type: direct damage, utility, denial of access, or contingent BI. Third, a <strong>reserve-delta log</strong> recording what new public information changed the expected interruption period or the expected proportion insured. That is the fastest way to avoid conflating humanitarian scale with actual insured BI exposure.</p>
+      </section>
+
+      <!-- LOSS GAP -->
+      <section id="lossgap">
+        <div class="sec-head"><span class="sec-num">07</span><h2 class="sec-title">Loss-gap quantification &amp; recommendations</h2></div>
+
+        <p>Because official economy-wide damage totals are not yet consolidated in the latest indexed DROMIC report, the most defensible way to quantify the protection gap at this stage is to use a <strong>component method</strong>:</p>
+
+        <div class="formula"><b>Economic loss</b> = direct property damage + public infrastructure repair + agriculture/fisheries losses + cleanup/debris + direct logistics interruption + uninsured business interruption.</div>
+        <div class="formula"><b>Insured loss</b> = covered property damage on insured assets + covered BI/extra expense + any contingent BI/extensions that actually respond &minus; deductibles, waiting periods, underinsurance, exclusions, and uninsured public/household losses.</div>
+
+        <p>That framework is consistent with current evidence that the event is broad-based geographically, while insured recovery is concentrated in a smaller set of corporates and formally insured assets. It also matches the market view from AM Best that insured losses should be only a small fraction of economic damage in the Philippines.</p>
+
+        <p>For Bob&rsquo;s reserving work, the most important <strong>assumptions</strong> are these:</p>
+        <ul class="clean">
+          <li><strong>Commercial insurance concentration.</strong> Material property and BI cover are concentrated in larger corporates, exporters, malls, hotels, and some industrial/ecozone occupiers, not the average household or microenterprise.</li>
+          <li><strong>Public and residential losses dominate the denominator.</strong> DROMIC shows very large household and displacement impact, which normally widens the economic-versus-insured gap.</li>
+          <li><strong>Named utilities and logistics matter more than headline shaking for BI.</strong> The path from outage and access disruption to restart timing will determine a meaningful share of insured loss on larger accounts.</li>
+          <li><strong>BI attachment rates are lower than property attachment rates.</strong> Even where an insured has quake property cover, BI extensions such as public-utility failure, denial of access, and supplier/customer dependency are less universal and more wording-sensitive.</li>
+        </ul>
+
+        <p>Using those assumptions, the following <strong>illustrative scenarios</strong> are analytically reasonable. <span class="badge est">◆ These are not official loss estimates</span></p>
+
+        <div class="scen">
+          <div class="scard best"><div class="nm">Best case</div>
+            <p class="narr">Localized heavy damage, rapid utility recovery, short port/airport interruption, limited hidden structural damage at major commercial sites.</p>
+            <div class="row"><span class="l">Economic loss</span><span class="v">₱12–18 B</span></div>
+            <div class="row"><span class="l">Insured loss</span><span class="v">₱0.7–1.1 B</span></div>
+            <div class="row"><span class="l">Implied insured share</span><span class="v share">5%–6%</span></div>
+            <p class="ka">Major commercial accounts reopen quickly; BI mostly limited to days rather than weeks.</p>
+          </div>
+          <div class="scard likely"><div class="nm">Likely case</div>
+            <p class="narr">Mixed commercial damage in Sarangani–GenSan corridor, several multi-week closures/restricted operations, meaningful utility and logistics drag.</p>
+            <div class="row"><span class="l">Economic loss</span><span class="v">₱25–35 B</span></div>
+            <div class="row"><span class="l">Insured loss</span><span class="v">₱1.0–1.5 B</span></div>
+            <div class="row"><span class="l">Implied insured share</span><span class="v share">4%–5%</span></div>
+            <p class="ka">Larger processors, retail nodes, and hotels face BI; household/public losses dominate economic total.</p>
+          </div>
+          <div class="scard worst"><div class="nm">Worst case</div>
+            <p class="narr">Hidden structural issues, repeat closures after aftershocks, prolonged corridor outages, significant disruption at port/fish-processing/agro-industrial nodes.</p>
+            <div class="row"><span class="l">Economic loss</span><span class="v">₱45–65 B</span></div>
+            <div class="row"><span class="l">Insured loss</span><span class="v">₱1.4–2.2 B</span></div>
+            <div class="row"><span class="l">Implied insured share</span><span class="v share">3%–4%</span></div>
+            <p class="ka">Direct damage plus extended BI/CBI at the main export and logistics nodes.</p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="dlabel">Fig. 4 — Illustrative loss-gap scenarios (₱ billions, range midpoints)</div>
+<pre class="mermaid">
+xychart-beta
+    title "Illustrative loss-gap scenarios"
+    x-axis [Best, Likely, Worst]
+    y-axis "PHP billions" 0 --&gt; 70
+    bar "Economic loss" [15, 30, 55]
+    bar "Insured loss" [0.9, 1.25, 1.8]
+</pre>
+          <figcaption>Uses the midpoints of the scenario ranges above — meant for reserve framing, not public loss guidance. The low insured shares are consistent with the Philippines&rsquo; low penetration and AM Best&rsquo;s &ldquo;small fraction&rdquo; characterization.</figcaption>
+        </figure>
+
+        <h3>Claims triage</h3>
+        <p>Bob should split the portfolio immediately into three operational buckets. The first bucket is <strong>property-plus-BI candidates</strong> in the main corridor: ports, fish/cold-chain assets, processors, ecozone occupiers, malls, hotels, hospitals, and large warehouses. The second is <strong>property-only high-frequency claims</strong> where BI is unlikely or immaterial. The third is <strong>contingent BI candidates</strong> dependent on GenSan logistics, utilities, or specific damaged suppliers/customers. That triage reflects both the geography of disruption and the wording complexity of BI extensions.</p>
+
+        <h3>Documentation templates</h3>
+        <p>I recommend issuing, within 24 hours of notice, five standardized templates to all commercial insureds: a site event log; a utility outage certification request form; a repair critical-path tracker; a daily sales/production shortfall bridge; and an extra-expense register for generators, rerouting, temporary warehousing, security, overtime, and spoilage mitigation. This directly addresses the most common BI failure points identified by forensic adjusters: missing timelines, weak financial baselines, and poor separation of gross loss from saved costs.</p>
+
+        <h3>Rapid evidence collection protocol</h3>
+        <p>For material accounts, require insureds to preserve within the first 48 hours: geotagged photos and videos; structural inspection notes; ERP/POS backups; inventory counts; cold-room temperature logs; utility meter readings; genset operating logs; payroll rosters; supplier/customer cancellation notices; and all government access or closure notices. If records are incomplete, ask adjusters to reconstruct from external data early rather than late. Crawford&rsquo;s and Sedgwick&rsquo;s materials both make clear that early forensic involvement improves reserve quality and reduces settlement friction.</p>
+
+        <h3>Stakeholder engagement</h3>
+        <p>The highest-yield external contacts for Bob&rsquo;s monitoring and claims substantiation are: <strong>DSWD DROMIC</strong> for displacement and area impact; <strong>PHIVOLCS</strong> for aftershocks and hazard interpretation; <strong>OCD/RDRRMC and LGUs</strong> for casualty, access, and local inspection updates; <strong>DOE/NEA/NPC</strong> for power restoration; <strong>PPA</strong> for port restrictions; <strong>CAAP</strong> for airport operating status; <strong>PhilSA</strong> for remote-sensing disruption proxies; and <strong>PFDA</strong> for fish-port throughput and operational tempo. Those agencies produce the public signals most likely to change interruption assumptions during the first month.</p>
+
+        <h3>Communication plan</h3>
+        <p>For Bob-facing reporting, I would use a fixed cadence: a <strong>daily executive sitrep</strong> for days 1–14; <strong>twice-weekly reserve sensitivity notes</strong> for the next month; and a <strong>weekly insured-versus-economic gap tracker</strong> showing what portion of the emerging loss picture is plausibly insurable. For brokers and insureds, the message should be deliberately practical: notify early, preserve records, request utility and access certifications immediately, and expect partial / interim evaluation before final BI quantification. The Insurance Commission&rsquo;s facilitated-claims precedent supports a cooperative and documentation-light approach early in catastrophe response, provided the insurer preserves enough evidence to assess coverage and quantum later.</p>
+
+        <div class="bottomline">
+          <div class="ck">▰ Bottom line for Bob</div>
+          <p>The most defensible current stance is that this is a <strong>large humanitarian and economic event</strong>, but one in which <strong>insured losses should remain concentrated in a relatively narrow ring of larger commercial accounts</strong> around the Sarangani–General Santos–South Cotabato corridor. If BI losses become material, it will be because <strong>operational proof</strong> eventually shows persistent disruption at named maritime, cold-chain, processing, retail, hotel, and utility-dependent sites — not because of the displacement headline alone.</p>
+        </div>
+      </section>
+
+      <footer>
+        <div class="fk">Methodology &amp; sources</div>
+        <p>This briefing separates <span class="badge fact">● Official fact</span> (latest indexed government figures) from <span class="badge est">◆ Analytical estimate</span> (illustrative scenarios and working assumptions). Where official economy-wide damage totals are not yet consolidated, loss figures are framed as ranges for reserving, not as official guidance. Figures reflect the latest indexed reporting as of 16 June 2026.</p>
+        <div class="agencies">
+          <span class="a">PHIVOLCS</span><span class="a">DSWD / DROMIC</span><span class="a">OCD / RDRRMC</span><span class="a">PIA / PCO</span><span class="a">PPA</span><span class="a">CAAP</span><span class="a">DOE / NEA / NPC</span><span class="a">PhilSA</span><span class="a">PFDA</span><span class="a">DILG / LGU</span><span class="a">Insurance Commission</span><span class="a">BSP</span><span class="a">AM Best</span><span class="a">World Bank</span><span class="a">EQECAT</span><span class="a">AIG · Pioneer</span><span class="a">Crawford · Sedgwick · McLarens</span>
+        </div>
+        <div class="foot-meta">Deep Research · Catastrophe &amp; BI Intelligence — prepared for Bob</div>
+      </footer>
+
+    </article>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+// Mermaid — light figure theme (diagram panels stay light in both page themes)
+mermaid.initialize({
+  startOnLoad:true,
+  securityLevel:'loose',
+  theme:'base',
+  fontFamily:"'DM Mono','Courier New',monospace",
+  themeVariables:{
+    background:'#ffffff',
+    primaryColor:'#FBF4DF',
+    primaryBorderColor:'#8A6A16',
+    primaryTextColor:'#1B1815',
+    secondaryColor:'#F0ECE2',
+    tertiaryColor:'#F7F5F0',
+    lineColor:'#9A7B2E',
+    textColor:'#33302A',
+    titleColor:'#7A5E12',
+    // timeline — soft tinted sections with dark labels
+    cScale0:'#E7D6A4',cScale1:'#CFE0EF',cScale2:'#CFE9D9',cScale3:'#F1D6D3',cScale4:'#E0D2F0',
+    cScaleLabel0:'#1B1815',cScaleLabel1:'#1B1815',cScaleLabel2:'#1B1815',cScaleLabel3:'#1B1815',cScaleLabel4:'#1B1815',
+    // xychart
+    xyChart:{
+      backgroundColor:'transparent',
+      titleColor:'#7A5E12',
+      xAxisLabelColor:'#33302A',xAxisTitleColor:'#8A6A16',xAxisTickColor:'#cfc9bb',xAxisLineColor:'#cfc9bb',
+      yAxisLabelColor:'#33302A',yAxisTitleColor:'#8A6A16',yAxisTickColor:'#cfc9bb',yAxisLineColor:'#cfc9bb',
+      plotColorPalette:'#8A6A16,#BC3B2C'
+    }
+  }
+});
+
+// Theme toggle (light default; toggles to dark)
+document.getElementById('themeBtn').addEventListener('click',function(){document.body.classList.toggle('dark');});
+
+// Reading progress
+var prog=document.getElementById('progress');
+function onScroll(){var h=document.documentElement;var max=h.scrollHeight-h.clientHeight;prog.style.width=(max>0?(h.scrollTop/max*100):0)+'%';}
+document.addEventListener('scroll',onScroll,{passive:true});onScroll();
+
+// TOC scroll-spy
+var links=[].slice.call(document.querySelectorAll('.toc a'));
+var map={};links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+var spy=new IntersectionObserver(function(entries){
+  entries.forEach(function(e){
+    if(e.isIntersecting){
+      links.forEach(function(a){a.classList.remove('active');});
+      var a=map[e.target.id];if(a)a.classList.add('active');
+    }
+  });
+},{rootMargin:'-15% 0px -75% 0px'});
+document.querySelectorAll('article section').forEach(function(s){spy.observe(s);});
+</script>
+</body>
+</html>
