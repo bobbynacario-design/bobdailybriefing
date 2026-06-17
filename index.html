@@ -1860,7 +1860,21 @@ function loadMarked() {
 var _reportTpl = null;
 function loadReportTemplate() {
   if (_reportTpl) return Promise.resolve(_reportTpl);
-  return fetch('./reports/_report-template.html').then(function(r){ return r.text(); }).then(function(t){ _reportTpl = t; return t; });
+  var paths = ['./reports/report-template.html', './reports/_report-template.html'];
+  function tryPath(i) {
+    return fetch(paths[i], { cache: 'no-cache' }).then(function(r) {
+      if (!r.ok) throw new Error('Template fetch failed: ' + r.status);
+      return r.text();
+    }).then(function(t) {
+      if (isProvider404Html(t) || t.indexOf('{{BODY}}') === -1) throw new Error('Template response was not a report template');
+      _reportTpl = t;
+      return t;
+    }).catch(function(err) {
+      if (i + 1 < paths.length) return tryPath(i + 1);
+      throw err;
+    });
+  }
+  return tryPath(0);
 }
 
 function pad2(n){ return (n<10?'0':'')+n; }
