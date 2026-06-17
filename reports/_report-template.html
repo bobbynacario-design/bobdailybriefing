@@ -289,23 +289,40 @@ mermaid.initialize({
     }
   }
 });
+if (mermaid.parseError) mermaid.parseError = function(){};
 
 // Render each diagram individually; if one has bad syntax (common in
 // machine-generated mermaid), fall back to readable source instead of a
 // jarring error graphic so the rest of the report stays clean.
 (function(){
   var blocks=[].slice.call(document.querySelectorAll('pre.mermaid'));
+  function cleanupMermaidErrors(id){
+    ['d'+id, id, id+'-svg'].forEach(function(x){
+      var el=document.getElementById(x);
+      if(el && !el.closest('pre.mermaid')) el.remove();
+    });
+    [].slice.call(document.querySelectorAll('body > div[id^="dmermaid-"], body > div[id^="dmmd-"], body > svg[aria-roledescription="error"], body > pre.error')).forEach(function(el){ el.remove(); });
+  }
+  function fallback(el, src, id){
+    cleanupMermaidErrors(id);
+    var pre=document.createElement('pre');
+    pre.textContent=src.trim();
+    pre.style.cssText="font-family:var(--mono);font-size:11px;line-height:1.6;white-space:pre-wrap;background:var(--surface2);border:1px solid var(--line2);border-radius:10px;padding:1rem 1.1rem;margin:0;overflow:auto;color:var(--ink2)";
+    var fig=el.closest('figure.diagram'); if(fig){ fig.querySelector('.dlabel')&&fig.querySelector('.dlabel').remove(); }
+    el.replaceWith(pre);
+  }
   blocks.forEach(function(el,i){
     var src=el.textContent;
-    mermaid.render('mmd-'+i, src).then(function(out){
+    var id='mmd-'+i;
+    Promise.resolve(mermaid.parse(src,{suppressErrors:true})).then(function(ok){
+      if(ok===false) throw new Error('Invalid mermaid syntax');
+      return mermaid.render(id, src);
+    }).then(function(out){
+      cleanupMermaidErrors(id);
       el.innerHTML=out.svg;
       if(out.bindFunctions) out.bindFunctions(el);
     }).catch(function(){
-      var pre=document.createElement('pre');
-      pre.textContent=src.trim();
-      pre.style.cssText="font-family:var(--mono);font-size:11px;line-height:1.6;white-space:pre-wrap;background:var(--surface2);border:1px solid var(--line2);border-radius:10px;padding:1rem 1.1rem;margin:0;overflow:auto;color:var(--ink2)";
-      var fig=el.closest('figure.diagram'); if(fig){ fig.querySelector('.dlabel')&&fig.querySelector('.dlabel').remove(); }
-      el.replaceWith(pre);
+      fallback(el, src, id);
     });
   });
 })();
