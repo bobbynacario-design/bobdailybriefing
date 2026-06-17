@@ -1828,8 +1828,16 @@ function reportEmptyHtml(message) {
 
 function isProvider404Html(html) {
   var s = String(html || '');
+  var text = s.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
   return /<title>\s*Site not found\s*<\/title>/i.test(s)
-    || (/GitHub Pages/i.test(s) && /File not found/i.test(s) && />\s*404\s*</.test(s));
+    || (/GitHub Pages/i.test(s) && /File not found/i.test(s) && />\s*404\s*</.test(s))
+    || (text.indexOf('404') !== -1
+      && text.indexOf('file not found') !== -1
+      && text.indexOf('site configured at this address does not contain the requested file') !== -1);
 }
 
 // ═══ MARKDOWN → RICH REPORT (deterministic, no LLM) ═══
@@ -3019,6 +3027,13 @@ function applyAppUpdate() {
   else window.location.reload();
 }
 
+function applyWaitingServiceWorker(worker) {
+  if (!worker) return;
+  window.__briefingSwWaiting = worker;
+  window.__briefingUpdateReloading = true;
+  worker.postMessage({ type: 'SKIP_WAITING' });
+}
+
 function registerBriefingServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   var canRegister = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
@@ -3031,14 +3046,12 @@ function registerBriefingServiceWorker() {
       if (!worker) return;
       worker.addEventListener('statechange', function() {
         if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-          window.__briefingSwWaiting = worker;
-          showUpdateBanner();
+          applyWaitingServiceWorker(worker);
         }
       });
     }
     if (reg.waiting && navigator.serviceWorker.controller) {
-      window.__briefingSwWaiting = reg.waiting;
-      showUpdateBanner();
+      applyWaitingServiceWorker(reg.waiting);
     }
     reg.addEventListener('updatefound', function() { watch(reg.installing); });
     setInterval(function() { reg.update().catch(function() {}); }, 60 * 60 * 1000);
