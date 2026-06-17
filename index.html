@@ -250,7 +250,7 @@ window.fbLoadReports = async function() {
     var out = [];
     snap.forEach(function(d) {
       var data = d.data();
-      out.push({ id:d.id, title:data.title, dateLabel:data.dateLabel, dek:data.dek||'', tags:data.tags||[], format:data.format||'html', html:data.html, md:data.md||'', saved:data.saved });
+      out.push({ id:d.id, title:data.title, dateLabel:data.dateLabel, dek:data.dek||'', tags:data.tags||[], format:data.format||'html', html:data.html, md:data.md||'', status:data.status||'ready', error:data.error||'', model:data.model||'', saved:data.saved });
     });
     return out;
   } catch(e) {
@@ -269,6 +269,23 @@ window.fbDeleteReport = async function(id) {
     setSyncStatus('ok','Deleted');
   } catch(e) {
     setSyncStatus('error','Delete failed');
+    console.error(e);
+    throw e;
+  }
+};
+
+// Kick off a deep-research report (long-running; poller finishes it server-side)
+window.fbGenerateDeepResearch = async function(topic, premium) {
+  var uid = getUid();
+  if (!uid) { setSyncStatus('error','Sign in first'); throw new Error('Sign in first'); }
+  try {
+    setSyncStatus('syncing','Starting deep research...');
+    var fn = httpsCallable(functions, 'generateDeepResearchReport', { timeout: 120000 });
+    var res = await fn({ topic: topic, premium: !!premium });
+    setSyncStatus('ok','Research started');
+    return res.data;
+  } catch(e) {
+    setSyncStatus('error','Could not start');
     console.error(e);
     throw e;
   }
@@ -513,6 +530,14 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 /* Reports keep the delete control visible (History hides it until hover) */
 #research-out .hist-delete{opacity:.7;border-color:var(--rim2)}
 #research-out .hist-card:hover .hist-delete{opacity:1}
+.report-badge.gen{background:rgba(240,168,50,.12);color:#F0A832;border-color:rgba(240,168,50,.3)}
+.report-badge.err{background:var(--red-dim);color:var(--red);border-color:rgba(232,92,92,.3)}
+.research-preset-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem}
+.gen-opt{display:flex;align-items:center;gap:.45rem;font-family:var(--mono);font-size:11px;color:var(--txt2);margin:.35rem 0 .1rem;cursor:pointer}
+.gen-opt input{accent-color:var(--gold)}
+.hist-card.pending{cursor:default;opacity:.92}
+.hist-card.pending .gen-spin{display:inline-block;animation:genspin 1s linear infinite}
+@keyframes genspin{to{transform:rotate(360deg)}}
 @media(max-width:768px){.research-frame{height:calc(100vh - 210px)}}
 
 /* ── WEEKLY DIGEST ── */
@@ -885,8 +910,28 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <div class="hero-divider"></div>
     </div>
 
-    <div class="digest-btn-wrap">
+    <div class="digest-btn-wrap" style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <button class="btn-primary" onclick="toggleResearchGen()">✨ GENERATE DEEP RESEARCH</button>
       <button class="btn-sec" onclick="toggleResearchImport()">＋ ADD REPORT</button>
+    </div>
+
+    <div class="paste-zone" id="research-gen" style="display:none;border-color:rgba(155,111,232,.4)">
+      <div class="paste-label">Generate Deep Research — autonomous web research → rich report (paid OpenAI run)</div>
+      <div class="research-preset-row">
+        <button class="filter-chip" onclick="setGenPreset(this,'forensic')">Forensic BI</button>
+        <button class="filter-chip" onclick="setGenPreset(this,'auins')">AU Insurance</button>
+        <button class="filter-chip" onclick="setGenPreset(this,'phcon')">PH Consulting</button>
+        <button class="filter-chip" onclick="setGenPreset(this,'custom')">Custom</button>
+      </div>
+      <textarea id="gen-topic" placeholder="Describe the research topic — e.g. 'Business-interruption exposure from recent typhoon activity in the Visayas, with insured-loss and claims angles.'"></textarea>
+      <label class="gen-opt"><input type="checkbox" id="gen-premium" onchange="updateGenCost()"> Premium model (o3 · deeper, slower, ~10× the cost)</label>
+      <div class="paste-actions">
+        <span class="paste-hint" id="gen-cost-note">o4-mini · ~$1 per report · runs a few minutes, appears in your feed when ready</span>
+        <div class="btn-row">
+          <button class="btn-sec" onclick="toggleResearchGen()">CANCEL</button>
+          <button class="btn-primary" onclick="startDeepResearch()">GENERATE ↗</button>
+        </div>
+      </div>
     </div>
 
     <div class="paste-zone" id="research-import" style="display:none">
@@ -1944,6 +1989,7 @@ function renderResearchList() {
     window.fbLoadReports().then(function(remote) {
       window._reportFeed = remote || [];
       paintResearchList();
+      maybeStartGenAutoRefresh();
     }).catch(function() {});
   }
 }
@@ -1952,7 +1998,7 @@ function paintResearchList() {
   var el = document.getElementById('research-out');
   if (!el) return;
   var all = BUILTIN_REPORTS.concat((window._reportFeed||[]).map(function(r) {
-    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:r.dek||'', tags:r.tags||[], format:r.format||'html', html:r.html, md:r.md, builtin:false, saved:r.saved };
+    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:r.dek||'', tags:r.tags||[], format:r.format||'html', html:r.html, md:r.md, status:r.status||'ready', error:r.error||'', builtin:false, saved:r.saved };
   }));
 
   var subEl = document.getElementById('research-sub');
@@ -1972,16 +2018,22 @@ function paintResearchList() {
 
   var html = '<div class="hist-grid">';
   filtered.forEach(function(r) {
-    html += '<div class="hist-card" data-report="'+esc(r.id)+'">';
+    var pending = r.status === 'generating';
+    var failed = r.status === 'error';
+    html += '<div class="hist-card'+(pending?' pending':'')+'" data-report="'+esc(r.id)+'">';
     if (!r.builtin) html += '<button class="hist-delete" data-delete-report="'+esc(r.id)+'" title="Delete report">✕</button>';
     html += '<div class="hist-date">'+esc(r.title)+'</div>';
-    var metaText = r.dateLabel || (r.saved ? new Date(r.saved).toLocaleDateString('en-PH',{day:'numeric',month:'short',year:'numeric'}) : '');
-    if (r.builtin) metaText += ' · BUILT-IN';
+    var metaText;
+    if (pending) metaText = 'Generating… started ' + (r.saved ? new Date(r.saved).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '');
+    else { metaText = r.dateLabel || (r.saved ? new Date(r.saved).toLocaleDateString('en-PH',{day:'numeric',month:'short',year:'numeric'}) : ''); if (r.builtin) metaText += ' · BUILT-IN'; }
     html += '<div class="hist-meta">'+esc(metaText)+'</div>';
-    if (r.dek) html += '<div class="hist-preview">'+esc(r.dek)+'</div>';
+    if (!pending && !failed && r.dek) html += '<div class="hist-preview">'+esc(r.dek)+'</div>';
+    if (failed && r.error) html += '<div class="hist-preview">'+esc(r.error)+'</div>';
     html += '<div class="hist-chips">';
-    (r.tags||[]).forEach(function(t){ html += '<span class="hist-chip">'+esc(t)+'</span>'; });
-    html += '<span class="report-badge">'+(r.format==='md' ? '📝 Markdown' : '📄 Full report')+'</span>';
+    if (!pending && !failed) (r.tags||[]).forEach(function(t){ html += '<span class="hist-chip">'+esc(t)+'</span>'; });
+    if (pending) html += '<span class="report-badge gen"><span class="gen-spin">⟳</span> Generating…</span>';
+    else if (failed) html += '<span class="report-badge err">⚠ Failed</span>';
+    else html += '<span class="report-badge">'+(r.format==='md' ? '📝 Markdown' : '📄 Full report')+'</span>';
     html += '</div></div>';
   });
   html += '</div>';
@@ -2010,12 +2062,18 @@ function getReportById(id) {
 function openReport(id) {
   var r = getReportById(id);
   if (!r) return;
+  if (r.status === 'generating') { showToast('Still generating — it will be ready shortly','info'); return; }
   var frame = document.getElementById('research-frame');
   _currentReportUrl = r.url || null;
   document.getElementById('research-reader-title').textContent = r.title || 'Report';
   document.getElementById('research-list-view').style.display = 'none';
   document.getElementById('research-reader-view').style.display = 'block';
   window.scrollTo(0,0);
+  if (r.status === 'error') {                    // generation failed
+    frame.removeAttribute('src');
+    frame.srcdoc = '<!doctype html><body style="margin:0;font-family:system-ui;padding:2.2rem 2rem"><h2 style="font-family:Georgia,serif;color:#bc3b2c;margin:0 0 .5rem">Generation failed</h2><p style="color:#666;font-size:14px;line-height:1.6">'+esc(r.error||'The report could not be generated.')+'</p></body>';
+    return;
+  }
   if (r.url) {                                  // built-in static file
     frame.removeAttribute('srcdoc');
     frame.src = r.url;
@@ -2182,6 +2240,77 @@ function deleteResearchReport(id) {
   }).catch(function(e) {
     showToast('Delete failed: '+e.message,'error');
   });
+}
+
+// ── DEEP RESEARCH GENERATION ──
+var GEN_PRESETS = {
+  forensic: "Recent (past 1-2 weeks) business-interruption and forensic-accounting developments relevant to large commercial insurance claims in Australia and the Philippines: notable loss events, claims-quantification issues, disputes, and methodology. Include the claim/BI angle and what to monitor.",
+  auins: "Latest (past 1-2 weeks) Australian insurance and reinsurance market developments: claims inflation, catastrophe exposure, APRA and regulatory changes, underwriting and pricing trends, and reinsurer commentary. Include implications for forensic BI and claims work.",
+  phcon: "Recent (past 1-2 weeks) Philippine economic, regulatory (BSP, Insurance Commission), and business-disruption developments relevant to consulting and insurance work: peso/markets, catastrophe and infrastructure disruptions, and policy changes. Include consulting and claims angles.",
+  custom: ""
+};
+
+function toggleResearchGen() {
+  var box = document.getElementById('research-gen');
+  if (!box) return;
+  var show = (box.style.display === 'none' || !box.style.display);
+  box.style.display = show ? 'block' : 'none';
+  if (show) { var imp = document.getElementById('research-import'); if (imp) imp.style.display = 'none'; }
+}
+
+function setGenPreset(btn, key) {
+  document.querySelectorAll('.research-preset-row .filter-chip').forEach(function(c){ c.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  var ta = document.getElementById('gen-topic');
+  if (!ta) return;
+  if (key === 'custom') { ta.value = ''; ta.focus(); } else { ta.value = GEN_PRESETS[key] || ''; }
+}
+
+function updateGenCost() {
+  var premium = document.getElementById('gen-premium').checked;
+  var note = document.getElementById('gen-cost-note');
+  if (note) note.textContent = premium
+    ? 'o3 (premium) · ~$10 per report (up to ~$30) · deeper, slower'
+    : 'o4-mini · ~$1 per report · runs a few minutes, appears in your feed when ready';
+}
+
+async function startDeepResearch() {
+  var topic = (document.getElementById('gen-topic').value||'').trim();
+  var premium = document.getElementById('gen-premium').checked;
+  if (topic.length < 8) { showToast('Describe the research topic first','warn'); return; }
+  if (!window.fbGenerateDeepResearch) { showToast('Sign in to generate','error'); return; }
+  var est = premium ? '~$10 (up to ~$30)' : '~$1';
+  if (!confirm('Start deep research with ' + (premium ? 'o3 (premium)' : 'o4-mini') + '?\n\n'
+    + 'This is a paid OpenAI run — roughly ' + est + ' per report — and takes a few minutes. '
+    + 'It will appear in your feed when ready. Continue?')) return;
+  try {
+    var res = await window.fbGenerateDeepResearch(topic, premium);
+    showToast('Deep research started — it will appear when ready'
+      + (res && typeof res.remaining === 'number' ? ' (' + res.remaining + ' left this month)' : ''), 'ok');
+    document.getElementById('gen-topic').value = '';
+    document.getElementById('gen-premium').checked = false;
+    updateGenCost();
+    toggleResearchGen();
+    renderResearchList();
+  } catch(e) {
+    showToast(e.message || 'Could not start deep research', 'error');
+  }
+}
+
+// Auto-refresh the feed while any report is still generating (paused off-tab).
+var _genRefreshTimer = null;
+function maybeStartGenAutoRefresh() {
+  var anyGen = (window._reportFeed||[]).some(function(r){ return r.status === 'generating'; });
+  if (!anyGen || _genRefreshTimer) return;
+  _genRefreshTimer = setInterval(function(){
+    var pg = document.getElementById('page-research');
+    if (!pg || !pg.classList.contains('active')) return;
+    var still = (window._reportFeed||[]).some(function(r){ return r.status === 'generating'; });
+    if (!still) { clearInterval(_genRefreshTimer); _genRefreshTimer = null; return; }
+    if (window.fbLoadReports) window.fbLoadReports().then(function(remote){
+      window._reportFeed = remote || []; paintResearchList();
+    }).catch(function(){});
+  }, 30000);
 }
 
 // ── WEEKLY DIGEST ──

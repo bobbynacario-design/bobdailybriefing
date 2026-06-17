@@ -1,14 +1,23 @@
 "use strict";
 
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const {initializeApp} = require("firebase-admin/app");
+const {getFirestore} = require("firebase-admin/firestore");
 
 initializeApp();
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
+
+// Deep-research generation config (all override-able via env)
+const DEEP_MODEL_DEFAULT = process.env.DEEP_MODEL_DEFAULT || "o4-mini-deep-research";
+const DEEP_MODEL_PREMIUM = process.env.DEEP_MODEL_PREMIUM || "o3-deep-research";
+const DEEP_RESEARCH_CAP = parseInt(process.env.DEEP_RESEARCH_CAP || "20", 10);
+const REPORTS_COLL = "reports-bob";
+const REPORTS_META = "reports-bob-meta";
 
 function buildBriefingPrompt(dateLabel) {
   const date = dateLabel || new Date().toLocaleDateString("en-US", {
@@ -184,5 +193,209 @@ exports.generateBobDailyBriefing = onCall(
       raw: JSON.stringify(briefing, null, 2),
       briefing,
     };
+  }
+);
+
+// ─────────────────────────────────────────────────────────────
+// Deep-research report generation (long-running, async)
+// ─────────────────────────────────────────────────────────────
+function buildDeepResearchPrompt(topic) {
+  const today = new Date().toLocaleDateString("en-US", {
+    year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila",
+  });
+
+  return [
+    "You are a deep-research analyst preparing a long-form intelligence report for Bob,",
+    "a forensic business-interruption (BI) consultant who works with Australian insurance",
+    "companies and Philippine consulting firms. Today is " + today + " (Asia/Manila).",
+    "",
+    "RESEARCH TOPIC:",
+    topic,
+    "",
+    "Produce a comprehensive, decision-useful report in GitHub-Flavored Markdown.",
+    "",
+    "OUTPUT FORMAT — follow exactly:",
+    "1) Begin with a YAML front-matter block delimited by lines containing only '---', with keys:",
+    "   title: a concise report title",
+    "   dek: a one-sentence editorial summary (<= 240 characters)",
+    "   date: " + today,
+    "   tags: 3-5 comma-separated topic tags",
+    "   ticker: a YAML list of up to 6 headline stats, each line as '  - Label | Value | Sub'",
+    "     (Value is a short number/figure; Sub is a brief qualifier). Use real figures found",
+    "     during research; omit the ticker key entirely if you have no solid figures.",
+    "2) After the closing '---', write the body using '##' for each main section and '###' for sub-sections.",
+    "",
+    "CONTENT REQUIREMENTS:",
+    "- Lead with an Executive summary section; end with a recommendations section.",
+    "- Clearly separate OFFICIAL FACTS (with sources) from ANALYTICAL ESTIMATES; label assumptions explicitly.",
+    "- Use Markdown tables for structured data (metrics, comparisons, exposure lists).",
+    "- Where a process, timeline, or relationship helps, add a Mermaid diagram in a ```mermaid code block.",
+    "  In timelines, do NOT put ':' inside time labels (write 0737H, not 07:37).",
+    "- Tie findings to Bob's angle: insurance/reinsurance, claims, business interruption, underwriting,",
+    "  catastrophe exposure, forensic accounting, audit, or consulting opportunities.",
+    "- Cite reputable, current, primary sources inline. Be thorough but precise; do not pad.",
+  ].join("\n");
+}
+
+exports.generateDeepResearchReport = onCall(
+  {
+    region: "asia-southeast1",
+    timeoutSeconds: 60,
+    memory: "256MiB",
+    secrets: [OPENAI_API_KEY],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in before generating a report.");
+    }
+    const uid = request.auth.uid;
+    const topic = String((request.data && request.data.topic) || "").trim();
+    if (topic.length < 8) {
+      throw new HttpsError("invalid-argument", "Describe the research topic in at least a sentence.");
+    }
+    const premium = !!(request.data && request.data.premium);
+    const model = premium ? DEEP_MODEL_PREMIUM : DEEP_MODEL_DEFAULT;
+
+    const db = getFirestore();
+    const month = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const metaRef = db.collection(REPORTS_META).doc(uid);
+
+    // Monthly cap — server-authoritative
+    const metaSnap = await metaRef.get();
+    let count = 0;
+    if (metaSnap.exists && metaSnap.data().month === month) count = metaSnap.data().count || 0;
+    if (count >= DEEP_RESEARCH_CAP) {
+      throw new HttpsError("resource-exhausted",
+        "Monthly report limit reached (" + DEEP_RESEARCH_CAP + "). Try again next month or raise the cap.");
+    }
+
+    // Kick off the deep-research job in background mode
+    const body = {
+      model,
+      background: true,
+      store: true,
+      input: [
+        {
+          role: "developer",
+          content: "You are a meticulous deep-research analyst. Produce a thorough, well-sourced Markdown report that begins with the requested YAML front-matter.",
+        },
+        {role: "user", content: buildDeepResearchPrompt(topic)},
+      ],
+      tools: [{type: "web_search"}],
+      tool_choice: "auto",
+    };
+
+    let response;
+    try {
+      response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + OPENAI_API_KEY.value(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      logger.error("Deep research kickoff network error", err);
+      throw new HttpsError("unavailable", "Could not reach OpenAI to start the report.");
+    }
+
+    const text = await response.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (err) {
+      json = {error: {message: text || "Non-JSON OpenAI response"}};
+    }
+    if (!response.ok) {
+      const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
+      logger.error("Deep research kickoff error", {status: response.status, message: msg});
+      throw new HttpsError("internal", msg);
+    }
+    const openaiId = json.id;
+    if (!openaiId) {
+      throw new HttpsError("internal", "OpenAI did not return a job id.");
+    }
+
+    // Placeholder report doc + usage increment
+    const now = Date.now();
+    const docRef = db.collection(REPORTS_COLL).doc("rpt-" + now);
+    await docRef.set({
+      title: topic.length > 90 ? topic.slice(0, 87) + "…" : topic,
+      dateLabel: "",
+      dek: "",
+      tags: [],
+      format: "md",
+      md: "",
+      status: "generating",
+      openaiId,
+      model,
+      requestedAt: now,
+      saved: now,
+      uid,
+    });
+    await metaRef.set({month, count: count + 1, updated: now}, {merge: true});
+
+    return {docId: docRef.id, openaiId, model, remaining: DEEP_RESEARCH_CAP - (count + 1)};
+  }
+);
+
+exports.pollDeepResearchReports = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    region: "asia-southeast1",
+    timeoutSeconds: 120,
+    memory: "256MiB",
+    secrets: [OPENAI_API_KEY],
+  },
+  async () => {
+    const db = getFirestore();
+    const snap = await db.collection(REPORTS_COLL).where("status", "==", "generating").limit(10).get();
+    if (snap.empty) return;
+
+    const now = Date.now();
+    const STUCK_MS = 45 * 60 * 1000;
+
+    for (const doc of snap.docs) {
+      const d = doc.data();
+      if (d.requestedAt && (now - d.requestedAt) > STUCK_MS) {
+        await doc.ref.update({status: "error", error: "Timed out before completion.", completedAt: now});
+        continue;
+      }
+      if (!d.openaiId) {
+        await doc.ref.update({status: "error", error: "Missing job id."});
+        continue;
+      }
+
+      let json;
+      try {
+        const res = await fetch("https://api.openai.com/v1/responses/" + d.openaiId, {
+          headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value()},
+        });
+        json = JSON.parse(await res.text());
+      } catch (err) {
+        logger.warn("Poll fetch failed for " + doc.id, err);
+        continue; // retry next tick
+      }
+
+      const status = json && json.status;
+      if (status === "completed") {
+        let md = "";
+        try {
+          md = extractText(json);
+        } catch (err) {
+          md = "";
+        }
+        if (md && md.trim()) {
+          await doc.ref.update({md, status: "ready", completedAt: now});
+        } else {
+          await doc.ref.update({status: "error", error: "Completed with empty output.", completedAt: now});
+        }
+      } else if (status === "failed" || status === "cancelled" || status === "incomplete" || status === "expired") {
+        const msg = (json.error && json.error.message) || ("Job " + status + ".");
+        await doc.ref.update({status: "error", error: msg, completedAt: now});
+      }
+      // queued / in_progress → leave for the next tick
+    }
   }
 );
