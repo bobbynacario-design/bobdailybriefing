@@ -320,6 +320,17 @@ window.fbLoadJournal = async function() {
   }
 };
 
+// Load the PH market snapshot. Single doc, no uid.
+window.fbLoadPh = async function() {
+  try {
+    var snap = await getDoc(doc(db, COLL, 'radar-ph'));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    console.error('PH snapshot load failed:', e);
+    return null;
+  }
+};
+
 window._fbReady = true;
 </script>
 
@@ -561,6 +572,17 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .help-key{border-left:2px solid var(--gold);padding-left:.8rem;color:var(--txt)!important}
 .help-takeaway{border-color:var(--gold-dim);background:var(--gold-dim)}
 
+/* ── PSE (PH snapshot) ── */
+.pse-caveat{font-size:12px;line-height:1.6;color:var(--txt2);background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:10px;padding:.7rem .9rem;margin-bottom:1.1rem}
+.pse-index{margin-bottom:.4rem}
+.pse-idx-top{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem}
+.pse-idx-name{font-size:18px;font-weight:600;color:var(--txt)}
+.pse-idx-val{font-family:var(--mono);font-size:26px;color:var(--gold);font-weight:500;line-height:1}
+.pse-idx-meta{font-size:13px;color:var(--txt2);margin-top:.5rem}
+.pse-idx-sma{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;letter-spacing:.03em}
+.pse-name{flex:1;color:var(--txt2);font-size:12px;min-width:90px}
+.pse-px{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:nowrap}
+
 /* ── WATCH CARD ── */
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
 .watch-stripe{position:absolute;top:0;left:0;width:4px;height:100%;background:var(--red)}
@@ -759,6 +781,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
     <button class="ntab" data-page="radar" onclick="switchPage('radar',this)">📡 Radar</button>
     <button class="ntab" data-page="journal" onclick="switchPage('journal',this)">📓 Journal</button>
+    <button class="ntab" data-page="pse" onclick="switchPage('pse',this)">🇵🇭 PSE</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">❔ Help</button>
   </div>
   <div class="nav-right">
@@ -1077,6 +1100,17 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="radar-disclaimer">Backtested feedback only. Each past day is re-scored point-in-time and tracked over the next horizon to see whether the status and score were informative — it is not a track record of trades and not advice.</div>
 </div>
 
+<!-- ═══════════════ PSE (PH SNAPSHOT) PAGE ═══════════════ -->
+<div class="page" id="page-pse">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Philippine Market</div>
+    <div class="hero-date" style="font-size:22px">🇵🇭 PSE</div>
+    <div class="hero-sub" id="pse-sub">Loading…</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div id="pse-out"><div class="empty-state">LOADING PH SNAPSHOT…</div></div>
+</div>
+
 <!-- ═══════════════ HELP PAGE ═══════════════ -->
 <div class="page" id="page-help">
   <div class="hero" style="margin-bottom:1.25rem">
@@ -1139,6 +1173,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
   <button class="mob-tab" id="mob-radar" onclick="switchPageMobile('radar',this)"><span class="mob-tab-icon">📡</span>RADAR</button>
   <button class="mob-tab" id="mob-journal" onclick="switchPageMobile('journal',this)"><span class="mob-tab-icon">📓</span>JOURNAL</button>
+  <button class="mob-tab" id="mob-pse" onclick="switchPageMobile('pse',this)"><span class="mob-tab-icon">🇵🇭</span>PSE</button>
   <button class="mob-tab" id="mob-help" onclick="switchPageMobile('help',this)"><span class="mob-tab-icon">❔</span>HELP</button>
 </div>
 
@@ -1357,6 +1392,7 @@ function switchPage(id, el) {
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
   if (id==='journal') renderJournal();
+  if (id==='pse') renderPh();
   window.scrollTo(0,0);
 }
 function switchPageMobile(id, el) {
@@ -1373,6 +1409,7 @@ function switchPageMobile(id, el) {
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
   if (id==='journal') renderJournal();
+  if (id==='pse') renderPh();
   window.scrollTo(0,0);
 }
 
@@ -1560,6 +1597,55 @@ function renderJournal() {
       '</div>';
     }
 
+    out.innerHTML = html;
+  });
+}
+
+// ── PH SNAPSHOT (read-only; not scored) ──
+function phRow(p) {
+  return '<div class="jrow">' +
+    '<span class="jrow-sym">' + esc(p.symbol) + '</span>' +
+    '<span class="pse-name">' + esc(p.name) + '</span>' +
+    '<span class="help-pill" style="color:var(--txt3)">' + esc(p.listing) + '</span>' +
+    '<span class="pse-px">' + p.close + ' ' + esc(p.currency) + '</span>' +
+    '<span class="jrow-ret">' + jSign(p.dayChangePct) + '</span>' +
+  '</div>';
+}
+function renderPh() {
+  var out = document.getElementById('pse-out');
+  var sub = document.getElementById('pse-sub');
+  if (!out) return;
+  if (!window.fbLoadPh) { out.innerHTML = '<div class="empty-state">PH SNAPSHOT UNAVAILABLE</div>'; return; }
+  out.innerHTML = '<div class="empty-state">LOADING PH SNAPSHOT…</div>';
+  window.fbLoadPh().then(function (d) {
+    if (!d || !d.index) {
+      if (sub) sub.textContent = 'No snapshot yet';
+      out.innerHTML = '<div class="empty-state">NO PH SNAPSHOT YET — RUN radar/refresh-radar.js</div>';
+      return;
+    }
+    var idx = d.index;
+    if (sub) sub.textContent = 'PSEi ' + idx.close + ' · as of ' + esc(idx.asOf);
+    var trendTxt, trendCol;
+    if (idx.aboveSma20 && idx.aboveSma50) { trendTxt = 'Above its 20- & 50-day averages — uptrend'; trendCol = 'var(--green)'; }
+    else if (!idx.aboveSma20 && !idx.aboveSma50) { trendTxt = 'Below its 20- & 50-day averages — downtrend'; trendCol = 'var(--red)'; }
+    else { trendTxt = 'Mixed vs its moving averages'; trendCol = 'var(--txt3)'; }
+
+    var html = '<div class="pse-caveat">⚠ ' + esc(d.caveat) + '</div>';
+    html += '<div class="card radar-card pse-index">' +
+      '<div class="card-accent" style="background:' + trendCol + '"></div>' +
+      '<div class="pse-idx-top"><span class="pse-idx-name">' + esc(idx.name) +
+        ' <span class="radar-theme">' + esc(idx.currency) + '</span></span>' +
+        '<span class="pse-idx-val">' + idx.close + '</span></div>' +
+      '<div class="pse-idx-meta">Day ' + jSign(idx.dayChangePct) +
+        ' · <span style="color:' + trendCol + '">' + esc(trendTxt) + '</span></div>' +
+      '<div class="pse-idx-sma">20-day avg ' + idx.sma20 + ' · 50-day avg ' + idx.sma50 + '</div>' +
+    '</div>';
+    html += '<div class="journal-section">Large-cap proxies — US-listed (USD), indicative only</div>';
+    if (d.proxies && d.proxies.length) {
+      html += '<div class="jlist">' + d.proxies.map(phRow).join('') + '</div>';
+    } else {
+      html += '<div class="rel-none-txt">No proxy data available.</div>';
+    }
     out.innerHTML = html;
   });
 }
