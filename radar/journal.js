@@ -165,7 +165,7 @@ function buildJournal(barsByAsset, config, opts) {
     horizonBars: horizon,
     entryMode: entryMode,
     ambiguousResolution: ambiguousResolution,
-    scoringModelMeasured: 'v1-with-riskReward'
+    scoringModelMeasured: jc.scoringModelMeasured || 'v1-with-riskReward'
   };
 
   function bodyFrom(entries, pendingCount) {

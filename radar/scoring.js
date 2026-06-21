@@ -21,8 +21,14 @@ var VOLUME_KNOTS = [
 var RELSTRENGTH_KNOTS = [
   [-10, 10], [-5, 30], [0, 50], [5, 80], [10, 100]
 ];
-var RR_KNOTS = [
-  [1.0, 20], [1.5, 55], [2.0, 75], [3.0, 100]
+// riskQuality (V2) replaces the inert riskReward sub-score. Two ATR-calibrated
+// curves: stop distance (risk / ATR) and extension above SMA20 ((close-SMA20)/ATR).
+// V1 heuristics — tune via the journal.
+var RQ_STOP_KNOTS = [
+  [0.5, 30], [1.0, 80], [1.5, 100], [2.5, 70], [4.0, 30]
+];
+var RQ_EXT_KNOTS = [
+  [0, 80], [0.5, 100], [2.0, 70], [4.0, 40], [6.0, 20]
 ];
 
 // Linear interpolation across sorted [x, y] knots, clamped outside the range.
@@ -100,26 +106,48 @@ function relStrengthMetrics(assetCloses, benchCloses) {
   return { spread: s, score: interp(RELSTRENGTH_KNOTS, s) };
 }
 
-// riskReward: rule-based 2R plan. stop = min(prior-day low, SMA20); entry = close;
-// target = entry + 2*(entry-stop). By construction rr resolves to ~2.0 (score 75)
-// for any valid setup, and degrades to a broken setup (<1 -> 20) when close <= stop.
-// This is the V1 spec verbatim; the levels themselves (entry/stop/target) are the
-// useful output and are surfaced on the card.
+// Risk/reward LEVELS for the card: stop = min(prior-day low, SMA20); entry =
+// close; target = entry + 2*(entry-stop). By construction rr is ~2.0 — these
+// levels are the displayed plan and the journal's published stop/target. The
+// score blend no longer reads rr (it was a constant); riskQuality replaces it.
 function riskRewardMetrics(close, priorLow, s20) {
   var stop = Math.min(
     priorLow != null ? priorLow : Infinity,
     s20 != null ? s20 : Infinity
   );
-  if (!isFinite(stop)) return { stop: null, entry: close, target: null, rr: null, score: 50 };
+  if (!isFinite(stop)) return { stop: null, entry: close, target: null, rr: null };
   var entry = close;
   var risk = entry - stop;
   if (risk <= 0) {
     // Close is at or below the stop: no valid long structure.
-    return { stop: stop, entry: entry, target: null, rr: 0, score: 20 };
+    return { stop: stop, entry: entry, target: null, rr: 0 };
   }
   var target = entry + 2 * risk;
-  var rr = (target - entry) / risk;
-  return { stop: stop, entry: entry, target: target, rr: rr, score: interp(RR_KNOTS, rr) };
+  return { stop: stop, entry: entry, target: target, rr: (target - entry) / risk };
+}
+
+// ATR(14): mean True Range over the last 14 bars. Equity uses real high/low;
+// crypto (high=low=close proxy) reduces to |close - prevClose| (close-to-close).
+function atr(bars, n) {
+  if (bars.length < n + 1) return null;
+  var sum = 0;
+  for (var i = bars.length - n; i < bars.length; i++) {
+    var b = bars[i], p = bars[i - 1];
+    var tr = Math.max(b.high - b.low, Math.abs(b.high - p.close), Math.abs(b.low - p.close));
+    sum += tr;
+  }
+  return sum / n;
+}
+
+// riskQuality (0-100): is the risk well-formed? Rewards a stop a healthy ATR
+// multiple below entry (not noise-tight, not chasing-wide) and an entry not
+// overextended above SMA20. Replaces the inert constant riskReward sub-score.
+function riskQuality(entry, stop, s20, atrVal) {
+  if (atrVal == null || atrVal <= 0) return 50;        // volatility undefined -> neutral
+  if (stop == null || entry - stop <= 0) return 20;    // broken structure
+  var a = (entry - stop) / atrVal;                     // stop distance, in ATRs
+  var e = (s20 != null ? (entry - s20) : 0) / atrVal;  // extension above mean, in ATRs
+  return Math.round(0.5 * interp(RQ_STOP_KNOTS, a) + 0.5 * interp(RQ_EXT_KNOTS, e));
 }
 
 // regime: SPY & QQQ both above their SMA20 -> 100; one -> 60; neither -> 25.
@@ -220,11 +248,12 @@ function scoreUniverse(barsByAsset, config) {
     var vol = volumeMetrics(bars);
     var rs = relStrengthMetrics(closes, benchCloses);
     var rr = riskRewardMetrics(close, priorLow, s20);
+    var atrVal = atr(bars, 14);
     var sub = {
       trend: trendScore(close, s20, s50),
       volume: vol.score,
       relStrength: rs.score,
-      riskReward: rr.score,
+      riskQuality: riskQuality(rr.entry, rr.stop, s20, atrVal),
       regime: regime.score
     };
 
@@ -232,7 +261,7 @@ function scoreUniverse(barsByAsset, config) {
       weights.trend * sub.trend +
       weights.volume * sub.volume +
       weights.relStrength * sub.relStrength +
-      weights.riskReward * sub.riskReward +
+      weights.riskQuality * sub.riskQuality +
       weights.regime * sub.regime;
 
     var status = classify(sub, close, rr.stop, regime.score);
@@ -252,6 +281,7 @@ function scoreUniverse(barsByAsset, config) {
       stop: round(rr.stop, 2),
       target: round(rr.target, 2),
       rr: round(rr.rr, 2),
+      riskQuality: sub.riskQuality,
       why: buildWhy(sym, item.benchmark, status, sub, vol.ratio, rs.spread),
       invalidation: buildInvalidation(sym, rr.stop, status)
     });

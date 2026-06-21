@@ -60,7 +60,7 @@ var WEIGHTS = {
   trend: 0.30,
   volume: 0.25,
   relStrength: 0.25,
-  riskReward: 0.10,
+  riskQuality: 0.10,
   regime: 0.10
 };
 
@@ -75,7 +75,8 @@ var JOURNAL = {
   horizonBars: 20,                      // forward window for outcome resolution
   entryMode: 'next-session',            // fill at next open (equity) / next close (crypto)
   ambiguousResolution: 'conservative',  // same-bar stop+target -> count the stop
-  recentCap: 120                        // how many recent outcomes to persist
+  recentCap: 120,                       // how many recent outcomes to persist
+  scoringModelMeasured: 'v2-riskQuality' // label: which scoring model the journal measured
 };
 
 var CONFIG = {
