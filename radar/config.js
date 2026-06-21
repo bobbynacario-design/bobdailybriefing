@@ -100,13 +100,29 @@ var JOURNAL = {
   scoringModelMeasured: 'v2-riskQuality' // label: which scoring model the journal measured
 };
 
+// PH market snapshot (NOT scored — there is no free historical per-stock PSE
+// feed). The PSEi index has clean Yahoo history (PHP); company rows are
+// US-listed proxies (ADR/OTC, USD) that only track the local shares loosely.
+// Snapshot only, heavily caveated. See buildPhSnapshot() in refresh-radar.js.
+var PH = {
+  index: { symbol: 'PSEI.PS', name: 'PSEi' },
+  proxies: [
+    { symbol: 'PHI',   name: 'PLDT',           listing: 'NYSE ADR' },
+    { symbol: 'SVTMF', name: 'SM Investments', listing: 'US OTC' },
+    { symbol: 'BDOUY', name: 'BDO Unibank',    listing: 'US OTC ADR' },
+    { symbol: 'JBFCY', name: 'Jollibee',       listing: 'US OTC ADR' },
+    { symbol: 'AYYLF', name: 'Ayala Corp',     listing: 'US OTC' }
+  ]
+};
+
 var CONFIG = {
   watchlist: WATCHLIST,
   indexSymbols: INDEX_SYMBOLS,
   coingeckoIds: COINGECKO_IDS,
   weights: WEIGHTS,
   lookbackBars: LOOKBACK_BARS,
-  journal: JOURNAL
+  journal: JOURNAL,
+  ph: PH
 };
 
 export { CONFIG };
