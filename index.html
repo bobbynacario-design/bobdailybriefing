@@ -548,6 +548,19 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .jamb{color:#F0A832;cursor:help}
 @media(max-width:768px){.jbar-label{width:74px}.jbar-meta{min-width:0}.jbar-row{flex-wrap:wrap}.jbar-row .jbar-meta{width:100%;text-align:left;margin-top:.3rem}.jbar-row .trend-bar-wrap{flex:1 1 120px}}
 
+/* ── HELP ── */
+.help-body{max-width:760px}
+.help-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1rem}
+.help-h{font-family:var(--mono);font-size:13px;letter-spacing:.04em;color:var(--gold);margin-bottom:.7rem}
+.help-card p{font-size:14px;line-height:1.7;color:var(--txt2);margin:.5rem 0}
+.help-card b{color:var(--txt)}
+.help-card ul{margin:.4rem 0 .4rem 1.1rem}
+.help-card li{font-size:14px;line-height:1.7;color:var(--txt2);margin:.25rem 0}
+.help-card ul ul{margin-top:.2rem}
+.help-pill{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.help-key{border-left:2px solid var(--gold);padding-left:.8rem;color:var(--txt)!important}
+.help-takeaway{border-color:var(--gold-dim);background:var(--gold-dim)}
+
 /* ── WATCH CARD ── */
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
 .watch-stripe{position:absolute;top:0;left:0;width:4px;height:100%;background:var(--red)}
@@ -746,6 +759,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
     <button class="ntab" data-page="radar" onclick="switchPage('radar',this)">📡 Radar</button>
     <button class="ntab" data-page="journal" onclick="switchPage('journal',this)">📓 Journal</button>
+    <button class="ntab" data-page="help" onclick="switchPage('help',this)">❔ Help</button>
   </div>
   <div class="nav-right">
     <div class="nav-clock" id="nav-clock">--:--</div>
@@ -1063,6 +1077,57 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="radar-disclaimer">Backtested feedback only. Each past day is re-scored point-in-time and tracked over the next horizon to see whether the status and score were informative — it is not a track record of trades and not advice.</div>
 </div>
 
+<!-- ═══════════════ HELP PAGE ═══════════════ -->
+<div class="page" id="page-help">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">How to read it</div>
+    <div class="hero-date" style="font-size:22px">❔ Help</div>
+    <div class="hero-sub">Reading the Radar &amp; Journal in plain terms</div>
+    <div class="hero-divider"></div>
+  </div>
+
+  <div class="help-body">
+    <div class="help-card">
+      <div class="help-h">📡 Radar — what's worth a look today</div>
+      <p>Each card is one asset, ranked by a <b>0–100 score</b> (higher = stronger setup right now on trend, volume and relative strength). Read a card top to bottom:</p>
+      <ul>
+        <li><b>Score + status badge</b> — the quick read:
+          <ul>
+            <li><span class="help-pill" style="color:var(--gold)">confirmed</span> — strong, signals lined up.</li>
+            <li><span class="help-pill" style="color:#F0A832">forming</span> — building, not there yet.</li>
+            <li><span class="help-pill" style="color:var(--red)">invalidated</span> — broke down / lagging. Don't chase.</li>
+          </ul>
+        </li>
+        <li><b>The "why" sentence</b> — why it's moving, in words.</li>
+        <li><b>📰 catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event).</li>
+        <li><b>Plan line</b> — <span class="src">Entry · Stop · Target · R:R</span>. The <b>stop is the useful number</b>: the level where the idea is wrong.</li>
+      </ul>
+      <p class="help-key">Use it as a shortlist and framing tool, never as buy signals. Check the regime line up top for the market backdrop, then scan the top confirmed/forming names and their catalysts. It tells you <i>what's strong and why</i> — never <i>"buy this."</i></p>
+    </div>
+
+    <div class="help-card">
+      <div class="help-h">📓 Journal — has the radar actually been right?</div>
+      <p>The honesty check. It re-runs the score on the last ~60 days and measures what happened next. The one number that matters is <b>excess</b> — return <b>vs the asset's own benchmark</b> (QQQ / SPY / BTC):</p>
+      <ul>
+        <li><b>Raw return</b> — did it go up? (Easy in a rising market — everything went up.)</li>
+        <li><b>Excess return</b> — did it beat what it <i>should</i> have, given its market? <b>This is the real test.</b> Raw can look great while excess is ~0.</li>
+      </ul>
+      <p class="help-key">Right now the journal says: raw returns look nicely ordered by score, but <b>excess is roughly flat</b> — only AI semis show real excess. Translation: the radar's apparent edge has mostly been <b>riding the AI wave</b>, not beating peers. That's the tool telling you the truth so you don't over-trust it.</p>
+      <p>The <b>caveats line</b> matters: ~60 days of mostly-correlated names is "indicative, not statistically significant." Treat the numbers as directional hints, not proof — they sharpen as more varied history builds up.</p>
+    </div>
+
+    <div class="help-card help-takeaway">
+      <div class="help-h">The simple takeaway</div>
+      <ul>
+        <li><b>Radar</b> = today's framing: what's strong, why, and where it breaks. Use the status + stop + catalyst.</li>
+        <li><b>Journal</b> = the reality check: look at <b>excess</b>, not raw. It currently says "we've mostly been long the AI trade" — so weight the radar accordingly.</li>
+      </ul>
+    </div>
+
+    <div class="radar-disclaimer">Framing, not advice. Nothing here is a recommendation to buy or sell. Scored once daily on daily bars.</div>
+  </div>
+</div>
+
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
@@ -1074,6 +1139,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
   <button class="mob-tab" id="mob-radar" onclick="switchPageMobile('radar',this)"><span class="mob-tab-icon">📡</span>RADAR</button>
   <button class="mob-tab" id="mob-journal" onclick="switchPageMobile('journal',this)"><span class="mob-tab-icon">📓</span>JOURNAL</button>
+  <button class="mob-tab" id="mob-help" onclick="switchPageMobile('help',this)"><span class="mob-tab-icon">❔</span>HELP</button>
 </div>
 
 <script>
