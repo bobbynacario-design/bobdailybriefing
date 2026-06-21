@@ -4,7 +4,8 @@
 // Radar. This is the only place to tune the universe. scoring.js reads `weights`
 // from the config object it is handed; it imports nothing from here directly.
 //
-// Themes: AI semis / AI infra / Crypto / Crypto eq / Energy-geo. Index symbols
+// Themes: AI semis / AI infra / Crypto / Crypto eq / Energy-geo / Financials /
+// Healthcare / Industrials / Consumer / Defense / Metals-commod. Index symbols
 // (SPY, QQQ, IWM) are fetched for regime + as benchmarks but are NOT scored as
 // ideas (scoring.js skips anything listed in indexSymbols).
 
@@ -38,6 +39,20 @@ var WATCHLIST = [
   { symbol: 'XOM', theme: 'Energy/geo', benchmark: 'SPY' },
   { symbol: 'CVX', theme: 'Energy/geo', benchmark: 'SPY' },
   { symbol: 'GLD', theme: 'Energy/geo', benchmark: 'SPY' },
+
+  // Diversifiers — uncorrelated to the AI trade, so the score has something to
+  // discriminate against (the journal flagged the universe as AI-concentrated).
+  // All benchmark SPY.
+  { symbol: 'XLF', theme: 'Financials',     benchmark: 'SPY' },
+  { symbol: 'XLV', theme: 'Healthcare',     benchmark: 'SPY' },
+  { symbol: 'XLI', theme: 'Industrials',    benchmark: 'SPY' },
+  { symbol: 'XLY', theme: 'Consumer',       benchmark: 'SPY' },
+  { symbol: 'ITA', theme: 'Defense',        benchmark: 'SPY' },
+  { symbol: 'LMT', theme: 'Defense',        benchmark: 'SPY' },
+  { symbol: 'RTX', theme: 'Defense',        benchmark: 'SPY' },
+  { symbol: 'GDX', theme: 'Metals/commod',  benchmark: 'SPY' },
+  { symbol: 'SLV', theme: 'Metals/commod',  benchmark: 'SPY' },
+  { symbol: 'DBC', theme: 'Metals/commod',  benchmark: 'SPY' },
 
   // Index / regime — fetched for regime + benchmarks, never scored as ideas
   { symbol: 'SPY', theme: 'Index/regime', benchmark: 'SPY' },

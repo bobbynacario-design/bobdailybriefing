@@ -195,7 +195,7 @@ function buildJournal(barsByAsset, config, opts) {
 
     var uniqueDates = Object.keys(dateGroups).length;
     var caveats = [
-      'Watchlist is concentrated in correlated AI names; non-overlapping counts still overstate independence. Treat headline stats as indicative, not statistically significant.'
+      'Universe still tilts toward correlated AI / risk-on names; non-overlapping counts overstate independence. Treat headline stats as indicative, not statistically significant.'
     ];
     if (entries.some(function (e) { return e.resolution === 'close-only'; })) {
       caveats.push('Crypto outcomes resolved on close only (no intrabar high/low).');
