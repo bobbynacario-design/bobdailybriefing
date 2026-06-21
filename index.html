@@ -532,11 +532,12 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-regime-line{font-family:var(--mono);font-size:11px;color:var(--txt2);letter-spacing:.05em;text-transform:uppercase;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .radar-asof{color:var(--txt3);font-size:10px;text-transform:none;letter-spacing:.03em}
 .radar-filter{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem}
+.radar-filter:has(+ .radar-subfilter){margin-bottom:.5rem}
 .radar-pill{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:.35rem .7rem;border-radius:20px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}
 .radar-pill:hover{color:var(--txt2);border-color:var(--txt3)}
 .radar-pill.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.3)}
 .radar-pill-n{opacity:.55;margin-left:.35rem}
-.radar-subfilter{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:-.5rem 0 1rem}
+.radar-subfilter{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:0 0 1rem}
 .radar-subfilter-label{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-right:.1rem}
 .radar-pill.sub{font-size:9px;padding:.28rem .6rem}
 .radar-pill-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:.4rem;vertical-align:middle}
@@ -1095,7 +1096,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div class="hero-divider"></div>
   </div>
   <div id="radar-regime"></div>
-  <div id="radar-filter"></div>
+  <div id="radar-filter" class="radar-filter"></div>
   <div id="radar-status-filter"></div>
   <div id="radar-out"><div class="empty-state">LOADING RADAR…</div></div>
   <div class="radar-disclaimer">Framing, not advice. Each card describes whether a move is strong, confirmed, and worth its defined risk — never a recommendation to buy or sell. Scored once daily on daily bars.</div>
@@ -1547,7 +1548,7 @@ function renderRadarStatusFilter() {
   base.forEach(function (s) { counts[s.status] = (counts[s.status] || 0) + 1; });
   var present = RADAR_STATUS_ORDER.filter(function (st) { return counts[st]; });
   // Nothing to discriminate (one status or none) — hide the sub-row entirely.
-  if (present.length < 2) { el.innerHTML = ''; return; }
+  if (present.length < 2) { el.className = ''; el.innerHTML = ''; return; }
   var pills = ['All'].concat(present).map(function (st) {
     var n = st === 'All' ? base.length : counts[st];
     var dot = st === 'All' ? ''
