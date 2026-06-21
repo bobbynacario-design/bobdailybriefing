@@ -67,12 +67,21 @@ var WEIGHTS = {
 // How many trailing daily bars to request so SMA50 + 20d returns are well-defined.
 var LOOKBACK_BARS = 160;
 
+// V3 journal: re-score the last `lookbackDays` trading days point-in-time and
+// track each signal's outcome over the next `horizonDays` bars.
+var JOURNAL = {
+  lookbackDays: 60,
+  horizonDays: 20,
+  recentCap: 120   // how many recent closed outcomes to persist for the table
+};
+
 var CONFIG = {
   watchlist: WATCHLIST,
   indexSymbols: INDEX_SYMBOLS,
   coingeckoIds: COINGECKO_IDS,
   weights: WEIGHTS,
-  lookbackBars: LOOKBACK_BARS
+  lookbackBars: LOOKBACK_BARS,
+  journal: JOURNAL
 };
 
 export { CONFIG };

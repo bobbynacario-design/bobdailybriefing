@@ -27,6 +27,7 @@ import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
+import { buildJournal } from './journal.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -350,9 +351,31 @@ async function main() {
   console.log('\n===== briefings-bob/radar-' + dateKey + ' =====');
   console.log(JSON.stringify(doc, null, 2));
 
+  // V3: rebuild the performance journal from the same bars (pure, deterministic
+  // re-scoring of the last N trading days). Persist stats + recent outcomes.
+  var jcfg = CONFIG.journal || { lookbackDays: 60, horizonDays: 20, recentCap: 120 };
+  var journal = buildJournal(barsByAsset, CONFIG, jcfg);
+  var recent = journal.entries
+    .filter(function (e) { return e.exitDate; })            // closed outcomes
+    .sort(function (a, b) { return a.exitDate < b.exitDate ? 1 : -1; })
+    .slice(0, jcfg.recentCap || 120);
+  var journalDoc = {
+    updatedAt: new Date().toISOString(),
+    lookbackDays: journal.lookbackDays,
+    horizonDays: journal.horizonDays,
+    tracked: journal.entries.length,
+    stats: journal.stats,
+    recent: recent
+  };
+  console.log('Journal: ' + journal.entries.length + ' signals over ' + journal.lookbackDays +
+    'd, overall win rate ' + journal.stats.overall.winRate + '% (' +
+    journal.stats.overall.wins + 'W/' + journal.stats.overall.losses + 'L), ' +
+    journal.stats.overall.open + ' still open.');
+
   var db = initAdmin();
   await writeDoc(db, dateKey, doc);
-  console.log('\nWrote briefings-bob/radar-' + dateKey + ' and radar-latest = ' + dateKey);
+  await db.collection(COLL).doc('radar-journal').set(journalDoc);
+  console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', and radar-journal.');
 }
 
 main().then(function () {
