@@ -381,6 +381,18 @@ async function main() {
     ' uniqueDates=' + journalBody.counts.uniqueDates + ' pending=' + journalBody.counts.pending);
   journalBody.caveats.forEach(function (c) { console.log('  caveat: ' + c); });
 
+  var wc = journalBody.weightCalibration;
+  console.log('\n  --- weight calibration (holdout from ' + wc.holdoutFrom + ') ---');
+  ['trend', 'volume', 'relStrength', 'riskQuality', 'regime'].forEach(function (c) {
+    var g = wc.components[c] || {};
+    console.log('    ' + c.padEnd(12) +
+      ' spreadFit=' + (g.spreadFit == null ? '—' : g.spreadFit + 'pp') +
+      '  spreadHoldout=' + (g.spreadHoldout == null ? '—' : g.spreadHoldout + 'pp') +
+      '  robust=' + (g.robust ? 'YES' : 'no') +
+      '   w ' + wc.currentWeights[c] + ' -> ' + wc.suggestedWeights[c]);
+  });
+  console.log('  ' + wc.note);
+
   var db = initAdmin();
   await writeDoc(db, dateKey, doc);
   await db.collection(COLL).doc('radar-journal').set(journalDoc);

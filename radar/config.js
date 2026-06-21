@@ -70,13 +70,19 @@ var COINGECKO_IDS = {
   SOL: 'solana'
 };
 
-// Renormalised V1 weights (catalyst + event-penalty dropped; sums to 1.0).
+// Component weights (sum to 1.0). Journal-calibrated against out-of-sample
+// forward excess (see journal.js weightCalibration): from the original
+// 0.30/0.25/0.25/0.10/0.10, riskQuality was the ONLY component whose excess
+// tercile-spread held its sign across the fit/holdout time-split — and it was
+// consistently negative (cleaner setups lagged in this momentum tape), so its
+// weight was conservatively shrunk (0.10 -> 0.073) and the rest renormalised.
+// The other four flipped sign OOS (no trustworthy edge) and were left in ratio.
 var WEIGHTS = {
-  trend: 0.30,
-  volume: 0.25,
-  relStrength: 0.25,
-  riskQuality: 0.10,
-  regime: 0.10
+  trend: 0.308,
+  volume: 0.258,
+  relStrength: 0.258,
+  riskQuality: 0.073,
+  regime: 0.103
 };
 
 // How many trailing daily bars to request so SMA50 + 20d returns are well-defined.

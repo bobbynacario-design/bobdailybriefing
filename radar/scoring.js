@@ -282,6 +282,12 @@ function scoreUniverse(barsByAsset, config) {
       target: round(rr.target, 2),
       rr: round(rr.rr, 2),
       riskQuality: sub.riskQuality,
+      // all five sub-scores, so the journal can calibrate each component's
+      // predictive power for forward excess (weight calibration).
+      subScores: {
+        trend: sub.trend, volume: sub.volume, relStrength: sub.relStrength,
+        riskQuality: sub.riskQuality, regime: sub.regime
+      },
       why: buildWhy(sym, item.benchmark, status, sub, vol.ratio, rs.spread),
       invalidation: buildInvalidation(sym, rr.stop, status)
     });

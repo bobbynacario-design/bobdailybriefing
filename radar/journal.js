@@ -151,6 +151,74 @@ function emptyGroup() {
   return { n: 0, winRate: null, avgForwardReturn: null, excessWinRate: null, avgExcessReturn: null, ambiguousN: 0 };
 }
 
+// ── weight calibration (diagnostic only — never auto-applied to scoring) ──
+// For one component, the spread = avg forward-excess of the top value-tercile
+// minus the bottom value-tercile. Positive => higher component value tends to
+// precede higher excess (predictive); ~0 or sign-flipping => no edge.
+function tercileSpread(list, comp) {
+  var pts = [];
+  list.forEach(function (e) {
+    if (e.subScores && e.subScores[comp] != null && e.excessReturn != null) {
+      pts.push({ v: e.subScores[comp], x: e.excessReturn });
+    }
+  });
+  if (pts.length < 9) return null;
+  pts.sort(function (a, b) { return a.v - b.v; });
+  var t = Math.floor(pts.length / 3);
+  var bottom = pts.slice(0, t).map(function (p) { return p.x; });
+  var top = pts.slice(pts.length - t).map(function (p) { return p.x; });
+  return round(mean(top) - mean(bottom), 2);
+}
+
+// Calibrate component weights against forward excess on a time-split. A component
+// only earns a (small, shrunk, capped) weight nudge if its excess-tercile spread
+// keeps the same sign in BOTH the older fit window and the recent holdout window
+// — i.e. it survives out-of-sample. Otherwise weights are left as-is. This is a
+// diagnostic surfaced for human review; scoring weights stay static in config.
+function weightCalibration(entries, weights) {
+  var comps = ['trend', 'volume', 'relStrength', 'riskQuality', 'regime'];
+  var withX = entries.filter(function (e) { return e.excessReturn != null && e.subScores; });
+  var dates = [];
+  withX.forEach(function (e) { if (dates.indexOf(e.date) === -1) dates.push(e.date); });
+  dates.sort();
+  if (dates.length < 6) {
+    return { method: 'insufficient history for a time-split', components: {}, anyRobust: false,
+      currentWeights: weights, suggestedWeights: weights, note: 'Not enough dates to calibrate weights.' };
+  }
+  var cut = dates[Math.floor(dates.length * 2 / 3)];
+  var fit = withX.filter(function (e) { return e.date < cut; });
+  var hold = withX.filter(function (e) { return e.date >= cut; });
+
+  var components = {}, current = {}, suggestedRaw = {};
+  comps.forEach(function (c) {
+    var sf = tercileSpread(fit, c);
+    var sh = tercileSpread(hold, c);
+    var robust = sf != null && sh != null && (sf > 0) === (sh > 0) &&
+      Math.abs(sf) >= 0.3 && Math.abs(sh) >= 0.3;
+    components[c] = { spreadFit: sf, spreadHoldout: sh, robust: robust };
+    current[c] = weights[c] != null ? weights[c] : 0;
+    var delta = 0;
+    if (robust) delta = Math.max(-0.03, Math.min(0.03, ((sf + sh) / 2) * 0.01)); // tiny + capped
+    suggestedRaw[c] = Math.max(0, current[c] + delta);
+  });
+  var sum = 0; comps.forEach(function (c) { sum += suggestedRaw[c]; });
+  var suggested = {};
+  comps.forEach(function (c) { suggested[c] = sum > 0 ? round(suggestedRaw[c] / sum, 3) : current[c]; });
+  var anyRobust = comps.some(function (c) { return components[c].robust; });
+
+  return {
+    method: 'forward-excess tercile spread, time-split (fit = older 2/3 of dates, holdout = recent 1/3); robust = same sign in both and |spread| >= 0.3pp',
+    holdoutFrom: cut,
+    components: components,
+    currentWeights: current,
+    suggestedWeights: suggested,
+    anyRobust: anyRobust,
+    note: anyRobust
+      ? 'Some component survived out-of-sample; a conservative shrunk reweight is suggested — review before applying.'
+      : 'No component robustly predicts excess out-of-sample; weights should stay as they are.'
+  };
+}
+
 function buildJournal(barsByAsset, config, opts) {
   opts = opts || {};
   var jc = config.journal || {};
@@ -229,6 +297,7 @@ function buildJournal(barsByAsset, config, opts) {
       byTheme: byTheme,
       byAsset: byAsset,
       byDate: byDate,
+      weightCalibration: weightCalibration(entries, config.weights || {}),
       recentOutcomes: recentOutcomes
     };
   }
@@ -282,6 +351,7 @@ function buildJournal(barsByAsset, config, opts) {
 
       entries.push({
         date: D, symbol: sym, theme: s.theme, status: s.status, score: s.score, idx: idxD,
+        subScores: s.subScores,
         entryBasis: entryBasis, publishedEntry: s.entry, fill: round(fill, 2),
         exit: oc.exit != null ? round(oc.exit, 2) : null, exitReason: oc.exitReason,
         ambiguous: oc.ambiguous, resolution: oc.resolution,
@@ -294,4 +364,4 @@ function buildJournal(barsByAsset, config, opts) {
   return bodyFrom(entries, pendingCount);
 }
 
-export { buildJournal, resolveOutcome, scoreBucket };
+export { buildJournal, resolveOutcome, scoreBucket, weightCalibration };
