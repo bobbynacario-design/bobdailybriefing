@@ -7,3 +7,4 @@ ui-debug.log*
 radar/node_modules/
 radar/serviceAccountKey.json
 radar/.env
+radar/refresh.log
