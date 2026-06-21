@@ -531,6 +531,11 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 @media(max-width:680px){.radar-grid{grid-template-columns:1fr}}
 .radar-regime-line{font-family:var(--mono);font-size:11px;color:var(--txt2);letter-spacing:.05em;text-transform:uppercase;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .radar-asof{color:var(--txt3);font-size:10px;text-transform:none;letter-spacing:.03em}
+.radar-filter{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem}
+.radar-pill{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:.35rem .7rem;border-radius:20px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}
+.radar-pill:hover{color:var(--txt2);border-color:var(--txt3)}
+.radar-pill.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.3)}
+.radar-pill-n{opacity:.55;margin-left:.35rem}
 .radar-card .card-top{align-items:center}
 .radar-theme{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;text-transform:uppercase;font-weight:400;margin-left:.5rem;white-space:nowrap}
 .radar-score-wrap{display:flex;align-items:center;gap:.65rem;flex-shrink:0}
@@ -1086,6 +1091,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div class="hero-divider"></div>
   </div>
   <div id="radar-regime"></div>
+  <div id="radar-filter"></div>
   <div id="radar-out"><div class="empty-state">LOADING RADAR…</div></div>
   <div class="radar-disclaimer">Framing, not advice. Each card describes whether a move is strong, confirmed, and worth its defined risk — never a recommendation to buy or sell. Scored once daily on daily bars.</div>
 </div>
@@ -1476,16 +1482,60 @@ function radarCard(s) {
     '<div class="card-footer"><span class="rel-text radar-invalidation">' + esc(s.invalidation) + '</span></div>' +
   '</div>';
 }
+// ── Asset-type quick filter ──
+// Coarse "main asset type" derived client-side from each signal's theme/symbol
+// (signals carry no explicit asset class). Crypto = coins; Commodities = metal /
+// energy / broad-commodity ETFs; everything else (incl. equity sector ETFs and
+// crypto-equities) is Stocks. Energy equities like XOM/CVX stay under Stocks.
+var RADAR_COMMODITY_SYMS = { USO:1, GLD:1, SLV:1, DBC:1, GDX:1 };
+var RADAR_TYPE_ORDER = ['Stocks', 'Crypto', 'Commodities'];
+var radarSignals = null;   // cached signals from the last load
+var radarFilter = 'All';   // active asset-type filter
+function radarAssetType(s) {
+  if (s.theme === 'Crypto') return 'Crypto';
+  if (RADAR_COMMODITY_SYMS[s.symbol] || s.theme === 'Metals/commod') return 'Commodities';
+  return 'Stocks';
+}
+function setRadarFilter(t) {
+  radarFilter = t;
+  renderRadarFilter();
+  renderRadarCards();
+}
+function renderRadarFilter() {
+  var el = document.getElementById('radar-filter');
+  if (!el || !radarSignals) return;
+  var counts = {};
+  radarSignals.forEach(function (s) { var t = radarAssetType(s); counts[t] = (counts[t] || 0) + 1; });
+  var types = ['All'].concat(RADAR_TYPE_ORDER.filter(function (t) { return counts[t]; }));
+  el.innerHTML = types.map(function (t) {
+    var n = t === 'All' ? radarSignals.length : counts[t];
+    return '<button class="radar-pill' + (t === radarFilter ? ' active' : '') +
+      '" onclick="setRadarFilter(\'' + t + '\')">' + esc(t) +
+      '<span class="radar-pill-n">' + n + '</span></button>';
+  }).join('');
+}
+function renderRadarCards() {
+  var out = document.getElementById('radar-out');
+  if (!out || !radarSignals) return;
+  var list = radarFilter === 'All' ? radarSignals
+    : radarSignals.filter(function (s) { return radarAssetType(s) === radarFilter; });
+  out.innerHTML = list.length
+    ? '<div class="radar-grid">' + list.map(radarCard).join('') + '</div>'
+    : '<div class="empty-state">NO ' + esc(radarFilter.toUpperCase()) + ' SIGNALS TODAY</div>';
+}
 function renderRadar() {
   var out = document.getElementById('radar-out');
   var sub = document.getElementById('radar-sub');
   var regimeEl = document.getElementById('radar-regime');
+  var filterEl = document.getElementById('radar-filter');
   if (!out) return;
   if (!window.fbLoadRadar) { out.innerHTML = '<div class="empty-state">RADAR UNAVAILABLE</div>'; return; }
   out.innerHTML = '<div class="empty-state">LOADING RADAR…</div>';
   window.fbLoadRadar().then(function(data) {
     if (!data || !data.signals || !data.signals.length) {
+      radarSignals = null;
       if (regimeEl) regimeEl.innerHTML = '';
+      if (filterEl) filterEl.innerHTML = '';
       if (sub) sub.textContent = 'No radar data yet';
       out.innerHTML = '<div class="empty-state">NO RADAR DATA YET — RUN radar/refresh-radar.js</div>';
       return;
@@ -1497,7 +1547,13 @@ function renderRadar() {
         '<span class="radar-asof">as of ' + esc(data.asOf || '—') + '</span></div>';
     }
     if (sub) sub.textContent = data.signals.length + ' opportunities ranked by score';
-    out.innerHTML = '<div class="radar-grid">' + data.signals.map(radarCard).join('') + '</div>';
+    radarSignals = data.signals;
+    // Drop a stale filter if that asset type isn't present in today's data.
+    if (radarFilter !== 'All' && !radarSignals.some(function (s) { return radarAssetType(s) === radarFilter; })) {
+      radarFilter = 'All';
+    }
+    renderRadarFilter();
+    renderRadarCards();
   });
 }
 
