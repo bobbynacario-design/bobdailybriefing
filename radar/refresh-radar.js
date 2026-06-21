@@ -10,6 +10,7 @@
 //   npm install
 //   set APCA_API_KEY_ID=...        (or ALPACA_KEY_ID)
 //   set APCA_API_SECRET_KEY=...    (or ALPACA_SECRET_KEY)
+//   set OPENAI_API_KEY=...         (optional — enables V2 catalyst tagging)
 //   node refresh-radar.js
 //
 // Firestore auth (firebase-admin, Admin SDK — bypasses security rules):
@@ -29,11 +30,36 @@ import { scoreUniverse } from './scoring.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Load radar/.env (gitignored) into process.env before any keys are read, so a
+// single local file holds all secrets — no per-run env setup, Task-Scheduler-friendly.
+// Format: KEY=value per line; # comments and blank lines ignored. Real env vars win.
+(function loadDotEnv() {
+  try {
+    var p = join(__dirname, '.env');
+    if (!existsSync(p)) return;
+    readFileSync(p, 'utf8').split(/\r?\n/).forEach(function (line) {
+      if (/^\s*(#|$)/.test(line)) return;
+      var m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/);
+      if (!m) return;
+      var val = m[2].replace(/^['"]|['"]$/g, '');
+      if (process.env[m[1]] === undefined) process.env[m[1]] = val;
+    });
+    console.log('Loaded radar/.env');
+  } catch (e) { console.warn('.env load failed:', e.message); }
+})();
+
 var PROJECT_ID = 'pokerhq-a67e4';
 var COLL = 'briefings-bob';
 
 var ALPACA_KEY = process.env.APCA_API_KEY_ID || process.env.ALPACA_KEY_ID || '';
 var ALPACA_SECRET = process.env.APCA_API_SECRET_KEY || process.env.ALPACA_SECRET_KEY || '';
+
+// V2 — catalyst tagging (display-only). Reuses the app's OpenAI integration
+// (same /v1/responses endpoint + web_search tool as the briefing function).
+// Optional: if no key is set, the run still completes and writes signals
+// without catalysts, so the radar never depends on the news layer.
+var OPENAI_KEY = process.env.OPENAI_API_KEY || '';
+var OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
 
 // ── helpers ──
 
@@ -171,6 +197,96 @@ async function fetchAll() {
   return barsByAsset;
 }
 
+// ── V2: catalyst tagging via OpenAI (display-only) ──
+// Pulls the text out of an OpenAI /v1/responses payload (mirrors the app's
+// briefing function, which uses the same endpoint).
+function extractText(json) {
+  if (typeof json.output_text === 'string' && json.output_text) return json.output_text;
+  var chunks = [];
+  (json.output || []).forEach(function (item) {
+    (item.content || []).forEach(function (c) {
+      if (c && typeof c.text === 'string') chunks.push(c.text);
+    });
+  });
+  return chunks.join('\n');
+}
+
+// Strip ```json fences and parse the first JSON object found.
+function parseLooseJson(raw) {
+  var s = String(raw).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  var start = s.indexOf('{');
+  var end = s.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('no JSON object in model output');
+  return JSON.parse(s.slice(start, end + 1));
+}
+
+// For each scored signal, ask OpenAI (with web_search) for the single most
+// relevant recent catalyst and an event type. Returns a map symbol -> {catalyst,
+// eventType}. Never throws: any failure logs and yields {} so the daily run
+// still writes the (catalyst-free) signals.
+async function fetchCatalysts(signals) {
+  if (!OPENAI_KEY) {
+    console.log('OPENAI_API_KEY not set — skipping catalyst tagging (signals written without catalysts).');
+    return {};
+  }
+  var list = signals.map(function (s) {
+    return s.symbol + ' (' + s.theme + ', ' + s.status + ', 20d vs ' + s.benchmark + ': ' +
+      (s.relStrength20d == null ? 'n/a' : s.relStrength20d) + ' pts)';
+  }).join('\n');
+
+  var EVENT_TYPES = 'earnings | guidance | product | macro | regulatory | analyst | partnership | legal | supply | none';
+  var prompt =
+    'You are tagging market catalysts for a personal daily market radar. For EACH ticker below, ' +
+    'search recent news (roughly the last 7 days) and identify the single most relevant catalyst or ' +
+    'news item currently driving it.\n\n' +
+    'Return STRICT JSON only — an object keyed by ticker symbol, each value an object with:\n' +
+    '  "catalyst": one factual plain sentence (<=140 chars) describing the news/driver. NO advice, ' +
+    'NO "buy"/"sell"/"should", no price targets. If nothing material is found, use "".\n' +
+    '  "eventType": one of [' + EVENT_TYPES + '].\n' +
+    '  "asOf": the news date as YYYY-MM-DD if known, else "recent".\n\n' +
+    'Tickers (crypto symbols are the coins themselves):\n' + list + '\n\n' +
+    'Output JSON only, no prose, no code fences.';
+
+  var body = {
+    model: OPENAI_MODEL,
+    input: [
+      { role: 'system', content: 'You produce factual, concise JSON. Return strict JSON only. Never give financial advice.' },
+      { role: 'user', content: prompt }
+    ],
+    tools: [{ type: 'web_search', search_context_size: 'low' }],
+    tool_choice: 'auto'
+  };
+
+  try {
+    console.log('Tagging catalysts via OpenAI (' + OPENAI_MODEL + ', web_search) for ' + signals.length + ' symbols...');
+    var res = await fetchRetry('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + OPENAI_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }, 'OpenAI');
+    var text = await res.text();
+    if (!res.ok) {
+      console.log('  OpenAI error ' + res.status + ': ' + text.slice(0, 200) + ' — skipping catalysts.');
+      return {};
+    }
+    var json = JSON.parse(text);
+    var map = parseLooseJson(extractText(json));
+    var clean = {};
+    Object.keys(map).forEach(function (sym) {
+      var v = map[sym] || {};
+      clean[sym.toUpperCase()] = {
+        catalyst: typeof v.catalyst === 'string' ? v.catalyst.slice(0, 200) : '',
+        eventType: typeof v.eventType === 'string' ? v.eventType.toLowerCase() : 'none',
+        asOf: typeof v.asOf === 'string' ? v.asOf : 'recent'
+      };
+    });
+    return clean;
+  } catch (e) {
+    console.log('  Catalyst tagging failed (' + (e.message || e) + ') — skipping catalysts.');
+    return {};
+  }
+}
+
 // ── Firestore (Admin SDK) ──
 
 function initAdmin() {
@@ -205,6 +321,24 @@ async function main() {
 
   var result = scoreUniverse(barsByAsset, CONFIG);
   var dateKey = phtDateKey();
+
+  // V2: tag each signal with a recent catalyst (display-only; score unchanged).
+  var catalysts = await fetchCatalysts(result.signals);
+  var tagged = 0;
+  result.signals.forEach(function (s) {
+    var c = catalysts[s.symbol];
+    if (c && c.catalyst) {
+      s.catalyst = c.catalyst;
+      s.eventType = c.eventType || 'none';
+      s.catalystAsOf = c.asOf || 'recent';
+      tagged++;
+    } else {
+      s.catalyst = '';
+      s.eventType = 'none';
+      s.catalystAsOf = '';
+    }
+  });
+  console.log('Catalysts tagged: ' + tagged + '/' + result.signals.length);
 
   var doc = {
     generatedAt: new Date().toISOString(),
