@@ -309,6 +309,17 @@ window.fbLoadRadar = async function() {
   }
 };
 
+// Load the radar performance journal (V3). Single rolling doc, no uid.
+window.fbLoadJournal = async function() {
+  try {
+    var snap = await getDoc(doc(db, COLL, 'radar-journal'));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    console.error('Journal load failed:', e);
+    return null;
+  }
+};
+
 window._fbReady = true;
 </script>
 
@@ -519,6 +530,19 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-invalidation{color:var(--txt3);font-style:italic}
 .radar-disclaimer{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;line-height:1.7;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rim)}
 
+/* ── JOURNAL (V3) ── */
+.journal-section{margin:1.6rem 0 .7rem;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+.jbar-label{width:96px;font-family:var(--mono);font-size:11px;color:var(--txt2);text-transform:uppercase;flex-shrink:0}
+.jbar-meta{font-family:var(--mono);font-size:10px;color:var(--txt3);white-space:nowrap;flex-shrink:0;min-width:150px;text-align:right}
+.jlist{display:flex;flex-direction:column}
+.jrow{display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--rim);font-family:var(--mono);font-size:11px;flex-wrap:wrap}
+.jrow:last-child{border-bottom:none}
+.jrow-sym{font-weight:500;color:var(--txt);width:54px;flex-shrink:0}
+.jrow-oc{text-transform:uppercase;letter-spacing:.04em;width:62px;flex-shrink:0}
+.jrow-ret{width:60px;text-align:right;flex-shrink:0}
+.jrow-date{color:var(--txt3);font-size:10px;margin-left:auto}
+@media(max-width:768px){.jbar-label{width:74px}.jbar-meta{min-width:0}}
+
 /* ── WATCH CARD ── */
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
 .watch-stripe{position:absolute;top:0;left:0;width:4px;height:100%;background:var(--red)}
@@ -716,6 +740,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
     <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
     <button class="ntab" data-page="radar" onclick="switchPage('radar',this)">📡 Radar</button>
+    <button class="ntab" data-page="journal" onclick="switchPage('journal',this)">📓 Journal</button>
   </div>
   <div class="nav-right">
     <div class="nav-clock" id="nav-clock">--:--</div>
@@ -1021,6 +1046,18 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="radar-disclaimer">Framing, not advice. Each card describes whether a move is strong, confirmed, and worth its defined risk — never a recommendation to buy or sell. Scored once daily on daily bars.</div>
 </div>
 
+<!-- ═══════════════ JOURNAL PAGE ═══════════════ -->
+<div class="page" id="page-journal">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Radar Performance Journal</div>
+    <div class="hero-date" style="font-size:22px">📓 Journal</div>
+    <div class="hero-sub" id="journal-sub">Loading…</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div id="journal-out"><div class="empty-state">LOADING JOURNAL…</div></div>
+  <div class="radar-disclaimer">Backtested feedback only. Each past day is re-scored point-in-time and tracked over the next horizon to see whether the status and score were informative — it is not a track record of trades and not advice.</div>
+</div>
+
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
@@ -1031,6 +1068,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
   <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
   <button class="mob-tab" id="mob-radar" onclick="switchPageMobile('radar',this)"><span class="mob-tab-icon">📡</span>RADAR</button>
+  <button class="mob-tab" id="mob-journal" onclick="switchPageMobile('journal',this)"><span class="mob-tab-icon">📓</span>JOURNAL</button>
 </div>
 
 <script>
@@ -1247,6 +1285,7 @@ function switchPage(id, el) {
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
+  if (id==='journal') renderJournal();
   window.scrollTo(0,0);
 }
 function switchPageMobile(id, el) {
@@ -1262,6 +1301,7 @@ function switchPageMobile(id, el) {
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
+  if (id==='journal') renderJournal();
   window.scrollTo(0,0);
 }
 
@@ -1348,6 +1388,70 @@ function renderRadar() {
     }
     if (sub) sub.textContent = data.signals.length + ' opportunities ranked by score';
     out.innerHTML = data.signals.map(radarCard).join('');
+  });
+}
+
+// ── JOURNAL (V3) ──
+function jTile(v, label) {
+  return '<div class="archive-card"><div class="archive-value">' + v + '</div>' +
+    '<div class="archive-label">' + esc(label) + '</div></div>';
+}
+function jPct(v) { return v == null ? '—' : (v > 0 ? '+' : '') + v + '%'; }
+function jBar(label, g, color) {
+  var wr = g.winRate == null ? 0 : g.winRate;
+  return '<div class="trend-row">' +
+    '<div class="jbar-label">' + esc(label) + '</div>' +
+    '<div class="trend-bar-wrap"><div class="trend-bar" style="width:' + wr + '%;background:' + color + '"></div></div>' +
+    '<div class="jbar-meta">' + (g.winRate == null ? '—' : g.winRate + '% win') +
+      ' · n=' + g.n + ' · ' + jPct(g.avgReturn) + '</div>' +
+  '</div>';
+}
+function jRow(e) {
+  var ocColor = e.outcome === 'target' ? 'var(--green)' : e.outcome === 'stop' ? 'var(--red)' : 'var(--txt3)';
+  var retColor = (e.forwardReturnPct >= 0) ? 'var(--green)' : 'var(--red)';
+  return '<div class="jrow">' +
+    '<span class="jrow-sym">' + esc(e.symbol) + '</span>' +
+    '<span class="rel-badge ' + radarStatusClass(e.status) + '">' + esc(e.status) + '</span>' +
+    '<span class="jrow-oc" style="color:' + ocColor + '">' + esc(e.outcome) + '</span>' +
+    '<span class="jrow-ret" style="color:' + retColor + '">' + jPct(e.forwardReturnPct) + '</span>' +
+    '<span class="jrow-date">' + esc(e.emitDate) + ' → ' + esc(e.exitDate || '') + '</span>' +
+  '</div>';
+}
+function renderJournal() {
+  var out = document.getElementById('journal-out');
+  var sub = document.getElementById('journal-sub');
+  if (!out) return;
+  if (!window.fbLoadJournal) { out.innerHTML = '<div class="empty-state">JOURNAL UNAVAILABLE</div>'; return; }
+  out.innerHTML = '<div class="empty-state">LOADING JOURNAL…</div>';
+  window.fbLoadJournal().then(function (j) {
+    if (!j || !j.stats) {
+      if (sub) sub.textContent = 'No journal yet';
+      out.innerHTML = '<div class="empty-state">NO JOURNAL YET — RUN radar/refresh-radar.js</div>';
+      return;
+    }
+    var ov = j.stats.overall;
+    if (sub) sub.textContent = j.tracked + ' signals tracked · ' + j.lookbackDays + 'd lookback · ' + j.horizonDays + 'd horizon';
+    var html = '<div class="archive-summary">' +
+      jTile(ov.n, 'Tracked') +
+      jTile(ov.winRate == null ? '—' : ov.winRate + '%', 'Win rate') +
+      jTile(jPct(ov.avgReturn), 'Avg fwd return') +
+      jTile(ov.open, 'Still open') +
+    '</div>';
+    html += '<div class="journal-section">Win rate by status</div>';
+    html += jBar('Confirmed', j.stats.byStatus.confirmed, 'var(--gold)');
+    html += jBar('Forming', j.stats.byStatus.forming, '#F0A832');
+    html += jBar('Invalidated', j.stats.byStatus.invalidated, 'var(--red)');
+    html += '<div class="journal-section">Win rate by score</div>';
+    ['80-100', '60-79', '40-59', '0-39'].forEach(function (b) {
+      html += jBar(b, j.stats.byScore[b], 'var(--gold)');
+    });
+    html += '<div class="journal-section">Recent outcomes</div>';
+    if (j.recent && j.recent.length) {
+      html += '<div class="jlist">' + j.recent.slice(0, 40).map(jRow).join('') + '</div>';
+    } else {
+      html += '<div class="rel-none-txt">No closed outcomes yet — they appear as tracked signals reach their target, stop, or horizon.</div>';
+    }
+    out.innerHTML = html;
   });
 }
 
