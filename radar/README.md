@@ -54,7 +54,7 @@ the Admin SDK bypasses rules on write):
 |---|---|
 | `radar-<YYYY-MM-DD>` | regime + ranked `signals[]` for that day (PHT date) |
 | `radar-latest` | `{ value: "<YYYY-MM-DD>" }` pointer to the newest day |
-| `radar-journal` | rolling performance stats + recent outcomes |
+| `radar-journal` | benchmark-excess calibration: `byStatus` / `byScoreBucket` (raw + excess), `byTheme` / `byAsset` / `byDate`, `counts` (raw / non-overlapping / unique-dates / pending), `caveats[]`, `weightCalibration`, and recent outcomes |
 
 ---
 
@@ -64,17 +64,25 @@ the Admin SDK bypasses rules on write):
 
 Fetches daily bars and scores each watchlist asset with a deterministic engine.
 
-**Score** = `0.30·trend + 0.25·volume + 0.25·relStrength + 0.10·riskReward + 0.10·regime`,
-each sub-score 0–100:
+**Score** = `0.308·trend + 0.258·volume + 0.258·relStrength + 0.073·riskQuality + 0.103·regime`,
+each sub-score 0–100. The weights are **journal-calibrated against out-of-sample
+forward excess** (see V3 below), not hand-picked — `riskQuality` was the only
+component whose excess edge held its sign across a fit/holdout time-split, so it
+was shrunk and the rest renormalised. They live in `config.js` `WEIGHTS`.
 
 - **trend** — close vs SMA20/SMA50 (above both = 100 … below both = 20; capped at
   60 if SMA20 < SMA50).
 - **volume** — today's volume vs trailing-20 average, interpolated.
 - **relStrength** — asset 20-day return minus its benchmark's, in points.
-- **riskReward** — rule-based 2R plan: `stop = min(prior-day low, SMA20)`,
-  `target = entry + 2·(entry−stop)`. (By construction rr ≈ 2.0; the useful output
-  is the entry/stop/target *levels* shown on the card.)
+- **riskQuality** (V2, replaced the inert `riskReward`) — is the risk
+  *well-formed*? Two ATR-calibrated curves: a stop a healthy ATR multiple below
+  entry (not noise-tight, not chasing-wide) and an entry not overextended above
+  SMA20. The old `riskReward` was a near-constant ≈2.0 that fed the score nothing.
 - **regime** — SPY & QQQ vs their SMA20, applied to every asset that day.
+
+The 2R plan itself (`stop = min(prior-day low, SMA20)`, `target = entry + 2·(entry−stop)`)
+still computes the entry/stop/target **levels** shown on the card and used as the
+journal's published stop/target — it just no longer feeds the score.
 
 **Status:** `confirmed` (trend≥70 & volume≥65 & relStrength≥50 & regime≥60),
 `invalidated` (close<stop, or relStrength<30, or weak regime+trend), else
@@ -99,18 +107,56 @@ Each card gains a colour-coded event chip (earnings/guidance = blue,
 analyst = purple, regulatory = amber, macro = teal, product/partnership = green)
 plus the one-line catalyst and its date.
 
-### V3 — performance journal (feedback loop)
+### V3 — calibration harness (benchmark-excess)
 
 Because `scoreUniverse` is deterministic, the journal is a pure function of the
 bars: it re-scores each of the last ~60 trading days **point-in-time** (bars
-sliced to that date) and measures the **actual forward outcome** over the next
-20 bars — target hit / stop hit / expired / still-open — plus the forward return.
-It rolls these up into win-rate and average forward return **by status** and
-**by score bucket**.
+sliced to that date) and measures what actually happened next. The original V3
+just tracked raw forward returns; in a one-correlated-AI-bull-run window those
+numbers were near-uninterpretable (even the "don't chase" `invalidated` bucket
+printed positive — everything went up). So the journal was rebuilt as an **honest
+calibration harness**. It changes *measurement only* — it never touches the score.
 
-A 📓 **Journal** tab shows overall stat tiles, win-rate bars by status and score,
-and a list of recent outcomes. This is the feedback loop for tuning the V1
-heuristics; it does not auto-tune (tuning stays manual by design).
+Five measurement disciplines (`radar/journal.js`, pure — all I/O stays in
+`refresh-radar.js`):
+
+1. **Next-session fill** — a brief reader can't transact at the close a signal
+   was scored on. Fill at `open(t+1)` for equities (`entryBasis: "next-open"`),
+   `close(t+1)` for crypto (`next-close`, CoinGecko has no open). The newest day
+   has no `t+1`, so it's excluded and counted as `pending`. The signal's
+   **published** stop/target levels are used — *not* recomputed off the fill — so
+   the gap between published level and real fill is captured, not hidden.
+2. **Conservative outcome resolution** — resolve over `H = 20` forward bars.
+   Equities use intrabar high/low; on a bar where `low ≤ stop` **and**
+   `high ≥ target` it counts the **stop** and flags `ambiguous: true` (never a
+   silent win). Crypto is close-only (`resolution: "close-only"`, no intrabar, so
+   never ambiguous). Unhit within the window → `expired` (or `open` if the window
+   runs past available data).
+3. **Benchmark-excess is the headline** — for each signal, the configured
+   benchmark's return over the same fill→exit window is subtracted:
+   `excessReturn = forwardReturn − benchmarkReturn`. `avgExcessReturn` /
+   `excessWinRate` are the primary stats (raw kept alongside for contrast). The
+   question this answers: does the score **beat its own benchmark** (QQQ / SPY /
+   BTC), or just ride sector beta?
+4. **Grouped by status, score bucket, theme, asset, and date** — so a single
+   ticker or one good stretch can't masquerade as skill (`byStatus` /
+   `byScoreBucket` carry both raw and excess; `byTheme` / `byAsset` / `byDate`
+   are excess-only rollups).
+5. **Overlap honesty** — alongside `raw` count, it reports `nonOverlapping`
+   (greedily keep per-asset signals ≥ `H` bars apart, killing forward-window
+   double-counting), `uniqueDates`, per-theme/asset counts, and a fixed
+   `caveats[]` always warning that the universe is correlated and the counts
+   overstate independence (plus a crypto close-only caveat when any crypto signal
+   is present).
+
+It also surfaces a **weight-calibration diagnostic** (`weightCalibration`): each
+component's forward-excess tercile-spread on a fit/holdout time-split, and a
+conservative shrunk reweight suggestion *only* for components that survive
+out-of-sample. This is the data behind the V1 weights above — it is **surfaced
+for human review, never auto-applied** (tuning stays manual by design).
+
+A 📓 **Journal** tab renders excess bars by status/score/theme, stat tiles
+(raw / non-overlapping / unique dates / horizon), and a list of recent outcomes.
 
 ### Quick filters (front-end only)
 
@@ -161,9 +207,13 @@ no key, crypto), OpenAI (catalysts; reuses the app's existing integration).
   low-volume session; energy names invalidated on the oil selloff.
 - **Catalysts:** 20/20 tagged (analyst upgrades, Broadcom guidance reset, a FERC
   grid order, the US–Iran deal weighing on crude).
-- **Journal (60d / 20d horizon, 1200 signals):** the ranking is informative —
-  confirmed 48.1% win / +4.36% avg, forming 43.5% / +3.5%, invalidated 20.2% /
-  +1.14%; score buckets monotonic (80–100 → 48.8% / +5.16%).
+- **Journal (60d / 20d horizon, benchmark-excess):** raw forward returns look
+  nicely ordered by score, but **excess is roughly flat** — only AI semis show
+  real excess over QQQ. Read: the score's apparent edge has mostly been *riding
+  the AI wave*, not beating peers. That's a valid, informative pass (honest
+  numbers, not good ones), and exactly why the headline metric is excess, not
+  raw. Live figures are in the 📓 Journal tab; non-overlapping counts and the
+  correlated-universe caveat are carried in the doc.
 
 ---
 
