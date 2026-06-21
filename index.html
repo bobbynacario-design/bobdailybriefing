@@ -536,6 +536,10 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-pill:hover{color:var(--txt2);border-color:var(--txt3)}
 .radar-pill.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.3)}
 .radar-pill-n{opacity:.55;margin-left:.35rem}
+.radar-subfilter{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:-.5rem 0 1rem}
+.radar-subfilter-label{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-right:.1rem}
+.radar-pill.sub{font-size:9px;padding:.28rem .6rem}
+.radar-pill-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:.4rem;vertical-align:middle}
 .radar-card .card-top{align-items:center}
 .radar-theme{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;text-transform:uppercase;font-weight:400;margin-left:.5rem;white-space:nowrap}
 .radar-score-wrap{display:flex;align-items:center;gap:.65rem;flex-shrink:0}
@@ -1092,6 +1096,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   </div>
   <div id="radar-regime"></div>
   <div id="radar-filter"></div>
+  <div id="radar-status-filter"></div>
   <div id="radar-out"><div class="empty-state">LOADING RADAR…</div></div>
   <div class="radar-disclaimer">Framing, not advice. Each card describes whether a move is strong, confirmed, and worth its defined risk — never a recommendation to buy or sell. Scored once daily on daily bars.</div>
 </div>
@@ -1489,16 +1494,34 @@ function radarCard(s) {
 // crypto-equities) is Stocks. Energy equities like XOM/CVX stay under Stocks.
 var RADAR_COMMODITY_SYMS = { USO:1, GLD:1, SLV:1, DBC:1, GDX:1 };
 var RADAR_TYPE_ORDER = ['Stocks', 'Crypto', 'Commodities'];
-var radarSignals = null;   // cached signals from the last load
-var radarFilter = 'All';   // active asset-type filter
+var RADAR_STATUS_ORDER = ['confirmed', 'forming', 'invalidated'];
+var radarSignals = null;          // cached signals from the last load
+var radarFilter = 'All';          // active asset-type filter
+var radarStatusFilter = 'All';    // active status sub-filter
 function radarAssetType(s) {
   if (s.theme === 'Crypto') return 'Crypto';
   if (RADAR_COMMODITY_SYMS[s.symbol] || s.theme === 'Metals/commod') return 'Commodities';
   return 'Stocks';
 }
+// Signals passing the asset-type filter (the set the status sub-filter ranges over).
+function radarAssetFiltered() {
+  return radarFilter === 'All' ? radarSignals
+    : radarSignals.filter(function (s) { return radarAssetType(s) === radarFilter; });
+}
 function setRadarFilter(t) {
   radarFilter = t;
+  // Clear the status sub-filter if that status isn't in the new asset set —
+  // otherwise the row hides itself and the user is stranded on an empty grid.
+  if (radarStatusFilter !== 'All' && !radarAssetFiltered().some(function (s) { return s.status === radarStatusFilter; })) {
+    radarStatusFilter = 'All';
+  }
   renderRadarFilter();
+  renderRadarStatusFilter();   // status counts depend on the asset-type selection
+  renderRadarCards();
+}
+function setRadarStatus(t) {
+  radarStatusFilter = t;
+  renderRadarStatusFilter();
   renderRadarCards();
 }
 function renderRadarFilter() {
@@ -1514,20 +1537,49 @@ function renderRadarFilter() {
       '<span class="radar-pill-n">' + n + '</span></button>';
   }).join('');
 }
+// Status sub-filter — subordinate to the asset-type pills. Counts range over the
+// asset-filtered set; pills only show statuses present there.
+function renderRadarStatusFilter() {
+  var el = document.getElementById('radar-status-filter');
+  if (!el || !radarSignals) return;
+  var base = radarAssetFiltered();
+  var counts = {};
+  base.forEach(function (s) { counts[s.status] = (counts[s.status] || 0) + 1; });
+  var present = RADAR_STATUS_ORDER.filter(function (st) { return counts[st]; });
+  // Nothing to discriminate (one status or none) — hide the sub-row entirely.
+  if (present.length < 2) { el.innerHTML = ''; return; }
+  var pills = ['All'].concat(present).map(function (st) {
+    var n = st === 'All' ? base.length : counts[st];
+    var dot = st === 'All' ? ''
+      : '<span class="radar-pill-dot" style="background:' + radarAccent(st) + '"></span>';
+    var label = st === 'All' ? 'All' : st.charAt(0).toUpperCase() + st.slice(1);
+    return '<button class="radar-pill sub' + (st === radarStatusFilter ? ' active' : '') +
+      '" onclick="setRadarStatus(\'' + st + '\')">' + dot + label +
+      '<span class="radar-pill-n">' + n + '</span></button>';
+  }).join('');
+  el.innerHTML = '<span class="radar-subfilter-label">Status</span>' + pills;
+  el.className = 'radar-subfilter';
+}
 function renderRadarCards() {
   var out = document.getElementById('radar-out');
   if (!out || !radarSignals) return;
-  var list = radarFilter === 'All' ? radarSignals
-    : radarSignals.filter(function (s) { return radarAssetType(s) === radarFilter; });
-  out.innerHTML = list.length
-    ? '<div class="radar-grid">' + list.map(radarCard).join('') + '</div>'
-    : '<div class="empty-state">NO ' + esc(radarFilter.toUpperCase()) + ' SIGNALS TODAY</div>';
+  var list = radarAssetFiltered().filter(function (s) {
+    return radarStatusFilter === 'All' || s.status === radarStatusFilter;
+  });
+  if (list.length) {
+    out.innerHTML = '<div class="radar-grid">' + list.map(radarCard).join('') + '</div>';
+    return;
+  }
+  var label = [radarFilter === 'All' ? '' : radarFilter.toUpperCase(),
+    radarStatusFilter === 'All' ? '' : radarStatusFilter.toUpperCase()].filter(Boolean).join(' ');
+  out.innerHTML = '<div class="empty-state">NO ' + esc(label) + ' SIGNALS TODAY</div>';
 }
 function renderRadar() {
   var out = document.getElementById('radar-out');
   var sub = document.getElementById('radar-sub');
   var regimeEl = document.getElementById('radar-regime');
   var filterEl = document.getElementById('radar-filter');
+  var statusEl = document.getElementById('radar-status-filter');
   if (!out) return;
   if (!window.fbLoadRadar) { out.innerHTML = '<div class="empty-state">RADAR UNAVAILABLE</div>'; return; }
   out.innerHTML = '<div class="empty-state">LOADING RADAR…</div>';
@@ -1536,6 +1588,7 @@ function renderRadar() {
       radarSignals = null;
       if (regimeEl) regimeEl.innerHTML = '';
       if (filterEl) filterEl.innerHTML = '';
+      if (statusEl) statusEl.innerHTML = '';
       if (sub) sub.textContent = 'No radar data yet';
       out.innerHTML = '<div class="empty-state">NO RADAR DATA YET — RUN radar/refresh-radar.js</div>';
       return;
@@ -1548,11 +1601,15 @@ function renderRadar() {
     }
     if (sub) sub.textContent = data.signals.length + ' opportunities ranked by score';
     radarSignals = data.signals;
-    // Drop a stale filter if that asset type isn't present in today's data.
+    // Drop a stale filter if that asset/status isn't present in today's data.
     if (radarFilter !== 'All' && !radarSignals.some(function (s) { return radarAssetType(s) === radarFilter; })) {
       radarFilter = 'All';
     }
+    if (radarStatusFilter !== 'All' && !radarAssetFiltered().some(function (s) { return s.status === radarStatusFilter; })) {
+      radarStatusFilter = 'All';
+    }
     renderRadarFilter();
+    renderRadarStatusFilter();
     renderRadarCards();
   });
 }
