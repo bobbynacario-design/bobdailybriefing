@@ -70,19 +70,22 @@ var COINGECKO_IDS = {
   SOL: 'solana'
 };
 
-// Component weights (sum to 1.0). Journal-calibrated against out-of-sample
-// forward excess (see journal.js weightCalibration): from the original
-// 0.30/0.25/0.25/0.10/0.10, riskQuality was the ONLY component whose excess
-// tercile-spread held its sign across the fit/holdout time-split — and it was
-// consistently negative (cleaner setups lagged in this momentum tape), so its
-// weight was conservatively shrunk (0.10 -> 0.073) and the rest renormalised.
-// The other four flipped sign OOS (no trustworthy edge) and were left in ratio.
+// Component weights (sum to 1.0). Deliberately round PRIORS — chosen, not fitted.
+// journal.js surfaces a weightCalibration diagnostic (forward-excess tercile
+// spread on a fit/holdout split), and on the current sample only riskQuality had
+// a robust OOS spread — but it was NEGATIVE, and the same journal finds aggregate
+// excess basically flat. Fitting weights to ~60 days of one correlated regime is
+// fitting to noise; the project defers auto-tuning the heuristics from journal
+// stats (overfitting risk on short history). So the calibration stays
+// SURFACED-ONLY: review it in the journal doc, do not apply it, until there is
+// multi-regime, non-overlapping history that can support a reweight. (These were
+// briefly set to a shrunk fit 0.308/0.258/0.258/0.073/0.103 and reverted here.)
 var WEIGHTS = {
-  trend: 0.308,
-  volume: 0.258,
-  relStrength: 0.258,
-  riskQuality: 0.073,
-  regime: 0.103
+  trend: 0.30,
+  volume: 0.25,
+  relStrength: 0.25,
+  riskQuality: 0.10,
+  regime: 0.10
 };
 
 // How many trailing daily bars to request so SMA50 + 20d returns are well-defined.

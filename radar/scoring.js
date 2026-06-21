@@ -21,9 +21,9 @@ var VOLUME_KNOTS = [
 var RELSTRENGTH_KNOTS = [
   [-10, 10], [-5, 30], [0, 50], [5, 80], [10, 100]
 ];
-// riskQuality (V2) replaces the inert riskReward sub-score. Two ATR-calibrated
-// curves: stop distance (risk / ATR) and extension above SMA20 ((close-SMA20)/ATR).
-// V1 heuristics — tune via the journal.
+// riskQuality replaces the inert riskReward sub-score (post-V3 refinement; not
+// the V2 catalyst lane). Two ATR-calibrated curves: stop distance (risk / ATR)
+// and extension above SMA20 ((close-SMA20)/ATR). Heuristic — tune via the journal.
 var RQ_STOP_KNOTS = [
   [0.5, 30], [1.0, 80], [1.5, 100], [2.5, 70], [4.0, 30]
 ];

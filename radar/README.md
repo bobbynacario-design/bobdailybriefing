@@ -64,20 +64,22 @@ the Admin SDK bypasses rules on write):
 
 Fetches daily bars and scores each watchlist asset with a deterministic engine.
 
-**Score** = `0.308·trend + 0.258·volume + 0.258·relStrength + 0.073·riskQuality + 0.103·regime`,
-each sub-score 0–100. The weights are **journal-calibrated against out-of-sample
-forward excess** (see V3 below), not hand-picked — `riskQuality` was the only
-component whose excess edge held its sign across a fit/holdout time-split, so it
-was shrunk and the rest renormalised. They live in `config.js` `WEIGHTS`.
+**Score** = `0.30·trend + 0.25·volume + 0.25·relStrength + 0.10·riskQuality + 0.10·regime`,
+each sub-score 0–100. The weights are **round priors — chosen, not fitted.** The
+journal surfaces a `weightCalibration` diagnostic (see V3 below), but on ~60 days
+of one correlated regime — where it also finds excess basically flat — fitting
+weights is fitting to noise, so the calibration is reviewed, not applied. They
+live in `config.js` `WEIGHTS`.
 
 - **trend** — close vs SMA20/SMA50 (above both = 100 … below both = 20; capped at
   60 if SMA20 < SMA50).
 - **volume** — today's volume vs trailing-20 average, interpolated.
 - **relStrength** — asset 20-day return minus its benchmark's, in points.
-- **riskQuality** (V2, replaced the inert `riskReward`) — is the risk
-  *well-formed*? Two ATR-calibrated curves: a stop a healthy ATR multiple below
-  entry (not noise-tight, not chasing-wide) and an entry not overextended above
-  SMA20. The old `riskReward` was a near-constant ≈2.0 that fed the score nothing.
+- **riskQuality** (replaced the inert `riskReward`; a post-V3 refinement, not the
+  V2 catalyst lane) — is the risk *well-formed*? Two ATR-calibrated curves: a stop
+  a healthy ATR multiple below entry (not noise-tight, not chasing-wide) and an
+  entry not overextended above SMA20. The old `riskReward` was a near-constant
+  ≈2.0 that fed the score nothing.
 - **regime** — SPY & QQQ vs their SMA20, applied to every asset that day.
 
 The 2R plan itself (`stop = min(prior-day low, SMA20)`, `target = entry + 2·(entry−stop)`)
@@ -152,8 +154,13 @@ Five measurement disciplines (`radar/journal.js`, pure — all I/O stays in
 It also surfaces a **weight-calibration diagnostic** (`weightCalibration`): each
 component's forward-excess tercile-spread on a fit/holdout time-split, and a
 conservative shrunk reweight suggestion *only* for components that survive
-out-of-sample. This is the data behind the V1 weights above — it is **surfaced
-for human review, never auto-applied** (tuning stays manual by design).
+out-of-sample. On the current sample just `riskQuality` survived — and its robust
+spread was **negative** (cleaner setups lagged in this momentum tape), which would
+*down*-weight it. The diagnostic is **surfaced for review, never applied**: the
+live `WEIGHTS` are the round priors, not these fitted numbers. Fitting weights on
+~60 days of one flat-excess regime is fitting to noise — the honest read is *keep
+the priors* until multi-regime, non-overlapping history accumulates. (This was
+briefly applied as a shrunk fit and reverted; tuning stays manual by design.)
 
 A 📓 **Journal** tab renders excess bars by status/score/theme, stat tiles
 (raw / non-overlapping / unique dates / horizon), and a list of recent outcomes.
