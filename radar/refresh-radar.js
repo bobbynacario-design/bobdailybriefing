@@ -351,26 +351,35 @@ async function main() {
   console.log('\n===== briefings-bob/radar-' + dateKey + ' =====');
   console.log(JSON.stringify(doc, null, 2));
 
-  // V3: rebuild the performance journal from the same bars (pure, deterministic
-  // re-scoring of the last N trading days). Persist stats + recent outcomes.
-  var jcfg = CONFIG.journal || { lookbackDays: 60, horizonDays: 20, recentCap: 120 };
-  var journal = buildJournal(barsByAsset, CONFIG, jcfg);
-  var recent = journal.entries
-    .filter(function (e) { return e.exitDate; })            // closed outcomes
-    .sort(function (a, b) { return a.exitDate < b.exitDate ? 1 : -1; })
-    .slice(0, jcfg.recentCap || 120);
-  var journalDoc = {
-    updatedAt: new Date().toISOString(),
-    lookbackDays: journal.lookbackDays,
-    horizonDays: journal.horizonDays,
-    tracked: journal.entries.length,
-    stats: journal.stats,
-    recent: recent
-  };
-  console.log('Journal: ' + journal.entries.length + ' signals over ' + journal.lookbackDays +
-    'd, overall win rate ' + journal.stats.overall.winRate + '% (' +
-    journal.stats.overall.wins + 'W/' + journal.stats.overall.losses + 'L), ' +
-    journal.stats.overall.open + ' still open.');
+  // V3: rebuild the calibration journal from the same bars (pure, deterministic
+  // re-scoring). buildJournal returns the full doc body; we only stamp the
+  // time/data fields (the I/O concerns) and write it.
+  var journalBody = buildJournal(barsByAsset, CONFIG, CONFIG.journal);
+  var journalDoc = Object.assign({
+    generatedAt: new Date().toISOString(),
+    asOf: result.asOf
+  }, journalBody);
+
+  console.log('\n===== radar-journal calibration (H=' + journalBody.journalConfig.horizonBars +
+    ', ' + journalBody.journalConfig.entryMode + ', benchmark-excess) =====');
+  ['confirmed', 'forming', 'invalidated'].forEach(function (st) {
+    var g = journalBody.byStatus[st];
+    console.log('  ' + st.padEnd(12) + ' n=' + String(g.n).padStart(4) +
+      '  winRate=' + (g.winRate == null ? '—' : g.winRate + '%') +
+      '  avgFwd=' + (g.avgForwardReturn == null ? '—' : g.avgForwardReturn + '%') +
+      '  excessWin=' + (g.excessWinRate == null ? '—' : g.excessWinRate + '%') +
+      '  avgExcess=' + (g.avgExcessReturn == null ? '—' : g.avgExcessReturn + '%') +
+      '  amb=' + g.ambiguousN);
+  });
+  ['80-100', '60-79', '40-59', '0-39'].forEach(function (bk) {
+    var g = journalBody.byScoreBucket[bk];
+    console.log('  score ' + bk.padEnd(7) + ' n=' + String(g.n).padStart(4) +
+      '  avgExcess=' + (g.avgExcessReturn == null ? '—' : g.avgExcessReturn + '%') +
+      '  excessWin=' + (g.excessWinRate == null ? '—' : g.excessWinRate + '%'));
+  });
+  console.log('  counts: raw=' + journalBody.counts.raw + ' nonOverlapping=' + journalBody.counts.nonOverlapping +
+    ' uniqueDates=' + journalBody.counts.uniqueDates + ' pending=' + journalBody.counts.pending);
+  journalBody.caveats.forEach(function (c) { console.log('  caveat: ' + c); });
 
   var db = initAdmin();
   await writeDoc(db, dateKey, doc);

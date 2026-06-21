@@ -1,18 +1,26 @@
 // radar/journal.js
 //
-// PURE performance-tracking module for the Market Radar (V3). No I/O.
+// PURE calibration harness for the Market Radar (V3). No I/O (no fetch, no
+// Firestore, no Date) — all I/O stays in refresh-radar.js.
 //
 // Because scoreUniverse() is deterministic, the journal is a pure function of
 // the price bars: re-score each past day point-in-time (bars sliced to that
-// date), then measure what the asset actually did afterwards. This is the
-// feedback loop for tuning the V1 heuristics — it does NOT change scoring.
+// date), then measure what actually happened — but honestly:
+//   - fill at the NEXT session (a brief reader can't transact at the scored close),
+//   - resolve target/stop with a conservative same-bar tie-break,
+//   - report BENCHMARK-EXCESS return (the score must beat its own benchmark, not
+//     just ride sector beta), alongside raw return,
+//   - break results out by theme / asset / date and report overlap honesty,
+//     so one ticker or one good stretch can't masquerade as skill.
 //
-//   buildJournal(barsByAsset, config, opts) -> { lookbackDays, horizonDays,
-//                                                entries, stats }
+// It calibrates the SHIPPED model — it does NOT change scoring.js.
+//
+//   buildJournal(barsByAsset, config, opts) -> journal doc body (see bottom)
 
 import { scoreUniverse } from './scoring.js';
 
-// Score buckets for the "does a higher score actually do better?" question.
+// All percentages are stored as percentage points (e.g. 4.36 == +4.36%).
+
 function scoreBucket(score) {
   if (score >= 80) return '80-100';
   if (score >= 60) return '60-79';
@@ -33,122 +41,257 @@ function round(v, dp) {
   return Math.round(v * m) / m;
 }
 
-// Walk forward bars (strictly after the emit date, ascending) and decide the
-// outcome of a signal: did price reach the target or the stop first?
-//   target -> hit target before stop (a win)
-//   stop   -> hit stop first (a loss)
-//   expired-> neither within the horizon, but the full horizon elapsed
-//   open   -> neither yet, and fewer than `horizon` bars exist (still tracking)
-// Equity bars carry real high/low; crypto bars use close for both (proxy).
-function evaluateOutcome(signal, forwardBars, horizon) {
-  var entry = signal.entry;
-  var stop = signal.stop;
-  var target = signal.target;
-  var n = Math.min(forwardBars.length, horizon);
-
-  for (var i = 0; i < n; i++) {
-    var b = forwardBars[i];
-    var hitStop = (stop != null) && (b.low <= stop);
-    var hitTarget = (target != null) && (b.high >= target);
-    // Same-bar ambiguity resolves conservatively to the stop.
-    if (hitStop) {
-      return { outcome: 'stop', exitDate: b.date, barsHeld: i + 1,
-        forwardReturnPct: round((stop / entry - 1) * 100, 2) };
-    }
-    if (hitTarget) {
-      return { outcome: 'target', exitDate: b.date, barsHeld: i + 1,
-        forwardReturnPct: round((target / entry - 1) * 100, 2) };
-    }
-  }
-
-  // No level hit within the window.
-  var lastClose = forwardBars.length ? forwardBars[Math.min(n, forwardBars.length) - 1].close : null;
-  var mtm = lastClose != null ? round((lastClose / entry - 1) * 100, 2) : null;
-  if (forwardBars.length >= horizon) {
-    return { outcome: 'expired', exitDate: forwardBars[horizon - 1].date, barsHeld: horizon, forwardReturnPct: mtm };
-  }
-  return { outcome: 'open', exitDate: null, barsHeld: forwardBars.length, forwardReturnPct: mtm };
+function idxOfDate(bars, date) {
+  for (var i = 0; i < bars.length; i++) if (bars[i].date === date) return i;
+  return -1;
 }
 
-// Aggregate a flat list of evaluated entries into win-rate / avg-return groups.
-// "decided" = target|stop (used for win rate); "closed" = target|stop|expired
-// (used for avg return); "open" entries are still tracking.
-function summarize(entries) {
-  var wins = 0, losses = 0, expired = 0, open = 0;
-  var closedReturns = [];
-  entries.forEach(function (e) {
-    if (e.outcome === 'target') { wins++; }
-    else if (e.outcome === 'stop') { losses++; }
-    else if (e.outcome === 'expired') { expired++; }
-    else { open++; }
-    if (e.outcome !== 'open' && e.forwardReturnPct != null) closedReturns.push(e.forwardReturnPct);
+// Most recent close at or before `date` (bars ascending). Lets a benchmark with
+// a different calendar (e.g. equity QQQ vs a weekend crypto exit) still resolve.
+function closeOnOrBefore(bars, date) {
+  var c = null;
+  for (var i = 0; i < bars.length; i++) {
+    if (bars[i].date <= date) c = bars[i].close; else break;
+  }
+  return c;
+}
+
+// Resolve one signal's outcome over its forward window (bars from the fill bar
+// onward, already capped to the horizon). Equity uses intrabar high/low with a
+// conservative same-bar tie-break; crypto resolves on close only.
+function resolveOutcome(stop, target, windowBars, isCrypto, fullWindow) {
+  var resolution = isCrypto ? 'close-only' : 'ohlc';
+  for (var i = 0; i < windowBars.length; i++) {
+    var b = windowBars[i];
+    if (isCrypto) {
+      if (stop != null && b.close <= stop) return { exitReason: 'stop-hit', exit: stop, exitDate: b.date, ambiguous: false, resolution: resolution };
+      if (target != null && b.close >= target) return { exitReason: 'target-hit', exit: target, exitDate: b.date, ambiguous: false, resolution: resolution };
+    } else {
+      var hitStop = (stop != null) && (b.low <= stop);
+      var hitTarget = (target != null) && (b.high >= target);
+      if (hitStop && hitTarget) {
+        // Same-bar ambiguity: conservatively count the stop, never a win.
+        return { exitReason: 'stop-hit', exit: stop, exitDate: b.date, ambiguous: true, resolution: resolution };
+      }
+      if (hitStop) return { exitReason: 'stop-hit', exit: stop, exitDate: b.date, ambiguous: false, resolution: resolution };
+      if (hitTarget) return { exitReason: 'target-hit', exit: target, exitDate: b.date, ambiguous: false, resolution: resolution };
+    }
+  }
+  // No level hit within the window.
+  if (windowBars.length) {
+    var last = windowBars[windowBars.length - 1];
+    return { exitReason: fullWindow ? 'expired' : 'open', exit: last.close, exitDate: last.date, ambiguous: false, resolution: resolution };
+  }
+  return { exitReason: 'open', exit: null, exitDate: null, ambiguous: false, resolution: resolution };
+}
+
+// ── aggregation ──
+
+// Full group stats (used by byStatus and byScoreBucket).
+function groupStats(list) {
+  var wins = 0, losses = 0, amb = 0, exWins = 0;
+  var fwd = [], ex = [];
+  list.forEach(function (e) {
+    if (e.exitReason === 'target-hit') wins++;
+    else if (e.exitReason === 'stop-hit') losses++;
+    if (e.ambiguous) amb++;
+    if (e.forwardReturn != null) fwd.push(e.forwardReturn);
+    if (e.excessReturn != null) { ex.push(e.excessReturn); if (e.excessReturn > 0) exWins++; }
   });
   var decided = wins + losses;
   return {
-    n: entries.length,
-    closed: wins + losses + expired,
-    open: open,
-    wins: wins,
-    losses: losses,
-    expired: expired,
+    n: list.length,
     winRate: decided ? round((wins / decided) * 100, 1) : null,
-    avgReturn: round(mean(closedReturns), 2)
+    avgForwardReturn: round(mean(fwd), 2),
+    excessWinRate: ex.length ? round((exWins / ex.length) * 100, 1) : null,
+    avgExcessReturn: round(mean(ex), 2),
+    ambiguousN: amb
   };
 }
 
-function aggregateStats(entries) {
-  var byStatus = {};
-  ['confirmed', 'forming', 'invalidated'].forEach(function (st) {
-    byStatus[st] = summarize(entries.filter(function (e) { return e.status === st; }));
+// Slim excess-only group (used by byTheme and byAsset).
+function excessStats(list) {
+  var exWins = 0, ex = [];
+  list.forEach(function (e) {
+    if (e.excessReturn != null) { ex.push(e.excessReturn); if (e.excessReturn > 0) exWins++; }
   });
-  var byScore = {};
-  ['80-100', '60-79', '40-59', '0-39'].forEach(function (bk) {
-    byScore[bk] = summarize(entries.filter(function (e) { return scoreBucket(e.score) === bk; }));
-  });
-  return { overall: summarize(entries), byStatus: byStatus, byScore: byScore };
+  return {
+    n: list.length,
+    excessWinRate: ex.length ? round((exWins / ex.length) * 100, 1) : null,
+    avgExcessReturn: round(mean(ex), 2)
+  };
 }
 
-// Build the full journal from bars. Uses SPY's trading days as the master
-// calendar so every asset is sliced to the same emit date.
+function groupBy(entries, keyFn) {
+  var out = {};
+  entries.forEach(function (e) {
+    var k = keyFn(e);
+    (out[k] = out[k] || []).push(e);
+  });
+  return out;
+}
+
+// Greedy non-overlapping count per asset: keep a signal only if it sits at least
+// `horizon` bars after the last kept one (its forward window doesn't overlap).
+function nonOverlappingCount(entries, horizon) {
+  var bySym = groupBy(entries, function (e) { return e.symbol; });
+  var total = 0;
+  Object.keys(bySym).forEach(function (sym) {
+    var arr = bySym[sym].slice().sort(function (a, b) { return a.idx - b.idx; });
+    var lastKept = -Infinity, kept = 0;
+    arr.forEach(function (e) {
+      if (e.idx >= lastKept + horizon) { kept++; lastKept = e.idx; }
+    });
+    total += kept;
+  });
+  return total;
+}
+
+function emptyGroup() {
+  return { n: 0, winRate: null, avgForwardReturn: null, excessWinRate: null, avgExcessReturn: null, ambiguousN: 0 };
+}
+
 function buildJournal(barsByAsset, config, opts) {
-  var lookbackDays = (opts && opts.lookbackDays) || 60;
-  var horizonDays = (opts && opts.horizonDays) || 20;
+  opts = opts || {};
+  var jc = config.journal || {};
+  var horizon = opts.horizonBars || jc.horizonBars || 20;
+  var lookback = opts.lookbackDays || jc.lookbackDays || 60;
+  var entryMode = opts.entryMode || jc.entryMode || 'next-session';
+  var ambiguousResolution = opts.ambiguousResolution || jc.ambiguousResolution || 'conservative';
+  var recentCap = opts.recentCap || jc.recentCap || 120;
+  var cryptoIds = config.coingeckoIds || {};
+
+  var journalConfig = {
+    horizonBars: horizon,
+    entryMode: entryMode,
+    ambiguousResolution: ambiguousResolution,
+    scoringModelMeasured: 'v1-with-riskReward'
+  };
+
+  function bodyFrom(entries, pendingCount) {
+    var byStatus = {};
+    ['confirmed', 'forming', 'invalidated'].forEach(function (st) {
+      var list = entries.filter(function (e) { return e.status === st; });
+      byStatus[st] = list.length ? groupStats(list) : emptyGroup();
+    });
+    var byScoreBucket = {};
+    ['80-100', '60-79', '40-59', '0-39'].forEach(function (bk) {
+      var list = entries.filter(function (e) { return scoreBucket(e.score) === bk; });
+      byScoreBucket[bk] = list.length ? groupStats(list) : emptyGroup();
+    });
+    var themeGroups = groupBy(entries, function (e) { return e.theme; });
+    var byTheme = {}, themeCounts = {};
+    Object.keys(themeGroups).forEach(function (t) { byTheme[t] = excessStats(themeGroups[t]); themeCounts[t] = themeGroups[t].length; });
+    var assetGroups = groupBy(entries, function (e) { return e.symbol; });
+    var byAsset = {}, assetCounts = {};
+    Object.keys(assetGroups).forEach(function (a) { byAsset[a] = excessStats(assetGroups[a]); assetCounts[a] = assetGroups[a].length; });
+    var dateGroups = groupBy(entries, function (e) { return e.date; });
+    var byDate = {};
+    Object.keys(dateGroups).forEach(function (d) {
+      var list = dateGroups[d];
+      var ex = list.map(function (e) { return e.excessReturn; }).filter(function (v) { return v != null; });
+      byDate[d] = { n: list.length, avgExcessReturn: round(mean(ex), 2) };
+    });
+
+    var uniqueDates = Object.keys(dateGroups).length;
+    var caveats = [
+      'Watchlist is concentrated in correlated AI names; non-overlapping counts still overstate independence. Treat headline stats as indicative, not statistically significant.'
+    ];
+    if (entries.some(function (e) { return e.resolution === 'close-only'; })) {
+      caveats.push('Crypto outcomes resolved on close only (no intrabar high/low).');
+    }
+
+    var recentOutcomes = entries.slice().sort(function (a, b) {
+      return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0);
+    }).slice(0, recentCap).map(function (e) {
+      return {
+        date: e.date, symbol: e.symbol, theme: e.theme, status: e.status, score: e.score,
+        entryBasis: e.entryBasis, publishedEntry: e.publishedEntry, fill: e.fill,
+        exit: e.exit, exitReason: e.exitReason, ambiguous: e.ambiguous, resolution: e.resolution,
+        forwardReturn: e.forwardReturn, benchmark: e.benchmark,
+        benchmarkReturn: e.benchmarkReturn, excessReturn: e.excessReturn
+      };
+    });
+
+    return {
+      journalConfig: journalConfig,
+      counts: {
+        raw: entries.length,
+        nonOverlapping: nonOverlappingCount(entries, horizon),
+        uniqueDates: uniqueDates,
+        pending: pendingCount,
+        byTheme: themeCounts,
+        byAsset: assetCounts
+      },
+      caveats: caveats,
+      byStatus: byStatus,
+      byScoreBucket: byScoreBucket,
+      byTheme: byTheme,
+      byAsset: byAsset,
+      byDate: byDate,
+      recentOutcomes: recentOutcomes
+    };
+  }
 
   var calendar = (barsByAsset.SPY || []).map(function (b) { return b.date; });
-  if (!calendar.length) return { lookbackDays: lookbackDays, horizonDays: horizonDays, entries: [], stats: aggregateStats([]) };
+  if (!calendar.length) return bodyFrom([], 0);
 
-  // Emit dates: the lookback window, EXCLUDING the most recent day (it has no
-  // forward bars yet — it is just today's live signals, tracked from here on).
-  var start = Math.max(0, calendar.length - 1 - lookbackDays);
+  // Emit dates: the lookback window, excluding the most recent day (no t+1 fill).
+  var start = Math.max(0, calendar.length - 1 - lookback);
   var emitDates = calendar.slice(start, calendar.length - 1);
 
   var entries = [];
+  var pendingCount = 0;
+
   emitDates.forEach(function (D) {
     var sliced = {};
     Object.keys(barsByAsset).forEach(function (sym) {
       sliced[sym] = barsByAsset[sym].filter(function (b) { return b.date <= D; });
     });
     var res = scoreUniverse(sliced, config);
+
     res.signals.forEach(function (s) {
-      var full = barsByAsset[s.symbol] || [];
-      var forward = full.filter(function (b) { return b.date > D; }).slice(0, horizonDays);
-      var oc = evaluateOutcome(s, forward, horizonDays);
+      var sym = s.symbol;
+      var bars = barsByAsset[sym] || [];
+      var idxD = idxOfDate(bars, D);
+      if (idxD < 0) return;
+      var isCrypto = !!cryptoIds[sym];
+
+      // Next-session fill: a brief reader cannot transact at the scored close.
+      var idxFill = idxD + 1;
+      if (idxFill >= bars.length) { pendingCount++; return; }   // no t+1 yet -> pending, excluded
+      var fillBar = bars[idxFill];
+      var fill = isCrypto ? fillBar.close : fillBar.open;
+      if (fill == null) { pendingCount++; return; }
+      var entryBasis = isCrypto ? 'next-close' : 'next-open';
+
+      // Resolve over the horizon, starting at the fill bar. Use the PUBLISHED
+      // stop/target (the levels the card showed) — not recomputed off the fill.
+      var windowBars = bars.slice(idxFill, idxFill + horizon);
+      var fullWindow = (idxFill + horizon) <= bars.length;
+      var oc = resolveOutcome(s.stop, s.target, windowBars, isCrypto, fullWindow);
+      var forwardReturn = oc.exit != null ? round((oc.exit / fill - 1) * 100, 2) : null;
+
+      // Benchmark-excess over the same window (fill date -> exit/window-end date).
+      var benchBars = barsByAsset[s.benchmark] || [];
+      var exitDate = oc.exitDate || (windowBars.length ? windowBars[windowBars.length - 1].date : fillBar.date);
+      var bFill = closeOnOrBefore(benchBars, fillBar.date);
+      var bExit = closeOnOrBefore(benchBars, exitDate);
+      var benchmarkReturn = (bFill && bExit) ? round((bExit / bFill - 1) * 100, 2) : null;
+      var excessReturn = (forwardReturn != null && benchmarkReturn != null) ? round(forwardReturn - benchmarkReturn, 2) : null;
+
       entries.push({
-        symbol: s.symbol, theme: s.theme, emitDate: D,
-        status: s.status, score: s.score,
-        entry: s.entry, stop: s.stop, target: s.target,
-        outcome: oc.outcome, exitDate: oc.exitDate,
-        barsHeld: oc.barsHeld, forwardReturnPct: oc.forwardReturnPct
+        date: D, symbol: sym, theme: s.theme, status: s.status, score: s.score, idx: idxD,
+        entryBasis: entryBasis, publishedEntry: s.entry, fill: round(fill, 2),
+        exit: oc.exit != null ? round(oc.exit, 2) : null, exitReason: oc.exitReason,
+        ambiguous: oc.ambiguous, resolution: oc.resolution,
+        forwardReturn: forwardReturn, benchmark: s.benchmark,
+        benchmarkReturn: benchmarkReturn, excessReturn: excessReturn
       });
     });
   });
 
-  return {
-    lookbackDays: lookbackDays,
-    horizonDays: horizonDays,
-    entries: entries,
-    stats: aggregateStats(entries)
-  };
+  return bodyFrom(entries, pendingCount);
 }
 
-export { buildJournal, evaluateOutcome, aggregateStats, scoreBucket };
+export { buildJournal, resolveOutcome, scoreBucket };

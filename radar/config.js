@@ -68,11 +68,14 @@ var WEIGHTS = {
 var LOOKBACK_BARS = 160;
 
 // V3 journal: re-score the last `lookbackDays` trading days point-in-time and
-// track each signal's outcome over the next `horizonDays` bars.
+// calibrate each signal's outcome over the next `horizonBars` bars. Measurement
+// only — these keys never touch scoring.
 var JOURNAL = {
   lookbackDays: 60,
-  horizonDays: 20,
-  recentCap: 120   // how many recent closed outcomes to persist for the table
+  horizonBars: 20,                      // forward window for outcome resolution
+  entryMode: 'next-session',            // fill at next open (equity) / next close (crypto)
+  ambiguousResolution: 'conservative',  // same-bar stop+target -> count the stop
+  recentCap: 120                        // how many recent outcomes to persist
 };
 
 var CONFIG = {
