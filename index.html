@@ -512,6 +512,10 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-score-wrap{display:flex;align-items:center;gap:.65rem;flex-shrink:0}
 .radar-score{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--gold);line-height:1}
 .radar-plan{display:block;white-space:normal;line-height:1.7;margin-bottom:.7rem;color:var(--txt2)}
+.radar-catalyst{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap;font-size:12.5px;line-height:1.6;margin:0 0 .7rem;color:var(--txt2)}
+.radar-event{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;border:1px solid currentColor}
+.radar-catalyst-txt{flex:1;min-width:55%}
+.radar-catalyst-asof{color:var(--txt3);font-family:var(--mono);font-size:10px;white-space:nowrap}
 .radar-invalidation{color:var(--txt3);font-style:italic}
 .radar-disclaimer{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;line-height:1.7;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rim)}
 
@@ -1283,6 +1287,27 @@ function radarLevel(v) {
   if (v === null || v === undefined) return '—';
   return Math.abs(v) >= 1000 ? Number(v).toLocaleString('en-US',{maximumFractionDigits:2}) : v;
 }
+// Event-type accent colour for the catalyst chip (V2). Falls back to muted.
+function radarEventColor(type) {
+  var map = {
+    earnings:'var(--blue)', guidance:'var(--blue)',
+    analyst:'var(--purple)', regulatory:'#F0A832', legal:'#F0A832',
+    macro:'var(--teal)', product:'var(--green)', partnership:'var(--green)',
+    supply:'var(--green)'
+  };
+  return map[type] || 'var(--txt3)';
+}
+// Catalyst row (V2) — only when a catalyst exists. Display-only context.
+function radarCatalyst(s) {
+  if (!s || !s.catalyst) return '';
+  var type = (s.eventType || 'news');
+  var asOf = s.catalystAsOf && s.catalystAsOf !== 'recent'
+    ? '<span class="radar-catalyst-asof">· ' + esc(s.catalystAsOf) + '</span>' : '';
+  return '<div class="radar-catalyst">' +
+      '<span class="radar-event" style="color:' + radarEventColor(type) + '">📰 ' + esc(type) + '</span>' +
+      '<span class="radar-catalyst-txt">' + esc(s.catalyst) + ' ' + asOf + '</span>' +
+    '</div>';
+}
 function radarCard(s) {
   var plan = 'Entry ' + radarLevel(s.entry) + '  ·  Stop ' + radarLevel(s.stop) +
     '  ·  Target ' + radarLevel(s.target) + '  ·  R:R ' + (s.rr == null ? '—' : s.rr);
@@ -1296,6 +1321,7 @@ function radarCard(s) {
       '</div>' +
     '</div>' +
     '<div class="card-body">' + esc(s.why) + '</div>' +
+    radarCatalyst(s) +
     '<div class="src radar-plan">' + esc(plan) + '</div>' +
     '<div class="card-footer"><span class="rel-text radar-invalidation">' + esc(s.invalidation) + '</span></div>' +
   '</div>';
