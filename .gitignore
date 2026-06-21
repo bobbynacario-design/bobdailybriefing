@@ -2,3 +2,8 @@ firebase-debug.log*
 firestore-debug.log*
 ui-debug.log*
 .firebase/
+
+# radar — local-only secrets and deps (never committed)
+radar/node_modules/
+radar/serviceAccountKey.json
+radar/.env
