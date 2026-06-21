@@ -88,6 +88,29 @@ var WEIGHTS = {
   regime: 0.10
 };
 
+// Theme-specific regime drivers. The regime sub-score (and the confirm/invalidate
+// gate) reads the breadth of a theme's OWN driver basket above its SMA20 — graded
+// 25..100 — instead of judging every asset by SPY & QQQ. Every driver here is
+// already a fetched watchlist symbol, so this adds no I/O and the journal
+// re-scores it point-in-time unchanged. A theme with no mapped/available drivers
+// falls back to the global market regime. (e.g. crypto now reads BTC/ETH, energy
+// reads USO/XLE, metals read gold/silver — so a weak QQQ no longer drags a
+// defensive-metals setup, and a crypto setup is no longer gated by US equities.)
+var THEME_REGIME = {
+  'AI semis':      ['QQQ', 'SMH', 'SOXX'],
+  'AI infra':      ['QQQ', 'XLI'],
+  'Crypto':        ['BTC', 'ETH'],
+  'Crypto eq':     ['QQQ', 'BTC'],
+  'Energy/geo':    ['USO', 'XLE'],
+  'Financials':    ['XLF', 'SPY'],
+  'Healthcare':    ['XLV', 'SPY'],
+  'Industrials':   ['XLI', 'SPY'],
+  'Consumer':      ['XLY', 'SPY'],
+  'Defense':       ['ITA', 'SPY'],
+  'Metals/commod': ['GLD', 'SLV', 'DBC'],
+  'Index/regime':  ['SPY', 'QQQ', 'IWM']
+};
+
 // How many trailing daily bars to request so SMA50 + 20d returns are well-defined.
 var LOOKBACK_BARS = 160;
 
@@ -123,6 +146,7 @@ var CONFIG = {
   indexSymbols: INDEX_SYMBOLS,
   coingeckoIds: COINGECKO_IDS,
   weights: WEIGHTS,
+  themeRegime: THEME_REGIME,
   lookbackBars: LOOKBACK_BARS,
   journal: JOURNAL,
   ph: PH

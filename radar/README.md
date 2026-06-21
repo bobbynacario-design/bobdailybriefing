@@ -80,7 +80,16 @@ live in `config.js` `WEIGHTS`.
   a healthy ATR multiple below entry (not noise-tight, not chasing-wide) and an
   entry not overextended above SMA20. The old `riskReward` was a near-constant
   ≈2.0 that fed the score nothing.
-- **regime** — SPY & QQQ vs their SMA20, applied to every asset that day.
+- **regime** — **theme-specific**: the breadth of the theme's own driver basket
+  above SMA20, graded 25..100 (none up → 25, half → ~62, all → 100). Crypto reads
+  BTC/ETH, energy reads USO/XLE, metals read GLD/SLV/DBC, AI semis read
+  QQQ/SMH/SOXX, etc. (`config.js` `THEME_REGIME`; drivers are existing watchlist
+  symbols, so no extra fetch). A theme with no available drivers falls back to the
+  global SPY & QQQ regime. This score also drives the confirm/invalidate gate, so
+  a crypto setup is no longer gated by US-equity regime, and a weak QQQ no longer
+  drags a defensive-metals setup. The global SPY & QQQ regime is still computed as
+  the market-backdrop header shown above the cards. Each signal records its
+  `regimeScore` and `regimeBasis` (the drivers) for transparency.
 
 The 2R plan itself (`stop = min(prior-day low, SMA20)`, `target = entry + 2·(entry−stop)`)
 still computes the entry/stop/target **levels** shown on the card and used as the

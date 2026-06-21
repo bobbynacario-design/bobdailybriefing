@@ -150,21 +150,42 @@ function riskQuality(entry, stop, s20, atrVal) {
   return Math.round(0.5 * interp(RQ_STOP_KNOTS, a) + 0.5 * interp(RQ_EXT_KNOTS, e));
 }
 
-// regime: SPY & QQQ both above their SMA20 -> 100; one -> 60; neither -> 25.
+// Is a symbol's latest close above its SMA20? null when it lacks enough bars.
+function symAboveSma20(barsByAsset, sym) {
+  var bars = barsByAsset[sym];
+  if (!bars || bars.length < 20) return null;
+  var closes = bars.map(function (b) { return b.close; });
+  var s20 = sma(closes, 20);
+  if (s20 == null) return null;
+  return closes[closes.length - 1] > s20;
+}
+
+// Global market backdrop (front-end header): SPY & QQQ both above SMA20 -> 100;
+// one -> 60; neither -> 25.
 function computeRegime(barsByAsset) {
-  function aboveSma20(sym) {
-    var bars = barsByAsset[sym];
-    if (!bars || bars.length < 20) return null;
-    var closes = bars.map(function (b) { return b.close; });
-    var s20 = sma(closes, 20);
-    var close = closes[closes.length - 1];
-    return s20 != null ? close > s20 : null;
-  }
-  var spy = aboveSma20('SPY');
-  var qqq = aboveSma20('QQQ');
+  var spy = symAboveSma20(barsByAsset, 'SPY');
+  var qqq = symAboveSma20(barsByAsset, 'QQQ');
   var n = (spy ? 1 : 0) + (qqq ? 1 : 0);
   var score = n === 2 ? 100 : (n === 1 ? 60 : 25);
   return { score: score, spyAboveSma20: !!spy, qqqAboveSma20: !!qqq };
+}
+
+// Theme-specific regime: breadth of a theme's own driver basket above SMA20,
+// graded 25..100 (none up -> 25, half -> ~62, all -> 100). Drivers with too few
+// bars are dropped from the count; a theme with no usable drivers falls back to
+// the global market regime. Keeps the model theme-aware (crypto reads BTC/ETH,
+// energy reads USO/XLE) instead of judging every asset by SPY & QQQ.
+function computeThemeRegime(barsByAsset, drivers, fallbackScore) {
+  if (!drivers || !drivers.length) return { score: fallbackScore, basis: 'market', up: null, of: 0 };
+  var up = 0, valid = 0;
+  drivers.forEach(function (d) {
+    var a = symAboveSma20(barsByAsset, d);
+    if (a === null) return;
+    valid++;
+    if (a) up++;
+  });
+  if (!valid) return { score: fallbackScore, basis: 'market', up: null, of: 0 };
+  return { score: Math.round(25 + 75 * (up / valid)), basis: drivers.join('·'), up: up, of: valid };
 }
 
 // status from the V1 heuristic gates. Invalidated is checked first: a setup that
@@ -229,6 +250,16 @@ function scoreUniverse(barsByAsset, config) {
 
   var regime = computeRegime(barsByAsset);
 
+  // Per-theme regime, computed once per theme and reused across its assets.
+  var themeRegimeMap = config.themeRegime || {};
+  var themeRegimeCache = {};
+  function regimeForTheme(theme) {
+    if (!(theme in themeRegimeCache)) {
+      themeRegimeCache[theme] = computeThemeRegime(barsByAsset, themeRegimeMap[theme], regime.score);
+    }
+    return themeRegimeCache[theme];
+  }
+
   var signals = [];
   (config.watchlist || []).forEach(function (item) {
     var sym = item.symbol;
@@ -249,12 +280,13 @@ function scoreUniverse(barsByAsset, config) {
     var rs = relStrengthMetrics(closes, benchCloses);
     var rr = riskRewardMetrics(close, priorLow, s20);
     var atrVal = atr(bars, 14);
+    var themeReg = regimeForTheme(item.theme);
     var sub = {
       trend: trendScore(close, s20, s50),
       volume: vol.score,
       relStrength: rs.score,
       riskQuality: riskQuality(rr.entry, rr.stop, s20, atrVal),
-      regime: regime.score
+      regime: themeReg.score
     };
 
     var score =
@@ -264,7 +296,7 @@ function scoreUniverse(barsByAsset, config) {
       weights.riskQuality * sub.riskQuality +
       weights.regime * sub.regime;
 
-    var status = classify(sub, close, rr.stop, regime.score);
+    var status = classify(sub, close, rr.stop, themeReg.score);
 
     signals.push({
       symbol: sym,
@@ -282,6 +314,9 @@ function scoreUniverse(barsByAsset, config) {
       target: round(rr.target, 2),
       rr: round(rr.rr, 2),
       riskQuality: sub.riskQuality,
+      // theme regime that drove this signal's regime sub-score + status gate.
+      regimeScore: themeReg.score,
+      regimeBasis: themeReg.basis,
       // all five sub-scores, so the journal can calibrate each component's
       // predictive power for forward excess (weight calibration).
       subScores: {
