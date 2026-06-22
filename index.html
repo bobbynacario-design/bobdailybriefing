@@ -1198,11 +1198,31 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <p>The <b>caveats line</b> matters: ~60 days of mostly-correlated names is "indicative, not statistically significant." Treat the numbers as directional hints, not proof — they sharpen as more varied history builds up.</p>
     </div>
 
+    <div class="help-card">
+      <div class="help-h">🎲 Markets — is a betting market mispriced?</div>
+      <p>Each card is one <b>event market</b> on Polymarket (e.g. "Will France win the 2026 World Cup?"). It compares the <b>market's own price</b> to an independent read, and tells you whether that's a real disagreement — or just noise. Read a card left to right:</p>
+      <ul>
+        <li><b>mkt X% YES</b> — the market's current price, read as the implied probability the answer is YES. This is the number to beat.</li>
+        <li><b>Panel Y% (haircut)</b> — our estimate. ~7 AI "personas" (a base-rate historian, a contrarian, a cautious quant, etc.) each guess the probability <i>without being told the price</i>, so they're an independent read, not the price echoed back. We then <b>haircut</b> it — pull it most of the way back toward the market price — because a panel built from one model shares that model's blind spots and its confidence is partly cosmetic.</li>
+        <li><b>spread ±</b> — how much the personas disagreed. A wide spread means low conviction, and the haircut pulls harder.</li>
+        <li><b>edge</b> — the gap that's actually left after the haircut and trading costs, with the side (<b>YES</b> or <b>NO</b>) you'd take. This is the only number that would matter if you ever acted on it.</li>
+        <li><b>GO / NO-GO badge</b> — the verdict:
+          <ul>
+            <li><span class="help-pill" style="color:var(--green)">GO</span> — a real, liquid, agreed-upon edge that clears costs.</li>
+            <li><span class="help-pill" style="color:var(--red)">NO-GO</span> — a check failed, and the badge says which: <i>no-edge</i> (too close to the price), <i>panel-split</i> (personas disagree), <i>thin</i> (can't actually trade it), or <i>closed</i>.</li>
+          </ul>
+        </li>
+      </ul>
+      <p>The <b>📓 Journal banner</b> up top is the honesty check. As markets resolve it scores our read against the market price using a <b>Brier score</b> (lower = better calibrated). <b>Skill</b> is the only number that matters: positive means we beat the price, negative means we didn't.</p>
+      <p class="help-key">Expect mostly <b>NO-GO</b>, and expect skill near zero — these markets are close to efficient, so a handful of AI guesses rarely beats the crowd's price. That's the tool being honest: <b>if even one check fails, you don't have a trade, you have a story.</b> Nothing here is a bet or advice.</p>
+    </div>
+
     <div class="help-card help-takeaway">
       <div class="help-h">The simple takeaway</div>
       <ul>
         <li><b>Radar</b> = today's framing: what's strong, why, and where it breaks. Use the status + stop + catalyst.</li>
         <li><b>Journal</b> = the reality check: look at <b>excess</b>, not raw. It currently says "we've mostly been long the AI trade" — so weight the radar accordingly.</li>
+        <li><b>Markets</b> = is a betting market mispriced? Compare <b>mkt %</b> to our <b>panel %</b>; trust only a <span class="help-pill" style="color:var(--green)">GO</span>, and even then check the journal's <b>skill</b>. Mostly NO-GO is the honest, expected answer.</li>
       </ul>
     </div>
 
