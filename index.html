@@ -504,6 +504,11 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .reader-tools{display:none;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.65rem .8rem;flex-wrap:wrap}
 .reader-tools.active{display:flex}
 .reader-filter-row{display:flex;gap:.35rem;flex-wrap:wrap}
+.section-nav{display:none;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem}
+.section-nav.active{display:flex}
+.secgroup-chip{font-family:var(--mono);font-size:11px;padding:.45rem .8rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;letter-spacing:.04em}
+.secgroup-chip:hover{color:var(--txt2);border-color:var(--txt3)}
+.secgroup-chip.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.25)}
 .reader-meta{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;text-transform:uppercase}
 
 /* ── STORY CARDS ── */
@@ -785,9 +790,6 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="nav-brand">INTELLIGENCE <span>// BOB</span></div>
   <div class="nav-center">
     <button class="ntab active" data-page="today" onclick="switchPage('today',this)">📰 Today</button>
-    <button class="ntab" data-page="global" onclick="switchPage('global',this)">🌍 Global</button>
-    <button class="ntab" data-page="ph" onclick="switchPage('ph',this)">🇵🇭 Philippines</button>
-    <button class="ntab" data-page="ai" onclick="switchPage('ai',this)">🤖 AI & Markets</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
     <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
     <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
@@ -912,6 +914,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     </div>
   </div>
 
+  <div class="section-nav" id="section-nav">
+    <button class="secgroup-chip active" data-group="all" onclick="setSectionGroup('all',this)">📰 All</button>
+    <button class="secgroup-chip" data-group="global" onclick="setSectionGroup('global',this)">🌍 Global</button>
+    <button class="secgroup-chip" data-group="ph" onclick="setSectionGroup('ph',this)">🇵🇭 Philippines</button>
+    <button class="secgroup-chip" data-group="ai" onclick="setSectionGroup('ai',this)">🤖 AI &amp; Markets</button>
+  </div>
+
   <div class="reader-tools" id="reader-tools">
     <div class="reader-filter-row">
       <button class="filter-chip active" data-filter="all" onclick="setRelevanceFilter('all',this)">All</button>
@@ -929,38 +938,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   </div>
 </div>
 
-<!-- ═══════════════ GLOBAL PAGE ═══════════════ -->
-<div class="page" id="page-global">
-  <div class="hero" style="margin-bottom:1.25rem">
-    <div class="hero-eyebrow">Section View</div>
-    <div class="hero-date" style="font-size:22px">🌍 Global News</div>
-    <div class="hero-sub" id="global-date-sub">No briefing loaded</div>
-    <div class="hero-divider"></div>
-  </div>
-  <div id="global-out"><div class="empty-state">RENDER A BRIEFING FIRST</div></div>
-</div>
-
-<!-- ═══════════════ PH PAGE ═══════════════ -->
-<div class="page" id="page-ph">
-  <div class="hero" style="margin-bottom:1.25rem">
-    <div class="hero-eyebrow">Section View</div>
-    <div class="hero-date" style="font-size:22px">🇵🇭 Philippines</div>
-    <div class="hero-sub" id="ph-date-sub">No briefing loaded</div>
-    <div class="hero-divider"></div>
-  </div>
-  <div id="ph-out"><div class="empty-state">RENDER A BRIEFING FIRST</div></div>
-</div>
-
-<!-- ═══════════════ AI & MARKETS PAGE ═══════════════ -->
-<div class="page" id="page-ai">
-  <div class="hero" style="margin-bottom:1.25rem">
-    <div class="hero-eyebrow">Section View</div>
-    <div class="hero-date" style="font-size:22px">🤖 AI, Markets & EV</div>
-    <div class="hero-sub" id="ai-date-sub">No briefing loaded</div>
-    <div class="hero-divider"></div>
-  </div>
-  <div id="ai-out"><div class="empty-state">RENDER A BRIEFING FIRST</div></div>
-</div>
+<!-- Global / PH / AI are now in-page selectors on the Today tab (see #section-nav). -->
 
 <!-- ═══════════════ HISTORY PAGE ═══════════════ -->
 <div class="page" id="page-history">
@@ -1184,9 +1162,6 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
-  <button class="mob-tab" id="mob-global" onclick="switchPageMobile('global',this)"><span class="mob-tab-icon">🌍</span>GLOBAL</button>
-  <button class="mob-tab" id="mob-ph" onclick="switchPageMobile('ph',this)"><span class="mob-tab-icon">🇵🇭</span>PH</button>
-  <button class="mob-tab" id="mob-ai" onclick="switchPageMobile('ai',this)"><span class="mob-tab-icon">🤖</span>AI</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
   <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
   <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
@@ -1213,6 +1188,7 @@ var MED_KEYS  = ['market','economy','inflation','trade','technology','gdp','rate
 var _currentData = null;
 var _renderTimestamp = null;
 var _relFilter = 'all';
+var _secGroup = 'all';
 var _compactMode = localStorage.getItem('briefing_compact') === 'true';
 window._briefingHistory = [];
 if (_compactMode) document.body.classList.add('compact');
@@ -1861,8 +1837,16 @@ function renderBriefConsole(data, schemaErrors) {
 
   var desk = document.getElementById('brief-desk');
   var tools = document.getElementById('reader-tools');
+  var secNav = document.getElementById('section-nav');
   if (desk) desk.classList.add('active');
   if (tools) tools.classList.add('active');
+  if (secNav) {
+    secNav.classList.add('active');
+    _secGroup = 'all';   // a fresh briefing always starts on the full view
+    secNav.querySelectorAll('.secgroup-chip').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-group') === 'all');
+    });
+  }
 
   var priorityItems = stats.stories.filter(function(item){ return item.score === 'high' || item.score === 'med'; }).slice(0, 6);
   var priorityEl = document.getElementById('priority-list');
@@ -1915,18 +1899,41 @@ function setRelevanceFilter(filter, el) {
   applyRelevanceFilter();
 }
 
+// Section-group selector (Today tab): show only one section group at a time —
+// All / Global / PH / AI — composing with the relevance filter below.
+function setSectionGroup(group, el) {
+  _secGroup = group || 'all';
+  document.querySelectorAll('.secgroup-chip').forEach(function(btn){
+    btn.classList.toggle('active', btn.getAttribute('data-group') === _secGroup);
+  });
+  if (el) el.classList.add('active');
+  applyRelevanceFilter();
+}
+
+function groupMatches(el) {
+  if (_secGroup === 'all') return true;
+  var wrap = el.closest('[data-group]');
+  return !wrap || wrap.getAttribute('data-group') === _secGroup;
+}
+
 function applyRelevanceFilter() {
+  // Whole section blocks toggle by group (so headers hide with their cards).
+  document.querySelectorAll('#today-out [data-group]').forEach(function(w){
+    w.style.display = (_secGroup === 'all' || w.getAttribute('data-group') === _secGroup) ? '' : 'none';
+  });
   var cards = Array.prototype.slice.call(document.querySelectorAll('.card[data-rel]'));
   cards.forEach(function(card) {
     var rel = card.getAttribute('data-rel');
     var show = _relFilter === 'all' || rel === _relFilter || (_relFilter === 'actionable' && (rel === 'high' || rel === 'med'));
     card.style.display = show ? '' : 'none';
   });
-  var visibleToday = Array.prototype.slice.call(document.querySelectorAll('#today-out .card[data-rel]')).filter(function(card){
-    return card.style.display !== 'none';
-  }).length;
-  var totalToday = document.querySelectorAll('#today-out .card[data-rel]').length;
-  var label = _relFilter === 'all' ? 'All stories visible' : (visibleToday + ' of ' + totalToday + ' stories visible / ' + _relFilter.toUpperCase());
+  var todayCards = Array.prototype.slice.call(document.querySelectorAll('#today-out .card[data-rel]')).filter(groupMatches);
+  var visibleToday = todayCards.filter(function(card){ return card.style.display !== 'none'; }).length;
+  var totalToday = todayCards.length;
+  var grpLabel = _secGroup === 'all' ? '' : ' · ' + _secGroup.toUpperCase();
+  var label = (_relFilter === 'all' && _secGroup === 'all')
+    ? 'All stories visible'
+    : (visibleToday + ' of ' + totalToday + ' stories visible / ' + _relFilter.toUpperCase() + grpLabel);
   setText('reader-meta', label);
 }
 
@@ -2048,10 +2055,6 @@ function renderBriefing() {
   // Hero date
   if (data.date) {
     document.getElementById('hero-date').textContent = data.date;
-    ['global-date-sub','ph-date-sub','ai-date-sub'].forEach(function(id){
-      var el = document.getElementById(id);
-      if (el) el.textContent = data.date;
-    });
   }
 
   // Timestamp
@@ -2077,7 +2080,7 @@ function renderBriefing() {
 
   // Render all sections
   var counts = {high:0,med:0,low:0,none:0};
-  var todayHTML = '', globalHTML = '', phHTML = '', aiHTML = '';
+  var todayHTML = '';
 
   Object.keys(SEC_META).forEach(function(id) {
     var meta = SEC_META[id];
@@ -2100,22 +2103,16 @@ function renderBriefing() {
       secHTML += '</div></div>';
     });
 
-    todayHTML += '<div style="margin-bottom:1.75rem;animation:fadeIn .4s ease">'+secHTML+'</div>';
-    if (meta.page==='global') globalHTML += '<div style="margin-bottom:1.75rem">'+secHTML+'</div>';
-    if (meta.page==='ph')     phHTML     += '<div style="margin-bottom:1.75rem">'+secHTML+'</div>';
-    if (meta.page==='ai')     aiHTML     += '<div style="margin-bottom:1.75rem">'+secHTML+'</div>';
+    todayHTML += '<div data-group="'+esc(meta.page)+'" style="margin-bottom:1.75rem;animation:fadeIn .4s ease">'+secHTML+'</div>';
   });
 
   // Watch section
   if (data.watch) {
-    var wHTML = '<div style="margin-bottom:1.75rem"><div class="sec-hdr"><div class="sec-pip" style="background:#E85C5C"></div><div class="sec-name">ONE THING TO WATCH</div></div><div class="watch-card"><div class="watch-stripe"></div><div class="watch-body">'+esc(data.watch)+'</div>'+(data.watch_source?'<div style="margin-top:.6rem"><span class="src">📍 '+esc(data.watch_source)+'</span></div>':'')+'</div></div>';
+    var wHTML = '<div data-group="today" style="margin-bottom:1.75rem"><div class="sec-hdr"><div class="sec-pip" style="background:#E85C5C"></div><div class="sec-name">ONE THING TO WATCH</div></div><div class="watch-card"><div class="watch-stripe"></div><div class="watch-body">'+esc(data.watch)+'</div>'+(data.watch_source?'<div style="margin-top:.6rem"><span class="src">📍 '+esc(data.watch_source)+'</span></div>':'')+'</div></div>';
     todayHTML += wHTML;
   }
 
   document.getElementById('today-out').innerHTML  = todayHTML  || '<div class="empty-state">NO CONTENT PARSED</div>';
-  document.getElementById('global-out').innerHTML = globalHTML || '<div class="empty-state">NO GLOBAL NEWS IN THIS BRIEFING</div>';
-  document.getElementById('ph-out').innerHTML     = phHTML     || '<div class="empty-state">NO PH NEWS IN THIS BRIEFING</div>';
-  document.getElementById('ai-out').innerHTML     = aiHTML     || '<div class="empty-state">NO AI/MARKETS NEWS IN THIS BRIEFING</div>';
 
   // Score bar
   ['high','med','low','none'].forEach(function(s){
@@ -3099,7 +3096,9 @@ function updateTabBadges(data) {
     if (id==='watch') return;
     var count = (data.sections[id]||[]).length;
     var pg = SEC_META[id].page;
-    if (pageCounts[pg] !== undefined) pageCounts[pg] += count;
+    // global/ph/ai buckets count their own group; `today` is the grand total.
+    // (pg can itself be 'today' for core sections — don't double-count those.)
+    if (pg !== 'today' && pageCounts[pg] !== undefined) pageCounts[pg] += count;
     pageCounts.today += count;
   });
   // Update desktop tabs
@@ -3124,6 +3123,19 @@ function updateTabBadges(data) {
       badge.className = 'tab-badge';
       badge.textContent = pageCounts[pg];
       tab.appendChild(badge);
+    }
+  });
+  // Update the Today-tab section selector pills (All / Global / PH / AI)
+  document.querySelectorAll('.secgroup-chip[data-group]').forEach(function(chip) {
+    var g = chip.getAttribute('data-group');
+    var n = g === 'all' ? pageCounts.today : pageCounts[g];
+    var existing = chip.querySelector('.tab-badge');
+    if (existing) existing.remove();
+    if (n !== undefined && n > 0) {
+      var badge = document.createElement('span');
+      badge.className = 'tab-badge';
+      badge.textContent = n;
+      chip.appendChild(badge);
     }
   });
 }
