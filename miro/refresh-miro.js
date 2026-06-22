@@ -29,6 +29,7 @@ import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
+import { aggregatePanel } from './scenario.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var __radar = join(__dirname, '..', 'radar');
@@ -54,6 +55,13 @@ var __radar = join(__dirname, '..', 'radar');
 var PROJECT_ID = 'pokerhq-a67e4';
 var COLL = 'briefings-bob';
 var GAMMA = 'https://gamma-api.polymarket.com';
+
+// Scenario panel (Lane 2). Reuses the app's OpenAI integration (same
+// /v1/responses endpoint + model as the radar's catalyst tagging). Optional: if
+// no key is set the run still completes and writes implied-only markets, so the
+// feature never hard-depends on the panel.
+var OPENAI_KEY = process.env.OPENAI_API_KEY || '';
+var OPENAI_MODEL = process.env.OPENAI_MODEL || CONFIG.panel.model || 'gpt-5.5';
 
 // ── helpers ──
 
@@ -151,6 +159,94 @@ async function fetchMarkets(markets) {
   return out;
 }
 
+// ── scenario panel via OpenAI (Lane 2) ──
+// Pull text out of an OpenAI /v1/responses payload (mirrors the radar).
+function extractText(json) {
+  if (typeof json.output_text === 'string' && json.output_text) return json.output_text;
+  var chunks = [];
+  (json.output || []).forEach(function (item) {
+    (item.content || []).forEach(function (c) {
+      if (c && typeof c.text === 'string') chunks.push(c.text);
+    });
+  });
+  return chunks.join('\n');
+}
+
+// Strip ```json fences and parse the first JSON object found.
+function parseLooseJson(raw) {
+  var s = String(raw).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  var start = s.indexOf('{');
+  var end = s.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('no JSON object in model output');
+  return JSON.parse(s.slice(start, end + 1));
+}
+
+// One OpenAI call per persona — each returns a probability for EVERY market in a
+// single response (cheap: ~N persona calls per run, not personas*markets). The
+// personas are deliberately diverse and BLIND to the market price, so their reads
+// are less correlated than asking one model the same way N times. Returns a map
+// slug -> [prob, prob, ...] across personas. Never throws.
+async function runPanel(markets, config) {
+  var readsBySlug = {};
+  markets.forEach(function (m) { readsBySlug[m.slug] = []; });
+
+  if (!OPENAI_KEY) {
+    console.log('OPENAI_API_KEY not set — skipping scenario panel (markets written implied-only).');
+    return readsBySlug;
+  }
+
+  var list = markets.map(function (m) {
+    return '- slug "' + m.slug + '": ' + m.question +
+      (m.endDate ? ' (resolves ' + m.endDate + ')' : '');
+  }).join('\n');
+
+  var personas = config.panel.personas;
+  console.log('Running scenario panel: ' + personas.length + ' personas x ' + markets.length + ' markets via ' + OPENAI_MODEL + '...');
+
+  for (var i = 0; i < personas.length; i++) {
+    var p = personas[i];
+    var prompt =
+      'You are estimating the probability that each event below resolves YES. ' +
+      'You are NOT given any market price — form your OWN independent view from base rates and evidence.\n\n' +
+      'Persona: ' + p.brief + '\n\n' +
+      'Markets:\n' + list + '\n\n' +
+      'Return STRICT JSON only — an object keyed by the exact slug string, each value a single number ' +
+      'between 0 and 1 (your probability the market resolves YES). No prose, no code fences, no extra keys.';
+
+    var body = {
+      model: OPENAI_MODEL,
+      input: [
+        { role: 'system', content: 'You are a calibrated probabilistic forecaster. Avoid overconfidence. Return strict JSON only. Never give financial advice.' },
+        { role: 'user', content: prompt }
+      ]
+    };
+    if (config.panel.webSearch) {
+      body.tools = [{ type: 'web_search', search_context_size: 'low' }];
+      body.tool_choice = 'auto';
+    }
+
+    try {
+      var res = await fetchRetry('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + OPENAI_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }, 'OpenAI(' + p.id + ')');
+      var text = await res.text();
+      if (!res.ok) { console.log('  persona ' + p.id + ' HTTP ' + res.status + ' — skipped: ' + text.slice(0, 160)); continue; }
+      var map = parseLooseJson(extractText(JSON.parse(text)));
+      var got = 0;
+      markets.forEach(function (m) {
+        var v = Number(map[m.slug]);
+        if (isFinite(v) && v >= 0 && v <= 1) { readsBySlug[m.slug].push(v); got++; }
+      });
+      console.log('  persona ' + p.id + ': ' + got + '/' + markets.length + ' reads');
+    } catch (e) {
+      console.log('  persona ' + p.id + ' failed (' + (e.message || e) + ') — skipped.');
+    }
+  }
+  return readsBySlug;
+}
+
 // ── Firestore (Admin SDK — bypasses security rules) ──
 
 function initAdmin() {
@@ -182,22 +278,32 @@ async function main() {
   var marketsData = await fetchMarkets(CONFIG.markets);
   console.log('Got ' + marketsData.length + ' markets.');
 
+  // Lane 2: run the persona panel (independent of price), attach the reads, and
+  // let the PURE engine compute haircut prob, executable edge, and the gate.
+  var readsBySlug = await runPanel(marketsData, CONFIG);
+  marketsData.forEach(function (m) { m.panelReads = readsBySlug[m.slug] || []; });
+  marketsData = aggregatePanel(marketsData, CONFIG);
+  // Drop the raw reads from the persisted doc (keep panelN as the count).
+  marketsData.forEach(function (m) { delete m.panelReads; });
+
   var dateKey = phtDateKey();
   var doc = {
     generatedAt: new Date().toISOString(),
     asOf: dateKey,
-    lane: 1,                 // bumped as the scenario engine (2) / journal (3) ship
-    disclaimer: 'Research framing only — implied probabilities from Polymarket. Not advice, not a recommendation, no execution. The scenario panel and edge gate arrive in a later lane.',
+    lane: 2,
+    disclaimer: 'Research framing only. Implied probabilities are Polymarket prices; the panel read is an independent, uncertainty-haircut estimate compared to that price. GO/NO-GO is research framing — not advice, not a recommendation, no execution.',
     markets: marketsData
   };
 
   console.log('\n===== briefings-bob/miro-' + dateKey + ' =====');
   marketsData.forEach(function (m) {
-    console.log('  ' + (m.label || m.slug).padEnd(34) +
-      '  implied YES ' + (m.impliedYes * 100).toFixed(1) + '%' +
-      '  vol ' + (m.volumeNum == null ? '—' : Math.round(m.volumeNum)) +
-      '  liq ' + (m.liquidityNum == null ? '—' : Math.round(m.liquidityNum)) +
-      (m.closed ? '  [CLOSED]' : ''));
+    var panel = m.haircutProb == null ? 'panel n/a (implied only)' :
+      ('panel ' + (m.haircutProb * 100).toFixed(1) + '% (' + m.panelN + ' reads, ±' +
+        (m.panelDispersion * 100).toFixed(1) + ')  edge ' +
+        (m.edge >= 0 ? '+' : '') + (m.edge * 100).toFixed(1) + 'pts ' + m.edgeSide +
+        '  [' + m.gate + (m.gateReason ? ':' + m.gateReason : '') + ']');
+    console.log('  ' + (m.label || m.slug).padEnd(30) +
+      '  mkt ' + (m.impliedYes * 100).toFixed(1) + '%  ' + panel);
   });
 
   var db = initAdmin();

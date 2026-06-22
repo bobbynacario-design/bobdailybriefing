@@ -1835,9 +1835,11 @@ function miroCard(m) {
   if (hasPanel) {
     var edge = m.edge;
     var edgeCol = edge == null ? 'var(--txt3)' : (edge >= 0 ? 'var(--green)' : 'var(--red)');
-    var edgeTxt = edge == null ? '—' : (edge >= 0 ? '+' : '') + (edge * 100).toFixed(1) + ' pts';
+    var edgeTxt = edge == null ? '—' : (edge >= 0 ? '+' : '') + (edge * 100).toFixed(1) + ' pts' +
+      (m.edgeSide ? ' ' + esc(m.edgeSide) : '');
     html += '<div class="radar-plan" style="margin-top:.4rem">' +
       'Panel ' + miroPct(m.haircutProb) + ' (haircut)' +
+      (m.panelN != null ? ' · ' + m.panelN + ' reads' : '') +
       (m.panelDispersion != null ? ' · spread ±' + (m.panelDispersion * 100).toFixed(1) + ' pts' : '') +
       ' · <span style="color:' + edgeCol + '">edge ' + edgeTxt + '</span></div>';
   }

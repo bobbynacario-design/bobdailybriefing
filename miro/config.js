@@ -49,13 +49,17 @@ var FEES = {
 };
 
 // Uncertainty haircut. A panel of correlated LLM passes is NOT an independent
-// weather ensemble — its apparent confidence is partly cosmetic. So we SHRINK the
-// panel's probability toward 0.5 before trusting it: haircutProb = 0.5 + k*(p-0.5)
-// with k<1. Wider panel dispersion shrinks harder (less agreement -> less trust).
+// weather ensemble — its apparent confidence is partly cosmetic, and a one-model
+// panel shares that model's biases (notably LLM longshot OVER-estimation). So we
+// shrink the panel toward the MARKET PRICE (the efficient prior), keeping only a
+// fraction k of its deviation: haircutProb = price + k*(panelProb - price), k<1.
+// Wider panel dispersion shrinks harder (less agreement -> less trust). Anchoring
+// on the price — not 0.5 — is what stops a correct ~0% read on a cheap longshot
+// from being inflated into fake YES-edge.
 var HAIRCUT = {
-  baseShrink: 0.70,        // k at zero dispersion (keep 70% of the panel's deviation from 0.5)
+  baseShrink: 0.60,        // k at zero dispersion (keep 60% of the panel's deviation from the price)
   dispersionPenalty: 1.50, // extra shrink proportional to panel stdev (in prob units)
-  minShrink: 0.25          // never keep less than 25% (floor so the read isn't erased)
+  minShrink: 0.20          // never keep less than 20% (floor so the read isn't fully erased)
 };
 
 // The gate. A market is only "GO" (worth researching as a position) if the
@@ -73,11 +77,12 @@ var EDGE_GATE = {
 // returns a probability for the YES outcome; scenario.js aggregates them.
 var PANEL = {
   model: 'gpt-5.5',  // overridable via OPENAI_MODEL; reuses the radar's OpenAI integration
+  webSearch: true,   // ground each persona in recent news (web_search, low context)
   personas: [
     { id: 'base-rate',  brief: 'A historian who anchors hard on base rates and how often this CLASS of event actually happens. Skeptical of recency and narrative.' },
     { id: 'insider',    brief: 'A domain specialist who weighs the latest concrete signals, official statements, and on-the-ground specifics for THIS event.' },
-    { id: 'contrarian', brief: 'A contrarian who actively looks for why the crowd/market price is wrong in EITHER direction, and prices tail risks.' },
-    { id: 'quant',      brief: 'A cautious quant who distrusts stories, defaults toward the market price, and only deviates when evidence is strong.' },
+    { id: 'contrarian', brief: 'A contrarian who actively looks for why the consensus narrative is wrong in EITHER direction, and prices tail risks. (You are NOT told any market price — form your own view.)' },
+    { id: 'quant',      brief: 'A cautious quant who distrusts stories, stays conservative and anchored to base rates, and only deviates when the evidence is strong. (You are NOT told any market price.)' },
     { id: 'newsdesk',   brief: 'A wire-service reporter focused strictly on what is verifiably known right now versus speculation.' },
     { id: 'devils-adv', brief: 'A devil\'s advocate who argues the OPPOSITE of whatever seems obvious, to surface overlooked failure modes.' },
     { id: 'generalist', brief: 'A calibrated generalist forecaster (superforecaster style) who blends base rates with current evidence and avoids overconfidence.' }
