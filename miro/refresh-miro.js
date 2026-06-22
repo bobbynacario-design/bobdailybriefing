@@ -30,6 +30,7 @@ import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { aggregatePanel } from './scenario.js';
+import { buildMiroJournal } from './journal-miro.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var __radar = join(__dirname, '..', 'radar');
@@ -290,7 +291,7 @@ async function main() {
   var doc = {
     generatedAt: new Date().toISOString(),
     asOf: dateKey,
-    lane: 2,
+    lane: 3,
     disclaimer: 'Research framing only. Implied probabilities are Polymarket prices; the panel read is an independent, uncertainty-haircut estimate compared to that price. GO/NO-GO is research framing — not advice, not a recommendation, no execution.',
     markets: marketsData
   };
@@ -309,6 +310,49 @@ async function main() {
   var db = initAdmin();
   await writeDoc(db, dateKey, doc);
   console.log('\nWrote briefings-bob/miro-' + dateKey + ' and miro-latest = ' + dateKey + '.');
+
+  // ── Lane 3: resolution journal (Brier ours vs market price) ──
+  // Load the rolling journal, catch any resolutions (including markets that have
+  // since dropped out of the curated list but are still open in the journal), and
+  // let the PURE engine update the accumulated record.
+  var priorJournal = (await db.collection(COLL).doc('miro-journal').get()).data() || null;
+
+  // Markets to check for resolution = today's curated set PLUS any still-open
+  // journal slugs no longer in the config (so a removed market still gets scored).
+  var openSlugs = (priorJournal && priorJournal.open) ? Object.keys(priorJournal.open) : [];
+  var haveSlugs = {};
+  marketsData.forEach(function (m) { haveSlugs[m.slug] = true; });
+  var extraSlugs = openSlugs.filter(function (s) { return !haveSlugs[s]; });
+  var extra = [];
+  if (extraSlugs.length) {
+    console.log('Checking ' + extraSlugs.length + ' off-list open market(s) for resolution...');
+    extra = await fetchMarkets(extraSlugs.map(function (s) { return { slug: s, label: s, theme: '', yesOutcome: 'Yes' }; }));
+  }
+
+  // A closed market settles to ~1/0; treat the YES price as the outcome.
+  var resolutions = marketsData.concat(extra)
+    .filter(function (m) { return m.closed; })
+    .map(function (m) { return { slug: m.slug, outcome: m.impliedYes >= 0.5 ? 1 : 0, resolvedDate: dateKey }; });
+
+  var todaySnapshots = marketsData
+    .filter(function (m) { return m.haircutProb != null; })
+    .map(function (m) {
+      return { slug: m.slug, label: m.label, theme: m.theme, impliedYes: m.impliedYes,
+        haircutProb: m.haircutProb, endDate: m.endDate, asOf: dateKey };
+    });
+
+  var journalBody = buildMiroJournal(priorJournal, todaySnapshots, resolutions, CONFIG);
+  var journalDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: dateKey }, journalBody);
+  await db.collection(COLL).doc('miro-journal').set(journalDoc);
+
+  var st = journalBody.stats;
+  console.log('\n===== miro-journal =====');
+  console.log('  open=' + st.nOpen + '  resolved=' + st.nResolved + '  newlyResolved=' + st.newlyResolved +
+    '  brierOurs=' + (st.brierOurs == null ? '—' : st.brierOurs) +
+    '  brierMarket=' + (st.brierMarket == null ? '—' : st.brierMarket) +
+    '  skill=' + (st.skill == null ? '—' : st.skill));
+  journalBody.caveats.forEach(function (c) { console.log('  caveat: ' + c); });
+  console.log('\nWrote briefings-bob/miro-journal.');
 }
 
 main().then(function () {

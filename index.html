@@ -347,6 +347,17 @@ window.fbLoadMiro = async function() {
   }
 };
 
+// Load the event-markets resolution journal (Lane 3). Single rolling doc, no uid.
+window.fbLoadMiroJournal = async function() {
+  try {
+    var snap = await getDoc(doc(db, COLL, 'miro-journal'));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    console.error('Markets journal load failed:', e);
+    return null;
+  }
+};
+
 window._fbReady = true;
 </script>
 
@@ -1859,7 +1870,9 @@ function renderMiro() {
   if (!out) return;
   if (!window.fbLoadMiro) { out.innerHTML = '<div class="empty-state">MARKETS UNAVAILABLE</div>'; return; }
   out.innerHTML = '<div class="empty-state">LOADING MARKETS…</div>';
-  window.fbLoadMiro().then(function (d) {
+  var jp = window.fbLoadMiroJournal ? window.fbLoadMiroJournal() : Promise.resolve(null);
+  Promise.all([window.fbLoadMiro(), jp]).then(function (res) {
+    var d = res[0], j = res[1];
     if (!d || !d.markets || !d.markets.length) {
       if (sub) sub.textContent = 'No data yet';
       out.innerHTML = '<div class="empty-state">NO MARKETS YET — RUN miro/refresh-miro.js</div>';
@@ -1868,8 +1881,24 @@ function renderMiro() {
     var hasPanel = d.markets.some(function (m) { return m.haircutProb != null; });
     if (sub) sub.textContent = d.markets.length + ' markets · as of ' + esc(d.asOf) +
       (hasPanel ? '' : ' · implied prices only (scenario panel pending)');
-    out.innerHTML = '<div class="radar-grid">' + d.markets.map(miroCard).join('') + '</div>';
+    out.innerHTML = miroJournalBanner(j) + '<div class="radar-grid">' + d.markets.map(miroCard).join('') + '</div>';
   });
+}
+// Journal summary banner: Brier(ours) vs Brier(market price). skill > 0 means the
+// panel read beat the price. Until markets resolve it shows the accumulating state.
+function miroJournalBanner(j) {
+  if (!j || !j.stats) return '';
+  var s = j.stats;
+  if (!s.nResolved) {
+    return '<div class="pse-caveat">📓 Journal accumulating — ' + (s.nOpen || 0) +
+      ' prediction(s) logged, 0 resolved yet. Brier vs the market price appears as curated markets settle. Expected, honest outcome: little or no edge.</div>';
+  }
+  var skill = s.skill;
+  var col = skill == null ? 'var(--txt3)' : (skill > 0 ? 'var(--green)' : 'var(--red)');
+  var verdict = skill == null ? '' : (skill > 0 ? 'beating the price' : 'not beating the price');
+  return '<div class="pse-caveat">📓 Journal · ' + s.nResolved + ' resolved · ' +
+    'Brier ours ' + s.brierOurs + ' vs market ' + s.brierMarket +
+    ' · <span style="color:' + col + '">skill ' + (skill > 0 ? '+' : '') + skill + ' (' + verdict + ')</span></div>';
 }
 
 // ── SCORE ──
