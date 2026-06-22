@@ -2,6 +2,19 @@
 
 Private daily intelligence briefing desk for Bob.
 
+## Features
+
+- **Daily briefing** — OpenAI-generated intelligence desk (see below).
+- **📡 Market Radar** — daily ranking of ~30 assets across 11 themes, with a
+  performance journal. Docs: [`radar/README.md`](radar/README.md).
+- **🎲 Markets** — daily "scenario read" over curated Polymarket event markets:
+  market price vs an independent AI panel, executable edge, GO/NO-GO, and a
+  Brier-score journal. The honest version of "MiroFish" — research framing, never
+  a bet or execution. Docs: [`miro/README.md`](miro/README.md).
+
+Each market feature is a **local Node refresh script** that writes Firestore docs
+the front end reads — no Cloud Functions, no build step.
+
 ## OpenAI generation
 
 The browser app does not call OpenAI directly. It calls the Firebase callable
