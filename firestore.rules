@@ -1,15 +1,15 @@
 rules_version = '2';
 
-// Shared Firebase project: pokerhq-a67e4 — ONE ruleset for THREE apps.
-// Firestore keeps a single ruleset per project: deploying from ANY repo
-// replaces the rules for ALL apps (this has happened — a PokerHQ-only
-// deploy on 2026-06-11 locked SonicVault and Daily Briefer out).
+// ⚠️ STALE / REFERENCE ONLY — DO NOT DEPLOY FROM THIS REPO. ⚠️
 //
-// This file is the canonical merged ruleset. Keep these copies identical:
-//   - sonicvault/firestore.rules
-//   - pokerhq/deploy/firestore.rules
-//   - bobdailybriefing/firestore.rules
-// and always deploy the FULL file: firebase deploy --only firestore:rules
+// As of 2026-06-22 Firestore rule ownership is CENTRALIZED in the sonicvault
+// repo. `sonicvault/firestore.rules` is the single source of truth for all
+// three apps (PokerHQ, Daily Briefing, SonicVault) on project pokerhq-a67e4,
+// and it is the only repo that deploys rules. The "rules" key has been removed
+// from this repo's firebase.json (indexes are still deployed from here) so
+// `firebase deploy` can no longer touch rules. This file is kept only for
+// reference and may be out of date — to change Daily Briefing's rules, edit
+// them in sonicvault/firestore.rules and deploy from there (./deploy-rules.ps1).
 
 service cloud.firestore {
   match /databases/{database}/documents {
