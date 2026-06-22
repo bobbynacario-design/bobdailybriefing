@@ -56,6 +56,7 @@ var __radar = join(__dirname, '..', 'radar');
 var PROJECT_ID = 'pokerhq-a67e4';
 var COLL = 'briefings-bob';
 var GAMMA = 'https://gamma-api.polymarket.com';
+var CLOB = 'https://clob.polymarket.com';
 
 // Scenario panel (Lane 2). Reuses the app's OpenAI integration (same
 // /v1/responses endpoint + model as the radar's catalyst tagging). Optional: if
@@ -127,6 +128,7 @@ async function fetchMarkets(markets) {
     }
     var outcomes = parseArr(r.outcomes);
     var prices = parseArr(r.outcomePrices);
+    var tokenIds = parseArr(r.clobTokenIds);
     var yesIdx = outcomes.findIndex(function (o) {
       return String(o).toLowerCase() === String(cfg.yesOutcome || 'Yes').toLowerCase();
     });
@@ -148,7 +150,11 @@ async function fetchMarkets(markets) {
       liquidityNum: num(r.liquidityNum),
       closed: !!r.closed,
       conditionId: r.conditionId || null,
-      // Lane 2 fills these; null here keeps the doc shape stable for the front end.
+      resolutionSource: r.resolutionSource || '',
+      yesTokenId: tokenIds[yesIdx] != null ? String(tokenIds[yesIdx]) : null,
+      // Order-book fields (Lane B) filled by fetchBooks(); null here keeps shape.
+      yesBid: null, yesAsk: null, mid: null, spread: null, depthTop: null,
+      // Panel fields (Lane 2) filled by aggregatePanel(); null keeps FE shape stable.
       panelProb: null,
       panelDispersion: null,
       haircutProb: null,
@@ -158,6 +164,36 @@ async function fetchMarkets(markets) {
     });
   });
   return out;
+}
+
+// ── data: executable order book via the free Polymarket CLOB API (Lane B) ──
+// For each market's YES token, read top-of-book so edge is computed against the
+// price you could actually HIT (ask to buy YES, bid to sell YES), with the spread
+// paid implicitly and top-of-book depth gated. Non-fatal per market: a missing
+// book just leaves the market on the implied-price fallback (noBook).
+async function fetchBooks(markets) {
+  for (var i = 0; i < markets.length; i++) {
+    var m = markets[i];
+    if (!m.yesTokenId) continue;
+    try {
+      var res = await fetchRetry(CLOB + '/book?token_id=' + encodeURIComponent(m.yesTokenId),
+        { headers: { 'accept': 'application/json' } }, 'CLOB ' + m.slug);
+      if (!res.ok) { console.log('  book ' + m.slug + ' HTTP ' + res.status + ' — implied-only'); continue; }
+      var b = await res.json();
+      var bids = b.bids || [], asks = b.asks || [];
+      var bestBid = null, bestBidSz = 0, bestAsk = null, bestAskSz = 0;
+      bids.forEach(function (o) { var p = num(o.price); if (p != null && (bestBid === null || p > bestBid)) { bestBid = p; bestBidSz = num(o.size) || 0; } });
+      asks.forEach(function (o) { var p = num(o.price); if (p != null && (bestAsk === null || p < bestAsk)) { bestAsk = p; bestAskSz = num(o.size) || 0; } });
+      if (bestBid === null || bestAsk === null) { console.log('  book ' + m.slug + ' empty — implied-only'); continue; }
+      m.yesBid = bestBid;
+      m.yesAsk = bestAsk;
+      m.mid = (bestBid + bestAsk) / 2;
+      m.spread = bestAsk - bestBid;
+      m.depthTop = Math.min(bestBidSz, bestAskSz);
+    } catch (e) {
+      console.log('  book ' + m.slug + ' failed (' + (e.message || e) + ') — implied-only');
+    }
+  }
 }
 
 // ── scenario panel via OpenAI (Lane 2) ──
@@ -279,6 +315,10 @@ async function main() {
   var marketsData = await fetchMarkets(CONFIG.markets);
   console.log('Got ' + marketsData.length + ' markets.');
 
+  // Lane B: read the executable order book so edge is vs the price you can hit.
+  console.log('Fetching order books from Polymarket CLOB...');
+  await fetchBooks(marketsData);
+
   // Lane 2: run the persona panel (independent of price), attach the reads, and
   // let the PURE engine compute haircut prob, executable edge, and the gate.
   var readsBySlug = await runPanel(marketsData, CONFIG);
@@ -298,13 +338,15 @@ async function main() {
 
   console.log('\n===== briefings-bob/miro-' + dateKey + ' =====');
   marketsData.forEach(function (m) {
+    var book = m.yesBid == null ? 'no-book' :
+      (m.yesBid * 100).toFixed(1) + '/' + (m.yesAsk * 100).toFixed(1) + 'c sprd ' + (m.spread * 100).toFixed(1) + 'c';
     var panel = m.haircutProb == null ? 'panel n/a (implied only)' :
       ('panel ' + (m.haircutProb * 100).toFixed(1) + '% (' + m.panelN + ' reads, ±' +
         (m.panelDispersion * 100).toFixed(1) + ')  edge ' +
         (m.edge >= 0 ? '+' : '') + (m.edge * 100).toFixed(1) + 'pts ' + m.edgeSide +
         '  [' + m.gate + (m.gateReason ? ':' + m.gateReason : '') + ']');
     console.log('  ' + (m.label || m.slug).padEnd(30) +
-      '  mkt ' + (m.impliedYes * 100).toFixed(1) + '%  ' + panel);
+      '  mkt ' + (m.impliedYes * 100).toFixed(1) + '%  ' + book + '  ' + panel);
   });
 
   var db = initAdmin();

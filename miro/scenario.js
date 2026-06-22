@@ -88,23 +88,44 @@ function aggregateOne(m, config) {
     return Object.assign({}, m, {
       panelN: reads.length,
       panelProb: null, panelDispersion: null, haircutProb: null, haircutK: null,
+      anchor: null, noBook: (m.yesBid == null || m.yesAsk == null),
       edge: null, edgeSide: null, gate: null, gateReason: null
     });
   }
 
+  // Use the executable order-book mid as the anchor/price when available, so the
+  // haircut shrinks toward what the market can actually trade at, not last/Gamma.
+  var hasBook = (m.yesBid != null && m.yesAsk != null);
+  var anchor = (hasBook && m.mid != null) ? m.mid : m.impliedYes;
+
   var panelProb = mean(reads);
   var dispersion = stdev(reads, panelProb);
-  var hcRes = haircut(panelProb, m.impliedYes, dispersion, hc);
+  var hcRes = haircut(panelProb, anchor, dispersion, hc);
   var haircutProb = clamp(hcRes.prob, 0, 1);
 
-  var rawGap = haircutProb - m.impliedYes;          // + => our read is higher than YES price
-  var edgeSide = rawGap >= 0 ? 'YES' : 'NO';
-  var edge = Math.abs(rawGap) - fees.roundTripCost; // executable edge after spread
+  // Executable edge against the price you'd actually HIT:
+  //   buy YES  -> pay the YES ask
+  //   "buy NO" -> sell YES, i.e. you receive the YES bid (NO entry = 1 - yesBid)
+  // so noEdge = (1 - haircutProb) - (1 - yesBid) - slip = yesBid - haircutProb - slip.
+  var edge, edgeSide;
+  if (hasBook) {
+    var yesEdge = haircutProb - m.yesAsk - fees.slippage;
+    var noEdge = m.yesBid - haircutProb - fees.slippage;
+    if (yesEdge >= noEdge) { edge = yesEdge; edgeSide = 'YES'; }
+    else { edge = noEdge; edgeSide = 'NO'; }
+  } else {
+    // Fallback: no order book -> compare to the Gamma price with a flat cost.
+    var rawGap = haircutProb - m.impliedYes;
+    edgeSide = rawGap >= 0 ? 'YES' : 'NO';
+    edge = Math.abs(rawGap) - fees.roundTripCost;
+  }
 
   // Gate — first failed check wins the reason.
   var pass = true, reason = null;
   if (m.closed) { pass = false; reason = 'closed'; }
   else if (m.liquidityNum != null && m.liquidityNum < gate.minLiquidityNum) { pass = false; reason = 'thin'; }
+  else if (hasBook && m.spread != null && m.spread > gate.maxSpread) { pass = false; reason = 'wide-spread'; }
+  else if (hasBook && m.depthTop != null && m.depthTop < gate.minDepthShares) { pass = false; reason = 'thin'; }
   else if (dispersion > gate.maxDispersion) { pass = false; reason = 'panel-split'; }
   else if (edge < gate.minEdge) { pass = false; reason = 'no-edge'; }
 
@@ -114,6 +135,8 @@ function aggregateOne(m, config) {
     panelDispersion: round(dispersion, 4),
     haircutProb: round(haircutProb, 4),
     haircutK: round(hcRes.k, 3),
+    anchor: round(anchor, 4),
+    noBook: !hasBook,
     edge: round(edge, 4),
     edgeSide: edgeSide,
     gate: pass ? 'GO' : 'NO-GO',

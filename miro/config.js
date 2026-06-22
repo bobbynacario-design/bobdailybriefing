@@ -40,12 +40,15 @@ var MARKETS = [
   { slug: 'will-jesus-christ-return-before-2027', label: 'Second Coming before 2027', theme: 'Control', yesOutcome: 'Yes' }
 ];
 
-// Trading-cost assumption used to turn a raw probability gap into an EXECUTABLE
-// edge. Polymarket charges no maker/taker fee on most markets, so the real cost
-// is the bid/ask spread you cross. A flat round-trip haircut in probability terms
-// (~2 cents) is a conservative stand-in until Lane 2 reads the live order book.
+// Trading-cost assumption. The real edge has to clear the price you can actually
+// HIT, not the mid/last. refresh-miro.js reads the live CLOB order book, so the
+// spread is paid implicitly (buy YES at the ask, "buy NO" by selling YES at the
+// bid). `slippage` is the extra buffer on top of crossing the spread (Polymarket
+// has no maker/taker fee on most markets). `roundTripCost` is only the FALLBACK
+// used when the order book can't be fetched (no executable quote available).
 var FEES = {
-  roundTripCost: 0.02  // subtracted from |edge| before the gate (spread proxy)
+  slippage: 0.005,     // probability-point buffer beyond the spread (book path)
+  roundTripCost: 0.02  // fallback spread proxy when there is no order book
 };
 
 // Uncertainty haircut. A panel of correlated LLM passes is NOT an independent
@@ -67,9 +70,11 @@ var HAIRCUT = {
 // Otherwise NO-GO with the failed check named — "if even one check fails, you
 // don't have a trade, you have a story."
 var EDGE_GATE = {
-  minEdge: 0.05,         // executable edge must be >= 5 percentage points
-  maxDispersion: 0.20,   // panel stdev above this -> NO-GO (panel-split)
-  minLiquidityNum: 5000  // thin markets -> NO-GO (you can't actually execute)
+  minEdge: 0.05,          // executable edge must be >= 5 percentage points
+  maxDispersion: 0.20,    // panel stdev above this -> NO-GO (panel-split)
+  minLiquidityNum: 5000,  // Gamma liquidity floor -> NO-GO (thin)
+  maxSpread: 0.03,        // top-of-book bid/ask spread above this -> NO-GO (wide-spread)
+  minDepthShares: 100     // top-of-book size (shares) below this -> NO-GO (thin)
 };
 
 // The persona panel (Lane 2). ~5-7 deliberately DIVERSE personas so the passes

@@ -39,6 +39,7 @@ later be lifted into a scheduled Cloud Function unchanged.
 
 ```
 Polymarket Gamma API (free, no key) --> curated markets + implied prices ---+
+Polymarket CLOB API  (free, no key) --> YES-token order book (bid/ask/depth)-+
                                                                             +--> aggregatePanel --> edge + GO/NO-GO
 OpenAI /v1/responses (~7 price-blind personas) --> independent YES probs ---+                            |
                                                                             |                            v
@@ -62,8 +63,11 @@ the Admin SDK bypasses rules on write):
 
 ## How a read is built
 
-1. **Implied price.** The market's `outcomePrices` give P(YES) — the efficient
-   prior and the number to beat.
+1. **Executable price.** The CLOB order book gives the YES token's best bid/ask;
+   the **mid** is the efficient prior (the number to beat) and edge is later
+   computed against the price you'd actually HIT — buy YES at the ask, "buy NO" by
+   selling YES at the bid. If the book can't be fetched it falls back to the Gamma
+   `outcomePrices` mid with a flat cost (`noBook`).
 2. **Panel.** ~7 deliberately diverse personas (base-rate historian, insider,
    contrarian, cautious quant, newsdesk, devil's-advocate, generalist) each
    return an independent probability for every market in a single OpenAI call.

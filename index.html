@@ -1884,6 +1884,14 @@ function miroCard(m) {
       (m.panelDispersion != null ? ' · spread ±' + (m.panelDispersion * 100).toFixed(1) + ' pts' : '') +
       ' · <span style="color:' + edgeCol + '">est. edge after costs ' + edgeTxt + '</span>' + sideTxt +
       '</div>';
+    // Executable order book (Lane B): the prices edge is actually computed against.
+    if (m.spread != null) {
+      var dep = m.depthTop == null ? '—' : (m.depthTop >= 1000 ? Math.round(m.depthTop / 1000) + 'k' : Math.round(m.depthTop)) + ' sh';
+      html += '<div class="src" style="margin-top:.2rem">book ' + (m.yesBid * 100).toFixed(1) + '/' +
+        (m.yesAsk * 100).toFixed(1) + '¢ · spread ' + (m.spread * 100).toFixed(1) + '¢ · top depth ' + dep + '</div>';
+    } else if (m.noBook) {
+      html += '<div class="src" style="margin-top:.2rem;color:var(--txt3)">no live quote — edge vs last price (less reliable)</div>';
+    }
     // Posture line — keep it unmistakably research, never actionable.
     if (verdict) {
       var posture = m.gate === 'GO'
