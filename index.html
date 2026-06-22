@@ -1935,16 +1935,27 @@ function renderMiro() {
 function miroJournalBanner(j) {
   if (!j || !j.stats) return '';
   var s = j.stats;
+  // Closing-line value: did the price drift toward our read? Early feedback well
+  // before resolution. Shown in percentage points.
+  var clvTxt = '';
+  if (s.meanClvTowardPanel != null && s.nClv) {
+    var c = s.meanClvTowardPanel, ccol = c > 0 ? 'var(--green)' : (c < 0 ? 'var(--red)' : 'var(--txt3)');
+    clvTxt = ' · <span style="color:' + ccol + '">price drift toward our read ' +
+      (c > 0 ? '+' : '') + (c * 100).toFixed(1) + ' pts</span> (' + s.nClv + ')';
+  }
   if (!s.nResolved) {
     return '<div class="pse-caveat">📓 Journal accumulating — ' + (s.nOpen || 0) +
-      ' prediction(s) logged, 0 resolved yet. Brier vs the market price appears as curated markets settle. Expected, honest outcome: little or no edge.</div>';
+      ' prediction(s) logged, 0 resolved yet. Brier vs the market price appears as markets settle.' +
+      clvTxt + '</div>';
   }
   var skill = s.skill;
   var col = skill == null ? 'var(--txt3)' : (skill > 0 ? 'var(--green)' : 'var(--red)');
   var verdict = skill == null ? '' : (skill > 0 ? 'beating the price' : 'not beating the price');
+  var ll = s.logLossSkill == null ? '' : ' · log-loss skill ' + (s.logLossSkill > 0 ? '+' : '') + s.logLossSkill;
   return '<div class="pse-caveat">📓 Journal · ' + s.nResolved + ' resolved · ' +
     'Brier ours ' + s.brierOurs + ' vs market ' + s.brierMarket +
-    ' · <span style="color:' + col + '">skill ' + (skill > 0 ? '+' : '') + skill + ' (' + verdict + ')</span></div>';
+    ' · <span style="color:' + col + '">skill ' + (skill > 0 ? '+' : '') + skill + ' (' + verdict + ')</span>' +
+    ll + clvTxt + '</div>';
 }
 
 // ── SCORE ──

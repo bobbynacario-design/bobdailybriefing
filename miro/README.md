@@ -86,9 +86,14 @@ the Admin SDK bypasses rules on write):
    (`no-edge` / `panel-split` / `thin` / `wide-spread` / `closed`).
 5. **Journal.** Each market's haircut prediction is recorded **once** at first
    sighting (no peeking as the price converges). When the market resolves, it is
-   scored with a **Brier score** against the outcome, vs the Brier of the market
-   price. `skill = Brier(market) − Brier(ours)` — positive means the panel beat
-   the price.
+   scored with **Brier** and **log loss** against the outcome, vs the same for the
+   market price — `skill = error(market) − error(ours)`, positive means the panel
+   beat the price — broken out **by price bucket** so longshots don't hide in the
+   average. Because resolution can be months away, the journal also tracks
+   **closing-line value**: each open market keeps a price trail, and
+   `clvTowardPanel` measures whether the price later drifts toward our read —
+   early feedback long before settlement. Resolved entries store an audit trail
+   (source, UMA status, method) so a bad resolution is explainable.
 
 ---
 
@@ -98,6 +103,8 @@ the Admin SDK bypasses rules on write):
 cd C:\Users\AO\projects\bobdailybriefing\miro
 npm install
 node refresh-miro.js
+node refresh-miro.js --no-openai   # skip the panel (fast, free; implied-only)
+node refresh-miro.js --dry-run     # compute + log, but write nothing to Firestore
 ```
 
 Secrets are reused from the radar — there is **no new setup**. The script loads

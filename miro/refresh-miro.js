@@ -65,6 +65,16 @@ var CLOB = 'https://clob.polymarket.com';
 var OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 var OPENAI_MODEL = process.env.OPENAI_MODEL || CONFIG.panel.model || 'gpt-5.5';
 
+// Provenance stamped onto every written doc (Lane C).
+var SCENARIO_VERSION = '1.1.0';
+var JOURNAL_VERSION = '1.1.0';
+
+// CLI flags: --dry-run (compute + log, skip Firestore writes), --no-openai (skip
+// the panel and write implied-only — fast, free smoke test).
+var ARGV = process.argv.slice(2);
+var DRY_RUN = ARGV.indexOf('--dry-run') !== -1;
+var NO_OPENAI = ARGV.indexOf('--no-openai') !== -1;
+
 // ── helpers ──
 
 // Today's date in Philippine time (PHT, UTC+8), as YYYY-MM-DD — the doc id.
@@ -151,6 +161,7 @@ async function fetchMarkets(markets) {
       closed: !!r.closed,
       conditionId: r.conditionId || null,
       resolutionSource: r.resolutionSource || '',
+      umaResolutionStatus: r.umaResolutionStatus || '',
       yesTokenId: tokenIds[yesIdx] != null ? String(tokenIds[yesIdx]) : null,
       // Order-book fields (Lane B) filled by fetchBooks(); null here keeps shape.
       yesBid: null, yesAsk: null, mid: null, spread: null, depthTop: null,
@@ -245,6 +256,10 @@ async function runPanel(markets, config) {
     var prompt =
       'You are estimating the probability that each event below resolves YES. ' +
       'You are NOT given any market price — form your OWN independent view from base rates and evidence.\n\n' +
+      'IMPORTANT — stay price-blind: do NOT consult or rely on prediction-market or ' +
+      'betting-odds sources (Polymarket, Kalshi, Manifold, Metaculus, sportsbooks, odds ' +
+      'aggregators) or articles that quote market-implied probabilities. Use primary and ' +
+      'base-rate evidence only (official sources, mainstream news, standings/polls/data).\n\n' +
       'Persona: ' + p.brief + '\n\n' +
       'Markets:\n' + list + '\n\n' +
       'Return STRICT JSON only — an object keyed by the exact slug string, each value a single number ' +
@@ -321,18 +336,41 @@ async function main() {
 
   // Lane 2: run the persona panel (independent of price), attach the reads, and
   // let the PURE engine compute haircut prob, executable edge, and the gate.
-  var readsBySlug = await runPanel(marketsData, CONFIG);
+  var readsBySlug;
+  if (NO_OPENAI) {
+    console.log('--no-openai: skipping panel (implied-only).');
+    readsBySlug = {};
+    marketsData.forEach(function (m) { readsBySlug[m.slug] = []; });
+  } else {
+    readsBySlug = await runPanel(marketsData, CONFIG);
+  }
   marketsData.forEach(function (m) { m.panelReads = readsBySlug[m.slug] || []; });
   marketsData = aggregatePanel(marketsData, CONFIG);
   // Drop the raw reads from the persisted doc (keep panelN as the count).
   marketsData.forEach(function (m) { delete m.panelReads; });
 
   var dateKey = phtDateKey();
+  var meta = {
+    scenarioVersion: SCENARIO_VERSION,
+    journalVersion: JOURNAL_VERSION,
+    model: (OPENAI_KEY && !NO_OPENAI) ? OPENAI_MODEL : 'none',
+    priceSource: 'polymarket-clob-book (mid); gamma outcomePrices fallback',
+    priceBlindSourcePolicy: 'panel price-blind; web_search instructed to exclude prediction-market/odds sources',
+    costAssumption: 'spread paid implicitly + slippage ' + CONFIG.fees.slippage,
+    gates: CONFIG.edgeGate,
+    warnings: [
+      'Research framing only — no execution path, never a bet.',
+      'Panel uses one model family; personas are prompted perspectives, not statistically independent forecasters.',
+      'Prediction markets are often close to efficient — expect little or no edge.',
+      'Thin or wide-spread markets can show paper edge that is not tradeable.'
+    ]
+  };
   var doc = {
     generatedAt: new Date().toISOString(),
     asOf: dateKey,
     lane: 3,
-    disclaimer: 'Research framing only. Implied probabilities are Polymarket prices; the panel read is an independent, uncertainty-haircut estimate compared to that price. GO/NO-GO is research framing — not advice, not a recommendation, no execution.',
+    meta: meta,
+    disclaimer: 'Research framing only. Implied probabilities are Polymarket prices; the panel read is an independent, uncertainty-haircut estimate compared to that price. The verdict is a research flag — not advice, not a recommendation, no execution.',
     markets: marketsData
   };
 
@@ -350,8 +388,12 @@ async function main() {
   });
 
   var db = initAdmin();
-  await writeDoc(db, dateKey, doc);
-  console.log('\nWrote briefings-bob/miro-' + dateKey + ' and miro-latest = ' + dateKey + '.');
+  if (DRY_RUN) {
+    console.log('\n--dry-run: NOT writing miro-' + dateKey + ' / miro-latest.');
+  } else {
+    await writeDoc(db, dateKey, doc);
+    console.log('\nWrote briefings-bob/miro-' + dateKey + ' and miro-latest = ' + dateKey + '.');
+  }
 
   // ── Lane 3: resolution journal (Brier ours vs market price) ──
   // Load the rolling journal, catch any resolutions (including markets that have
@@ -371,30 +413,51 @@ async function main() {
     extra = await fetchMarkets(extraSlugs.map(function (s) { return { slug: s, label: s, theme: '', yesOutcome: 'Yes' }; }));
   }
 
-  // A closed market settles to ~1/0; treat the YES price as the outcome.
-  var resolutions = marketsData.concat(extra)
+  var allForResolution = marketsData.concat(extra);
+
+  // A closed market settles to ~1/0; treat the YES price as the outcome, and keep
+  // an audit trail (source / UMA status / method) so a bad resolution is explainable.
+  var resolutions = allForResolution
     .filter(function (m) { return m.closed; })
-    .map(function (m) { return { slug: m.slug, outcome: m.impliedYes >= 0.5 ? 1 : 0, resolvedDate: dateKey }; });
+    .map(function (m) {
+      return {
+        slug: m.slug, outcome: m.impliedYes >= 0.5 ? 1 : 0, resolvedDate: dateKey,
+        resolutionSource: m.resolutionSource || '',
+        resolutionStatus: m.umaResolutionStatus || '',
+        method: 'auto-closed-price', confidence: 1
+      };
+    });
+
+  // Today's executable price for EVERY open/known market (drives CLV trails).
+  var todayPrices = allForResolution.map(function (m) {
+    return { slug: m.slug, mid: (m.mid != null ? m.mid : m.impliedYes), asOf: dateKey };
+  });
 
   var todaySnapshots = marketsData
     .filter(function (m) { return m.haircutProb != null; })
     .map(function (m) {
       return { slug: m.slug, label: m.label, theme: m.theme, impliedYes: m.impliedYes,
-        haircutProb: m.haircutProb, endDate: m.endDate, asOf: dateKey };
+        mid: m.mid, haircutProb: m.haircutProb, endDate: m.endDate, asOf: dateKey };
     });
 
-  var journalBody = buildMiroJournal(priorJournal, todaySnapshots, resolutions, CONFIG);
-  var journalDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: dateKey }, journalBody);
-  await db.collection(COLL).doc('miro-journal').set(journalDoc);
+  var journalBody = buildMiroJournal(priorJournal, todaySnapshots, todayPrices, resolutions, CONFIG);
+  var journalDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: dateKey, meta: meta }, journalBody);
+  if (DRY_RUN) {
+    console.log('--dry-run: NOT writing miro-journal.');
+  } else {
+    await db.collection(COLL).doc('miro-journal').set(journalDoc);
+  }
 
   var st = journalBody.stats;
   console.log('\n===== miro-journal =====');
   console.log('  open=' + st.nOpen + '  resolved=' + st.nResolved + '  newlyResolved=' + st.newlyResolved +
     '  brierOurs=' + (st.brierOurs == null ? '—' : st.brierOurs) +
     '  brierMarket=' + (st.brierMarket == null ? '—' : st.brierMarket) +
-    '  skill=' + (st.skill == null ? '—' : st.skill));
+    '  skill=' + (st.skill == null ? '—' : st.skill) +
+    '  logLossSkill=' + (st.logLossSkill == null ? '—' : st.logLossSkill) +
+    '  meanCLV=' + (st.meanClvTowardPanel == null ? '—' : st.meanClvTowardPanel) + ' (n=' + st.nClv + ')');
   journalBody.caveats.forEach(function (c) { console.log('  caveat: ' + c); });
-  console.log('\nWrote briefings-bob/miro-journal.');
+  console.log(DRY_RUN ? '\n(dry-run — nothing written).' : '\nWrote briefings-bob/miro-journal.');
 }
 
 main().then(function () {
