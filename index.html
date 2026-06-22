@@ -475,6 +475,8 @@ body.light .hero::after{opacity:.42}
 body.compact .card{padding:.8rem 1rem;margin-bottom:.5rem}
 body.compact .card-body{line-height:1.55;margin-bottom:.45rem}
 body.compact .card-footer{display:none}
+body.compact .card-2col{grid-template-columns:1fr;gap:0}
+body.compact .card-aside,body.compact .card-2col .card-main .src{display:none}
 body.compact .hero{padding:1rem 1.35rem}
 
 /* ── PASTE ZONE ── */
@@ -517,6 +519,15 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1.1rem 1.35rem;margin-bottom:.75rem;position:relative;overflow:hidden;transition:border-color .2s,transform .15s}
 .card:hover{border-color:var(--rim2);transform:translateY(-1px)}
 .card-accent{position:absolute;top:0;left:0;width:4px;height:100%}
+/* Two-column story card: story + source on the left, Bob's relevance on the right. */
+.card-2col{display:grid;grid-template-columns:1.7fr 1fr;gap:1.2rem;align-items:start}
+.card-2col .card-main{min-width:0}
+.card-2col .card-main .src{display:inline-block;margin-top:.2rem}
+.card-aside{min-width:0;border-left:1px solid var(--rim);padding-left:1.2rem;align-self:stretch}
+@media(max-width:680px){
+  .card-2col{grid-template-columns:1fr;gap:.65rem}
+  .card-aside{border-left:none;border-top:1px solid var(--rim);padding-left:0;padding-top:.65rem}
+}
 .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:.45rem}
 .card-hl{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt);line-height:1.35;flex:1}
 .rel-badge{font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;margin-top:3px;letter-spacing:.05em;text-transform:uppercase}
@@ -2093,11 +2104,15 @@ function renderBriefing() {
       var score = scoreRelevance(st);
       counts[score]++;
       var bc = {high:'rel-high',med:'rel-med',low:'rel-low',none:'rel-none-b'}[score];
-      secHTML += '<div class="card" data-rel="'+score+'" data-section="'+esc(id)+'"><div class="card-accent" style="background:'+meta.pip+'"></div>';
+      secHTML += '<div class="card card-2col" data-rel="'+score+'" data-section="'+esc(id)+'"><div class="card-accent" style="background:'+meta.pip+'"></div>';
+      // Column 1: the story + its source.
+      secHTML += '<div class="card-main">';
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
-      secHTML += '<div class="card-footer">';
       if (st.source) secHTML += '<span class="src">📍 '+esc(st.source)+'</span>';
+      secHTML += '</div>';
+      // Column 2: Bob's relevance note.
+      secHTML += '<div class="card-aside">';
       if (score!=='none') secHTML += '<div class="rel-text"><strong>→ Bob:</strong> '+esc(st.relevance)+'</div>';
       else secHTML += '<div class="rel-none-txt">No direct relevance today</div>';
       secHTML += '</div></div>';
