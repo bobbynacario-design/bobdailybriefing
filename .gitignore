@@ -8,3 +8,9 @@ radar/node_modules/
 radar/serviceAccountKey.json
 radar/.env
 radar/refresh.log
+
+# miro — local-only secrets and deps (never committed; reuses radar's secrets)
+miro/node_modules/
+miro/serviceAccountKey.json
+miro/.env
+miro/refresh.log

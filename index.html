@@ -331,6 +331,22 @@ window.fbLoadPh = async function() {
   }
 };
 
+// Load the latest Event-Markets "scenario read" doc: read the miro-latest
+// pointer, then the dated doc it names. Written by miro/refresh-miro.js (no uid).
+window.fbLoadMiro = async function() {
+  try {
+    var latestSnap = await getDoc(doc(db, COLL, 'miro-latest'));
+    if (!latestSnap.exists()) return null;
+    var dateKey = latestSnap.data().value;
+    if (!dateKey) return null;
+    var docSnap = await getDoc(doc(db, COLL, 'miro-' + dateKey));
+    return docSnap.exists() ? docSnap.data() : null;
+  } catch(e) {
+    console.error('Markets load failed:', e);
+    return null;
+  }
+};
+
 window._fbReady = true;
 </script>
 
@@ -807,6 +823,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab" data-page="radar" onclick="switchPage('radar',this)">📡 Radar</button>
     <button class="ntab" data-page="journal" onclick="switchPage('journal',this)">📓 Journal</button>
     <button class="ntab" data-page="pse" onclick="switchPage('pse',this)">🇵🇭 PSE</button>
+    <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">🎲 Markets</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">❔ Help</button>
   </div>
   <div class="nav-right">
@@ -1114,6 +1131,18 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div id="pse-out"><div class="empty-state">LOADING PH SNAPSHOT…</div></div>
 </div>
 
+<!-- ═══════════════ MARKETS (EVENT-MARKET SCENARIO READ) PAGE ═══════════════ -->
+<div class="page" id="page-miro">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Event-Market Scenario Read</div>
+    <div class="hero-date" style="font-size:22px">🎲 Markets</div>
+    <div class="hero-sub" id="miro-sub">Loading…</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div id="miro-out"><div class="empty-state">LOADING MARKETS…</div></div>
+  <div class="radar-disclaimer">Research framing only. Implied probabilities are Polymarket's own prices; any "scenario" read is a haircut research estimate compared to that price — never a recommendation to bet, and no execution. If a check fails it's a NO-GO: you don't have a trade, you have a story.</div>
+</div>
+
 <!-- ═══════════════ HELP PAGE ═══════════════ -->
 <div class="page" id="page-help">
   <div class="hero" style="margin-bottom:1.25rem">
@@ -1179,6 +1208,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <button class="mob-tab" id="mob-radar" onclick="switchPageMobile('radar',this)"><span class="mob-tab-icon">📡</span>RADAR</button>
   <button class="mob-tab" id="mob-journal" onclick="switchPageMobile('journal',this)"><span class="mob-tab-icon">📓</span>JOURNAL</button>
   <button class="mob-tab" id="mob-pse" onclick="switchPageMobile('pse',this)"><span class="mob-tab-icon">🇵🇭</span>PSE</button>
+  <button class="mob-tab" id="mob-miro" onclick="switchPageMobile('miro',this)"><span class="mob-tab-icon">🎲</span>MKTS</button>
   <button class="mob-tab" id="mob-help" onclick="switchPageMobile('help',this)"><span class="mob-tab-icon">❔</span>HELP</button>
 </div>
 
@@ -1399,6 +1429,7 @@ function switchPage(id, el) {
   if (id==='radar') renderRadar();
   if (id==='journal') renderJournal();
   if (id==='pse') renderPh();
+  if (id==='miro') renderMiro();
   window.scrollTo(0,0);
 }
 function switchPageMobile(id, el) {
@@ -1416,6 +1447,7 @@ function switchPageMobile(id, el) {
   if (id==='radar') renderRadar();
   if (id==='journal') renderJournal();
   if (id==='pse') renderPh();
+  if (id==='miro') renderMiro();
   window.scrollTo(0,0);
 }
 
@@ -1755,6 +1787,86 @@ function renderPh() {
       html += '<div class="rel-none-txt">No proxy data available.</div>';
     }
     out.innerHTML = html;
+  });
+}
+
+// ── MARKETS (event-market scenario read) ──
+// Reads the latest miro doc (written daily by miro/refresh-miro.js) and renders
+// one card per curated Polymarket market. Lane 1 shows the market's implied
+// probability only; once the scenario panel (Lane 2) populates haircutProb/edge/
+// gate, those fields render automatically (GO/NO-GO). Framing only — never a bet.
+function miroPct(p) { return (p == null) ? '—' : (p * 100).toFixed(1) + '%'; }
+function miroNum(n) {
+  if (n == null) return '—';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'k';
+  return '$' + Math.round(n);
+}
+function miroCard(m) {
+  var imp = m.impliedYes;
+  var barW = imp == null ? 0 : Math.max(2, Math.min(100, imp * 100));
+  var hasPanel = m.haircutProb != null;
+  var html = '<div class="card radar-card" style="position:relative">';
+  html += '<div class="card-accent" style="background:var(--blue)"></div>';
+  // header: theme chip + GO/NO-GO badge (only once the gate exists)
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.35rem">';
+  html += '<span class="radar-theme">' + esc(m.theme || '') + '</span>';
+  if (m.gate) {
+    var goCls = m.gate === 'GO' ? 'rel-high' : 'rel-low';
+    html += '<span class="rel-badge ' + goCls + '">' + esc(m.gate) +
+      (m.gate !== 'GO' && m.gateReason ? ' · ' + esc(m.gateReason) : '') + '</span>';
+  } else {
+    html += '<span class="help-pill" style="color:var(--txt3)">implied only</span>';
+  }
+  html += '</div>';
+  // label + question
+  html += '<div style="font-weight:600;font-size:15px;margin-bottom:.15rem">' + esc(m.label || m.slug) + '</div>';
+  if (m.question && m.question !== m.label) {
+    html += '<div class="src" style="margin-bottom:.5rem">' + esc(m.question) + '</div>';
+  }
+  // implied probability bar
+  html += '<div style="display:flex;align-items:center;gap:.6rem;margin:.4rem 0">';
+  html += '<div style="flex:1;height:8px;border-radius:4px;background:var(--bg4);overflow:hidden">' +
+    '<div style="height:100%;width:' + barW + '%;background:var(--blue)"></div></div>';
+  html += '<div style="font-family:var(--mono);font-size:13px;color:var(--blue);min-width:108px;text-align:right">' +
+    'mkt ' + miroPct(imp) + ' YES</div>';
+  html += '</div>';
+  // panel read (Lane 2): only shown when present
+  if (hasPanel) {
+    var edge = m.edge;
+    var edgeCol = edge == null ? 'var(--txt3)' : (edge >= 0 ? 'var(--green)' : 'var(--red)');
+    var edgeTxt = edge == null ? '—' : (edge >= 0 ? '+' : '') + (edge * 100).toFixed(1) + ' pts';
+    html += '<div class="radar-plan" style="margin-top:.4rem">' +
+      'Panel ' + miroPct(m.haircutProb) + ' (haircut)' +
+      (m.panelDispersion != null ? ' · spread ±' + (m.panelDispersion * 100).toFixed(1) + ' pts' : '') +
+      ' · <span style="color:' + edgeCol + '">edge ' + edgeTxt + '</span></div>';
+  }
+  // meta line
+  var meta = [];
+  if (m.endDate) meta.push('resolves ' + esc(m.endDate));
+  meta.push('liq ' + miroNum(m.liquidityNum));
+  meta.push('vol ' + miroNum(m.volumeNum));
+  if (m.closed) meta.push('CLOSED');
+  html += '<div class="src" style="margin-top:.45rem">' + meta.join(' · ') + '</div>';
+  html += '</div>';
+  return html;
+}
+function renderMiro() {
+  var out = document.getElementById('miro-out');
+  var sub = document.getElementById('miro-sub');
+  if (!out) return;
+  if (!window.fbLoadMiro) { out.innerHTML = '<div class="empty-state">MARKETS UNAVAILABLE</div>'; return; }
+  out.innerHTML = '<div class="empty-state">LOADING MARKETS…</div>';
+  window.fbLoadMiro().then(function (d) {
+    if (!d || !d.markets || !d.markets.length) {
+      if (sub) sub.textContent = 'No data yet';
+      out.innerHTML = '<div class="empty-state">NO MARKETS YET — RUN miro/refresh-miro.js</div>';
+      return;
+    }
+    var hasPanel = d.markets.some(function (m) { return m.haircutProb != null; });
+    if (sub) sub.textContent = d.markets.length + ' markets · as of ' + esc(d.asOf) +
+      (hasPanel ? '' : ' · implied prices only (scenario panel pending)');
+    out.innerHTML = '<div class="radar-grid">' + d.markets.map(miroCard).join('') + '</div>';
   });
 }
 

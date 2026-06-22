@@ -1,0 +1,16 @@
+{
+  "name": "bobdailybriefing-miro",
+  "description": "Local daily Event-Markets 'scenario read': fetch Polymarket markets -> (panel) -> write Firestore doc. The honest MiroFish: research framing, never execution.",
+  "private": true,
+  "type": "module",
+  "main": "refresh-miro.js",
+  "scripts": {
+    "refresh": "node refresh-miro.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0"
+  }
+}
