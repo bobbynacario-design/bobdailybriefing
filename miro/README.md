@@ -74,10 +74,12 @@ the Admin SDK bypasses rules on write):
    0.5 — anchoring on 0.5 inflates a correct ~0% read on a cheap longshot into
    fake YES-edge. (This was caught on the first live run, which flagged a bogus
    "GO" on *"Second Coming before 2027"*.)
-4. **Edge & gate.** `edge = k · (panelProb − price) − round-trip cost`, with the
-   side (YES/NO) you'd take. **GO** only if the market is open, liquid enough, the
-   panel isn't too split, and the edge clears the threshold — otherwise **NO-GO**
-   with the failed check named (`no-edge` / `panel-split` / `thin` / `closed`).
+4. **Edge & gate.** `edge = k · (panelProb − price) − costs`, with the side
+   (YES/NO) of the discrepancy. The verdict is framed as research, not a trade: a
+   **RESEARCH FLAG** ("watch only — not advice") only if the market is open,
+   liquid enough, the panel isn't too split, the spread is tight, and the edge
+   clears the threshold — otherwise **no edge**, with the failed check named
+   (`no-edge` / `panel-split` / `thin` / `wide-spread` / `closed`).
 5. **Journal.** Each market's haircut prediction is recorded **once** at first
    sighting (no peeking as the price converges). When the market resolves, it is
    scored with a **Brier score** against the outcome, vs the Brier of the market

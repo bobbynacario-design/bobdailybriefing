@@ -1205,11 +1205,11 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>mkt X% YES</b> — the market's current price, read as the implied probability the answer is YES. This is the number to beat.</li>
         <li><b>Panel Y% (haircut)</b> — our estimate. ~7 AI "personas" (a base-rate historian, a contrarian, a cautious quant, etc.) each guess the probability <i>without being told the price</i>, so they're an independent read, not the price echoed back. We then <b>haircut</b> it — pull it most of the way back toward the market price — because a panel built from one model shares that model's blind spots and its confidence is partly cosmetic.</li>
         <li><b>spread ±</b> — how much the personas disagreed. A wide spread means low conviction, and the haircut pulls harder.</li>
-        <li><b>edge</b> — the gap that's actually left after the haircut and trading costs, with the side (<b>YES</b> or <b>NO</b>) you'd take. This is the only number that would matter if you ever acted on it.</li>
-        <li><b>GO / NO-GO badge</b> — the verdict:
+        <li><b>est. edge after costs</b> — the gap that's actually left after the haircut and the bid/ask spread, with the <b>side</b> of the discrepancy (YES or NO). It's a research signal, not a trade ticket.</li>
+        <li><b>verdict badge</b> — the research call:
           <ul>
-            <li><span class="help-pill" style="color:var(--green)">GO</span> — a real, liquid, agreed-upon edge that clears costs.</li>
-            <li><span class="help-pill" style="color:var(--red)">NO-GO</span> — a check failed, and the badge says which: <i>no-edge</i> (too close to the price), <i>panel-split</i> (personas disagree), <i>thin</i> (can't actually trade it), or <i>closed</i>.</li>
+            <li><span class="help-pill" style="color:var(--green)">RESEARCH FLAG</span> — a real, liquid, agreed-upon discrepancy that clears costs. "Watch only — not advice."</li>
+            <li><span class="help-pill" style="color:var(--red)">NO EDGE / PANEL SPLIT / TOO THIN / SPREAD TOO WIDE / CLOSED</span> — a check failed, and the badge says which: too close to the price, personas disagree, can't actually trade size, spread too wide, or already resolved.</li>
           </ul>
         </li>
       </ul>
@@ -1222,7 +1222,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <ul>
         <li><b>Radar</b> = today's framing: what's strong, why, and where it breaks. Use the status + stop + catalyst.</li>
         <li><b>Journal</b> = the reality check: look at <b>excess</b>, not raw. It currently says "we've mostly been long the AI trade" — so weight the radar accordingly.</li>
-        <li><b>Markets</b> = is a betting market mispriced? Compare <b>mkt %</b> to our <b>panel %</b>; trust only a <span class="help-pill" style="color:var(--green)">GO</span>, and even then check the journal's <b>skill</b>. Mostly NO-GO is the honest, expected answer.</li>
+        <li><b>Markets</b> = is a betting market mispriced? Compare <b>mkt %</b> to our <b>panel %</b>; treat a <span class="help-pill" style="color:var(--green)">RESEARCH FLAG</span> as watch-only, and even then check the journal's <b>skill</b>. Mostly "no edge" is the honest, expected answer.</li>
       </ul>
     </div>
 
@@ -1833,19 +1833,29 @@ function miroNum(n) {
   if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'k';
   return '$' + Math.round(n);
 }
+// Research-framed verdict (deliberately NOT betting language). The internal gate
+// is GO/NO-GO; here it is shown as a research flag vs the reason it is not one.
+function miroVerdict(m) {
+  if (!m.gate) return null;
+  if (m.gate === 'GO') return { label: 'RESEARCH FLAG', cls: 'rel-high' };
+  var reasons = {
+    'no-edge': 'NO EDGE', 'panel-split': 'PANEL SPLIT', 'thin': 'TOO THIN',
+    'closed': 'CLOSED', 'wide-spread': 'SPREAD TOO WIDE', 'no-book': 'NO QUOTES'
+  };
+  return { label: reasons[m.gateReason] || 'NO EDGE', cls: 'rel-low' };
+}
 function miroCard(m) {
   var imp = m.impliedYes;
   var barW = imp == null ? 0 : Math.max(2, Math.min(100, imp * 100));
   var hasPanel = m.haircutProb != null;
   var html = '<div class="card radar-card" style="position:relative">';
   html += '<div class="card-accent" style="background:var(--blue)"></div>';
-  // header: theme chip + GO/NO-GO badge (only once the gate exists)
+  // header: theme chip + research verdict badge (only once the gate exists)
+  var verdict = miroVerdict(m);
   html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.35rem">';
   html += '<span class="radar-theme">' + esc(m.theme || '') + '</span>';
-  if (m.gate) {
-    var goCls = m.gate === 'GO' ? 'rel-high' : 'rel-low';
-    html += '<span class="rel-badge ' + goCls + '">' + esc(m.gate) +
-      (m.gate !== 'GO' && m.gateReason ? ' · ' + esc(m.gateReason) : '') + '</span>';
+  if (verdict) {
+    html += '<span class="rel-badge ' + verdict.cls + '">' + esc(verdict.label) + '</span>';
   } else {
     html += '<span class="help-pill" style="color:var(--txt3)">implied only</span>';
   }
@@ -1862,17 +1872,25 @@ function miroCard(m) {
   html += '<div style="font-family:var(--mono);font-size:13px;color:var(--blue);min-width:108px;text-align:right">' +
     'mkt ' + miroPct(imp) + ' YES</div>';
   html += '</div>';
-  // panel read (Lane 2): only shown when present
+  // panel read (Lane 2): only shown when present. Framed as a research estimate.
   if (hasPanel) {
     var edge = m.edge;
     var edgeCol = edge == null ? 'var(--txt3)' : (edge >= 0 ? 'var(--green)' : 'var(--red)');
-    var edgeTxt = edge == null ? '—' : (edge >= 0 ? '+' : '') + (edge * 100).toFixed(1) + ' pts' +
-      (m.edgeSide ? ' ' + esc(m.edgeSide) : '');
+    var edgeTxt = edge == null ? '—' : (edge >= 0 ? '+' : '') + (edge * 100).toFixed(1) + ' pts';
+    var sideTxt = m.edgeSide ? ' · ' + esc(m.edgeSide) + '-side discrepancy' : '';
     html += '<div class="radar-plan" style="margin-top:.4rem">' +
-      'Panel ' + miroPct(m.haircutProb) + ' (haircut)' +
+      'Panel ' + miroPct(m.panelProb) + ' raw → ' + miroPct(m.haircutProb) + ' haircut (vs price)' +
       (m.panelN != null ? ' · ' + m.panelN + ' reads' : '') +
       (m.panelDispersion != null ? ' · spread ±' + (m.panelDispersion * 100).toFixed(1) + ' pts' : '') +
-      ' · <span style="color:' + edgeCol + '">edge ' + edgeTxt + '</span></div>';
+      ' · <span style="color:' + edgeCol + '">est. edge after costs ' + edgeTxt + '</span>' + sideTxt +
+      '</div>';
+    // Posture line — keep it unmistakably research, never actionable.
+    if (verdict) {
+      var posture = m.gate === 'GO'
+        ? 'Watch only — research flag, not advice. No execution.'
+        : 'No research edge — ' + esc((m.gateReason || '').replace(/-/g, ' ')) + '. Not advice.';
+      html += '<div class="src" style="margin-top:.2rem;color:var(--txt3)">' + posture + '</div>';
+    }
   }
   // meta line
   var meta = [];
