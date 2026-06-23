@@ -28,6 +28,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
+import { extractUsage, recordUsage } from '../lib/llm-usage.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -228,7 +229,7 @@ function parseLooseJson(raw) {
 async function fetchCatalysts(signals) {
   if (!OPENAI_KEY) {
     console.log('OPENAI_API_KEY not set — skipping catalyst tagging (signals written without catalysts).');
-    return {};
+    return { catalysts: {}, usage: null };
   }
   var list = signals.map(function (s) {
     return s.symbol + ' (' + s.theme + ', ' + s.status + ', 20d vs ' + s.benchmark + ': ' +
@@ -268,7 +269,7 @@ async function fetchCatalysts(signals) {
     var text = await res.text();
     if (!res.ok) {
       console.log('  OpenAI error ' + res.status + ': ' + text.slice(0, 200) + ' — skipping catalysts.');
-      return {};
+      return { catalysts: {}, usage: null };
     }
     var json = JSON.parse(text);
     var map = parseLooseJson(extractText(json));
@@ -281,10 +282,10 @@ async function fetchCatalysts(signals) {
         asOf: typeof v.asOf === 'string' ? v.asOf : 'recent'
       };
     });
-    return clean;
+    return { catalysts: clean, usage: extractUsage(json) };
   } catch (e) {
     console.log('  Catalyst tagging failed (' + (e.message || e) + ') — skipping catalysts.');
-    return {};
+    return { catalysts: {}, usage: null };
   }
 }
 
@@ -389,7 +390,8 @@ async function main() {
   var dateKey = phtDateKey();
 
   // V2: tag each signal with a recent catalyst (display-only; score unchanged).
-  var catalysts = await fetchCatalysts(result.signals);
+  var catResult = await fetchCatalysts(result.signals);
+  var catalysts = catResult.catalysts;
   var tagged = 0;
   result.signals.forEach(function (s) {
     var c = catalysts[s.symbol];
@@ -462,6 +464,9 @@ async function main() {
   await writeDoc(db, dateKey, doc);
   await db.collection(COLL).doc('radar-journal').set(journalDoc);
   console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', and radar-journal.');
+
+  // Record the catalyst call's token usage to the shared LLM cost ledger (no-throw).
+  if (catResult.usage) await recordUsage(db, 'radar-catalyst', OPENAI_MODEL, catResult.usage, dateKey, 1);
 
   // PH snapshot (non-fatal — never blocks the radar write).
   try {

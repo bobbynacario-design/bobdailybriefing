@@ -31,6 +31,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { aggregatePanel } from './scenario.js';
 import { buildMiroJournal } from './journal-miro.js';
+import { extractUsage, addUsage, recordUsage } from '../lib/llm-usage.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var __radar = join(__dirname, '..', 'radar');
@@ -237,10 +238,12 @@ function parseLooseJson(raw) {
 async function runPanel(markets, config) {
   var readsBySlug = {};
   markets.forEach(function (m) { readsBySlug[m.slug] = []; });
+  var usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+  var calls = 0;
 
   if (!OPENAI_KEY) {
     console.log('OPENAI_API_KEY not set — skipping scenario panel (markets written implied-only).');
-    return readsBySlug;
+    return { reads: readsBySlug, usage: usage, calls: calls };
   }
 
   var list = markets.map(function (m) {
@@ -285,7 +288,10 @@ async function runPanel(markets, config) {
       }, 'OpenAI(' + p.id + ')');
       var text = await res.text();
       if (!res.ok) { console.log('  persona ' + p.id + ' HTTP ' + res.status + ' — skipped: ' + text.slice(0, 160)); continue; }
-      var map = parseLooseJson(extractText(JSON.parse(text)));
+      var pj = JSON.parse(text);
+      var map = parseLooseJson(extractText(pj));
+      usage = addUsage(usage, extractUsage(pj));   // count tokens even if parse below is partial
+      calls += 1;
       var got = 0;
       markets.forEach(function (m) {
         var v = Number(map[m.slug]);
@@ -296,7 +302,7 @@ async function runPanel(markets, config) {
       console.log('  persona ' + p.id + ' failed (' + (e.message || e) + ') — skipped.');
     }
   }
-  return readsBySlug;
+  return { reads: readsBySlug, usage: usage, calls: calls };
 }
 
 // ── Firestore (Admin SDK — bypasses security rules) ──
@@ -336,14 +342,16 @@ async function main() {
 
   // Lane 2: run the persona panel (independent of price), attach the reads, and
   // let the PURE engine compute haircut prob, executable edge, and the gate.
-  var readsBySlug;
+  var panel;
   if (NO_OPENAI) {
     console.log('--no-openai: skipping panel (implied-only).');
-    readsBySlug = {};
-    marketsData.forEach(function (m) { readsBySlug[m.slug] = []; });
+    var emptyReads = {};
+    marketsData.forEach(function (m) { emptyReads[m.slug] = []; });
+    panel = { reads: emptyReads, usage: null, calls: 0 };
   } else {
-    readsBySlug = await runPanel(marketsData, CONFIG);
+    panel = await runPanel(marketsData, CONFIG);
   }
+  var readsBySlug = panel.reads;
   marketsData.forEach(function (m) { m.panelReads = readsBySlug[m.slug] || []; });
   marketsData = aggregatePanel(marketsData, CONFIG);
   // Drop the raw reads from the persisted doc (keep panelN as the count).
@@ -393,6 +401,8 @@ async function main() {
   } else {
     await writeDoc(db, dateKey, doc);
     console.log('\nWrote briefings-bob/miro-' + dateKey + ' and miro-latest = ' + dateKey + '.');
+    // Record the panel's token usage to the shared LLM cost ledger (no-throw).
+    if (panel.calls > 0) await recordUsage(db, 'miro-panel', OPENAI_MODEL, panel.usage, dateKey, panel.calls);
   }
 
   // ── Lane 3: resolution journal (Brier ours vs market price) ──
