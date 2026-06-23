@@ -627,8 +627,10 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 @media(max-width:768px){.jbar-label{width:74px}.jbar-meta{min-width:0}.jbar-row{flex-wrap:wrap}.jbar-row .jbar-meta{width:100%;text-align:left;margin-top:.3rem}.jbar-row .trend-bar-wrap{flex:1 1 120px}}
 
 /* ── HELP ── */
-.help-body{max-width:760px}
-.help-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1rem}
+.help-body{max-width:1100px;display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start}
+.help-body>.help-wide{grid-column:1 / -1}
+@media(max-width:768px){.help-body{grid-template-columns:1fr}}
+.help-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1.1rem 1.3rem}
 .help-h{font-family:var(--mono);font-size:13px;letter-spacing:.04em;color:var(--gold);margin-bottom:.7rem}
 .help-card p{font-size:14px;line-height:1.7;color:var(--txt2);margin:.5rem 0}
 .help-card b{color:var(--txt)}
@@ -1181,7 +1183,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   </div>
 
   <div class="help-body">
-    <div class="help-card">
+    <div class="help-card help-wide">
       <div class="help-h">💰 LLM usage &amp; cost — where the AI spend goes</div>
       <p>Every OpenAI call across the app (the daily <b>briefing</b>, on-demand <b>deep-research</b> reports, the <b>radar</b> catalyst tagger, and the <b>Markets</b> persona panel) records its token usage to a shared ledger. This table ranks the spend by feature, in USD, using OpenAI's published rates — raw API cost, no markup.</p>
       <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
