@@ -358,6 +358,18 @@ window.fbLoadMiroJournal = async function() {
   }
 };
 
+// Load the shared LLM usage/cost ledger (token telemetry from every OpenAI call
+// across the app: briefing, deep-research, radar catalyst, miro panel). No uid.
+window.fbLoadLlmUsage = async function() {
+  try {
+    var snap = await getDoc(doc(db, COLL, 'llm-usage'));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    console.error('LLM usage load failed:', e);
+    return null;
+  }
+};
+
 window._fbReady = true;
 </script>
 
@@ -626,6 +638,11 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .help-pill{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
 .help-key{border-left:2px solid var(--gold);padding-left:.8rem;color:var(--txt)!important}
 .help-takeaway{border-color:var(--gold-dim);background:var(--gold-dim)}
+.llm-tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;margin:.4rem 0}
+.llm-tbl th,.llm-tbl td{padding:.35rem .5rem;border-bottom:1px solid var(--rim);text-align:left}
+.llm-tbl th{color:var(--txt3);font-weight:400;font-size:10px;letter-spacing:.05em;text-transform:uppercase}
+.llm-tbl td.num,.llm-tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
+.llm-tbl tr.llm-tot td{border-top:1px solid var(--rim2);border-bottom:none;color:var(--txt);font-weight:600}
 
 /* ── PSE (PH snapshot) ── */
 .pse-caveat{font-size:12px;line-height:1.6;color:var(--txt2);background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:10px;padding:.7rem .9rem;margin-bottom:1.1rem}
@@ -1165,6 +1182,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
   <div class="help-body">
     <div class="help-card">
+      <div class="help-h">💰 LLM usage &amp; cost — where the AI spend goes</div>
+      <p>Every OpenAI call across the app (the daily <b>briefing</b>, on-demand <b>deep-research</b> reports, the <b>radar</b> catalyst tagger, and the <b>Markets</b> persona panel) records its token usage to a shared ledger. This table ranks the spend by feature, in USD, using OpenAI's published rates — raw API cost, no markup.</p>
+      <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
+      <p class="help-key">The ledger stores tokens only; cost is computed here from a single rate table, so the figure is auditable (see the "rates as of" line). Deep-research models are shown <i>unpriced</i> until their rates are confirmed — the tracker never guesses.</p>
+    </div>
+
+    <div class="help-card">
       <div class="help-h">📡 Radar — what's worth a look today</div>
       <p>Each card is one asset, ranked by a <b>0–100 score</b> (higher = stronger setup right now on trend, volume and relative strength). Read a card top to bottom:</p>
       <ul>
@@ -1461,6 +1485,7 @@ function switchPage(id, el) {
   if (id==='journal') renderJournal();
   if (id==='pse') renderPh();
   if (id==='miro') renderMiro();
+  if (id==='help') renderLlmUsage();
   window.scrollTo(0,0);
 }
 function switchPageMobile(id, el) {
@@ -1479,6 +1504,7 @@ function switchPageMobile(id, el) {
   if (id==='journal') renderJournal();
   if (id==='pse') renderPh();
   if (id==='miro') renderMiro();
+  if (id==='help') renderLlmUsage();
   window.scrollTo(0,0);
 }
 
@@ -1956,6 +1982,93 @@ function miroJournalBanner(j) {
     'Brier ours ' + s.brierOurs + ' vs market ' + s.brierMarket +
     ' · <span style="color:' + col + '">skill ' + (skill > 0 ? '+' : '') + skill + ' (' + verdict + ')</span>' +
     ll + clvTxt + '</div>';
+}
+
+// ── LLM USAGE & COST (Help tab report) ──
+// Single source of truth for pricing (the ledger stores tokens only). USD per
+// 1,000 tokens, from OpenAI's published rates. A null entry = model known but
+// intentionally unpriced (rates unconfirmed) — never guess; show as "unpriced".
+var LLM_PRICING_USD_PER_1K = {
+  'gpt-5.5': { input: 0.005, output: 0.030, cacheRead: 0.0005 },
+  // Deep-research rates not confirmed for this lane -> unpriced on purpose.
+  'o4-mini-deep-research': null,
+  'o3-deep-research': null
+};
+var LLM_RATES_AS_OF = '2026-06-23';
+// OpenAI counts cached tokens as a subset of input tokens (billed cheaper), so
+// charge (input - cached) at the input rate + cached at the cache-read rate.
+function llmPriceUsd(model, e) {
+  var r = LLM_PRICING_USD_PER_1K[model];
+  if (!r) return null; // unknown or intentionally-unpriced
+  var cached = e.cachedTokens || 0;
+  var uncached = Math.max(0, (e.inputTokens || 0) - cached);
+  return (uncached * (r.input || 0) + cached * (r.cacheRead || 0) + (e.outputTokens || 0) * (r.output || 0)) / 1000;
+}
+function llmUsd(v) {
+  if (v == null) return '—';
+  if (v === 0) return '$0';
+  return v < 1 ? '$' + v.toFixed(4) : '$' + v.toFixed(2);
+}
+function llmInt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
+function renderLlmUsage() {
+  var out = document.getElementById('llm-usage-out');
+  if (!out) return;
+  if (!window.fbLoadLlmUsage) { out.innerHTML = '<div class="rel-none-txt">Usage unavailable.</div>'; return; }
+  out.innerHTML = '<div class="rel-none-txt">Loading usage…</div>';
+  window.fbLoadLlmUsage().then(function (d) {
+    if (!d || !d.entries || !Object.keys(d.entries).length) {
+      out.innerHTML = '<div class="rel-none-txt">No LLM usage recorded yet — it accrues as the briefing, radar and Markets refreshes run.</div>';
+      return;
+    }
+    var rows = Object.keys(d.entries).map(function (k) {
+      var e = d.entries[k];
+      var cost = llmPriceUsd(e.model, e);
+      return { feature: e.feature, model: e.model, calls: e.calls || 0,
+        inT: e.inputTokens || 0, outT: e.outputTokens || 0, cached: e.cachedTokens || 0,
+        cost: cost, firstSeen: e.firstSeen };
+    });
+    // Rank by est. cost desc; unpriced (null) sink to the bottom.
+    rows.sort(function (a, b) { return (b.cost == null ? -1 : b.cost) - (a.cost == null ? -1 : a.cost); });
+
+    var totCalls = 0, totIn = 0, totOut = 0, totCost = 0, anyUnpriced = false;
+    rows.forEach(function (r) {
+      totCalls += r.calls; totIn += r.inT; totOut += r.outT;
+      if (r.cost == null) anyUnpriced = true; else totCost += r.cost;
+    });
+    var since = rows.reduce(function (m, r) { return (!m || (r.firstSeen && r.firstSeen < m)) ? r.firstSeen : m; }, null);
+
+    var html = '<table class="llm-tbl"><thead><tr>' +
+      '<th>Feature</th><th>Model</th><th class="num">Calls</th><th class="num">Input</th>' +
+      '<th class="num">Output</th><th class="num">Est. cost</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      html += '<tr><td>' + esc(r.feature) + '</td><td>' + esc(r.model) + '</td>' +
+        '<td class="num">' + llmInt(r.calls) + '</td>' +
+        '<td class="num">' + llmInt(r.inT) + (r.cached ? ' <span class="src">(' + llmInt(r.cached) + ' cached)</span>' : '') + '</td>' +
+        '<td class="num">' + llmInt(r.outT) + '</td>' +
+        '<td class="num">' + (r.cost == null ? '<span class="src">unpriced</span>' : llmUsd(r.cost)) + '</td></tr>';
+    });
+    html += '<tr class="llm-tot"><td>Total</td><td></td><td class="num">' + llmInt(totCalls) + '</td>' +
+      '<td class="num">' + llmInt(totIn) + '</td><td class="num">' + llmInt(totOut) + '</td>' +
+      '<td class="num">' + llmUsd(totCost) + (anyUnpriced ? '+' : '') + '</td></tr>';
+    html += '</tbody></table>';
+
+    // Last-7-day token totals from byDay (tokens only — byDay aggregates models).
+    if (d.byDay) {
+      var days = Object.keys(d.byDay).sort().slice(-7);
+      var c = 0, i = 0, o = 0;
+      days.forEach(function (k) { var b = d.byDay[k]; c += b.calls || 0; i += b.inputTokens || 0; o += b.outputTokens || 0; });
+      if (days.length) {
+        html += '<div class="src" style="margin-top:.5rem">Last ' + days.length + ' day(s): ' +
+          llmInt(c) + ' calls · ' + llmInt(i) + ' in / ' + llmInt(o) + ' out tokens</div>';
+      }
+    }
+    html += '<div class="src" style="margin-top:.35rem">' +
+      (since ? 'Since ' + esc(String(since).slice(0, 10)) + ' · ' : '') +
+      'rates as of ' + LLM_RATES_AS_OF + ' (gpt-5.5 $5/$30 per 1M in/out, $0.50 cached)' +
+      (anyUnpriced ? ' · deep-research shown unpriced (rates unconfirmed — never guessed)' : '') +
+      ' · raw API cost, no markup.</div>';
+    out.innerHTML = html;
+  });
 }
 
 // ── SCORE ──

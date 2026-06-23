@@ -12,6 +12,12 @@ Private daily intelligence briefing desk for Bob.
   Brier-score journal. The honest version of "MiroFish" — research framing, never
   a bet or execution. Docs: [`miro/README.md`](miro/README.md).
 
+- **💰 LLM usage & cost** (Help tab) — every OpenAI call across the app (briefing,
+  deep-research, radar catalyst, Markets panel) records token usage to a shared
+  ledger (`briefings-bob/llm-usage`); the Help tab ranks the spend by feature in
+  USD from a single auditable rate table (raw API cost, no markup; unconfirmed
+  model rates shown "unpriced", never guessed).
+
 Each market feature is a **local Node refresh script** that writes Firestore docs
 the front end reads — no Cloud Functions, no build step.
 
