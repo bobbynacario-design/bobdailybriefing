@@ -627,9 +627,14 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 @media(max-width:768px){.jbar-label{width:74px}.jbar-meta{min-width:0}.jbar-row{flex-wrap:wrap}.jbar-row .jbar-meta{width:100%;text-align:left;margin-top:.3rem}.jbar-row .trend-bar-wrap{flex:1 1 120px}}
 
 /* ── HELP ── */
-.help-body{max-width:1100px;display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start}
+.help-body{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
 .help-body>.help-wide{grid-column:1 / -1}
 @media(max-width:768px){.help-body{grid-template-columns:1fr}}
+/* Wide cost card laid out as an internal panel: table left, notes right, so it
+   fills the full width instead of a sparse stretched table. */
+.llm-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:1.6rem;align-items:start;margin-top:.4rem}
+@media(max-width:900px){.llm-grid{grid-template-columns:1fr;gap:.6rem}}
+.llm-notes p{margin-top:0}
 .help-card{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1.1rem 1.3rem}
 .help-h{font-family:var(--mono);font-size:13px;letter-spacing:.04em;color:var(--gold);margin-bottom:.7rem}
 .help-card p{font-size:14px;line-height:1.7;color:var(--txt2);margin:.5rem 0}
@@ -1185,9 +1190,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="help-body">
     <div class="help-card help-wide">
       <div class="help-h">💰 LLM usage &amp; cost — where the AI spend goes</div>
-      <p>Every OpenAI call across the app (the daily <b>briefing</b>, on-demand <b>deep-research</b> reports, the <b>radar</b> catalyst tagger, and the <b>Markets</b> persona panel) records its token usage to a shared ledger. This table ranks the spend by feature, in USD, using OpenAI's published rates — raw API cost, no markup.</p>
-      <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
-      <p class="help-key">The ledger stores tokens only; cost is computed here from a single rate table, so the figure is auditable (see the "rates as of" line). Deep-research models are shown <i>unpriced</i> until their rates are confirmed — the tracker never guesses.</p>
+      <div class="llm-grid">
+        <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
+        <div class="llm-notes">
+          <p>Every OpenAI call across the app (the daily <b>briefing</b>, on-demand <b>deep-research</b> reports, the <b>radar</b> catalyst tagger, and the <b>Markets</b> persona panel) records its token usage to a shared ledger. The table ranks the spend by feature, in USD, using OpenAI's published rates — raw API cost, no markup.</p>
+          <p class="help-key">The ledger stores tokens only; cost is computed from a single rate table, so the figure is auditable (see the "rates as of" line). Deep-research models are shown <i>unpriced</i> until their rates are confirmed — the tracker never guesses.</p>
+        </div>
+      </div>
     </div>
 
     <div class="help-card">
