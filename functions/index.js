@@ -19,6 +19,70 @@ const DEEP_RESEARCH_CAP = parseInt(process.env.DEEP_RESEARCH_CAP || "20", 10);
 const REPORTS_COLL = "reports-bob";
 const REPORTS_META = "reports-bob-meta";
 
+// ── LLM usage telemetry (CJS twin of lib/llm-usage.js) ──
+// Writes token usage to the shared ledger briefings-bob/llm-usage (no uid).
+// Never throws — telemetry must not break generation.
+function phtDateKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
+function _num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function extractUsage(json) {
+  const u = (json && json.usage) || {};
+  let cached = 0;
+  if (u.input_tokens_details && u.input_tokens_details.cached_tokens != null) {
+    cached = _num(u.input_tokens_details.cached_tokens);
+  } else if (u.cached_tokens != null) {
+    cached = _num(u.cached_tokens);
+  }
+  return {
+    inputTokens: _num(u.input_tokens != null ? u.input_tokens : u.inputTokens),
+    outputTokens: _num(u.output_tokens != null ? u.output_tokens : u.outputTokens),
+    cachedTokens: cached,
+  };
+}
+async function recordUsage(db, feature, model, usage, dateKey) {
+  try {
+    if (!usage) return;
+    const ref = db.collection("briefings-bob").doc("llm-usage");
+    const key = feature + "|" + model;
+    const nowIso = new Date().toISOString();
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const d = snap.exists ? (snap.data() || {}) : {};
+      d.entries = d.entries || {};
+      d.byDay = d.byDay || {};
+      const e = d.entries[key] || {
+        feature, model, calls: 0,
+        inputTokens: 0, outputTokens: 0, cachedTokens: 0,
+        firstSeen: nowIso, lastSeen: nowIso,
+      };
+      e.calls += 1;
+      e.inputTokens += _num(usage.inputTokens);
+      e.outputTokens += _num(usage.outputTokens);
+      e.cachedTokens += _num(usage.cachedTokens);
+      e.lastSeen = nowIso;
+      if (!e.firstSeen) e.firstSeen = nowIso;
+      d.entries[key] = e;
+      if (dateKey) {
+        const dd = d.byDay[dateKey] || {calls: 0, inputTokens: 0, outputTokens: 0};
+        dd.calls += 1;
+        dd.inputTokens += _num(usage.inputTokens);
+        dd.outputTokens += _num(usage.outputTokens);
+        d.byDay[dateKey] = dd;
+      }
+      d.updated = nowIso;
+      tx.set(ref, d);
+    });
+  } catch (err) {
+    logger.warn("recordUsage failed", err);
+  }
+}
+
 function buildBriefingPrompt(dateLabel) {
   const date = dateLabel || new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -187,6 +251,9 @@ exports.generateBobDailyBriefing = onCall(
       logger.error("OpenAI JSON parse error", err);
       throw new HttpsError("internal", "OpenAI returned invalid briefing JSON.");
     }
+
+    // Record token usage to the shared LLM cost ledger (no-throw).
+    await recordUsage(getFirestore(), "briefing", model, extractUsage(json), phtDateKey());
 
     return {
       model,
@@ -388,6 +455,8 @@ exports.pollDeepResearchReports = onSchedule(
         }
         if (md && md.trim()) {
           await doc.ref.update({md, status: "ready", completedAt: now});
+          // Record deep-research token usage to the shared LLM cost ledger (no-throw).
+          await recordUsage(db, "deep-research", d.model || DEEP_MODEL_DEFAULT, extractUsage(json), phtDateKey());
         } else {
           await doc.ref.update({status: "error", error: "Completed with empty output.", completedAt: now});
         }
