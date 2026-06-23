@@ -674,6 +674,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .ph-chip{font-family:var(--mono);font-size:11px;color:var(--txt3);background:var(--bg3);border:1px solid var(--rim);border-radius:6px;padding:.25rem .55rem}
 .ph-chip b{color:var(--txt);font-weight:600}
 .ph-prox-rets{font-family:var(--mono);font-size:10px;color:var(--txt3);white-space:nowrap;margin-left:auto}
+.ph-cat-h{font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:.05em;text-transform:uppercase;margin:.8rem 0 .45rem}
+.ph-news{background:var(--bg2);border:1px solid var(--rim);border-left:2px solid var(--rim2);border-radius:8px;padding:.6rem .8rem;margin-bottom:.5rem}
+.ph-news-h{font-size:14px;font-weight:600;color:var(--txt);line-height:1.5;display:flex;gap:.5rem;align-items:baseline}
+.ph-news-b{font-size:13px;line-height:1.6;color:var(--txt2);margin:.3rem 0 .15rem}
+.ph-cat{font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:4px;letter-spacing:.05em;flex-shrink:0}
+.ph-cat-macro{color:var(--blue);background:var(--blue-dim)}
+.ph-cat-spec{color:var(--purple);background:var(--purple-dim)}
 
 /* ── WATCH CARD ── */
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
@@ -1847,6 +1854,44 @@ function phSparkline(closes) {
   return '<svg class="ph-spark" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
     '<polyline fill="none" stroke="' + col + '" stroke-width="1.5" points="' + pts + '"/></svg>';
 }
+// PH market briefer: pull market-related PH stories from today's loaded briefing
+// (_currentData) and tag each MACRO (economy/rates/peso/index) vs SPECIFIC (a
+// named PSE-listed company). Heuristic — no LLM, no redeploy.
+var PH_CO = ['sm investments','sm prime',' sm ','ayala','acen','ac energy','bdo','bpi','metrobank','security bank','union bank','china bank','pnb','jollibee','jfc','pldt','globe','converge','dito','meralco','ictsi','san miguel',' smc','aboitiz','gt capital','jg summit','universal robina','urc','megaworld','monde nissin','nickel asia','semirara','dmci','robinsons','puregold','wilcon','century pacific','emperador','bloomberry','manila water','maynilad','cebu pacific','first gen','alliance global','maya','gcash'];
+var PH_GEO = ['philippine','manila','psei','pse ','peso','bsp',' ph ','filipino','bangko sentral'];
+var PH_MKT = ['stock','share','market','index','peso','inflation','rate','earnings','ipo','listed','listing','economy','gdp','investor','trading','bourse','equit','bond','yield','dividend','tariff','remittance'];
+function phText(st) { return ((st.headline || '') + ' ' + (st.body || '') + ' ' + (st.relevance || '')).toLowerCase(); }
+function phHasCompany(t) { return PH_CO.some(function (k) { return t.indexOf(k) !== -1; }); }
+function phMarketStories(data) {
+  var macro = [], specific = [], seen = {};
+  if (!data || !data.sections) return { macro: macro, specific: specific };
+  function consider(list, requireGeo) {
+    (list || []).forEach(function (st) {
+      var t = phText(st);
+      var geo = PH_GEO.some(function (k) { return t.indexOf(k) !== -1; }) || phHasCompany(t);
+      var mkt = PH_MKT.some(function (k) { return t.indexOf(k) !== -1; }) || phHasCompany(t);
+      if (requireGeo ? !(geo && mkt) : !mkt) return;       // markets section needs PH-ness; ph section needs market-ness
+      var key = (st.headline || '').toLowerCase().slice(0, 60);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      var item = { headline: st.headline || '', body: st.body || '', source: st.source || '', cat: phHasCompany(t) ? 'specific' : 'macro' };
+      (item.cat === 'specific' ? specific : macro).push(item);
+    });
+  }
+  consider(data.sections.ph, false);       // PH news → require market relevance
+  consider(data.sections.markets, true);   // markets/economy → require PH relevance
+  return { macro: macro, specific: specific };
+}
+function phNewsCard(it) {
+  var badge = it.cat === 'specific'
+    ? '<span class="ph-cat ph-cat-spec">SPECIFIC</span>'
+    : '<span class="ph-cat ph-cat-macro">MACRO</span>';
+  return '<div class="ph-news">' +
+    '<div class="ph-news-h">' + badge + '<span>' + esc(it.headline) + '</span></div>' +
+    (it.body ? '<div class="ph-news-b">' + esc(it.body) + '</div>' : '') +
+    (it.source ? '<div class="src">' + esc(it.source) + '</div>' : '') +
+  '</div>';
+}
 function renderPh() {
   var out = document.getElementById('pse-out');
   var sub = document.getElementById('pse-sub');
@@ -1915,6 +1960,16 @@ function renderPh() {
       }
       if (d.fx.audphp) fxhtml += '<span class="ph-chip">AUD/PHP <b>' + d.fx.audphp.level + '</b></span>';
       html += '<div class="ph-fx">' + fxhtml + '</div>';
+    }
+
+    // PH market briefer — pulled from today's loaded briefing, tagged macro/specific.
+    var phb = phMarketStories(_currentData);
+    html += '<div class="journal-section">PH market briefer — from today’s briefing</div>';
+    if (phb.macro.length || phb.specific.length) {
+      if (phb.macro.length) html += '<div class="ph-cat-h">Macro</div>' + phb.macro.map(phNewsCard).join('');
+      if (phb.specific.length) html += '<div class="ph-cat-h">Company-specific</div>' + phb.specific.map(phNewsCard).join('');
+    } else {
+      html += '<div class="rel-none-txt">No PH market items in today’s briefing — generate or open today’s briefing on the Today tab.</div>';
     }
 
     html += '<div class="journal-section">Large-cap proxies — US-listed (USD), indicative only</div>';
