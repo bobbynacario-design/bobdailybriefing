@@ -660,7 +660,20 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .pse-idx-meta{font-size:13px;color:var(--txt2);margin-top:.5rem}
 .pse-idx-sma{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;letter-spacing:.03em}
 .pse-name{flex:1;color:var(--txt2);font-size:12px;min-width:90px}
-.pse-px{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:nowrap}
+.pse-px{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:nowrap;min-width:96px;text-align:right}
+.ph-spark{display:block;width:100%;height:44px;margin:.6rem 0 .2rem}
+.ph-rets{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin:.5rem 0}
+.ph-rets>div{background:var(--bg3);border:1px solid var(--rim);border-radius:8px;padding:.4rem .5rem;text-align:center;font-family:var(--mono);font-size:13px}
+.ph-k{display:block;font-size:9px;letter-spacing:.08em;color:var(--txt3);margin-bottom:.2rem}
+.ph-range{margin:.7rem 0 .3rem}
+.ph-range-bar{position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--red-dim),var(--bg4),var(--green-dim))}
+.ph-range-dot{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;background:var(--gold);transform:translate(-50%,-50%);box-shadow:0 0 0 2px var(--bg2)}
+.ph-range-lab{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--txt2);margin-top:.35rem}
+.ph-chips,.ph-fx{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
+.ph-fx{margin:.6rem 0 .2rem}
+.ph-chip{font-family:var(--mono);font-size:11px;color:var(--txt3);background:var(--bg3);border:1px solid var(--rim);border-radius:6px;padding:.25rem .55rem}
+.ph-chip b{color:var(--txt);font-weight:600}
+.ph-prox-rets{font-family:var(--mono);font-size:10px;color:var(--txt3);white-space:nowrap;margin-left:auto}
 
 /* ── WATCH CARD ── */
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
@@ -1809,15 +1822,30 @@ function renderJournal() {
   });
 }
 
-// ── PH SNAPSHOT (read-only; not scored) ──
+// ── PH MARKET HEALTH (read-only; not scored) ──
+function phRet(v) { return v == null ? '<span class="jmut">—</span>' : jSign(v); }
 function phRow(p) {
   return '<div class="jrow">' +
     '<span class="jrow-sym">' + esc(p.symbol) + '</span>' +
     '<span class="pse-name">' + esc(p.name) + '</span>' +
     '<span class="help-pill" style="color:var(--txt3)">' + esc(p.listing) + '</span>' +
     '<span class="pse-px">' + p.close + ' ' + esc(p.currency) + '</span>' +
-    '<span class="jrow-ret">' + jSign(p.dayChangePct) + '</span>' +
+    '<span class="ph-prox-rets">D ' + phRet(p.dayChangePct) + ' · 1w ' + phRet(p.ret1w) + ' · 1m ' + phRet(p.ret1m) + '</span>' +
   '</div>';
+}
+// Inline sparkline SVG from a closes[] array (uses theme colors).
+function phSparkline(closes) {
+  if (!closes || closes.length < 2) return '';
+  var w = 260, h = 44, pad = 3;
+  var min = Math.min.apply(null, closes), max = Math.max.apply(null, closes), rng = (max - min) || 1;
+  var pts = closes.map(function (c, i) {
+    var x = pad + i * (w - 2 * pad) / (closes.length - 1);
+    var y = h - pad - (c - min) / rng * (h - 2 * pad);
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  }).join(' ');
+  var col = closes[closes.length - 1] >= closes[0] ? 'var(--green)' : 'var(--red)';
+  return '<svg class="ph-spark" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
+    '<polyline fill="none" stroke="' + col + '" stroke-width="1.5" points="' + pts + '"/></svg>';
 }
 function renderPh() {
   var out = document.getElementById('pse-out');
@@ -1828,26 +1856,67 @@ function renderPh() {
   window.fbLoadPh().then(function (d) {
     if (!d || !d.index) {
       if (sub) sub.textContent = 'No snapshot yet';
-      out.innerHTML = '<div class="empty-state">NO PH SNAPSHOT YET — RUN radar/refresh-radar.js</div>';
+      out.innerHTML = '<div class="empty-state">NO PH SNAPSHOT YET — RUN radar/refresh-ph.js</div>';
       return;
     }
     var idx = d.index;
     if (sub) sub.textContent = 'PSEi ' + idx.close + ' · as of ' + esc(idx.asOf);
-    var trendTxt, trendCol;
-    if (idx.aboveSma20 && idx.aboveSma50) { trendTxt = 'Above its 20- & 50-day averages — uptrend'; trendCol = 'var(--green)'; }
-    else if (!idx.aboveSma20 && !idx.aboveSma50) { trendTxt = 'Below its 20- & 50-day averages — downtrend'; trendCol = 'var(--red)'; }
-    else { trendTxt = 'Mixed vs its moving averages'; trendCol = 'var(--txt3)'; }
+
+    var a = idx.aboveSma20, b = idx.aboveSma50, c = idx.aboveSma200, trendTxt, trendCol;
+    if (a && b && c) { trendTxt = 'Uptrend — above 20/50/200-day'; trendCol = 'var(--green)'; }
+    else if (!a && !b && !c) { trendTxt = 'Downtrend — below 20/50/200-day'; trendCol = 'var(--red)'; }
+    else { trendTxt = 'Mixed vs moving averages'; trendCol = 'var(--txt3)'; }
 
     var html = '<div class="pse-caveat">⚠ ' + esc(d.caveat) + '</div>';
+
     html += '<div class="card radar-card pse-index">' +
       '<div class="card-accent" style="background:' + trendCol + '"></div>' +
       '<div class="pse-idx-top"><span class="pse-idx-name">' + esc(idx.name) +
         ' <span class="radar-theme">' + esc(idx.currency) + '</span></span>' +
         '<span class="pse-idx-val">' + idx.close + '</span></div>' +
       '<div class="pse-idx-meta">Day ' + jSign(idx.dayChangePct) +
-        ' · <span style="color:' + trendCol + '">' + esc(trendTxt) + '</span></div>' +
-      '<div class="pse-idx-sma">20-day avg ' + idx.sma20 + ' · 50-day avg ' + idx.sma50 + '</div>' +
+        ' · <span style="color:' + trendCol + '">' + esc(trendTxt) + '</span></div>';
+
+    html += phSparkline(idx.spark);
+
+    html += '<div class="ph-rets">' +
+      '<div><span class="ph-k">1W</span>' + phRet(idx.ret1w) + '</div>' +
+      '<div><span class="ph-k">1M</span>' + phRet(idx.ret1m) + '</div>' +
+      '<div><span class="ph-k">3M</span>' + phRet(idx.ret3m) + '</div>' +
+      '<div><span class="ph-k">YTD</span>' + phRet(idx.retYtd) + '</div>' +
     '</div>';
+
+    if (idx.high52 != null && idx.low52 != null) {
+      var pos = Math.max(0, Math.min(100, (idx.close - idx.low52) / ((idx.high52 - idx.low52) || 1) * 100));
+      html += '<div class="ph-range">' +
+        '<div class="ph-range-bar"><div class="ph-range-dot" style="left:' + pos.toFixed(1) + '%"></div></div>' +
+        '<div class="ph-range-lab"><span>' + idx.low52 + '</span>' +
+          '<span class="jmut">52-wk' + (idx.pctFromHigh != null ? ' · ' + idx.pctFromHigh + '% from high' : '') + '</span>' +
+          '<span>' + idx.high52 + '</span></div>' +
+      '</div>';
+    }
+
+    var rsiCol = idx.rsi14 == null ? 'var(--txt3)' : (idx.rsi14 >= 70 ? 'var(--red)' : (idx.rsi14 <= 30 ? 'var(--green)' : 'var(--txt2)'));
+    html += '<div class="ph-chips">' +
+      '<span class="ph-chip">RSI <b style="color:' + rsiCol + '">' + (idx.rsi14 == null ? '—' : idx.rsi14) + '</b></span>' +
+      '<span class="ph-chip">Volatility <b>' + (idx.vol20 == null ? '—' : idx.vol20 + '%') + '</b></span>' +
+      '<span class="ph-chip">SMA20 ' + idx.sma20 + '</span>' +
+      '<span class="ph-chip">SMA50 ' + idx.sma50 + '</span>' +
+      '<span class="ph-chip">SMA200 ' + (idx.sma200 == null ? '—' : idx.sma200) + '</span>' +
+    '</div>';
+    html += '</div>'; // /pse-index
+
+    if (d.fx && (d.fx.usdphp || d.fx.audphp)) {
+      var fxhtml = '';
+      if (d.fx.usdphp) {
+        var u = d.fx.usdphp;
+        var pesoDir = u.ret1m == null ? '' : (u.ret1m < 0 ? ' · peso stronger 1m' : ' · peso weaker 1m');
+        fxhtml += '<span class="ph-chip">USD/PHP <b>' + u.level + '</b> ' + phRet(u.dayChangePct) + '<span class="jmut">' + esc(pesoDir) + '</span></span>';
+      }
+      if (d.fx.audphp) fxhtml += '<span class="ph-chip">AUD/PHP <b>' + d.fx.audphp.level + '</b></span>';
+      html += '<div class="ph-fx">' + fxhtml + '</div>';
+    }
+
     html += '<div class="journal-section">Large-cap proxies — US-listed (USD), indicative only</div>';
     if (d.proxies && d.proxies.length) {
       html += '<div class="jlist">' + d.proxies.map(phRow).join('') + '</div>';
