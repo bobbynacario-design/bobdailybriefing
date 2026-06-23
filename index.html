@@ -681,6 +681,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .ph-cat{font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:4px;letter-spacing:.05em;flex-shrink:0}
 .ph-cat-macro{color:var(--blue);background:var(--blue-dim)}
 .ph-cat-spec{color:var(--purple);background:var(--purple-dim)}
+.ph-subj{font-family:var(--mono);font-size:10px;color:var(--gold);background:var(--gold-dim);padding:2px 6px;border-radius:4px;flex-shrink:0}
 
 /* ── WATCH CARD ── */
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
@@ -1862,32 +1863,46 @@ var PH_GEO = ['philippine','manila','psei','pse ','peso','bsp',' ph ','filipino'
 var PH_MKT = ['stock','share','market','index','peso','inflation','rate','earnings','ipo','listed','listing','economy','gdp','investor','trading','bourse','equit','bond','yield','dividend','tariff','remittance'];
 function phText(st) { return ((st.headline || '') + ' ' + (st.body || '') + ' ' + (st.relevance || '')).toLowerCase(); }
 function phHasCompany(t) { return PH_CO.some(function (k) { return t.indexOf(k) !== -1; }); }
+// Category for one ph/markets story. Prefers the model's market_category tag
+// (sharp); falls back to the keyword heuristic for briefings generated before
+// the tag existed. Returns 'macro' | 'specific' | null (null = exclude).
+function phStoryCat(st, section) {
+  var c = (st.market_category || '').toLowerCase();
+  if (c === 'macro' || c === 'specific') return c;
+  if (c === 'none') return null;                 // model explicitly excluded it
+  // fallback heuristic (untagged briefing)
+  var t = phText(st);
+  var geo = PH_GEO.some(function (k) { return t.indexOf(k) !== -1; }) || phHasCompany(t);
+  var mkt = PH_MKT.some(function (k) { return t.indexOf(k) !== -1; }) || phHasCompany(t);
+  var include = section === 'markets' ? (geo && mkt) : mkt;
+  if (!include) return null;
+  return phHasCompany(t) ? 'specific' : 'macro';
+}
 function phMarketStories(data) {
   var macro = [], specific = [], seen = {};
   if (!data || !data.sections) return { macro: macro, specific: specific };
-  function consider(list, requireGeo) {
+  function consider(list, section) {
     (list || []).forEach(function (st) {
-      var t = phText(st);
-      var geo = PH_GEO.some(function (k) { return t.indexOf(k) !== -1; }) || phHasCompany(t);
-      var mkt = PH_MKT.some(function (k) { return t.indexOf(k) !== -1; }) || phHasCompany(t);
-      if (requireGeo ? !(geo && mkt) : !mkt) return;       // markets section needs PH-ness; ph section needs market-ness
+      var cat = phStoryCat(st, section);
+      if (!cat) return;
       var key = (st.headline || '').toLowerCase().slice(0, 60);
       if (!key || seen[key]) return;
       seen[key] = true;
-      var item = { headline: st.headline || '', body: st.body || '', source: st.source || '', cat: phHasCompany(t) ? 'specific' : 'macro' };
-      (item.cat === 'specific' ? specific : macro).push(item);
+      var item = { headline: st.headline || '', body: st.body || '', source: st.source || '', subject: st.market_subject || '', cat: cat };
+      (cat === 'specific' ? specific : macro).push(item);
     });
   }
-  consider(data.sections.ph, false);       // PH news → require market relevance
-  consider(data.sections.markets, true);   // markets/economy → require PH relevance
+  consider(data.sections.ph, 'ph');
+  consider(data.sections.markets, 'markets');
   return { macro: macro, specific: specific };
 }
 function phNewsCard(it) {
   var badge = it.cat === 'specific'
     ? '<span class="ph-cat ph-cat-spec">SPECIFIC</span>'
     : '<span class="ph-cat ph-cat-macro">MACRO</span>';
+  var subj = it.subject ? '<span class="ph-subj">' + esc(it.subject) + '</span>' : '';
   return '<div class="ph-news">' +
-    '<div class="ph-news-h">' + badge + '<span>' + esc(it.headline) + '</span></div>' +
+    '<div class="ph-news-h">' + badge + subj + '<span>' + esc(it.headline) + '</span></div>' +
     (it.body ? '<div class="ph-news-b">' + esc(it.body) + '</div>' : '') +
     (it.source ? '<div class="src">' + esc(it.source) + '</div>' : '') +
   '</div>';
