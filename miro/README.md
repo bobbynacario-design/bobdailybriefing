@@ -113,6 +113,14 @@ completes and writes implied-only markets), and authenticates Firestore with
 `miro/serviceAccountKey.json` or `../radar/serviceAccountKey.json` (same project,
 `pokerhq-a67e4`). A run makes ~7 OpenAI `gpt-5.5` calls (web-search grounded).
 
+**Auto-refresh (same as the radar):** a Windows Task Scheduler job
+`BobDailyBriefing-MiroRefresh` runs `node refresh-miro.js` daily at 06:15 PHT
+(15 min after `BobDailyBriefing-RadarRefresh`, since both call OpenAI), logging to
+`miro/refresh.log`. The web app is a pure reader and picks up the new doc on tab
+open — there is no in-app refresh button. Note: the task must allow running on
+battery (`-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries`), or it sits
+"Queued" on a laptop — same setting the radar task uses.
+
 The curated universe lives in `config.js` (`MARKETS`) — edit it freely; the
 journal stays honest as the list changes. Prefer **slower-resolving** markets
 where a panel can reason (geopolitics, tournament outrights), not near-efficient
