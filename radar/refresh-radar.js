@@ -28,6 +28,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
+import { buildPhSnapshot } from './ph-snapshot.js';
 import { extractUsage, recordUsage } from '../lib/llm-usage.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -290,69 +291,8 @@ async function fetchCatalysts(signals) {
 }
 
 // ── PH market snapshot (NOT scored — no free historical per-stock PSE feed) ──
-function r2(v) { return (v == null || isNaN(v)) ? null : Math.round(v * 100) / 100; }
-
-// Daily bars for a Yahoo symbol (the PSEi index + US-listed PH proxies).
-async function fetchYahooChart(symbol) {
-  var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
-    encodeURIComponent(symbol) + '?interval=1d&range=6mo';
-  var res = await fetchRetry(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 'Yahoo ' + symbol);
-  if (!res.ok) throw new Error('Yahoo ' + symbol + ' HTTP ' + res.status);
-  var j = await res.json();
-  var r = j.chart && j.chart.result && j.chart.result[0];
-  if (!r || !r.timestamp) return [];
-  var ts = r.timestamp;
-  var q = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {};
-  var ccy = r.meta && r.meta.currency;
-  var bars = [];
-  for (var i = 0; i < ts.length; i++) {
-    if (!q.close || q.close[i] == null) continue;
-    bars.push({ date: new Date(ts[i] * 1000).toISOString().slice(0, 10), close: q.close[i], currency: ccy });
-  }
-  return bars;
-}
-
-// Build the PH snapshot: PSEi index (clean PHP history -> level + trend) plus a
-// few US-listed proxies (USD, indicative only). Never throws fatally.
-async function buildPhSnapshot(config) {
-  var ph = config.ph;
-  function sma(a, n) { if (a.length < n) return null; var s = 0; for (var i = a.length - n; i < a.length; i++) s += a[i]; return s / n; }
-  function dayPct(bars) { if (bars.length < 2) return null; var l = bars[bars.length - 1].close, p = bars[bars.length - 2].close; return p ? (l / p - 1) * 100 : null; }
-
-  console.log('Fetching PH snapshot (PSEi + proxies) from Yahoo...');
-  var idxBars = await fetchYahooChart(ph.index.symbol);
-  if (!idxBars.length) throw new Error('no PSEi data');
-  var closes = idxBars.map(function (b) { return b.close; });
-  var last = idxBars[idxBars.length - 1];
-  var s20 = sma(closes, 20), s50 = sma(closes, 50);
-  var index = {
-    symbol: ph.index.symbol, name: ph.index.name, currency: last.currency || 'PHP',
-    asOf: last.date, close: r2(last.close), dayChangePct: r2(dayPct(idxBars)),
-    sma20: r2(s20), sma50: r2(s50),
-    aboveSma20: s20 != null ? last.close > s20 : null,
-    aboveSma50: s50 != null ? last.close > s50 : null
-  };
-
-  var proxies = [];
-  for (var i = 0; i < ph.proxies.length; i++) {
-    var p = ph.proxies[i];
-    try {
-      var b = await fetchYahooChart(p.symbol);
-      if (b.length) {
-        var l = b[b.length - 1];
-        proxies.push({ symbol: p.symbol, name: p.name, listing: p.listing,
-          currency: l.currency || 'USD', asOf: l.date, close: r2(l.close), dayChangePct: r2(dayPct(b)) });
-      }
-    } catch (e) { console.log('  PH proxy ' + p.symbol + ' skipped: ' + (e.message || e)); }
-    await new Promise(function (r) { setTimeout(r, 400); });
-  }
-
-  return {
-    index: index,
-    proxies: proxies,
-    caveat: 'Snapshot only — not scored, not backtested, not advice. PSEi is the live Philippine index (PHP). Company rows are US-listed proxies (ADR/OTC, USD) that track their PSE-local shares only loosely and trade thinly; treat as indicative, not exact PSE prices.'
-  };
-}
+// Moved to radar/ph-snapshot.js so the after-close run (radar/refresh-ph.js) can
+// reuse it without re-running the whole US radar. buildPhSnapshot is imported.
 
 // ── Firestore (Admin SDK) ──
 
