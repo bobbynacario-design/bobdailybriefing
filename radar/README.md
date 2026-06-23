@@ -214,6 +214,16 @@ summary. Markets are closed on weekends, so `asOf` will be the last trading day.
 **Data providers:** Alpaca (equities/ETFs, free IEX daily bars), CoinGecko (free,
 no key, crypto), OpenAI (catalysts; reuses the app's existing integration).
 
+**PH market-health (🇵🇭 PSE tab, `radar-ph`):** NOT scored — there is no free
+per-stock PSE feed. `radar/ph-snapshot.js` builds a PSEi health read from free
+Yahoo data (1y bars → SMA20/50/200, 1w/1m/3m/YTD returns, 52-wk range, RSI, vol,
+sparkline) plus USD/PHP + AUD/PHP FX and US-listed ADR proxies. The 06:00 radar
+run builds it pre-open (prior close); a separate Task Scheduler job
+`BobDailyBriefing-PhRefresh` runs `node refresh-ph.js` at **16:30 PHT** (after the
+15:30 close) so the tab shows today's close — standalone, no US re-fetch, no LLM
+cost. A real *scored* per-stock PH radar would need a paid feed (e.g. EOD
+Historical Data) reusing `scoring.js`/`journal.js`.
+
 ---
 
 ## Latest run snapshot (2026-06-21, as-of 2026-06-18)
