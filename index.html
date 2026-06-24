@@ -2910,6 +2910,18 @@ function loadReportTemplate() {
 
 function pad2(n){ return (n<10?'0':'')+n; }
 
+// Trim a dek for the masthead. Prefer ending on a sentence boundary so it reads
+// as a complete thought instead of a jarring mid-word "…" cutoff. Falls back to
+// a word-boundary ellipsis only when no sentence break sits within the window.
+function clampDek(dek, max) {
+  dek = (dek || '').trim();
+  if (dek.length <= max) return dek;
+  var slice = dek.slice(0, max);
+  var m = slice.match(/^[\s\S]*[.!?](?=["')\]]?(?:\s|$))/);
+  if (m && m[0].trim().length >= max * 0.45) return m[0].trim();
+  return slice.replace(/\s+\S*$/, '').trim() + '…';
+}
+
 // Strip OpenAI deep-research citation tokens (citeturn31search0…) plus their
 // private-use delimiter glyphs — but never touch fenced code / mermaid blocks.
 function stripCites(md) {
@@ -3016,7 +3028,7 @@ function mdToReportHtml(rawMd) {
     // Dek (front-matter or first paragraph), trimmed
     var dek = fm.meta.dek || '';
     if (!dek) { var fp = root.querySelector('p'); dek = fp ? fp.textContent.trim() : ''; }
-    if (dek.length > 320) dek = dek.slice(0,317).replace(/\s+\S*$/, '') + '…';
+    dek = clampDek(dek, 320);
 
     var words = (root.textContent || '').split(/\s+/).filter(Boolean).length;
     var readMin = Math.max(1, Math.round(words/200));
