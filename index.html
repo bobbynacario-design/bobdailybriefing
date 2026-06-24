@@ -358,6 +358,22 @@ window.fbLoadMiroJournal = async function() {
   }
 };
 
+// Load the latest Sports briefing doc. Written by sports/refresh-sports.js with
+// no uid so it follows the same shared-read pattern as Radar and Markets.
+window.fbLoadSports = async function() {
+  try {
+    var latestSnap = await getDoc(doc(db, COLL, 'sports-latest'));
+    if (!latestSnap.exists()) return null;
+    var dateKey = latestSnap.data().value;
+    if (!dateKey) return null;
+    var docSnap = await getDoc(doc(db, COLL, 'sports-' + dateKey));
+    return docSnap.exists() ? docSnap.data() : null;
+  } catch(e) {
+    console.error('Sports load failed:', e);
+    return null;
+  }
+};
+
 // Load the shared LLM usage/cost ledger (token telemetry from every OpenAI call
 // across the app: briefing, deep-research, radar catalyst, miro panel). No uid.
 window.fbLoadLlmUsage = async function() {
@@ -607,6 +623,35 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-catalyst-asof{color:var(--txt3);font-family:var(--mono);font-size:10px;white-space:nowrap}
 .radar-invalidation{color:var(--txt3);font-style:italic}
 .radar-disclaimer{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;line-height:1.7;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rim)}
+
+/* ── SPORTS ── */
+.sports-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1rem}
+.sports-kpi{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.85rem 1rem}
+.sports-kpi-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
+.sports-kpi-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
+.sports-kpi-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.5}
+.sports-layout{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.85fr);gap:1rem;align-items:start}
+.sports-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem}
+.sports-panel-title{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
+.sports-list{display:flex;flex-direction:column;gap:.65rem}
+.sports-match{position:relative;border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.8rem .85rem .8rem 1rem;overflow:hidden}
+.sports-match:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--blue)}
+.sports-match.live:before{background:var(--green)}
+.sports-match.finished:before{background:var(--gold)}
+.sports-match-meta{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.55rem}
+.sports-teams{display:grid;grid-template-columns:1fr auto 1fr;gap:.7rem;align-items:center}
+.sports-team{font-family:var(--serif);font-size:17px;font-weight:700;color:var(--txt);line-height:1.25}
+.sports-team.away{text-align:right}
+.sports-score{font-family:var(--mono);font-size:18px;color:var(--gold);white-space:nowrap}
+.sports-note{font-size:12px;color:var(--txt2);line-height:1.55;margin-top:.55rem}
+.sports-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+.sports-table th,.sports-table td{padding:.45rem .35rem;border-bottom:1px solid var(--rim);text-align:left}
+.sports-table th{color:var(--txt3);font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:400}
+.sports-table td.num,.sports-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+.sports-tag-row{display:flex;gap:.35rem;flex-wrap:wrap}
+.sports-empty{font-size:12px;line-height:1.7;color:var(--txt3);font-style:italic}
+@media(max-width:900px){.sports-kpis{grid-template-columns:repeat(2,1fr)}.sports-layout{grid-template-columns:1fr}}
+@media(max-width:520px){.sports-kpis{grid-template-columns:1fr}.sports-teams{grid-template-columns:1fr;gap:.25rem}.sports-score{text-align:left}.sports-team.away{text-align:left}}
 
 /* ── JOURNAL (V3) ── */
 .journal-section{margin:1.6rem 0 .7rem;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
@@ -880,6 +925,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab" data-page="journal" onclick="switchPage('journal',this)">📓 Journal</button>
     <button class="ntab" data-page="pse" onclick="switchPage('pse',this)">🇵🇭 PSE</button>
     <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">🎲 Markets</button>
+    <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">⚽ Sports</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">❔ Help</button>
   </div>
   <div class="nav-right">
@@ -1199,6 +1245,18 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="radar-disclaimer">Research framing only. Implied probabilities are Polymarket's own prices; any "scenario" read is a haircut research estimate compared to that price — never a recommendation to bet, and no execution. If a check fails it's a NO-GO: you don't have a trade, you have a story.</div>
 </div>
 
+<!-- ═══════════════ SPORTS PAGE ═══════════════ -->
+<div class="page" id="page-sports">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Sports Briefing</div>
+    <div class="hero-date" style="font-size:22px">⚽ Sports</div>
+    <div class="hero-sub" id="sports-sub">World Cup first, more sports later</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div id="sports-out"><div class="empty-state">LOADING SPORTS…</div></div>
+  <div class="radar-disclaimer">Sports framing only. Scores, fixtures, standings and market context depend on the configured data provider in sports/refresh-sports.js. No betting execution.</div>
+</div>
+
 <!-- ═══════════════ HELP PAGE ═══════════════ -->
 <div class="page" id="page-help">
   <div class="hero" style="margin-bottom:1.25rem">
@@ -1296,6 +1354,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <button class="mob-tab" id="mob-journal" onclick="switchPageMobile('journal',this)"><span class="mob-tab-icon">📓</span>JOURNAL</button>
   <button class="mob-tab" id="mob-pse" onclick="switchPageMobile('pse',this)"><span class="mob-tab-icon">🇵🇭</span>PSE</button>
   <button class="mob-tab" id="mob-miro" onclick="switchPageMobile('miro',this)"><span class="mob-tab-icon">🎲</span>MKTS</button>
+  <button class="mob-tab" id="mob-sports" onclick="switchPageMobile('sports',this)"><span class="mob-tab-icon">⚽</span>SPORT</button>
   <button class="mob-tab" id="mob-help" onclick="switchPageMobile('help',this)"><span class="mob-tab-icon">❔</span>HELP</button>
 </div>
 
@@ -1517,6 +1576,7 @@ function switchPage(id, el) {
   if (id==='journal') renderJournal();
   if (id==='pse') renderPh();
   if (id==='miro') renderMiro();
+  if (id==='sports') renderSports();
   if (id==='help') renderLlmUsage();
   window.scrollTo(0,0);
 }
@@ -1536,6 +1596,7 @@ function switchPageMobile(id, el) {
   if (id==='journal') renderJournal();
   if (id==='pse') renderPh();
   if (id==='miro') renderMiro();
+  if (id==='sports') renderSports();
   if (id==='help') renderLlmUsage();
   window.scrollTo(0,0);
 }
@@ -2132,6 +2193,122 @@ function miroJournalBanner(j) {
     'Brier ours ' + s.brierOurs + ' vs market ' + s.brierMarket +
     ' · <span style="color:' + col + '">skill ' + (skill > 0 ? '+' : '') + skill + ' (' + verdict + ')</span>' +
     ll + clvTxt + '</div>';
+}
+
+// ── SPORTS ──
+// Generic sports shell, seeded with World Cup. Data is written by
+// sports/refresh-sports.js so provider tokens never live in the browser.
+function sportsStatusClass(status) {
+  var s = String(status || '').toUpperCase();
+  if (s === 'LIVE' || s === 'IN_PLAY' || s === 'PAUSED') return 'live';
+  if (s === 'FINISHED' || s === 'AWARDED') return 'finished';
+  return '';
+}
+function sportsStatusLabel(status) {
+  var s = String(status || '').replace(/_/g, ' ').toLowerCase();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Scheduled';
+}
+function sportsDate(v) {
+  if (!v) return 'TBD';
+  var d = new Date(v);
+  if (isNaN(d.getTime())) return String(v);
+  return d.toLocaleString('en-PH', {
+    timeZone: 'Asia/Manila', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }) + ' PHT';
+}
+function sportsScore(m) {
+  var s = m.score || {};
+  if (s.home == null && s.away == null) return 'vs';
+  return String(s.home == null ? '-' : s.home) + ' - ' + String(s.away == null ? '-' : s.away);
+}
+function sportsMatchCard(m) {
+  return '<div class="sports-match ' + sportsStatusClass(m.status) + '">' +
+    '<div class="sports-match-meta"><span>' + esc(m.stage || m.group || 'World Cup') + '</span><span>' +
+      esc(sportsDate(m.utcDate)) + ' · ' + esc(sportsStatusLabel(m.status)) + '</span></div>' +
+    '<div class="sports-teams">' +
+      '<div class="sports-team">' + esc(m.home || 'TBD') + '</div>' +
+      '<div class="sports-score">' + esc(sportsScore(m)) + '</div>' +
+      '<div class="sports-team away">' + esc(m.away || 'TBD') + '</div>' +
+    '</div>' +
+    (m.venue ? '<div class="sports-note">' + esc(m.venue) + '</div>' : '') +
+  '</div>';
+}
+function sportsKpi(label, value, sub) {
+  return '<div class="sports-kpi"><div class="sports-kpi-label">' + esc(label) + '</div>' +
+    '<div class="sports-kpi-value">' + esc(value) + '</div>' +
+    '<div class="sports-kpi-sub">' + esc(sub || '') + '</div></div>';
+}
+function sportsTable(rows, empty, cols) {
+  if (!rows || !rows.length) return '<div class="sports-empty">' + esc(empty) + '</div>';
+  return '<table class="sports-table"><thead><tr>' + cols.map(function (c) {
+    return '<th' + (c.num ? ' class="num"' : '') + '>' + esc(c.h) + '</th>';
+  }).join('') + '</tr></thead><tbody>' + rows.map(function (r) {
+    return '<tr>' + cols.map(function (c) {
+      return '<td' + (c.num ? ' class="num"' : '') + '>' + esc(c.v(r)) + '</td>';
+    }).join('') + '</tr>';
+  }).join('') + '</tbody></table>';
+}
+function sportsWorldCupHtml(d) {
+  var wc = d.worldCup || {};
+  var matches = wc.matches || [];
+  var upcoming = wc.upcoming || matches.filter(function (m) { return String(m.status || '').toUpperCase() !== 'FINISHED'; }).slice(0, 8);
+  var recent = wc.recent || matches.filter(function (m) { return String(m.status || '').toUpperCase() === 'FINISHED'; }).slice(0, 5);
+  var live = matches.filter(function (m) { return sportsStatusClass(m.status) === 'live'; }).length;
+  var finished = matches.filter(function (m) { return String(m.status || '').toUpperCase() === 'FINISHED'; }).length;
+  var goals = matches.reduce(function (a, m) {
+    return a + ((m.score && m.score.home != null && m.score.away != null) ? Number(m.score.home || 0) + Number(m.score.away || 0) : 0);
+  }, 0);
+  var next = upcoming[0];
+  var html = '<div class="sports-kpis">' +
+    sportsKpi('Competition', wc.name || 'FIFA World Cup', wc.season || 'World Cup module') +
+    sportsKpi('Matches', String(matches.length || '0'), finished + ' finished · ' + live + ' live') +
+    sportsKpi('Goals', String(goals), finished ? (goals / finished).toFixed(2) + ' per finished match' : 'Waiting for results') +
+    sportsKpi('Next Kickoff', next ? sportsDate(next.utcDate) : 'TBD', next ? ((next.home || 'TBD') + ' vs ' + (next.away || 'TBD')) : 'No fixture loaded') +
+  '</div>';
+  if (wc.providerNote) html += '<div class="pse-caveat">' + esc(wc.providerNote) + '</div>';
+  html += '<div class="sports-layout"><div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Next Fixtures</div>' +
+    (upcoming.length ? '<div class="sports-list">' + upcoming.slice(0, 8).map(sportsMatchCard).join('') + '</div>' : '<div class="sports-empty">No upcoming World Cup fixtures loaded.</div>') +
+    '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Recent Results</div>' +
+    (recent.length ? '<div class="sports-list">' + recent.slice(0, 5).map(sportsMatchCard).join('') + '</div>' : '<div class="sports-empty">No completed World Cup matches loaded yet.</div>') +
+    '</div></div><div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Watchlist</div>' +
+    (wc.watchlist && wc.watchlist.length ? '<div class="sports-list">' + wc.watchlist.map(sportsMatchCard).join('') + '</div>' : '<div class="sports-empty">Set SPORTS_FOLLOW_TEAMS in sports/.env to pin teams here.</div>') +
+    '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Standings</div>' +
+    sportsTable((wc.standings || []).slice(0, 12), 'Standings unavailable from the current feed.', [
+      { h:'Grp', v:function (r) { return r.group || '-'; } },
+      { h:'Team', v:function (r) { return r.team || ''; } },
+      { h:'P', num:true, v:function (r) { return r.playedGames == null ? '-' : r.playedGames; } },
+      { h:'GD', num:true, v:function (r) { return r.goalDifference == null ? '-' : r.goalDifference; } },
+      { h:'Pts', num:true, v:function (r) { return r.points == null ? '-' : r.points; } }
+    ]) + '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Top Scorers</div>' +
+    sportsTable((wc.scorers || []).slice(0, 10), 'Scorers unavailable from the current feed.', [
+      { h:'Player', v:function (r) { return r.player || ''; } },
+      { h:'Team', v:function (r) { return r.team || ''; } },
+      { h:'G', num:true, v:function (r) { return r.goals == null ? '-' : r.goals; } }
+    ]) + '</div>';
+  html += '</div></div>';
+  return html;
+}
+function renderSports() {
+  var out = document.getElementById('sports-out');
+  var sub = document.getElementById('sports-sub');
+  if (!out) return;
+  if (!window.fbLoadSports) { out.innerHTML = '<div class="empty-state">SPORTS UNAVAILABLE</div>'; return; }
+  out.innerHTML = '<div class="empty-state">LOADING SPORTS…</div>';
+  window.fbLoadSports().then(function (d) {
+    if (!d || !d.worldCup) {
+      if (sub) sub.textContent = 'No sports data yet';
+      out.innerHTML = '<div class="empty-state">NO SPORTS DATA YET — RUN sports/refresh-sports.js</div>';
+      return;
+    }
+    if (sub) sub.textContent = (d.title || 'Sports briefing') + ' · as of ' + esc(d.asOf || d.generatedAt || '—');
+    out.innerHTML = sportsWorldCupHtml(d);
+  });
 }
 
 // ── LLM USAGE & COST (Help tab report) ──

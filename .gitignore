@@ -15,3 +15,9 @@ miro/node_modules/
 miro/serviceAccountKey.json
 miro/.env
 miro/refresh.log
+
+# sports - local-only secrets and deps
+sports/node_modules/
+sports/serviceAccountKey.json
+sports/.env
+sports/refresh.log

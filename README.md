@@ -11,6 +11,9 @@ Private daily intelligence briefing desk for Bob.
   market price vs an independent AI panel, executable edge, GO/NO-GO, and a
   Brier-score journal. The honest version of "MiroFish" — research framing, never
   a bet or execution. Docs: [`miro/README.md`](miro/README.md).
+- **⚽ Sports** — a provider-backed sports briefing tab. First lane is FIFA World
+  Cup fixtures/results, standings, scorers, and followed-team watchlist. The local
+  runner writes `briefings-bob/sports-*` docs that the browser reads.
 
 - **💰 LLM usage & cost** (Help tab) — every OpenAI call across the app (briefing,
   deep-research, radar catalyst, Markets panel) records token usage to a shared
@@ -20,6 +23,22 @@ Private daily intelligence briefing desk for Bob.
 
 Each market feature is a **local Node refresh script** that writes Firestore docs
 the front end reads — no Cloud Functions, no build step.
+
+## Sports refresh
+
+The Sports tab starts with the FIFA World Cup through football-data.org. Keep the
+provider token local/server-side; the browser only reads Firestore.
+
+```powershell
+cd C:\Users\AO\projects\bobdailybriefing\sports
+npm install
+set FOOTBALL_DATA_TOKEN=your_token_here
+set SPORTS_FOLLOW_TEAMS=Australia,England
+npm run refresh
+```
+
+Use `npm run dry-run` to inspect the generated document without writing
+`briefings-bob/sports-<date>` and `briefings-bob/sports-latest`.
 
 ## OpenAI generation
 

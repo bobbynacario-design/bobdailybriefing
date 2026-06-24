@@ -1,0 +1,17 @@
+{
+  "name": "bobdailybriefing-sports",
+  "description": "Local sports refresh: fetch World Cup data -> write Firestore doc",
+  "private": true,
+  "type": "module",
+  "main": "refresh-sports.js",
+  "scripts": {
+    "refresh": "node refresh-sports.js",
+    "dry-run": "node refresh-sports.js --dry-run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0"
+  }
+}
