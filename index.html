@@ -625,24 +625,25 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-disclaimer{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;line-height:1.7;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rim)}
 
 /* ── SPORTS ── */
-.sports-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1rem}
+#sports-out{max-width:1420px;margin:0 auto}
+.sports-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}
 .sports-kpi{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.85rem 1rem}
 .sports-kpi-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
 .sports-kpi-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
 .sports-kpi-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.5}
-.sports-layout{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.85fr);gap:1rem;align-items:start}
+.sports-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);gap:1rem;align-items:start}
 .sports-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem}
 .sports-panel-title{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
-.sports-list{display:flex;flex-direction:column;gap:.65rem}
-.sports-match{position:relative;border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.8rem .85rem .8rem 1rem;overflow:hidden}
+.sports-list{display:flex;flex-direction:column;gap:.55rem}
+.sports-match{position:relative;border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem .8rem .75rem 1rem;overflow:hidden}
 .sports-match:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--blue)}
 .sports-match.live:before{background:var(--green)}
 .sports-match.finished:before{background:var(--gold)}
-.sports-match-meta{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.55rem}
-.sports-teams{display:grid;grid-template-columns:1fr auto 1fr;gap:.7rem;align-items:center}
-.sports-team{font-family:var(--serif);font-size:17px;font-weight:700;color:var(--txt);line-height:1.25}
+.sports-match-meta{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.45rem}
+.sports-teams{display:grid;grid-template-columns:minmax(120px,1fr) 72px minmax(120px,1fr);gap:.55rem;align-items:center;max-width:680px;margin:0 auto}
+.sports-team{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt);line-height:1.25;min-width:0}
 .sports-team.away{text-align:right}
-.sports-score{font-family:var(--mono);font-size:18px;color:var(--gold);white-space:nowrap}
+.sports-score{font-family:var(--mono);font-size:17px;color:var(--gold);white-space:nowrap;text-align:center;font-variant-numeric:tabular-nums}
 .sports-note{font-size:12px;color:var(--txt2);line-height:1.55;margin-top:.55rem}
 .sports-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
 .sports-table th,.sports-table td{padding:.45rem .35rem;border-bottom:1px solid var(--rim);text-align:left}
@@ -650,7 +651,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-table td.num,.sports-table th.num{text-align:right;font-variant-numeric:tabular-nums}
 .sports-tag-row{display:flex;gap:.35rem;flex-wrap:wrap}
 .sports-empty{font-size:12px;line-height:1.7;color:var(--txt3);font-style:italic}
-@media(max-width:900px){.sports-kpis{grid-template-columns:repeat(2,1fr)}.sports-layout{grid-template-columns:1fr}}
+@media(max-width:900px){#sports-out{max-width:none}.sports-kpis{grid-template-columns:repeat(2,1fr)}.sports-layout{grid-template-columns:1fr}}
 @media(max-width:520px){.sports-kpis{grid-template-columns:1fr}.sports-teams{grid-template-columns:1fr;gap:.25rem}.sports-score{text-align:left}.sports-team.away{text-align:left}}
 
 /* ── JOURNAL (V3) ── */
