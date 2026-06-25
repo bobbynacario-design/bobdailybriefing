@@ -1337,7 +1337,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Regime rationale</b> — in risk-off tape, the box leans harder on visible relative strength and confirmed structure; forming names become stalks rather than chases.</li>
         <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
-      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box, and it never repeats a name already in Taker Nuggets. It hunts the early zone: <b>forming</b> names where relative strength is turning up and volume is coming in <i>before</i> the &ldquo;confirmed&rdquo; screen — the one everyone else runs — lights up. It deliberately tilts away from top-of-screen names and toward emerging leadership, volume thrust, and live catalysts; raw target distance is only a capped tiebreak. Higher variance and non-consensus by design — treat these as early watchlist ideas, not clean confirmations.</p>
+      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box, and it never repeats a name already in Taker Nuggets. It hunts the early zone: <b>forming</b> names where relative strength is turning up and volume is coming in <i>before</i> the &ldquo;confirmed&rdquo; screen — the one everyone else runs — lights up. It deliberately tilts away from top-of-screen names and toward emerging leadership, volume thrust, and live catalysts; raw target distance is only a capped tiebreak. The <b>asymmetry bar</b> (shown as <span class="src">bar ≥X%</span>) is adaptive — it scales with the current tape, so it stays low in a compressed risk-off field and rises when risk-on widens target distances; a name only qualifies if it's unusually asymmetric <i>for today</i>. Higher variance and non-consensus by design — treat these as early watchlist ideas, not clean confirmations.</p>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
         <li><b>Asset type</b> — <span class="help-pill">All</span> / <span class="help-pill">Stocks</span> / <span class="help-pill">Crypto</span> / <span class="help-pill">Commodities</span>. Each pill shows how many names sit in it. <i>Commodities</i> = metal/energy/broad-commodity ETFs (GLD, USO, GDX…); energy <i>stocks</i> like XOM stay under Stocks.</li>
@@ -1961,9 +1961,28 @@ function renderRadarTakerNuggets(list) {
     '<div class="radar-nuggets">' + base.map(radarTakerCard).join('') + '</div>' +
   '</div>';
 }
+function radarMedian(nums) {
+  var a = (nums || []).slice().sort(function (x, y) { return x - y; });
+  if (!a.length) return 0;
+  var mid = Math.floor(a.length / 2);
+  return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+}
+// Adaptive upside bar: scales with TODAY's tape so "wildcard = unusually
+// asymmetric for the current field". Compressed risk-off tape (small target
+// distances) -> low bar; expanded risk-on tape -> higher bar. Computed over the
+// live non-invalidated field, with a sane absolute minimum so it can't drift to
+// zero or block everything. It's a filter, not a sort input — the rank is regime-
+// independent, so behavior stays consistent as the regime flips.
+function radarWildcardFloor(list) {
+  var fieldUpside = (list || []).filter(function (s) {
+    return s.status !== 'invalidated' && radarUpsidePct(s) !== null;
+  }).map(radarUpsidePct);
+  return Math.max(2.5, radarMedian(fieldUpside) * 0.6);
+}
 function renderRadarWildcards(list) {
   var el = document.getElementById('radar-wildcards');
   if (!el) return;
+  var upsideFloor = radarWildcardFloor(list);
   var base = (list || []).filter(function (s) {
     var upside = radarUpsidePct(s);
     // The early/non-obvious zone: anything the Taker box hasn't already claimed,
@@ -1972,7 +1991,7 @@ function renderRadarWildcards(list) {
     return s.status !== 'invalidated' &&
       !radarTakerSymbols[s.symbol] &&
       upside !== null &&
-      upside >= 6 &&
+      upside >= upsideFloor &&
       (s.score || 0) >= 42 &&
       notObvious &&
       radarWildcardRank(s) > 0;
@@ -1980,7 +1999,7 @@ function renderRadarWildcards(list) {
     return radarWildcardRank(b) - radarWildcardRank(a);
   }).slice(0, 3);
   if (!base.length) {
-    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No early-edge names outside the Taker list right now. Nothing is setting up ahead of the crowd in this filter.</div></div></div></div>';
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No early-edge names outside the Taker list clearing today&rsquo;s asymmetry bar (&ge;' + upsideFloor.toFixed(1) + '% upside). Nothing is setting up ahead of the crowd in this filter.</div></div></div></div>';
     return;
   }
   var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
@@ -1988,7 +2007,7 @@ function renderRadarWildcards(list) {
   el.innerHTML = '<div class="radar-taker radar-wildcard">' +
     '<div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div>' +
     '<div class="radar-taker-sub">Early edge — names building leadership and volume before the &ldquo;confirmed&rdquo; screen lights up. Higher variance, deliberately non-consensus.</div></div>' +
-    '<div class="radar-taker-sub">' + esc(activeFilter || 'Ahead of the crowd') + '</div></div>' +
+    '<div class="radar-taker-sub">' + esc(activeFilter || 'Ahead of the crowd') + ' · bar &ge;' + upsideFloor.toFixed(1) + '%</div></div>' +
     '<div class="radar-nuggets">' + base.map(radarWildcardCard).join('') + '</div>' +
   '</div>';
 }
