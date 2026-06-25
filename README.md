@@ -13,7 +13,9 @@ Private daily intelligence briefing desk for Bob.
   a bet or execution. Docs: [`miro/README.md`](miro/README.md).
 - **⚽ Sports** — a provider-backed sports briefing tab. First lane is FIFA World
   Cup fixtures/results, standings, scorers, and followed-team watchlist. The local
-  runner writes `briefings-bob/sports-*` docs that the browser reads.
+  runner writes `briefings-bob/sports-*` docs that the browser reads. It also
+  computes a first-pass team momentum score from recent form, goal-difference
+  trend, attack/defense rates, and opponent-quality proxy.
 
 - **💰 LLM usage & cost** (Help tab) — every OpenAI call across the app (briefing,
   deep-research, radar catalyst, Markets panel) records token usage to a shared

@@ -152,6 +152,141 @@ function followedMatch(m) {
   });
 }
 
+function matchTeams(m) {
+  return [m.home, m.away].filter(function (t) { return t && t !== 'TBD'; });
+}
+
+function matchPoints(m, team) {
+  if (!m.score || m.score.home == null || m.score.away == null) return 0;
+  var isHome = m.home === team;
+  var gf = isHome ? m.score.home : m.score.away;
+  var ga = isHome ? m.score.away : m.score.home;
+  if (gf > ga) return 3;
+  if (gf === ga) return 1;
+  return 0;
+}
+
+function matchGoalDiff(m, team) {
+  if (!m.score || m.score.home == null || m.score.away == null) return 0;
+  return m.home === team ? m.score.home - m.score.away : m.score.away - m.score.home;
+}
+
+function matchGoalsFor(m, team) {
+  if (!m.score || m.score.home == null || m.score.away == null) return 0;
+  return m.home === team ? m.score.home : m.score.away;
+}
+
+function matchGoalsAgainst(m, team) {
+  if (!m.score || m.score.home == null || m.score.away == null) return 0;
+  return m.home === team ? m.score.away : m.score.home;
+}
+
+function pct(n, d) {
+  return d ? Math.round((n / d) * 100) : 0;
+}
+
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function buildTeamMomentum(matches, standings) {
+  var finished = matches.filter(function (m) {
+    return String(m.status || '').toUpperCase() === 'FINISHED'
+      && m.score && m.score.home != null && m.score.away != null;
+  });
+  var standingByTeam = {};
+  (standings || []).forEach(function (s) {
+    standingByTeam[s.team] = s;
+  });
+
+  var opponents = {};
+  finished.forEach(function (m) {
+    matchTeams(m).forEach(function (team) {
+      var opp = m.home === team ? m.away : m.home;
+      if (!opponents[team]) opponents[team] = [];
+      opponents[team].push(opp);
+    });
+  });
+
+  var teams = {};
+  finished.forEach(function (m) {
+    matchTeams(m).forEach(function (team) {
+      if (!teams[team]) teams[team] = [];
+      teams[team].push(m);
+    });
+  });
+
+  function opponentQuality(team) {
+    var opps = opponents[team] || [];
+    if (!opps.length) return 0;
+    var avg = opps.reduce(function (sum, opp) {
+      var s = standingByTeam[opp];
+      return sum + (s && s.playedGames ? (s.points / s.playedGames) : 1);
+    }, 0) / opps.length;
+    return round2(avg);
+  }
+
+  return Object.keys(teams).map(function (team) {
+    var all = teams[team].slice().sort(function (a, b) {
+      return String(a.utcDate).localeCompare(String(b.utcDate));
+    });
+    var recent = all.slice(-5);
+    var last3 = all.slice(-3);
+    var played = all.length;
+    var points = all.reduce(function (sum, m) { return sum + matchPoints(m, team); }, 0);
+    var recentPoints = recent.reduce(function (sum, m) { return sum + matchPoints(m, team); }, 0);
+    var recentMax = recent.length * 3;
+    var gf = all.reduce(function (sum, m) { return sum + matchGoalsFor(m, team); }, 0);
+    var ga = all.reduce(function (sum, m) { return sum + matchGoalsAgainst(m, team); }, 0);
+    var gd = gf - ga;
+    var gdTrend = last3.reduce(function (sum, m) { return sum + matchGoalDiff(m, team); }, 0);
+    var cleanSheets = all.filter(function (m) { return matchGoalsAgainst(m, team) === 0; }).length;
+    var oppQ = opponentQuality(team);
+    var attackRate = played ? gf / played : 0;
+    var defenseRate = played ? ga / played : 0;
+    var formScore = recentMax ? pct(recentPoints, recentMax) : 0;
+    var gdScore = clamp(50 + gdTrend * 10, 0, 100);
+    var attackScore = clamp(attackRate * 32, 0, 100);
+    var defenseScore = clamp(100 - defenseRate * 34, 0, 100);
+    var oppScore = clamp(oppQ * 34, 0, 100);
+    var score = Math.round(formScore * 0.34 + gdScore * 0.22 + attackScore * 0.18 + defenseScore * 0.16 + oppScore * 0.10);
+    var label = score >= 72 ? 'RISING' : (score >= 58 ? 'WATCH' : (score <= 38 ? 'FADING' : 'STEADY'));
+    return {
+      team: team,
+      score: score,
+      label: label,
+      played: played,
+      points: points,
+      pointsPerMatch: round2(played ? points / played : 0),
+      recentForm: recent.map(function (m) {
+        var p = matchPoints(m, team);
+        return p === 3 ? 'W' : (p === 1 ? 'D' : 'L');
+      }).join(''),
+      recentPoints: recentPoints,
+      recentMatches: recent.length,
+      goalsFor: gf,
+      goalsAgainst: ga,
+      goalDifference: gd,
+      goalDiffTrend: gdTrend,
+      attackRate: round2(attackRate),
+      defenseRate: round2(defenseRate),
+      cleanSheetRate: pct(cleanSheets, played),
+      opponentQuality: oppQ,
+      note: label === 'RISING'
+        ? 'Form, scoring and recent goal difference are moving in the right direction.'
+        : (label === 'FADING'
+          ? 'Recent results or goal trend are weakening relative to the field.'
+          : 'Needs one more positive result to confirm the move.')
+    };
+  }).sort(function (a, b) {
+    return b.score - a.score || b.goalDiffTrend - a.goalDiffTrend || b.pointsPerMatch - a.pointsPerMatch;
+  });
+}
+
 async function fetchWorldCup() {
   var query = '?season=2026';
   var matchesJson = await footballData('/competitions/WC/matches' + query);
@@ -181,6 +316,7 @@ async function fetchWorldCup() {
     });
   });
   var scorers = (scorersJson && scorersJson.scorers || []).map(normScorer);
+  var momentum = buildTeamMomentum(matches, standings);
 
   return {
     name: matchesJson.competition && matchesJson.competition.name || 'FIFA World Cup',
@@ -192,7 +328,11 @@ async function fetchWorldCup() {
     recent: recent,
     watchlist: matches.filter(followedMatch).slice(0, 10),
     standings: standings,
-    scorers: scorers
+    scorers: scorers,
+    momentum: momentum,
+    risingTeams: momentum.filter(function (t) { return t.label === 'RISING'; }).slice(0, 6),
+    watchTeams: momentum.filter(function (t) { return t.label === 'WATCH'; }).slice(0, 6),
+    fadingTeams: momentum.filter(function (t) { return t.label === 'FADING'; }).slice(0, 6)
   };
 }
 
@@ -212,7 +352,11 @@ function setupDoc(reason) {
       recent: [],
       watchlist: [],
       standings: [],
-      scorers: []
+      scorers: [],
+      momentum: [],
+      risingTeams: [],
+      watchTeams: [],
+      fadingTeams: []
     }
   };
 }
