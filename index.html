@@ -635,6 +635,12 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-nugget-upside{font-family:var(--mono);font-size:10px;color:var(--green);letter-spacing:.04em;text-align:right;margin-top:.3rem;white-space:nowrap}
 .radar-nugget-body{font-size:12px;color:var(--txt2);line-height:1.6;margin-bottom:.55rem}
 .radar-nugget-risk{font-family:var(--mono);font-size:10px;color:var(--txt3);line-height:1.5}
+.radar-wildcard{border-left-color:var(--purple);border-color:rgba(155,111,232,.2);background:linear-gradient(180deg,var(--bg2),var(--bg3))}
+.radar-wildcard .radar-taker-title{color:var(--purple)}
+.radar-wildcard .radar-nugget{border-color:rgba(155,111,232,.22)}
+.radar-wildcard .radar-nugget-action{color:var(--purple);border-color:rgba(155,111,232,.32);background:var(--purple-dim)}
+.radar-wildcard .radar-nugget-upside{color:var(--green)}
+.radar-wildcard-score{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;margin-top:.25rem;white-space:nowrap}
 .radar-disclaimer{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;line-height:1.7;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rim)}
 @media(max-width:900px){.radar-nuggets{grid-template-columns:1fr}}
 
@@ -1233,6 +1239,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   </div>
   <div id="radar-regime"></div>
   <div id="radar-taker"></div>
+  <div id="radar-wildcards"></div>
   <div id="radar-filter" class="radar-filter"></div>
   <div id="radar-status-filter"></div>
   <div id="radar-out"><div class="empty-state">LOADING RADAR…</div></div>
@@ -1330,6 +1337,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Regime rationale</b> — in risk-off tape, the box is deliberately stricter: it favors visible relative strength and confirmed structure, while forming names become stalks rather than chases.</li>
         <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
+      <p><b>Wildcard Upside</b> is the less traditional box. It looks for non-invalidated names with bigger target distance and enough structure to stay alive, even when the setup is messier than the main Taker list. Treat these as asymmetric watchlist ideas, not clean confirmations.</p>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
         <li><b>Asset type</b> — <span class="help-pill">All</span> / <span class="help-pill">Stocks</span> / <span class="help-pill">Crypto</span> / <span class="help-pill">Commodities</span>. Each pill shows how many names sit in it. <i>Commodities</i> = metal/energy/broad-commodity ETFs (GLD, USO, GDX…); energy <i>stocks</i> like XOM stay under Stocks.</li>
@@ -1814,6 +1822,7 @@ function renderRadarCards() {
     return radarStatusFilter === 'All' || s.status === radarStatusFilter;
   });
   renderRadarTakerNuggets(list);
+  renderRadarWildcards(list);
   if (list.length) {
     out.innerHTML = '<div class="radar-grid">' + list.map(radarCard).join('') + '</div>';
     return;
@@ -1861,6 +1870,38 @@ function radarTakerCard(s) {
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
 }
+function radarWildcardRank(s) {
+  var upside = radarUpsidePct(s);
+  if (upside === null) return -999;
+  var statusBoost = s.status === 'forming' ? 10 : (s.status === 'confirmed' ? 6 : -40);
+  var catalystBoost = s.catalyst ? 4 : 0;
+  var riskPenalty = s.riskQuality != null && s.riskQuality < 35 ? 8 : 0;
+  return upside * 1.4 + (s.score || 0) * 0.45 + statusBoost + catalystBoost - riskPenalty;
+}
+function radarWildcardWhy(s) {
+  var bits = [];
+  var upside = radarUpsideLabel(s).toLowerCase();
+  bits.push(upside + ' to target');
+  bits.push(s.status === 'forming' ? 'not fully confirmed yet' : 'structure is alive');
+  bits.push('score ' + s.score);
+  if (s.riskQuality != null && s.riskQuality < 45) bits.push('messier risk box');
+  if (s.catalyst) bits.push('has a current catalyst');
+  return bits.join('; ') + '.';
+}
+function radarWildcardCard(s) {
+  var invalid = s.invalidation || ('Wrong below ' + radarLevel(s.stop));
+  return '<div class="radar-nugget">' +
+    '<div class="radar-nugget-top">' +
+      '<div><div class="radar-nugget-symbol">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme || '') + '</span></div>' +
+      '<span class="rel-badge ' + radarStatusClass(s.status) + '">' + esc(s.status) + '</span></div>' +
+      '<div><div class="radar-nugget-action">Wildcard</div>' +
+      '<div class="radar-nugget-upside">' + esc(radarUpsideLabel(s)) + '</div>' +
+      '<div class="radar-wildcard-score">score ' + esc(s.score) + '</div></div>' +
+    '</div>' +
+    '<div class="radar-nugget-body">' + esc(radarWildcardWhy(s)) + '</div>' +
+    '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
+  '</div>';
+}
 function renderRadarTakerNuggets(list) {
   var el = document.getElementById('radar-taker');
   if (!el) return;
@@ -1890,11 +1931,40 @@ function renderRadarTakerNuggets(list) {
     '<div class="radar-nuggets">' + base.map(radarTakerCard).join('') + '</div>' +
   '</div>';
 }
+function renderRadarWildcards(list) {
+  var el = document.getElementById('radar-wildcards');
+  if (!el) return;
+  var base = (list || []).filter(function (s) {
+    var upside = radarUpsidePct(s);
+    var lessClean = s.status === 'forming' || (s.score || 0) < 70 || (s.riskQuality != null && s.riskQuality < 55);
+    return s.status !== 'invalidated' &&
+      upside !== null &&
+      upside >= 8 &&
+      (s.score || 0) >= 45 &&
+      lessClean &&
+      radarWildcardRank(s) > 0;
+  }).sort(function (a, b) {
+    return radarWildcardRank(b) - radarWildcardRank(a);
+  }).slice(0, 3);
+  if (!base.length) {
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No asymmetric-but-alive setups in this filter. That is useful information too.</div></div></div></div>';
+    return;
+  }
+  var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
+    .filter(Boolean).join(' / ');
+  el.innerHTML = '<div class="radar-taker radar-wildcard">' +
+    '<div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div>' +
+    '<div class="radar-taker-sub">Higher-asymmetry names that are still alive, but less clean than Taker Nuggets.</div></div>' +
+    '<div class="radar-taker-sub">' + esc(activeFilter || 'Speculative pressure points') + '</div></div>' +
+    '<div class="radar-nuggets">' + base.map(radarWildcardCard).join('') + '</div>' +
+  '</div>';
+}
 function renderRadar() {
   var out = document.getElementById('radar-out');
   var sub = document.getElementById('radar-sub');
   var regimeEl = document.getElementById('radar-regime');
   var takerEl = document.getElementById('radar-taker');
+  var wildcardEl = document.getElementById('radar-wildcards');
   var filterEl = document.getElementById('radar-filter');
   var statusEl = document.getElementById('radar-status-filter');
   if (!out) return;
@@ -1905,6 +1975,7 @@ function renderRadar() {
       radarSignals = null;
       if (regimeEl) regimeEl.innerHTML = '';
       if (takerEl) takerEl.innerHTML = '';
+      if (wildcardEl) wildcardEl.innerHTML = '';
       if (filterEl) filterEl.innerHTML = '';
       if (statusEl) statusEl.innerHTML = '';
       if (sub) sub.textContent = 'No radar data yet';
