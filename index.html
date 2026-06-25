@@ -2286,7 +2286,58 @@ function sportsMomentumCard(t) {
     '<div class="sports-momentum-note">' + esc(t.note || '') + '</div>' +
   '</div>';
 }
-function sportsWorldCupHtml(d) {
+function sportsTeamKey(s) {
+  return String(s || '').toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+function sportsMarketTeam(m) {
+  var label = String(m.label || m.question || '');
+  var mm = label.match(/^(?:will\s+)?(.+?)\s+win(?:s)?\s+(?:the\s+)?(?:2026\s+)?(?:fifa\s+)?world cup/i);
+  return mm ? mm[1].trim() : '';
+}
+function sportsPct(v) {
+  return v == null ? '-' : (v * 100).toFixed(1) + '%';
+}
+function sportsMarketRead(gap) {
+  if (gap == null) return 'NO MATCH';
+  if (gap >= 0.04) return 'FORM AHEAD';
+  if (gap <= -0.04) return 'MARKET AHEAD';
+  return 'FAIR / CONFIRMED';
+}
+function sportsMarketLens(wc, miro) {
+  var momentum = wc.momentum || [];
+  var markets = (miro && miro.markets || []).filter(function (m) {
+    return String(m.theme || '').toLowerCase() === 'sports' && sportsMarketTeam(m);
+  });
+  if (!markets.length) return '<div class="sports-empty">No World Cup outright markets loaded yet. Run miro/refresh-miro.js to update the Markets tab.</div>';
+  var byTeam = {};
+  momentum.forEach(function (t) { byTeam[sportsTeamKey(t.team)] = t; });
+  var rows = markets.map(function (m) {
+    var team = sportsMarketTeam(m);
+    return { market:m, team:team, momentum:byTeam[sportsTeamKey(team)] || null };
+  }).filter(function (r) { return r.momentum; });
+  if (!rows.length) return '<div class="sports-empty">World Cup markets loaded, but team names did not match the Sports momentum feed.</div>';
+  var sum = rows.reduce(function (a, r) { return a + Math.max(0, r.momentum.score || 0); }, 0) || 1;
+  rows.forEach(function (r) {
+    r.momentumShare = Math.max(0, r.momentum.score || 0) / sum;
+    r.marketProb = r.market.impliedYes;
+    r.gap = r.marketProb == null ? null : r.momentumShare - r.marketProb;
+    r.read = sportsMarketRead(r.gap);
+  });
+  rows.sort(function (a, b) {
+    return Math.abs(b.gap || 0) - Math.abs(a.gap || 0);
+  });
+  return sportsTable(rows, 'No matched market rows.', [
+    { h:'Team', v:function (r) { return r.team; } },
+    { h:'Momentum', num:true, v:function (r) { return sportsPct(r.momentumShare); } },
+    { h:'Market', num:true, v:function (r) { return sportsPct(r.marketProb); } },
+    { h:'Gap', num:true, v:function (r) { return r.gap == null ? '-' : ((r.gap > 0 ? '+' : '') + (r.gap * 100).toFixed(1) + ' pts'); } },
+    { h:'Read', v:function (r) { return r.read; } }
+  ]) + '<div class="sports-empty" style="margin-top:.55rem">Momentum is normalized only across teams with outright markets in the Markets tab. It is a comparison lens, not a true win probability.</div>';
+}
+function sportsWorldCupHtml(d, miro) {
   var wc = d.worldCup || {};
   var matches = wc.matches || [];
   var momentum = wc.momentum || [];
@@ -2308,6 +2359,9 @@ function sportsWorldCupHtml(d) {
   if (wc.providerNote) html += '<div class="pse-caveat">' + esc(wc.providerNote) + '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Rising Teams</div>' +
     (risingTeams.length ? '<div class="sports-momentum-list">' + risingTeams.slice(0, 3).map(sportsMomentumCard).join('') + '</div>' : '<div class="sports-empty">Momentum model needs completed matches before it can identify rising teams.</div>') +
+    '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">World Cup Market Lens</div>' +
+    sportsMarketLens(wc, miro) +
     '</div>';
   html += '<div class="sports-layout"><div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Next Fixtures</div>' +
@@ -2350,7 +2404,9 @@ function renderSports() {
   if (!out) return;
   if (!window.fbLoadSports) { out.innerHTML = '<div class="empty-state">SPORTS UNAVAILABLE</div>'; return; }
   out.innerHTML = '<div class="empty-state">LOADING SPORTS…</div>';
-  window.fbLoadSports().then(function (d) {
+  var mp = window.fbLoadMiro ? window.fbLoadMiro().catch(function () { return null; }) : Promise.resolve(null);
+  Promise.all([window.fbLoadSports(), mp]).then(function (res) {
+    var d = res[0], miro = res[1];
     if (!d || !d.worldCup) {
       if (sub) sub.textContent = 'No sports data yet';
       out.innerHTML = '<div class="empty-state">NO SPORTS DATA YET — RUN sports/refresh-sports.js</div>';
@@ -2358,7 +2414,7 @@ function renderSports() {
     }
     if (sub) sub.textContent = (d.title || 'Sports briefing') + ' · as of ' + esc(d.asOf || d.generatedAt || '—');
     try {
-      out.innerHTML = sportsWorldCupHtml(d);
+      out.innerHTML = sportsWorldCupHtml(d, miro);
     } catch (e) {
       console.error('Sports render failed:', e);
       out.innerHTML = '<div class="empty-state">SPORTS RENDER FAILED — CHECK CONSOLE</div>';

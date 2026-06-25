@@ -15,7 +15,9 @@ Private daily intelligence briefing desk for Bob.
   Cup fixtures/results, standings, scorers, and followed-team watchlist. The local
   runner writes `briefings-bob/sports-*` docs that the browser reads. It also
   computes a first-pass team momentum score from recent form, goal-difference
-  trend, attack/defense rates, and opponent-quality proxy.
+  trend, attack/defense rates, and opponent-quality proxy. The Sports tab also
+  joins World Cup momentum to the Markets tab's outright odds and shows a
+  price-vs-form "Market Lens" for matched teams.
 
 - **💰 LLM usage & cost** (Help tab) — every OpenAI call across the app (briefing,
   deep-research, radar catalyst, Markets panel) records token usage to a shared
