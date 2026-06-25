@@ -1337,7 +1337,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Regime rationale</b> — in risk-off tape, the box leans harder on visible relative strength and confirmed structure; forming names become stalks rather than chases.</li>
         <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
-      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box, and it never repeats a name already in Taker Nuggets. It hunts the early zone: <b>forming</b> names where relative strength is turning up and volume is coming in <i>before</i> the &ldquo;confirmed&rdquo; screen — the one everyone else runs — lights up. It deliberately tilts away from top-of-screen names and toward emerging leadership, volume thrust, and live catalysts; raw target distance is only a capped tiebreak. The <b>asymmetry bar</b> (shown as <span class="src">bar ≥X%</span>) is adaptive — it scales with the current tape, so it stays low in a compressed risk-off field and rises when risk-on widens target distances; a name only qualifies if it's unusually asymmetric <i>for today</i>. One slot is always reserved for the single biggest-upside qualifier (tagged <span class="src">Top upside</span>) so a standout fat-tail is never crowded out by names that merely lead harder; the other two fill by leadership rank. Higher variance and non-consensus by design — treat these as early watchlist ideas, not clean confirmations.</p>
+      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box — early, deliberately non-consensus names. It never repeats a name already in Taker Nuggets, and it hunts the <b>forming</b> zone where relative strength and volume are turning up <i>before</i> the &ldquo;confirmed&rdquo; screen — the one everyone else runs — lights up:</p>
+      <ul>
+        <li><b>Leadership-first</b> — ranked by emerging relative strength, volume thrust and live catalysts, <i>not</i> raw target distance (that's only a capped tiebreak), so it tilts away from already-obvious top-of-screen names.</li>
+        <li><b>Adaptive asymmetry bar</b> (<span class="src">bar ≥X%</span>) — the minimum upside to qualify scales with the tape: low in a compressed risk-off field, higher when risk-on widens target distances. A name has to be unusually asymmetric <i>for today</i>.</li>
+        <li><b>Top upside</b> — one slot is always reserved for the single biggest-upside qualifier, so a standout fat-tail is never crowded out by names that merely lead harder. The other two fill by leadership rank.</li>
+      </ul>
+      <p>Higher variance and non-consensus by design — treat these as early watchlist ideas, not clean confirmations.</p>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
         <li><b>Asset type</b> — <span class="help-pill">All</span> / <span class="help-pill">Stocks</span> / <span class="help-pill">Crypto</span> / <span class="help-pill">Commodities</span>. Each pill shows how many names sit in it. <i>Commodities</i> = metal/energy/broad-commodity ETFs (GLD, USO, GDX…); energy <i>stocks</i> like XOM stay under Stocks.</li>
@@ -1385,12 +1391,12 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>GF / GA chips</b> — goals for and goals against per match. Rising with strong GF and low GA is better than rising only because of one messy result.</li>
         <li><b>Tags</b> — <span class="help-pill" style="color:var(--green)">RISING</span> means form and goal trend are improving; <span class="help-pill" style="color:#F0A832">WATCH</span> means promising but not fully confirmed; <span class="help-pill" style="color:var(--red)">FADING</span> means recent results or goal trend are weakening.</li>
       </ul>
-      <p><b>World Cup Market Lens</b> compares the Sports momentum signal with the Markets tab's World Cup outright prices:</p>
+      <p><b>World Cup Market Lens</b> finds where the Sports momentum signal disagrees with the Markets tab's World Cup outright prices. Both sides are re-based over the <i>same</i> set of teams (those with an outright market loaded), so the comparison is like-for-like — not a win probability:</p>
       <ul>
-        <li><b>Momentum %</b> — the team's share of momentum among teams that also have an outright market loaded. It is a comparison index, not a true win probability.</li>
-        <li><b>Market %</b> — the market's implied probability from the Markets tab.</li>
-        <li><b>Gap</b> — momentum % minus market %. Positive means form is ahead of the market; negative means the market is ahead of current form.</li>
-        <li><b>Read</b> — <span class="help-pill">FORM AHEAD</span>, <span class="help-pill">MARKET AHEAD</span>, or <span class="help-pill">FAIR / CONFIRMED</span>. This is a watchlist signal, not an instruction to bet.</li>
+        <li><b>Momentum %</b> — the team's share of momentum within that matched set.</li>
+        <li><b>Market %</b> — the team's share of market-implied probability within the same set. (Raw outright prices are on the Markets tab.)</li>
+        <li><b>Gap</b> — momentum % minus market %. Positive = momentum ranks the team ahead of where the market prices it; negative = the market ranks it ahead of current form.</li>
+        <li><b>Read</b> — <span class="help-pill">FORM AHEAD</span>, <span class="help-pill">MARKET AHEAD</span>, or <span class="help-pill">IN LINE</span>. A watchlist divergence to dig into, not an instruction to bet.</li>
       </ul>
       <p class="help-key">Best use: compare <b>RISING</b> teams with <b>FORM AHEAD</b> market reads, then check the fixtures and path. If a team is RISING but the market is already far ahead, the story may be real but already priced in.</p>
     </div>
@@ -2573,7 +2579,7 @@ function sportsMarketRead(gap) {
   if (gap == null) return 'NO MATCH';
   if (gap >= 0.04) return 'FORM AHEAD';
   if (gap <= -0.04) return 'MARKET AHEAD';
-  return 'FAIR / CONFIRMED';
+  return 'IN LINE';
 }
 function sportsMarketLens(wc, miro) {
   var momentum = wc.momentum || [];
@@ -2586,13 +2592,18 @@ function sportsMarketLens(wc, miro) {
   var rows = markets.map(function (m) {
     var team = sportsMarketTeam(m);
     return { market:m, team:team, momentum:byTeam[sportsTeamKey(team)] || null };
-  }).filter(function (r) { return r.momentum; });
+  }).filter(function (r) { return r.momentum && r.market.impliedYes != null; });
   if (!rows.length) return '<div class="sports-empty">World Cup markets loaded, but team names did not match the Sports momentum feed.</div>';
-  var sum = rows.reduce(function (a, r) { return a + Math.max(0, r.momentum.score || 0); }, 0) || 1;
+  // Apples-to-apples: re-base BOTH sides over the SAME matched set so each is a
+  // share that sums to ~100% across these teams, and the gap is a like-for-like
+  // divergence. (Previously momentum was a within-group share but market was the
+  // absolute implied probability — different denominators overstated the gap.)
+  var sumScore = rows.reduce(function (a, r) { return a + Math.max(0, r.momentum.score || 0); }, 0) || 1;
+  var sumImplied = rows.reduce(function (a, r) { return a + Math.max(0, r.market.impliedYes || 0); }, 0) || 1;
   rows.forEach(function (r) {
-    r.momentumShare = Math.max(0, r.momentum.score || 0) / sum;
-    r.marketProb = r.market.impliedYes;
-    r.gap = r.marketProb == null ? null : r.momentumShare - r.marketProb;
+    r.momentumShare = Math.max(0, r.momentum.score || 0) / sumScore;
+    r.marketShare = Math.max(0, r.market.impliedYes || 0) / sumImplied;
+    r.gap = r.momentumShare - r.marketShare;
     r.read = sportsMarketRead(r.gap);
   });
   rows.sort(function (a, b) {
@@ -2601,10 +2612,10 @@ function sportsMarketLens(wc, miro) {
   return sportsTable(rows, 'No matched market rows.', [
     { h:'Team', v:function (r) { return r.team; } },
     { h:'Momentum', num:true, v:function (r) { return sportsPct(r.momentumShare); } },
-    { h:'Market', num:true, v:function (r) { return sportsPct(r.marketProb); } },
+    { h:'Market', num:true, v:function (r) { return sportsPct(r.marketShare); } },
     { h:'Gap', num:true, v:function (r) { return r.gap == null ? '-' : ((r.gap > 0 ? '+' : '') + (r.gap * 100).toFixed(1) + ' pts'); } },
     { h:'Read', v:function (r) { return r.read; } }
-  ]) + '<div class="sports-empty" style="margin-top:.55rem">Momentum is normalized only across teams with outright markets in the Markets tab. It is a comparison lens, not a true win probability.</div>';
+  ]) + '<div class="sports-empty" style="margin-top:.55rem">Both columns are shares <i>within</i> the teams that have an outright market loaded, so the gap is a like-for-like divergence — where momentum ranks a team higher (FORM AHEAD) or lower (MARKET AHEAD) than the market does. Raw outright prices live on the Markets tab. A comparison lens, not a win probability.</div>';
 }
 function sportsWorldCupHtml(d, miro) {
   var wc = d.worldCup || {};
