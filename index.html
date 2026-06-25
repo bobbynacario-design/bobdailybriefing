@@ -872,6 +872,21 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .trend-rel-num{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1.2}
 .trend-rel-label{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-top:.2rem}
 .trend-rel-pct{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:.15rem}
+.trend-emerge{background:var(--bg3);border:1px solid var(--rim);border-left:3px solid var(--green);border-radius:10px;padding:.7rem .85rem;margin-bottom:.55rem}
+.trend-emerge:last-child{margin-bottom:0}
+.trend-emerge.cooling{border-left-color:var(--red)}
+.trend-emerge-head{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem;margin-bottom:.25rem}
+.trend-emerge-name{font-family:var(--serif);font-size:15px;font-weight:700;color:var(--txt)}
+.trend-emerge-accel{font-family:var(--mono);font-size:10px;color:var(--green);white-space:nowrap}
+.trend-emerge.cooling .trend-emerge-accel{color:var(--red)}
+.trend-emerge-meta{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-bottom:.45rem;letter-spacing:.02em}
+.trend-headline{font-size:12px;line-height:1.5;color:var(--txt2);padding-left:.7rem;border-left:1px solid var(--rim);margin-bottom:.25rem}
+.trend-headline:last-child{margin-bottom:0}
+.trend-headline .thd{color:var(--txt3);font-family:var(--mono);font-size:9px;margin-right:.4rem}
+.trend-xlink{font-size:10px;margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
+.trend-xchip{font-family:var(--mono);border:1px solid var(--rim);border-radius:20px;padding:1px 8px;background:var(--bg2);color:var(--txt2);white-space:nowrap}
+.trend-xchip.radar{border-color:rgba(201,168,76,.35);color:var(--gold)}
+.trend-xchip.miro{border-color:rgba(155,111,232,.4);color:var(--purple)}
 .trend-period-toggle{display:flex;gap:.3rem;margin-bottom:1rem}
 .trend-period-btn{font-family:var(--mono);font-size:10px;padding:.3rem .7rem;border-radius:5px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;text-transform:uppercase}
 .trend-period-btn.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.2)}
@@ -4324,255 +4339,281 @@ function copyAsText() {
 }
 
 // ── TREND TRACKER ──
+// ── TRENDS: relevance-weighted theme/entity tracking ──────────────────────────
+// Replaces the old bag-of-words counter. Tracks domain TOPICS (synonyms unified,
+// casing-agnostic) + discovered proper nouns, each weighted by story relevance,
+// ranked by ACCELERATION (what is building now), with story threads and cross-
+// links to the Radar/Markets surfaces Bob actually acts on.
+var _trendsRadar = null, _trendsMiro = null, _trendsEnrichTried = false;
+
+// Canonical topic -> match terms (lowercase substrings). Tunable.
+var TREND_TOPICS = [
+  {name:'Fed / rates', terms:['federal reserve','the fed','rate cut','rate hike','interest rate','fomc','powell','jerome powell']},
+  {name:'Inflation / CPI', terms:['inflation','cpi','consumer price','ppi ','core price']},
+  {name:'Tariffs / trade', terms:['tariff','trade war','trade deal','import duty','export curb']},
+  {name:'Jobs / labor', terms:['payroll','jobs report','unemployment','labor market','jobless']},
+  {name:'AI', terms:['artificial intelligence',' ai ','ai-','genai','chatbot','large language','data center','data centre']},
+  {name:'Semiconductors', terms:['semiconductor','chipmaker',' chips ',' chip ','foundry','nvidia']},
+  {name:'Crypto', terms:['bitcoin','ethereum','crypto','stablecoin','altcoin']},
+  {name:'Oil / energy', terms:['crude','oil price','opec','brent',' wti','natural gas']},
+  {name:'Gold', terms:['gold price','bullion','gold rose','gold fell','gold hit','gold rallied']},
+  {name:'China', terms:['china','chinese','beijing','pboc']},
+  {name:'Japan / yen', terms:['japan','japanese','bank of japan',' boj',' yen']},
+  {name:'Philippines / peso', terms:['philippine','philippines','peso',' bsp','pse ','manila']},
+  {name:'Taiwan', terms:['taiwan','tsmc','taipei']},
+  {name:'EV', terms:['electric vehicle',' ev ','ev maker','battery','lithium']},
+  {name:'Middle East', terms:['israel','gaza','iran','hezbollah','red sea','houthi']},
+  {name:'Ukraine / Russia', terms:['ukraine','russia','moscow','kyiv','kremlin']},
+  {name:'Insurance', terms:['insurance','insurer','reinsurance','underwriting','catastrophe',' claims']},
+  {name:'Recession risk', terms:['recession','slowdown','contraction','hard landing','soft landing']},
+  {name:'Typhoon / weather', terms:['typhoon','cyclone','monsoon','flooding']},
+  {name:'Trump', terms:['trump']}
+];
+// Flat list of all topic terms — used to suppress discovered proper nouns that a
+// gazetteer topic already covers (e.g. drop discovered "Federal Reserve" when the
+// "Fed / rates" topic matched the same story).
+var TREND_TOPIC_TERMS = (function(){
+  var t=[]; TREND_TOPICS.forEach(function(tp){ tp.terms.forEach(function(x){ var s=x.trim().toLowerCase(); if(s.length>=3) t.push(s); }); }); return t;
+})();
+function trendCoveredByTopic(entLower){
+  return TREND_TOPIC_TERMS.some(function(term){ return entLower.indexOf(term)!==-1 || term.indexOf(entLower)!==-1; });
+}
+
+// news-name -> radar ticker. The chip only shows if that ticker is on the radar.
+var TREND_RADAR_ALIASES = {
+  'nvidia':'NVDA','amd':'AMD','broadcom':'AVGO','tsmc':'TSM','taiwan semiconductor':'TSM','micron':'MU','intel':'INTC','arm holdings':'ARM','super micro':'SMCI','supermicro':'SMCI','semiconductor':'SMH','chips':'SMH','chipmaker':'SMH',
+  'apple':'AAPL','microsoft':'MSFT','alphabet':'GOOGL','google':'GOOGL','amazon':'AMZN','meta':'META','tesla':'TSLA','palantir':'PLTR',
+  'bitcoin':'BTC','ethereum':'ETH','crypto':'BTC','coinbase':'COIN','microstrategy':'MSTR','strategy':'MSTR',
+  'gold':'GLD','silver':'SLV','oil':'USO','crude':'USO','opec':'USO','copper':'COPX'
+};
+// topic name -> alias key for radar lookup
+var TREND_TOPIC_RADAR = {'Semiconductors':'semiconductor','AI':'semiconductor','Crypto':'bitcoin','Oil / energy':'oil','Gold':'gold'};
+
+// Capitalized non-entities to drop when discovering proper nouns.
+var TREND_CAP_STOP = {The:1,A:1,An:1,This:1,That:1,These:1,Those:1,It:1,In:1,On:1,At:1,For:1,And:1,But:1,Or:1,As:1,To:1,Of:1,With:1,From:1,By:1,After:1,Before:1,Over:1,Under:1,Into:1,How:1,Why:1,What:1,When:1,Where:1,Who:1,Will:1,Can:1,May:1,Could:1,Would:1,Should:1,Now:1,Amid:1,Despite:1,Says:1,Said:1,Report:1,Monday:1,Tuesday:1,Wednesday:1,Thursday:1,Friday:1,Saturday:1,Sunday:1,January:1,February:1,March:1,April:1,June:1,July:1,August:1,September:1,October:1,November:1,December:1};
+
+function trendRelevanceWeight(score){ return score==='high'?3:(score==='med'?2:(score==='low'?1:0.4)); }
+function trendDateKey(saved){ return new Date(saved).toISOString().split('T')[0]; }
+function trendFmtDay(key){
+  var p = String(key).split('-'); if(p.length!==3) return key;
+  var mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(+p[1])-1] || p[1];
+  return mo + ' ' + (+p[2]);
+}
+// Discover capitalized multi-word proper nouns (2+ words) the gazetteer missed.
+// Requiring 2+ words avoids most sentence-initial / title-case noise.
+function trendDiscoverEntities(headline){
+  if(!headline) return [];
+  var tokens = String(headline).split(/\s+/), out=[], cur=[];
+  function flush(){
+    if(cur.length>=2){
+      var name = cur.join(' ').replace(/\s+(of|and|the|for)$/i,'').trim();
+      if(name.split(' ').length>=2 && name.length>=6) out.push(name);
+    }
+    cur=[];
+  }
+  for(var i=0;i<tokens.length;i++){
+    var raw = tokens[i].replace(/^[^A-Za-z]+/,'').replace(/[^A-Za-z.&-]+$/,'');
+    var isCap = /^[A-Z][a-z][A-Za-z.&-]*$/.test(raw);
+    var isConn = cur.length>0 && /^(of|and|the|for)$/i.test(raw);
+    if(isCap && !TREND_CAP_STOP[raw]) cur.push(raw);
+    else if(isConn) cur.push(raw.toLowerCase());
+    else flush();
+  }
+  flush();
+  var seen={}, dedup=[];
+  out.forEach(function(e){ var k=e.toLowerCase(); if(!seen[k]){ seen[k]=1; dedup.push(e); } });
+  return dedup;
+}
+
+// Radar/Markets cross-link chips for a mover.
+function trendCrossLinks(m){
+  var chips=[];
+  if(_trendsRadar && _trendsRadar.length){
+    var aliasKey = m.key.indexOf('topic:')===0 ? TREND_TOPIC_RADAR[m.name] : m.name.toLowerCase();
+    var sym = aliasKey ? TREND_RADAR_ALIASES[aliasKey] : null;
+    if(sym){
+      var sig = _trendsRadar.filter(function(s){ return s.symbol===sym; })[0];
+      if(sig) chips.push('<span class="trend-xchip radar">📡 '+esc(sym)+' '+esc(sig.status)+' on Radar</span>');
+    }
+  }
+  if(_trendsMiro && _trendsMiro.length){
+    var needle = m.name.toLowerCase().split(' ')[0];
+    if(needle.length>=3){
+      var mk = _trendsMiro.filter(function(x){ return String(x.label||x.question||'').toLowerCase().indexOf(needle)!==-1; })[0];
+      if(mk) chips.push('<span class="trend-xchip miro">🎲 in Markets</span>');
+    }
+  }
+  return chips;
+}
+
+function trendEmergeCard(m, cooling){
+  var stat = m.stat;
+  var dks = Object.keys(stat.days).sort();
+  var first = dks[0], last = dks[dks.length-1];
+  var seen={}, picks=[];
+  stat.headlines.slice().sort(function(a,b){ return (b.weight-a.weight) || String(b.dateKey).localeCompare(String(a.dateKey)); }).forEach(function(h){
+    var key = (h.headline||'').toLowerCase().slice(0,60);
+    if(h.headline && !seen[key] && picks.length<3){ seen[key]=1; picks.push(h); }
+  });
+  var html = '<div class="trend-emerge'+(cooling?' cooling':'')+'">';
+  html += '<div class="trend-emerge-head"><div class="trend-emerge-name">'+esc(m.name)+(m.isNew?' <span class="trend-new">NEW</span>':'')+'</div>'+
+    '<div class="trend-emerge-accel">'+(m.accel>=0?'▲ +':'▼ ')+m.accel.toFixed(2)+'/briefing</div></div>';
+  html += '<div class="trend-emerge-meta">'+stat.count+' mention'+(stat.count===1?'':'s')+' · '+trendFmtDay(first)+(first!==last?' → '+trendFmtDay(last):'')+'</div>';
+  picks.forEach(function(h){
+    html += '<div class="trend-headline"><span class="thd">'+trendFmtDay(h.dateKey)+'</span>'+esc(h.headline)+'</div>';
+  });
+  var chips = trendCrossLinks(m);
+  if(chips.length) html += '<div class="trend-xlink">'+chips.join('')+'</div>';
+  html += '</div>';
+  return html;
+}
+
 function renderTrends(days, btnEl) {
-  // Update active button
   if (btnEl) {
     document.querySelectorAll('.trend-period-btn').forEach(function(b){ b.classList.remove('active'); });
     btnEl.classList.add('active');
   }
-
+  var out = document.getElementById('trends-out');
   var history = window._briefingHistory || [];
-  if (!history.length) {
-    document.getElementById('trends-out').innerHTML = '<div class="empty-state">NO BRIEFING HISTORY FOR TRENDS</div>';
-    return;
-  }
-
+  if (!history.length) { out.innerHTML = '<div class="empty-state">NO BRIEFING HISTORY FOR TRENDS</div>'; return; }
   var now = new Date();
   var cutoff = days > 0 ? new Date(now.getTime() - days * 86400000) : new Date(0);
   var filtered = history.filter(function(h){ return new Date(h.saved) >= cutoff; });
+  if (!filtered.length) { out.innerHTML = '<div class="empty-state">NO BRIEFINGS IN THIS PERIOD</div>'; return; }
 
-  if (!filtered.length) {
-    document.getElementById('trends-out').innerHTML = '<div class="empty-state">NO BRIEFINGS IN THIS PERIOD</div>';
-    return;
-  }
-
-  var stopWords = ['the','a','an','to','of','in','for','and','is','on','at','by','with','from','as','it','its','that','this','are','was','be','has','have','had','will','been','or','but','not','all','also','than','into','over','new','more','no','up','out','after','about','could','would','may','can','one','two','said','says','they','their','he','she','we','our','you','which','what','when','how','who','where','why','other','some','between','under','during','through','while','because','per','year','been','most','being','still','just','set','below','above','around','since','last','next','first','among','three','four','five','six','billion','million','percent','according','expected','growth','including'];
-
-  // Build per-day date keys for sparklines
-  var dayKeys = [];
-  var numDays = days > 0 ? Math.min(days, 30) : 30;
-  for (var di = numDays - 1; di >= 0; di--) {
-    var dd = new Date(now.getTime() - di * 86400000);
-    dayKeys.push(dd.toISOString().split('T')[0]);
-  }
-
-  // Count keyword frequency + per-day tracking
-  var wordFreq = {};
-  var wordDays = {}; // word -> { 'YYYY-MM-DD': count }
-
-  function extractWords(text) {
-    return text.toLowerCase().replace(/[^a-z\s]/g,' ').split(/\s+/).filter(function(w){ return w.length >= 3 && stopWords.indexOf(w)===-1; });
-  }
-
-  filtered.forEach(function(h) {
-    var d = h.data;
-    var dateKey = new Date(h.saved).toISOString().split('T')[0];
-    Object.keys(d.sections||{}).forEach(function(k) {
-      (d.sections[k]||[]).forEach(function(st) {
-        var text = (st.headline||'') + ' ' + (st.body||'');
-        var words = extractWords(text);
-        // 2-word phrases from headlines
-        var hlWords = (st.headline||'').toLowerCase().replace(/[^a-z\s]/g,' ').split(/\s+/).filter(function(w){ return w.length >= 3 && stopWords.indexOf(w)===-1; });
-        for (var i=0; i<hlWords.length-1; i++) {
-          var phrase = hlWords[i]+' '+hlWords[i+1];
-          wordFreq[phrase] = (wordFreq[phrase]||0) + 2;
-          if (!wordDays[phrase]) wordDays[phrase] = {};
-          wordDays[phrase][dateKey] = (wordDays[phrase][dateKey]||0) + 2;
-        }
-        words.forEach(function(w) {
-          wordFreq[w] = (wordFreq[w]||0) + 1;
-          if (!wordDays[w]) wordDays[w] = {};
-          wordDays[w][dateKey] = (wordDays[w][dateKey]||0) + 1;
+  // Flatten a history subset into per-story records.
+  function collect(subset){
+    var arr=[];
+    subset.forEach(function(h){
+      var dk = trendDateKey(h.saved);
+      Object.keys(h.data.sections||{}).forEach(function(sec){
+        (h.data.sections[sec]||[]).forEach(function(st){
+          var score = scoreRelevance(st);
+          arr.push({ dateKey:dk, section:sec, story:st, score:score, weight:trendRelevanceWeight(score), headline:(st.headline||'') });
         });
       });
     });
-  });
-
-  // Sort by frequency, take top 25
-  var sorted = Object.keys(wordFreq).map(function(k){ return {word:k,count:wordFreq[k]}; })
-    .sort(function(a,b){ return b.count - a.count; })
-    .slice(0, 25);
-
-  if (!sorted.length) {
-    document.getElementById('trends-out').innerHTML = '<div class="empty-state">NO KEYWORD DATA</div>';
-    return;
+    return arr;
+  }
+  // Accumulate topic + discovered-entity stats over a story list.
+  function accumulate(stories){
+    var map={};
+    function bump(key, name, item){
+      var e = map[key] || (map[key]={ name:name, weight:0, count:0, days:{}, headlines:[] });
+      e.weight += item.weight; e.count += 1;
+      e.days[item.dateKey] = (e.days[item.dateKey]||0) + item.weight;
+      e.headlines.push({ dateKey:item.dateKey, section:item.section, headline:item.headline, score:item.score, weight:item.weight });
+    }
+    stories.forEach(function(item){
+      var hay = (item.headline + ' ' + (item.story.body||'')).toLowerCase();
+      TREND_TOPICS.forEach(function(t){
+        if (t.terms.some(function(term){ return hay.indexOf(term)!==-1; })) bump('topic:'+t.name, t.name, item);
+      });
+      trendDiscoverEntities(item.headline).forEach(function(ent){
+        var el = ent.toLowerCase();
+        if (!trendCoveredByTopic(el)) bump('ent:'+el, ent, item);
+      });
+    });
+    return map;
   }
 
-  var maxCount = sorted[0].count;
+  var mainStats = accumulate(collect(filtered));
 
-  // Previous period comparison
-  var prevCutoff = days > 0 ? new Date(cutoff.getTime() - days * 86400000) : new Date(0);
-  var prevFiltered = days > 0 ? history.filter(function(h){ var s=new Date(h.saved); return s >= prevCutoff && s < cutoff; }) : [];
-  var prevFreq = {};
-  prevFiltered.forEach(function(h) {
-    var d = h.data;
-    Object.keys(d.sections||{}).forEach(function(k) {
-      (d.sections[k]||[]).forEach(function(st) {
-        extractWords((st.headline||'')+' '+(st.body||'')).forEach(function(w){
-          prevFreq[w] = (prevFreq[w]||0) + 1;
-        });
-      });
-    });
+  // Acceleration: most-recent window vs the prior equal window (per-briefing rate).
+  var accelDays = days > 0 ? days : 14;
+  var aCut = new Date(now.getTime() - accelDays * 86400000);
+  var aPrev = new Date(aCut.getTime() - accelDays * 86400000);
+  var curSub = history.filter(function(h){ return new Date(h.saved) >= aCut; });
+  var prevSub = history.filter(function(h){ var s=new Date(h.saved); return s >= aPrev && s < aCut; });
+  var curStats = accumulate(collect(curSub));
+  var prevStats = accumulate(collect(prevSub));
+  var curN = curSub.length || 1, prevN = prevSub.length || 1;
+
+  var keys={}; Object.keys(curStats).forEach(function(k){keys[k]=1;}); Object.keys(prevStats).forEach(function(k){keys[k]=1;});
+  var movers = Object.keys(keys).map(function(k){
+    var c = curStats[k], p = prevStats[k];
+    var curRate = (c?c.weight:0)/curN, prevRate = (p?p.weight:0)/prevN;
+    return { key:k, name:(c||p).name, accel:curRate-prevRate, curRate:curRate, prevRate:prevRate, isNew:!p && !!c, stat:(c||p) };
   });
-  var hasPrev = days > 0 && prevFiltered.length > 0;
+  var emerging = movers.filter(function(m){ return m.accel > 0 && m.curRate > 0 && (m.stat.count >= 2 || m.isNew); })
+    .sort(function(a,b){ return b.accel - a.accel; }).slice(0, 6);
+  var cooling = movers.filter(function(m){ return m.accel < 0 && m.prevRate > 0; })
+    .sort(function(a,b){ return a.accel - b.accel; }).slice(0, 4);
 
-  // ── RELEVANCE BREAKDOWN ──
-  var relCounts = {high:0, med:0, low:0, none:0};
-  var totalStories = 0;
-  filtered.forEach(function(h) {
-    Object.keys(h.data.sections||{}).forEach(function(k) {
-      (h.data.sections[k]||[]).forEach(function(st) {
-        totalStories++;
-        var score = scoreRelevance(st);
-        relCounts[score]++;
-      });
+  var topThemes = Object.keys(mainStats).map(function(k){ return mainStats[k]; })
+    .sort(function(a,b){ return b.weight - a.weight; }).slice(0, 12);
+  var topMax = topThemes.length ? topThemes[0].weight : 1;
+
+  var allStories = collect(filtered);
+  var relCounts={high:0,med:0,low:0,none:0};
+  allStories.forEach(function(s){ relCounts[s.score]++; });
+  var totalStories = allStories.length;
+
+  var html='';
+
+  html += '<div class="trend-card"><div class="trend-card-title">Emerging — accelerating vs prior '+accelDays+' days</div>';
+  if (emerging.length) emerging.forEach(function(m){ html += trendEmergeCard(m, false); });
+  else html += '<div style="font-family:var(--mono);font-size:11px;color:var(--txt3)">Nothing accelerating in this window — the news mix looks steady.</div>';
+  html += '</div>';
+
+  if (cooling.length) {
+    html += '<div class="trend-card"><div class="trend-card-title">Cooling — fading vs prior '+accelDays+' days</div>';
+    cooling.forEach(function(m){
+      html += '<div class="trend-mover"><div class="trend-mover-arrow" style="color:var(--red)">↓</div>'+
+        '<div class="trend-mover-word">'+esc(m.name)+'</div>'+
+        '<div class="trend-mover-delta trend-down">'+m.accel.toFixed(2)+'/br</div></div>';
     });
-  });
-
-  var html = '';
-
-  // Relevance distribution card
-  html += '<div class="trend-card">';
-  html += '<div class="trend-card-title">Relevance Distribution · ' + totalStories + ' stories</div>';
-  html += '<div class="trend-rel-grid">';
-  var relMeta = [
-    {key:'high', label:'High', color:'var(--green)'},
-    {key:'med', label:'Medium', color:'#F0A832'},
-    {key:'low', label:'Low', color:'var(--purple)'},
-    {key:'none', label:'None', color:'var(--txt3)'}
-  ];
-  relMeta.forEach(function(rm) {
-    var pct = totalStories > 0 ? Math.round((relCounts[rm.key]/totalStories)*100) : 0;
-    html += '<div class="trend-rel-box">';
-    html += '<div class="trend-rel-num" style="color:'+rm.color+'">'+relCounts[rm.key]+'</div>';
-    html += '<div class="trend-rel-label">'+rm.label+'</div>';
-    html += '<div class="trend-rel-pct">'+pct+'%</div>';
     html += '</div>';
+  }
+
+  html += '<div class="trend-card"><div class="trend-card-title">'+filtered.length+' briefings · top themes (relevance-weighted)</div>';
+  if (topThemes.length) {
+    topThemes.forEach(function(t){
+      var pct = Math.round((t.weight/topMax)*100);
+      html += '<div class="trend-row"><div class="trend-keyword">'+esc(t.name)+'</div>'+
+        '<div class="trend-bar-wrap"><div class="trend-bar" style="width:'+pct+'%;background:var(--blue)"></div></div>'+
+        '<div class="trend-count">'+t.count+'</div></div>';
+    });
+  } else html += '<div style="font-family:var(--mono);font-size:11px;color:var(--txt3)">No themes detected in this period.</div>';
+  html += '</div>';
+
+  html += '<div class="trend-card"><div class="trend-card-title">Relevance Distribution · '+totalStories+' stories</div><div class="trend-rel-grid">';
+  [{key:'high',label:'High',color:'var(--green)'},{key:'med',label:'Medium',color:'#F0A832'},{key:'low',label:'Low',color:'var(--purple)'},{key:'none',label:'None',color:'var(--txt3)'}].forEach(function(rm){
+    var pct = totalStories>0?Math.round((relCounts[rm.key]/totalStories)*100):0;
+    html += '<div class="trend-rel-box"><div class="trend-rel-num" style="color:'+rm.color+'">'+relCounts[rm.key]+'</div><div class="trend-rel-label">'+rm.label+'</div><div class="trend-rel-pct">'+pct+'%</div></div>';
   });
   html += '</div></div>';
 
-  // ── TOP MOVERS (if previous period data exists) ──
-  if (hasPrev) {
-    // Calculate all deltas for words that appear in either period
-    var allWords = {};
-    sorted.forEach(function(item){ allWords[item.word] = true; });
-    Object.keys(prevFreq).forEach(function(w){ allWords[w] = true; });
-    var deltas = Object.keys(allWords).map(function(w) {
-      var curr = wordFreq[w] || 0;
-      var prev = prevFreq[w] || 0;
-      return {word:w, curr:curr, prev:prev, delta:curr-prev, isNew:prev===0 && curr>0};
-    }).filter(function(d){ return d.delta !== 0; });
-
-    var gainers = deltas.filter(function(d){ return d.delta > 0; }).sort(function(a,b){ return b.delta - a.delta; }).slice(0,5);
-    var droppers = deltas.filter(function(d){ return d.delta < 0; }).sort(function(a,b){ return a.delta - b.delta; }).slice(0,5);
-
-    if (gainers.length || droppers.length) {
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">';
-
-      // Gainers
-      html += '<div class="trend-card" style="margin-bottom:0">';
-      html += '<div class="trend-card-title">Trending Up</div>';
-      if (gainers.length) {
-        gainers.forEach(function(g) {
-          html += '<div class="trend-mover">';
-          html += '<div class="trend-mover-arrow" style="color:var(--green)">↑</div>';
-          html += '<div class="trend-mover-word">' + esc(g.word);
-          if (g.isNew) html += ' <span class="trend-new">NEW</span>';
-          html += '</div>';
-          html += '<div class="trend-mover-delta trend-up">+' + g.delta + '</div>';
-          html += '</div>';
-        });
-      } else {
-        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--txt3);padding:.5rem">No gainers</div>';
-      }
-      html += '</div>';
-
-      // Droppers
-      html += '<div class="trend-card" style="margin-bottom:0">';
-      html += '<div class="trend-card-title">Trending Down</div>';
-      if (droppers.length) {
-        droppers.forEach(function(g) {
-          html += '<div class="trend-mover">';
-          html += '<div class="trend-mover-arrow" style="color:var(--red)">↓</div>';
-          html += '<div class="trend-mover-word">' + esc(g.word) + '</div>';
-          html += '<div class="trend-mover-delta trend-down">' + g.delta + '</div>';
-          html += '</div>';
-        });
-      } else {
-        html += '<div style="font-family:var(--mono);font-size:11px;color:var(--txt3);padding:.5rem">No drops</div>';
-      }
-      html += '</div>';
-      html += '</div>';
-    }
-  }
-
-  // ── TOP 25 KEYWORDS with sparklines ──
-  html += '<div class="trend-card">';
-  html += '<div class="trend-card-title">' + filtered.length + ' Briefings Analyzed · Top 25 Keywords</div>';
-  sorted.forEach(function(item) {
-    var pct = Math.round((item.count / maxCount) * 100);
-    var prev = prevFreq[item.word] || 0;
-    var delta = item.count - prev;
-    var isNew = hasPrev && prev === 0;
-    var deltaClass = delta > 0 ? 'trend-up' : delta < 0 ? 'trend-down' : 'trend-same';
-    var deltaArrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '–';
-    var deltaText = delta > 0 ? deltaArrow + ' +'+delta : delta < 0 ? deltaArrow + ' '+delta : deltaArrow;
-    var barColor = 'var(--blue)';
-    if (HIGH_KEYS.some(function(k){ return item.word.includes(k); })) barColor = 'var(--green)';
-    else if (MED_KEYS.some(function(k){ return item.word.includes(k); })) barColor = '#F0A832';
-
-    // Build sparkline data
-    var dayData = wordDays[item.word] || {};
-    var sparkMax = 0;
-    dayKeys.forEach(function(dk){ if ((dayData[dk]||0) > sparkMax) sparkMax = dayData[dk]; });
-
-    html += '<div class="trend-row">';
-    html += '<div class="trend-keyword">' + esc(item.word);
-    if (isNew) html += ' <span class="trend-new">NEW</span>';
-    html += '</div>';
-    // Sparkline
-    html += '<div class="trend-spark">';
-    dayKeys.forEach(function(dk) {
-      var val = dayData[dk] || 0;
-      var h = sparkMax > 0 ? Math.max(1, Math.round((val/sparkMax)*14)) : 0;
-      html += '<div class="trend-spark-bar'+(val>0?' active':'')+'" style="height:'+h+'px;background:'+barColor+'"></div>';
-    });
-    html += '</div>';
-    html += '<div class="trend-bar-wrap"><div class="trend-bar" style="width:'+pct+'%;background:'+barColor+'"></div></div>';
-    html += '<div class="trend-count">' + item.count + '</div>';
-    if (hasPrev) {
-      html += '<div class="trend-delta '+deltaClass+'" title="vs previous '+days+' days">' + deltaText + '</div>';
-    }
-    html += '</div>';
+  html += '<div class="trend-card"><div class="trend-card-title">Section Coverage</div>';
+  var secCounts={};
+  filtered.forEach(function(h){ Object.keys(h.data.sections||{}).forEach(function(k){ secCounts[k]=(secCounts[k]||0)+(h.data.sections[k]||[]).length; }); });
+  var secSorted = Object.keys(secCounts).map(function(k){ return {id:k,count:secCounts[k]}; }).sort(function(a,b){ return b.count-a.count; });
+  var secMax = secSorted.length?secSorted[0].count:1;
+  secSorted.forEach(function(item){
+    var meta = SEC_META[item.id]; if(!meta) return;
+    var pct = Math.round((item.count/secMax)*100);
+    html += '<div class="trend-row"><div class="trend-keyword">'+meta.label+'</div><div class="trend-bar-wrap"><div class="trend-bar" style="width:'+pct+'%;background:'+meta.pip+'"></div></div><div class="trend-count">'+item.count+'</div></div>';
   });
   html += '</div>';
 
-  // ── SECTION COVERAGE ──
-  html += '<div class="trend-card">';
-  html += '<div class="trend-card-title">Section Coverage</div>';
-  var secCounts = {};
-  filtered.forEach(function(h) {
-    Object.keys(h.data.sections||{}).forEach(function(k) {
-      secCounts[k] = (secCounts[k]||0) + (h.data.sections[k]||[]).length;
-    });
-  });
-  var secSorted = Object.keys(secCounts).map(function(k){ return {id:k,count:secCounts[k]}; })
-    .sort(function(a,b){ return b.count - a.count; });
-  var secMax = secSorted.length ? secSorted[0].count : 1;
-  secSorted.forEach(function(item) {
-    var meta = SEC_META[item.id];
-    if (!meta) return;
-    var pct = Math.round((item.count / secMax) * 100);
-    html += '<div class="trend-row">';
-    html += '<div class="trend-keyword">' + meta.label + '</div>';
-    html += '<div class="trend-bar-wrap"><div class="trend-bar" style="width:'+pct+'%;background:'+meta.pip+'"></div></div>';
-    html += '<div class="trend-count">' + item.count + '</div>';
-    html += '</div>';
-  });
-  html += '</div>';
-
-  document.getElementById('trends-out').innerHTML = html;
+  out.innerHTML = html;
   document.getElementById('trends-sub').textContent = filtered.length + ' briefings · ' + (days > 0 ? 'Last '+days+' days' : 'All time') + ' · ' + totalStories + ' stories';
+
+  // One-time async enrichment: load Radar + Markets, then re-render with cross-links.
+  if (!_trendsEnrichTried) {
+    _trendsEnrichTried = true;
+    var rp = window.fbLoadRadar ? window.fbLoadRadar().catch(function(){ return null; }) : Promise.resolve(null);
+    var mp = window.fbLoadMiro ? window.fbLoadMiro().catch(function(){ return null; }) : Promise.resolve(null);
+    Promise.all([rp, mp]).then(function(res){
+      _trendsRadar = (res[0] && res[0].signals) || null;
+      _trendsMiro = (res[1] && res[1].markets) || null;
+      var pg = document.getElementById('page-trends');
+      if ((_trendsRadar || _trendsMiro) && pg && pg.classList.contains('active')) {
+        var active = document.querySelector('.trend-period-btn.active');
+        renderTrends(active ? +active.getAttribute('data-days') : 7, null);
+      }
+    });
+  }
 }
 
 // ── GEMINI PROMPT TEMPLATE ──
