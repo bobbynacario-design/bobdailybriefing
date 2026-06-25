@@ -732,6 +732,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
 /* ── PSE (PH snapshot) ── */
 .pse-caveat{font-size:12px;line-height:1.6;color:var(--txt2);background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:10px;padding:.7rem .9rem;margin-bottom:1.1rem}
+.pse-stale{font-size:12.5px;line-height:1.6;color:var(--txt);background:rgba(240,168,50,.12);border:1px solid rgba(240,168,50,.5);border-left:3px solid #F0A832;border-radius:10px;padding:.7rem .9rem;margin-bottom:.8rem;font-weight:500}
+.pse-sub-stale{color:#F0A832;font-weight:600}
 .pse-index{margin-bottom:.4rem}
 .pse-idx-top{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem}
 .pse-idx-name{font-size:18px;font-weight:600;color:var(--txt)}
@@ -2257,6 +2259,16 @@ function phNewsCard(it) {
     (it.source ? '<div class="src">' + esc(it.source) + '</div>' : '') +
   '</div>';
 }
+// Calendar-day age of a YYYY-MM-DD asOf vs today in PHT. Parsed at UTC midnight
+// so the subtraction can't drift by a timezone offset.
+function phDaysOld(asOf) {
+  if (!asOf) return null;
+  var todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  var a = Date.parse(asOf + 'T00:00:00Z');
+  var t = Date.parse(todayKey + 'T00:00:00Z');
+  if (isNaN(a) || isNaN(t)) return null;
+  return Math.round((t - a) / 86400000);
+}
 function renderPh() {
   var out = document.getElementById('pse-out');
   var sub = document.getElementById('pse-sub');
@@ -2270,14 +2282,27 @@ function renderPh() {
       return;
     }
     var idx = d.index;
-    if (sub) sub.textContent = 'PSEi ' + idx.close + ' · as of ' + esc(idx.asOf);
+    // Staleness: asOf is the last trading day. >=4 calendar days old clears a
+    // normal Fri->Mon weekend gap (3 days), so it flags a genuinely stuck feed
+    // (e.g. the PSEI.PS clobber) rather than a routine pre-open/weekend lag.
+    var ageDays = phDaysOld(idx.asOf);
+    var stale = ageDays != null && ageDays >= 4;
+    if (sub) {
+      sub.innerHTML = 'PSEi ' + esc(idx.close) + ' · as of ' + esc(idx.asOf) +
+        (stale ? ' · <span class="pse-sub-stale">' + ageDays + ' days old</span>' : '');
+    }
 
     var a = idx.aboveSma20, b = idx.aboveSma50, c = idx.aboveSma200, trendTxt, trendCol;
     if (a && b && c) { trendTxt = 'Uptrend — above 20/50/200-day'; trendCol = 'var(--green)'; }
     else if (!a && !b && !c) { trendTxt = 'Downtrend — below 20/50/200-day'; trendCol = 'var(--red)'; }
     else { trendTxt = 'Mixed vs moving averages'; trendCol = 'var(--txt3)'; }
 
-    var html = '<div class="pse-caveat">⚠ ' + esc(d.caveat) + '</div>';
+    var html = '';
+    if (stale) {
+      html += '<div class="pse-stale">⚠ Snapshot is ' + ageDays + ' days old (last close ' + esc(idx.asOf) +
+        '). The free PSEi feed is intermittently stale — re-run <b>radar/refresh-ph.js</b> to refresh.</div>';
+    }
+    html += '<div class="pse-caveat">⚠ ' + esc(d.caveat) + '</div>';
 
     html += '<div class="card radar-card pse-index">' +
       '<div class="card-accent" style="background:' + trendCol + '"></div>' +
