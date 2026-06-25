@@ -622,7 +622,19 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-catalyst-txt{flex:1;min-width:55%}
 .radar-catalyst-asof{color:var(--txt3);font-family:var(--mono);font-size:10px;white-space:nowrap}
 .radar-invalidation{color:var(--txt3);font-style:italic}
+.radar-taker{background:var(--bg2);border:1px solid rgba(201,168,76,.18);border-left:3px solid var(--gold);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem}
+.radar-taker-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.8rem}
+.radar-taker-title{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.1em;text-transform:uppercase}
+.radar-taker-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em}
+.radar-nuggets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}
+.radar-nugget{background:var(--bg3);border:1px solid var(--rim);border-radius:10px;padding:.8rem .9rem;min-width:0}
+.radar-nugget-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.55rem;margin-bottom:.45rem}
+.radar-nugget-symbol{font-family:var(--serif);font-size:18px;font-weight:700;color:var(--txt);line-height:1.2}
+.radar-nugget-action{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(201,168,76,.25);border-radius:20px;padding:2px 7px;white-space:nowrap}
+.radar-nugget-body{font-size:12px;color:var(--txt2);line-height:1.6;margin-bottom:.55rem}
+.radar-nugget-risk{font-family:var(--mono);font-size:10px;color:var(--txt3);line-height:1.5}
 .radar-disclaimer{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;line-height:1.7;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rim)}
+@media(max-width:900px){.radar-nuggets{grid-template-columns:1fr}}
 
 /* ── SPORTS ── */
 #sports-out{max-width:1420px;margin:0 auto}
@@ -1218,6 +1230,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div class="hero-divider"></div>
   </div>
   <div id="radar-regime"></div>
+  <div id="radar-taker"></div>
   <div id="radar-filter" class="radar-filter"></div>
   <div id="radar-status-filter"></div>
   <div id="radar-out"><div class="empty-state">LOADING RADAR…</div></div>
@@ -1306,6 +1319,12 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>The "why" sentence</b> — why it's moving, in words.</li>
         <li><b>📰 catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event).</li>
         <li><b>Plan line</b> — <span class="src">Entry · Stop · Target · R:R</span>. The <b>stop is the useful number</b>: the level where the idea is wrong.</li>
+      </ul>
+      <p><b>Taker Nuggets</b> is the more opportunistic read. It pulls the best confirmed/forming signals from the current filter and names the stance:</p>
+      <ul>
+        <li><b>Press strength</b> — highest-conviction confirmed setups; scan these first if you want active opportunity.</li>
+        <li><b>Stalk breakout</b> — forming setups with enough pressure to watch closely, but not fully confirmed yet.</li>
+        <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
@@ -1775,6 +1794,7 @@ function renderRadarCards() {
   var list = radarAssetFiltered().filter(function (s) {
     return radarStatusFilter === 'All' || s.status === radarStatusFilter;
   });
+  renderRadarTakerNuggets(list);
   if (list.length) {
     out.innerHTML = '<div class="radar-grid">' + list.map(radarCard).join('') + '</div>';
     return;
@@ -1783,10 +1803,59 @@ function renderRadarCards() {
     radarStatusFilter === 'All' ? '' : radarStatusFilter.toUpperCase()].filter(Boolean).join(' ');
   out.innerHTML = '<div class="empty-state">NO ' + esc(label) + ' SIGNALS TODAY</div>';
 }
+function radarTakerAction(s) {
+  if (s.status === 'confirmed' && s.score >= 80) return 'Press strength';
+  if (s.status === 'confirmed') return 'Take the clean setup';
+  if (s.status === 'forming' && s.score >= 70) return 'Stalk breakout';
+  if (s.status === 'forming') return 'Starter size only';
+  return 'Avoid / pass';
+}
+function radarTakerWhy(s) {
+  var bits = [];
+  bits.push('Score ' + s.score + ' with ' + s.status + ' structure');
+  if (s.catalyst) bits.push('fresh catalyst');
+  if (s.rr != null) bits.push('R:R ' + s.rr);
+  return bits.join(', ') + '.';
+}
+function radarTakerCard(s) {
+  var invalid = s.invalidation || ('Wrong below ' + radarLevel(s.stop));
+  return '<div class="radar-nugget">' +
+    '<div class="radar-nugget-top">' +
+      '<div><div class="radar-nugget-symbol">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme || '') + '</span></div>' +
+      '<span class="rel-badge ' + radarStatusClass(s.status) + '">' + esc(s.status) + '</span></div>' +
+      '<div class="radar-nugget-action">' + esc(radarTakerAction(s)) + '</div>' +
+    '</div>' +
+    '<div class="radar-nugget-body">' + esc(radarTakerWhy(s)) + '</div>' +
+    '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
+  '</div>';
+}
+function renderRadarTakerNuggets(list) {
+  var el = document.getElementById('radar-taker');
+  if (!el) return;
+  var base = (list || []).filter(function (s) {
+    return s.status !== 'invalidated' && s.score >= 60;
+  }).sort(function (a, b) {
+    var sa = (a.status === 'confirmed' ? 8 : 0) + (a.score || 0);
+    var sb = (b.status === 'confirmed' ? 8 : 0) + (b.score || 0);
+    return sb - sa;
+  }).slice(0, 3);
+  if (!base.length) {
+    el.innerHTML = '<div class="radar-taker"><div class="radar-taker-head"><div class="radar-taker-title">Taker Nuggets</div><div class="radar-taker-sub">No aggressive stance today — filtered field has no clean taker setup.</div></div></div>';
+    return;
+  }
+  var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
+    .filter(Boolean).join(' / ');
+  el.innerHTML = '<div class="radar-taker">' +
+    '<div class="radar-taker-head"><div class="radar-taker-title">Taker Nuggets</div>' +
+    '<div class="radar-taker-sub">' + esc(activeFilter || 'Top actionable pressure points') + '</div></div>' +
+    '<div class="radar-nuggets">' + base.map(radarTakerCard).join('') + '</div>' +
+  '</div>';
+}
 function renderRadar() {
   var out = document.getElementById('radar-out');
   var sub = document.getElementById('radar-sub');
   var regimeEl = document.getElementById('radar-regime');
+  var takerEl = document.getElementById('radar-taker');
   var filterEl = document.getElementById('radar-filter');
   var statusEl = document.getElementById('radar-status-filter');
   if (!out) return;
@@ -1796,6 +1865,7 @@ function renderRadar() {
     if (!data || !data.signals || !data.signals.length) {
       radarSignals = null;
       if (regimeEl) regimeEl.innerHTML = '';
+      if (takerEl) takerEl.innerHTML = '';
       if (filterEl) filterEl.innerHTML = '';
       if (statusEl) statusEl.innerHTML = '';
       if (sub) sub.textContent = 'No radar data yet';
