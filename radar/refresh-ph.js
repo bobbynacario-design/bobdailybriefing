@@ -15,7 +15,7 @@ import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
-import { buildPhSnapshot } from './ph-snapshot.js';
+import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -58,8 +58,10 @@ async function main() {
   console.log('  proxies: ' + ph.proxies.length);
 
   var db = initAdmin();
-  await db.collection(COLL).doc('radar-ph').set(phDoc);
-  console.log('\nWrote briefings-bob/radar-ph (after-close refresh).');
+  var wrote = await writePhSnapshot(db, COLL, phDoc);
+  console.log(wrote
+    ? '\nWrote briefings-bob/radar-ph (after-close refresh).'
+    : '\nSkipped briefings-bob/radar-ph write — stored snapshot is newer.');
 }
 
 main().then(function () { process.exit(0); }).catch(function (e) {

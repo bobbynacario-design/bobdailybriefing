@@ -28,7 +28,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
-import { buildPhSnapshot } from './ph-snapshot.js';
+import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 import { extractUsage, recordUsage } from '../lib/llm-usage.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -412,8 +412,8 @@ async function main() {
   try {
     var ph = await buildPhSnapshot(CONFIG);
     var phDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: ph.index.asOf }, ph);
-    await db.collection(COLL).doc('radar-ph').set(phDoc);
-    console.log('Wrote radar-ph snapshot (PSEi ' + ph.index.close + ' ' + ph.index.currency +
+    var wrote = await writePhSnapshot(db, COLL, phDoc);
+    if (wrote) console.log('Wrote radar-ph snapshot (PSEi ' + ph.index.close + ' ' + ph.index.currency +
       ', ' + ph.proxies.length + ' proxies).');
   } catch (e) {
     console.log('PH snapshot skipped: ' + (e.message || e));

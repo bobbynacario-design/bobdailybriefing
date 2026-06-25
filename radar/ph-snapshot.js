@@ -169,4 +169,22 @@ async function buildPhSnapshot(config) {
   };
 }
 
-export { buildPhSnapshot, fetchYahooChart };
+// Write the PH snapshot to briefings-bob/radar-ph, but NEVER regress the date:
+// skip the write if a stored snapshot already has a strictly NEWER asOf. Yahoo's
+// PSEI.PS feed is flaky and intermittently drops its latest bars, so the pre-open
+// 06:00 run can otherwise clobber a good after-close close with a stale older one
+// (exactly how the tab got stuck on an old date). asOf is YYYY-MM-DD, so a string
+// compare is a date compare. Same-date writes are allowed (values can be revised).
+async function writePhSnapshot(db, coll, phDoc) {
+  var ref = db.collection(coll).doc('radar-ph');
+  var snap = await ref.get();
+  var prev = snap.exists ? (snap.data() || {}).asOf : null;
+  if (prev && phDoc.asOf && String(phDoc.asOf) < String(prev)) {
+    console.log('radar-ph NOT written: new asOf ' + phDoc.asOf + ' is older than stored ' + prev + ' — kept the fresher snapshot.');
+    return false;
+  }
+  await ref.set(phDoc);
+  return true;
+}
+
+export { buildPhSnapshot, fetchYahooChart, writePhSnapshot };
