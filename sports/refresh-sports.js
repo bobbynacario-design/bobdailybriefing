@@ -352,27 +352,35 @@ function buildTeamMomentum(matches, standings) {
   });
 }
 
-function sportsProjectionPower(t, squad) {
-  if (!t && !squad) return null;
-  var score = t ? Number(t.score || 0) : 50;
-  var squadScore = squad ? Number(squad.score || 50) : 50;
-  var historyWeight = t ? 0.80 : 0.35;
-  var squadWeight = t ? 0.20 : 0.65;
-  if (t && t.played != null && t.played < 2) {
-    historyWeight = 0.65;
-    squadWeight = 0.35;
+// World Football Elo (eloratings.net) → 0-100. Elo ~1400-2150 across this field.
+function eloScore(elo) {
+  if (elo == null) return null;
+  return clamp(Math.round((elo - 1400) * 100 / 750), 0, 100);
+}
+// Projection power. Elo is the strength anchor (the real, slowly-moving team
+// rating); momentum form is the secondary nudge. Squad shape was dropped from the
+// blend (it scored roster age/balance, not quality — it ranked Sweden #1). Elo-only
+// when a team has not played yet (fixes the cold start); momentum-only if Elo is
+// unavailable (e.g. fetch failed, or in the point-in-time journal which passes none).
+function sportsProjectionPower(t, squad, elo) {
+  var es = eloScore(elo);
+  var mom = null;
+  if (t) {
+    var score = Number(t.score || 0);
+    var ppm = t.pointsPerMatch == null ? 1 : Number(t.pointsPerMatch);
+    var gdTrend = Number(t.goalDiffTrend || 0);
+    var attack = t.attackRate == null ? 1 : Number(t.attackRate);
+    var defense = t.defenseRate == null ? 1 : Number(t.defenseRate);
+    var form = clamp((ppm / 3) * 100, 0, 100);
+    var gd = clamp(50 + gdTrend * 8, 0, 100);
+    var attackScore = clamp(attack * 30, 0, 100);
+    var defenseScore = clamp(100 - defense * 30, 0, 100);
+    mom = score * 0.46 + form * 0.22 + gd * 0.16 + attackScore * 0.09 + defenseScore * 0.07;
   }
-  if (!t) return Math.round(squadScore);
-  var ppm = t.pointsPerMatch == null ? 1 : Number(t.pointsPerMatch);
-  var gdTrend = Number(t.goalDiffTrend || 0);
-  var attack = t.attackRate == null ? 1 : Number(t.attackRate);
-  var defense = t.defenseRate == null ? 1 : Number(t.defenseRate);
-  var form = clamp((ppm / 3) * 100, 0, 100);
-  var gd = clamp(50 + gdTrend * 8, 0, 100);
-  var attackScore = clamp(attack * 30, 0, 100);
-  var defenseScore = clamp(100 - defense * 30, 0, 100);
-  var historyPower = score * 0.46 + form * 0.22 + gd * 0.16 + attackScore * 0.09 + defenseScore * 0.07;
-  return Math.round(historyPower * historyWeight + squadScore * squadWeight);
+  if (es == null && mom == null) return null;
+  if (es == null) return Math.round(mom);
+  if (mom == null) return Math.round(es);
+  return Math.round(es * 0.6 + mom * 0.4);
 }
 
 // Convert the power gap into win/draw/loss probabilities. Logistic on the gap
@@ -389,15 +397,17 @@ function projectionProbabilities(hp, ap) {
   var r3 = function (x) { return Math.round(x * 1000) / 1000; };
   return { home: r3((1 - pDraw) * pHomeCore), draw: r3(pDraw), away: r3((1 - pDraw) * (1 - pHomeCore)) };
 }
-function projectionFromMomentum(m, momentumMap, squadMap) {
+function projectionFromMomentum(m, momentumMap, squadMap, eloByKey) {
   if (!m || !m.home || !m.away || !momentumMap) return null;
   var home = momentumMap[teamKey(m.home)];
   var away = momentumMap[teamKey(m.away)];
   var homeSquad = squadMap ? squadMap[teamKey(m.home)] : null;
   var awaySquad = squadMap ? squadMap[teamKey(m.away)] : null;
-  if (!home && !away && !homeSquad && !awaySquad) return null;
-  var hp = sportsProjectionPower(home, homeSquad);
-  var ap = sportsProjectionPower(away, awaySquad);
+  var homeElo = eloByKey ? eloByKey[teamKey(m.home)] : null;
+  var awayElo = eloByKey ? eloByKey[teamKey(m.away)] : null;
+  if (!home && !away && !homeSquad && !awaySquad && homeElo == null && awayElo == null) return null;
+  var hp = sportsProjectionPower(home, homeSquad, homeElo);
+  var ap = sportsProjectionPower(away, awaySquad, awayElo);
   if (hp == null && ap == null) return null;
   if (hp == null) hp = 48;
   if (ap == null) ap = 48;
@@ -412,6 +422,8 @@ function projectionFromMomentum(m, momentumMap, squadMap) {
     homePower: hp,
     awayPower: ap,
     probs: projectionProbabilities(hp, ap),
+    homeElo: homeElo == null ? null : homeElo,
+    awayElo: awayElo == null ? null : awayElo,
     homeSquad: homeSquad ? homeSquad.score : null,
     awaySquad: awaySquad ? awaySquad.score : null
   };
@@ -543,9 +555,42 @@ function buildProjectionJournal(matches, squadProfiles) {
     baselineLogLoss: baselineLogLoss,
     brierSkill: brierSkill,
     accuracyRates: accuracyRates,
-    note: 'Point-in-time audit: match form uses only matches before kickoff; squad profile uses the loaded tournament roster age/position balance.',
+    note: 'Point-in-time audit of the FORM model (match form uses only results before kickoff). Live fixture projections additionally blend current World-Football-Elo strength — not shown here because dated Elo snapshots are not freely available, so injecting today\'s Elo would leak hindsight into a backtest of past matches.',
     recent: rows.slice(-8).reverse()
   };
+}
+
+// World Cup team name -> eloratings.net 2-letter code. Mostly ISO alpha-2; the
+// football exceptions are England (EN) and Scotland (SQ — NOT SC, which is
+// Seychelles). Verified against eloratings.net/World.tsv for this 48-team field.
+var TEAM_ELO_CODE = {
+  'Algeria': 'DZ', 'Argentina': 'AR', 'Australia': 'AU', 'Austria': 'AT', 'Belgium': 'BE',
+  'Bosnia-H.': 'BA', 'Brazil': 'BR', 'Canada': 'CA', 'Cape Verde': 'CV', 'Colombia': 'CO',
+  'Congo DR': 'CD', 'Croatia': 'HR', 'Curaçao': 'CW', 'Czechia': 'CZ', 'Ecuador': 'EC',
+  'Egypt': 'EG', 'England': 'EN', 'France': 'FR', 'Germany': 'DE', 'Ghana': 'GH',
+  'Haiti': 'HT', 'Iran': 'IR', 'Iraq': 'IQ', 'Ivory Coast': 'CI', 'Japan': 'JP',
+  'Jordan': 'JO', 'Korea Republic': 'KR', 'Mexico': 'MX', 'Morocco': 'MA', 'Netherlands': 'NL',
+  'New Zealand': 'NZ', 'Norway': 'NO', 'Panama': 'PA', 'Paraguay': 'PY', 'Portugal': 'PT',
+  'Qatar': 'QA', 'Saudi Arabia': 'SA', 'Scotland': 'SQ', 'Senegal': 'SN', 'South Africa': 'ZA',
+  'Spain': 'ES', 'Sweden': 'SE', 'Switzerland': 'CH', 'Tunisia': 'TN', 'Turkey': 'TR',
+  'USA': 'US', 'Uruguay': 'UY', 'Uzbekistan': 'UZ'
+};
+
+// World Football Elo from eloratings.net — a thin SPA over public TSV (no key, no
+// rate limit). World.tsv columns: rank | rank | 2-letter code | Elo | … Returns a
+// { code: elo } map, or null on failure (projection then falls back to momentum).
+async function fetchEloRatings() {
+  try {
+    var res = await fetchRetry('https://www.eloratings.net/World.tsv', { headers: { 'User-Agent': 'Mozilla/5.0' } }, 'eloratings World.tsv');
+    if (!res || !res.ok) { console.warn('Elo fetch HTTP ' + (res && res.status)); return null; }
+    var txt = await res.text();
+    var map = {};
+    txt.split(/\r?\n/).forEach(function (line) {
+      var c = line.split('\t');
+      if (c.length > 3 && /^[A-Z]{2}$/.test(c[2])) { var e = Number(c[3]); if (!isNaN(e)) map[c[2]] = e; }
+    });
+    return Object.keys(map).length ? map : null;
+  } catch (e) { console.warn('Elo fetch failed:', e.message || e); return null; }
 }
 
 async function fetchWorldCup() {
@@ -582,12 +627,23 @@ async function fetchWorldCup() {
   var scorers = (scorersJson && scorersJson.scorers || []).map(normScorer);
   var squadProfiles = buildSquadProfiles((teamsJson && teamsJson.teams) || [], new Date());
   var momentum = buildTeamMomentum(matches, standings);
+  var eloRaw = await fetchEloRatings();
+  var eloByKey = {};
+  if (eloRaw) Object.keys(TEAM_ELO_CODE).forEach(function (name) {
+    var c = TEAM_ELO_CODE[name];
+    if (eloRaw[c] != null) eloByKey[teamKey(name)] = eloRaw[c];
+  });
+  // Journal stays Elo-free: today's Elo already reflects the matches it would be
+  // "predicting", so injecting it into the point-in-time backtest would leak
+  // hindsight. The audit measures the form model; live fixtures add the Elo prior.
   var projectionJournal = buildProjectionJournal(matches, squadProfiles);
-  // Attach a stored projection to each upcoming fixture so the front end renders a
-  // single source of truth (same math the journal audits) — no client-side recompute.
+  projectionJournal.eloInformed = Object.keys(eloByKey).length > 0;
+  // Attach a stored, Elo-informed projection to each upcoming fixture — the front
+  // end just renders it (single source of truth, no client-side recompute). Elo on
+  // an UPCOMING match is not lookahead: the match has not been played.
   var momByTeam = {}; momentum.forEach(function (t) { momByTeam[teamKey(t.team)] = t; });
   var sqByTeam = {}; squadProfiles.forEach(function (s) { sqByTeam[teamKey(s.team)] = s; });
-  upcoming.forEach(function (m) { m.projection = projectionFromMomentum(m, momByTeam, sqByTeam); });
+  upcoming.forEach(function (m) { m.projection = projectionFromMomentum(m, momByTeam, sqByTeam, eloByKey); });
 
   return {
     name: matchesJson.competition && matchesJson.competition.name || 'FIFA World Cup',

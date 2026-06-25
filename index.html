@@ -681,6 +681,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-prob-bar .seg.away{background:#3498DB}
 .sports-confcalls{font-size:12px;color:var(--txt2);line-height:1.5;background:var(--green-dim);border:1px solid rgba(45,184,122,.25);border-radius:8px;padding:.5rem .7rem;margin-bottom:.7rem}
 .sports-confcalls b{color:var(--txt)}
+.sports-elo{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.03em;white-space:nowrap}
 .sports-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
 .sports-table th,.sports-table td{padding:.45rem .35rem;border-bottom:1px solid var(--rim);text-align:left}
 .sports-table th{color:var(--txt3);font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:400}
@@ -2586,7 +2587,8 @@ function sportsProjectionHtml(m) {
   var decisive = p.tag === 'Strong edge' || p.tag === 'Moderate edge';
   var cls = !p.favorite ? 'close' : (decisive ? '' : 'watch');
   var favPct = p.favorite === m.home ? h : (p.favorite === m.away ? a : Math.max(h, a));
-  var split = esc(m.home) + ' ' + h + '% · draw ' + dr + '% · ' + esc(m.away) + ' ' + a + '%';
+  var eloBit = (p.homeElo != null && p.awayElo != null) ? ' <span class="sports-elo">Elo ' + p.homeElo + '–' + p.awayElo + '</span>' : '';
+  var split = esc(m.home) + ' ' + h + '% · draw ' + dr + '% · ' + esc(m.away) + ' ' + a + '%' + eloBit;
   var main;
   if (!p.favorite) {
     main = '<b>Too close to call</b> — ' + split;
