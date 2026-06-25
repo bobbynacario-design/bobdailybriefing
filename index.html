@@ -1345,12 +1345,32 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <p class="help-key">Expect mostly <b>NO-GO</b>, and expect skill near zero — these markets are close to efficient, so a handful of AI guesses rarely beats the crowd's price. That's the tool being honest: <b>if even one check fails, you don't have a trade, you have a story.</b> Nothing here is a bet or advice.</p>
     </div>
 
+    <div class="help-card">
+      <div class="help-h">⚽ Sports — who is rising, and what does the market think?</div>
+      <p>The Sports tab starts with World Cup data. It combines fixtures/results with a simple <b>0–100 team momentum score</b>. Higher means the team is currently showing stronger form, not that it is guaranteed to win.</p>
+      <ul>
+        <li><b>Rising Teams</b> — the strongest current movers by score. These are the first teams to scan if you want to know who is emerging.</li>
+        <li><b>Team Momentum</b> — the full ranked table. <span class="help-pill">Score</span> is the model score, <span class="help-pill">Form</span> is recent W/D/L, and <span class="help-pill">GD3</span> is goal-difference trend over recent matches.</li>
+        <li><b>GF / GA chips</b> — goals for and goals against per match. Rising with strong GF and low GA is better than rising only because of one messy result.</li>
+        <li><b>Tags</b> — <span class="help-pill" style="color:var(--green)">RISING</span> means form and goal trend are improving; <span class="help-pill" style="color:#F0A832">WATCH</span> means promising but not fully confirmed; <span class="help-pill" style="color:var(--red)">FADING</span> means recent results or goal trend are weakening.</li>
+      </ul>
+      <p><b>World Cup Market Lens</b> compares the Sports momentum signal with the Markets tab's World Cup outright prices:</p>
+      <ul>
+        <li><b>Momentum %</b> — the team's share of momentum among teams that also have an outright market loaded. It is a comparison index, not a true win probability.</li>
+        <li><b>Market %</b> — the market's implied probability from the Markets tab.</li>
+        <li><b>Gap</b> — momentum % minus market %. Positive means form is ahead of the market; negative means the market is ahead of current form.</li>
+        <li><b>Read</b> — <span class="help-pill">FORM AHEAD</span>, <span class="help-pill">MARKET AHEAD</span>, or <span class="help-pill">FAIR / CONFIRMED</span>. This is a watchlist signal, not an instruction to bet.</li>
+      </ul>
+      <p class="help-key">Best use: compare <b>RISING</b> teams with <b>FORM AHEAD</b> market reads, then check the fixtures and path. If a team is RISING but the market is already far ahead, the story may be real but already priced in.</p>
+    </div>
+
     <div class="help-card help-takeaway">
       <div class="help-h">The simple takeaway</div>
       <ul>
         <li><b>Radar</b> = today's framing: what's strong, why, and where it breaks. Use the status + stop + catalyst.</li>
         <li><b>Journal</b> = the reality check: look at <b>excess</b>, not raw. It currently says "we've mostly been long the AI trade" — so weight the radar accordingly.</li>
         <li><b>Markets</b> = is a betting market mispriced? Compare <b>mkt %</b> to our <b>panel %</b>; treat a <span class="help-pill" style="color:var(--green)">RESEARCH FLAG</span> as watch-only, and even then check the journal's <b>skill</b>. Mostly "no edge" is the honest, expected answer.</li>
+        <li><b>Sports</b> = who is moving up or down. Use Momentum for form, and Market Lens for whether the market already agrees.</li>
       </ul>
     </div>
 
