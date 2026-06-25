@@ -1324,6 +1324,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <ul>
         <li><b>Press strength</b> — highest-conviction confirmed setups; scan these first if you want active opportunity.</li>
         <li><b>Stalk breakout</b> — forming setups with enough pressure to watch closely, but not fully confirmed yet.</li>
+        <li><b>Regime rationale</b> — in risk-off tape, the box is deliberately stricter: it favors visible relative strength and confirmed structure, while forming names become stalks rather than chases.</li>
         <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
@@ -1726,6 +1727,7 @@ var RADAR_STATUS_ORDER = ['confirmed', 'forming', 'invalidated'];
 var radarSignals = null;          // cached signals from the last load
 var radarFilter = 'All';          // active asset-type filter
 var radarStatusFilter = 'All';    // active status sub-filter
+var radarRegimeState = null;      // cached regime label from the latest run
 function radarAssetType(s) {
   if (s.theme === 'Crypto') return 'Crypto';
   if (RADAR_COMMODITY_SYMS[s.symbol] || s.theme === 'Metals/commod') return 'Commodities';
@@ -1811,11 +1813,22 @@ function radarTakerAction(s) {
   return 'Avoid / pass';
 }
 function radarTakerWhy(s) {
+  var regime = radarRegimeState ? radarRegimeState.txt : '';
   var bits = [];
-  bits.push('Score ' + s.score + ' with ' + s.status + ' structure');
+  if (regime === 'Risk-off') {
+    bits.push('Risk-off tape: only take names showing relative pressure');
+    bits.push(s.status === 'confirmed' ? 'confirmed structure earns priority' : 'forming structure means stalk, not chase');
+  } else if (regime === 'Mixed') {
+    bits.push('Mixed tape: selective taker stance, avoid weak follow-through');
+  } else if (regime === 'Supportive') {
+    bits.push('Supportive tape: strength can be pressed while trend holds');
+  } else {
+    bits.push('Tactical read from score and structure');
+  }
+  bits.push('score ' + s.score);
   if (s.catalyst) bits.push('fresh catalyst');
   if (s.rr != null) bits.push('R:R ' + s.rr);
-  return bits.join(', ') + '.';
+  return bits.join('; ') + '.';
 }
 function radarTakerCard(s) {
   var invalid = s.invalidation || ('Wrong below ' + radarLevel(s.stop));
@@ -1832,6 +1845,12 @@ function radarTakerCard(s) {
 function renderRadarTakerNuggets(list) {
   var el = document.getElementById('radar-taker');
   if (!el) return;
+  var regime = radarRegimeState ? radarRegimeState.txt : 'Unknown';
+  var regimeCopy = regime === 'Risk-off'
+    ? 'Risk-off stance: be a taker only where relative strength is already visible; otherwise wait for the tape to prove it.'
+    : (regime === 'Mixed'
+      ? 'Mixed stance: take the cleanest pressure, keep size selective, and let weak setups pass.'
+      : 'Supportive stance: press confirmed strength while the stop/tripwire remains intact.');
   var base = (list || []).filter(function (s) {
     return s.status !== 'invalidated' && s.score >= 60;
   }).sort(function (a, b) {
@@ -1840,13 +1859,14 @@ function renderRadarTakerNuggets(list) {
     return sb - sa;
   }).slice(0, 3);
   if (!base.length) {
-    el.innerHTML = '<div class="radar-taker"><div class="radar-taker-head"><div class="radar-taker-title">Taker Nuggets</div><div class="radar-taker-sub">No aggressive stance today — filtered field has no clean taker setup.</div></div></div>';
+    el.innerHTML = '<div class="radar-taker"><div class="radar-taker-head"><div><div class="radar-taker-title">Taker Nuggets</div><div class="radar-taker-sub">' + esc(regimeCopy) + '</div></div><div class="radar-taker-sub">No clean taker setup in this filter.</div></div></div>';
     return;
   }
   var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
     .filter(Boolean).join(' / ');
   el.innerHTML = '<div class="radar-taker">' +
-    '<div class="radar-taker-head"><div class="radar-taker-title">Taker Nuggets</div>' +
+    '<div class="radar-taker-head"><div><div class="radar-taker-title">Taker Nuggets</div>' +
+    '<div class="radar-taker-sub">' + esc(regimeCopy) + '</div></div>' +
     '<div class="radar-taker-sub">' + esc(activeFilter || 'Top actionable pressure points') + '</div></div>' +
     '<div class="radar-nuggets">' + base.map(radarTakerCard).join('') + '</div>' +
   '</div>';
@@ -1873,6 +1893,7 @@ function renderRadar() {
       return;
     }
     var rg = radarRegimeLabel(data.regime ? data.regime.score : 0);
+    radarRegimeState = rg;
     if (regimeEl) {
       regimeEl.innerHTML = '<div class="radar-regime-line">Regime: ' +
         '<span class="rel-badge ' + rg.cls + '">' + rg.txt + '</span>' +
