@@ -615,6 +615,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-card .card-top{align-items:center}
 .radar-theme{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;text-transform:uppercase;font-weight:400;margin-left:.5rem;white-space:nowrap}
 .radar-score-wrap{display:flex;align-items:center;gap:.65rem;flex-shrink:0}
+.radar-upside{font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--green);background:var(--green-dim);border:1px solid rgba(45,184,122,.28);border-radius:20px;padding:2px 8px;white-space:nowrap}
 .radar-score{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--gold);line-height:1}
 .radar-plan{display:block;white-space:normal;line-height:1.7;margin-bottom:.7rem;color:var(--txt2)}
 .radar-catalyst{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap;font-size:12.5px;line-height:1.6;margin:0 0 .7rem;color:var(--txt2)}
@@ -631,6 +632,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .radar-nugget-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.55rem;margin-bottom:.45rem}
 .radar-nugget-symbol{font-family:var(--serif);font-size:18px;font-weight:700;color:var(--txt);line-height:1.2}
 .radar-nugget-action{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(201,168,76,.25);border-radius:20px;padding:2px 7px;white-space:nowrap}
+.radar-nugget-upside{font-family:var(--mono);font-size:10px;color:var(--green);letter-spacing:.04em;text-align:right;margin-top:.3rem;white-space:nowrap}
 .radar-nugget-body{font-size:12px;color:var(--txt2);line-height:1.6;margin-bottom:.55rem}
 .radar-nugget-risk{font-family:var(--mono);font-size:10px;color:var(--txt3);line-height:1.5}
 .radar-disclaimer{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;line-height:1.7;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rim)}
@@ -1318,12 +1320,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         </li>
         <li><b>The "why" sentence</b> — why it's moving, in words.</li>
         <li><b>📰 catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event).</li>
-        <li><b>Plan line</b> — <span class="src">Entry · Stop · Target · R:R</span>. The <b>stop is the useful number</b>: the level where the idea is wrong.</li>
+        <li><b>Plan line</b> — <span class="src">Upside · Entry · Stop · Target · R:R</span>. <b>Upside</b> is target distance from entry, useful for comparing reward size. The <b>stop is the useful risk number</b>: the level where the idea is wrong.</li>
       </ul>
       <p><b>Taker Nuggets</b> is the more opportunistic read. It pulls the best confirmed/forming signals from the current filter and names the stance:</p>
       <ul>
         <li><b>Press strength</b> — highest-conviction confirmed setups; scan these first if you want active opportunity.</li>
         <li><b>Stalk breakout</b> — forming setups with enough pressure to watch closely, but not fully confirmed yet.</li>
+        <li><b>Upside %</b> — the estimated move from entry to target. Use it to compare potential performance across nuggets, not as a probability that the target will hit.</li>
         <li><b>Regime rationale</b> — in risk-off tape, the box is deliberately stricter: it favors visible relative strength and confirmed structure, while forming names become stalks rather than chases.</li>
         <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
@@ -1677,6 +1680,18 @@ function radarLevel(v) {
   if (v === null || v === undefined) return '—';
   return Math.abs(v) >= 1000 ? Number(v).toLocaleString('en-US',{maximumFractionDigits:2}) : v;
 }
+function radarUpsidePct(s) {
+  if (!s || s.entry === null || s.entry === undefined || s.target === null || s.target === undefined) return null;
+  var entry = Number(s.entry);
+  var target = Number(s.target);
+  if (!isFinite(entry) || !isFinite(target) || entry <= 0) return null;
+  return (target - entry) / entry * 100;
+}
+function radarUpsideLabel(s) {
+  var pct = radarUpsidePct(s);
+  if (pct === null) return 'Upside —';
+  return 'Upside ' + (pct > 0 ? '+' : '') + pct.toFixed(1) + '%';
+}
 // Event-type accent colour for the catalyst chip (V2). Falls back to muted.
 function radarEventColor(type) {
   var map = {
@@ -1699,13 +1714,15 @@ function radarCatalyst(s) {
     '</div>';
 }
 function radarCard(s) {
-  var plan = 'Entry ' + radarLevel(s.entry) + '  ·  Stop ' + radarLevel(s.stop) +
+  var upside = radarUpsideLabel(s);
+  var plan = upside + '  ·  Entry ' + radarLevel(s.entry) + '  ·  Stop ' + radarLevel(s.stop) +
     '  ·  Target ' + radarLevel(s.target) + '  ·  R:R ' + (s.rr == null ? '—' : s.rr);
   return '<div class="card radar-card">' +
     '<div class="card-accent" style="background:' + radarAccent(s.status) + '"></div>' +
     '<div class="card-top">' +
       '<div class="card-hl">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme) + '</span></div>' +
       '<div class="radar-score-wrap">' +
+        '<span class="radar-upside">' + esc(upside) + '</span>' +
         '<span class="rel-badge ' + radarStatusClass(s.status) + '">' + esc(s.status) + '</span>' +
         '<span class="radar-score">' + s.score + '</span>' +
       '</div>' +
@@ -1826,6 +1843,7 @@ function radarTakerWhy(s) {
     bits.push('Tactical read from score and structure');
   }
   bits.push('score ' + s.score);
+  if (radarUpsidePct(s) !== null) bits.push(radarUpsideLabel(s).toLowerCase() + ' to target');
   if (s.catalyst) bits.push('fresh catalyst');
   if (s.rr != null) bits.push('R:R ' + s.rr);
   return bits.join('; ') + '.';
@@ -1836,7 +1854,8 @@ function radarTakerCard(s) {
     '<div class="radar-nugget-top">' +
       '<div><div class="radar-nugget-symbol">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme || '') + '</span></div>' +
       '<span class="rel-badge ' + radarStatusClass(s.status) + '">' + esc(s.status) + '</span></div>' +
-      '<div class="radar-nugget-action">' + esc(radarTakerAction(s)) + '</div>' +
+      '<div><div class="radar-nugget-action">' + esc(radarTakerAction(s)) + '</div>' +
+      '<div class="radar-nugget-upside">' + esc(radarUpsideLabel(s)) + '</div></div>' +
     '</div>' +
     '<div class="radar-nugget-body">' + esc(radarTakerWhy(s)) + '</div>' +
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
