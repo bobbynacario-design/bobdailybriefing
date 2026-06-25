@@ -4352,7 +4352,7 @@ var TREND_TOPICS = [
   {name:'Inflation / CPI', terms:['inflation','cpi','consumer price','ppi ','core price']},
   {name:'Tariffs / trade', terms:['tariff','trade war','trade deal','import duty','export curb']},
   {name:'Jobs / labor', terms:['payroll','jobs report','unemployment','labor market','jobless']},
-  {name:'AI', terms:['artificial intelligence',' ai ','ai-','genai','chatbot','large language','data center','data centre']},
+  {name:'AI', terms:['artificial intelligence',' ai ','ai-','genai','chatbot','large language','data center','data centre','openai','chatgpt','gpt-','anthropic','claude','gemini',' llm','copilot','deepmind']},
   {name:'Semiconductors', terms:['semiconductor','chipmaker',' chips ',' chip ','foundry','nvidia']},
   {name:'Crypto', terms:['bitcoin','ethereum','crypto','stablecoin','altcoin']},
   {name:'Oil / energy', terms:['crude','oil price','opec','brent',' wti','natural gas']},
@@ -4388,6 +4388,9 @@ var TREND_RADAR_ALIASES = {
 };
 // topic name -> alias key for radar lookup
 var TREND_TOPIC_RADAR = {'Semiconductors':'semiconductor','AI':'semiconductor','Crypto':'bitcoin','Oil / energy':'oil','Gold':'gold'};
+// briefing SECTION -> topic. The section is the most reliable theme signal for the
+// focused sections, so a story counts toward its theme even with no literal match.
+var TREND_SECTION_TOPIC = { ai:'AI', ev:'EV', insurance:'Insurance' };
 
 // Capitalized non-entities to drop when discovering proper nouns.
 var TREND_CAP_STOP = {The:1,A:1,An:1,This:1,That:1,These:1,Those:1,It:1,In:1,On:1,At:1,For:1,And:1,But:1,Or:1,As:1,To:1,Of:1,With:1,From:1,By:1,After:1,Before:1,Over:1,Under:1,Into:1,How:1,Why:1,What:1,When:1,Where:1,Who:1,Will:1,Can:1,May:1,Could:1,Would:1,Should:1,Now:1,Amid:1,Despite:1,Says:1,Said:1,Report:1,Monday:1,Tuesday:1,Wednesday:1,Thursday:1,Friday:1,Saturday:1,Sunday:1,January:1,February:1,March:1,April:1,June:1,July:1,August:1,September:1,October:1,November:1,December:1};
@@ -4506,9 +4509,17 @@ function renderTrends(days, btnEl) {
     }
     stories.forEach(function(item){
       var hay = (item.headline + ' ' + (item.story.body||'')).toLowerCase();
+      // Collect matched topics for this story, deduped, so each topic counts once.
+      var matched = {};
       TREND_TOPICS.forEach(function(t){
-        if (t.terms.some(function(term){ return hay.indexOf(term)!==-1; })) bump('topic:'+t.name, t.name, item);
+        if (t.terms.some(function(term){ return hay.indexOf(term)!==-1; })) matched['topic:'+t.name] = t.name;
       });
+      // The story's SECTION is a strong topic signal on its own — an 'ai'-section
+      // story is about AI even if it never spells out a literal term (e.g.
+      // "OpenAI launches…"). This is what was making AI/EV/Insurance under-count.
+      var secTopic = TREND_SECTION_TOPIC[item.section];
+      if (secTopic) matched['topic:'+secTopic] = secTopic;
+      Object.keys(matched).forEach(function(key){ bump(key, matched[key], item); });
       trendDiscoverEntities(item.headline).forEach(function(ent){
         var el = ent.toLowerCase();
         if (!trendCoveredByTopic(el)) bump('ent:'+el, ent, item);
