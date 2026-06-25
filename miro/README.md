@@ -41,7 +41,7 @@ later be lifted into a scheduled Cloud Function unchanged.
 Polymarket Gamma API (free, no key) --> curated markets + implied prices ---+
 Polymarket CLOB API  (free, no key) --> YES-token order book (bid/ask/depth)-+
                                                                             +--> aggregatePanel --> edge + GO/NO-GO
-OpenAI /v1/responses (~7 price-blind personas) --> independent YES probs ---+                            |
+OpenAI /v1/responses (5 price-blind personas) --> independent YES probs ----+                            |
                                                                             |                            v
 prior journal + today's predictions + detected resolutions --> buildMiroJournal --> Brier(ours vs price) |
                                                                             |                            |
@@ -68,9 +68,9 @@ the Admin SDK bypasses rules on write):
    computed against the price you'd actually HIT — buy YES at the ask, "buy NO" by
    selling YES at the bid. If the book can't be fetched it falls back to the Gamma
    `outcomePrices` mid with a flat cost (`noBook`).
-2. **Panel.** ~7 deliberately diverse personas (base-rate historian, insider,
-   contrarian, cautious quant, newsdesk, devil's-advocate, generalist) each
-   return an independent probability for every market in a single OpenAI call.
+2. **Panel.** 5 deliberately diverse personas (base-rate historian, insider,
+   contrarian, newsdesk, generalist) each return an independent probability for
+   every market in a single OpenAI call.
    They are **blind to the market price**, so their reads aren't the price echoed
    back to itself.
 3. **Haircut.** `haircutProb = price + k · (panelProb − price)`, with `k < 1`
@@ -111,7 +111,7 @@ Secrets are reused from the radar — there is **no new setup**. The script load
 `miro/.env` then `../radar/.env` (needs `OPENAI_API_KEY`; without it the run still
 completes and writes implied-only markets), and authenticates Firestore with
 `miro/serviceAccountKey.json` or `../radar/serviceAccountKey.json` (same project,
-`pokerhq-a67e4`). A run makes ~7 OpenAI `gpt-5.5` calls (web-search grounded).
+`pokerhq-a67e4`). A run makes 5 OpenAI `gpt-5.5` calls (web-search grounded).
 
 **Auto-refresh (same as the radar):** a Windows Task Scheduler job
 `BobDailyBriefing-MiroRefresh` runs `node refresh-miro.js` daily at 06:15 PHT

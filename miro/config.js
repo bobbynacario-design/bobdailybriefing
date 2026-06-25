@@ -77,9 +77,14 @@ var EDGE_GATE = {
   minDepthShares: 100     // top-of-book size (shares) below this -> NO-GO (thin)
 };
 
-// The persona panel (Lane 2). ~5-7 deliberately DIVERSE personas so the passes
-// are less correlated than asking the same model the same way N times. Each
-// returns a probability for the YES outcome; scenario.js aggregates them.
+// The persona panel (Lane 2). 5 deliberately DIVERSE personas so the passes are
+// less correlated than asking the same model the same way N times. Each returns
+// a probability for the YES outcome; scenario.js aggregates them. Trimmed from 7
+// to 5 (2026-06-25, cost) by dropping the two least-distinct: 'quant' overlapped
+// 'base-rate' (both base-rate-anchored conservatives) and 'devils-adv' overlapped
+// 'contrarian' (both argue against consensus). The kept five span a base-rate
+// anchor, a signal-chaser, a tail-risk contrarian, a strict-facts reporter, and a
+// calibrated blender. Each persona = one OpenAI call/run, so this is the cost lever.
 var PANEL = {
   model: 'gpt-5.5',  // overridable via OPENAI_MODEL; reuses the radar's OpenAI integration
   webSearch: true,   // ground each persona in recent news (web_search, low context)
@@ -87,9 +92,7 @@ var PANEL = {
     { id: 'base-rate',  brief: 'A historian who anchors hard on base rates and how often this CLASS of event actually happens. Skeptical of recency and narrative.' },
     { id: 'insider',    brief: 'A domain specialist who weighs the latest concrete signals, official statements, and on-the-ground specifics for THIS event.' },
     { id: 'contrarian', brief: 'A contrarian who actively looks for why the consensus narrative is wrong in EITHER direction, and prices tail risks. (You are NOT told any market price — form your own view.)' },
-    { id: 'quant',      brief: 'A cautious quant who distrusts stories, stays conservative and anchored to base rates, and only deviates when the evidence is strong. (You are NOT told any market price.)' },
     { id: 'newsdesk',   brief: 'A wire-service reporter focused strictly on what is verifiably known right now versus speculation.' },
-    { id: 'devils-adv', brief: 'A devil\'s advocate who argues the OPPOSITE of whatever seems obvious, to surface overlooked failure modes.' },
     { id: 'generalist', brief: 'A calibrated generalist forecaster (superforecaster style) who blends base rates with current evidence and avoids overconfidence.' }
   ]
 };
