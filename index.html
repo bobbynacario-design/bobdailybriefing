@@ -1416,9 +1416,9 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <ul>
         <li><b>Rising Teams</b> — the strongest current movers by score. These are the first teams to scan if you want to know who is emerging.</li>
         <li><b>Team Momentum</b> — the full ranked table. <span class="help-pill">Score</span> is the model score, <span class="help-pill">Form</span> is recent W/D/L, and <span class="help-pill">GD3</span> is goal-difference trend over recent matches.</li>
-        <li><b>Next Fixtures projection</b> — a fixture-level lean based on both teams' momentum score, recent points, GD trend, goals for, goals against, and squad profile. <span class="help-pill">Lean</span> / <span class="help-pill">Moderate edge</span> / <span class="help-pill">Strong edge</span> describe model separation, not certainty.</li>
+        <li><b>Next Fixtures projection</b> — a fixture-level lean based on both teams' momentum score, recent points, GD trend, goals for, goals against, and squad profile. <span class="help-pill">Watch only</span> is weak separation; <span class="help-pill">Moderate edge</span> / <span class="help-pill">Strong edge</span> are the only decisive projection buckets.</li>
         <li><b>Squad Profile</b> — roster age and position-balance from the World Cup teams feed. It helps stabilize early fixtures before form is rich, but it is not a player-rating, market-value, injury, or expected-XI model.</li>
-        <li><b>Projection Alignment</b> — the feedback loop. It persists in the generated Sports document and replays completed matches point-in-time, using only matches before kickoff, then checks whether the projected lean matched the result. The confidence table shows whether <span class="help-pill">Strong edge</span>, <span class="help-pill">Moderate edge</span>, and <span class="help-pill">Lean</span> are actually aligning at different rates.</li>
+        <li><b>Projection Alignment</b> — the feedback loop. It persists in the generated Sports document and replays completed matches point-in-time, using only matches before kickoff, then checks whether the projected lean matched the result. The headline uses <b>Decisive accuracy</b> for strong/moderate calls; weak <span class="help-pill">Watch only</span> calls are tracked separately so they do not dress up noise.</li>
         <li><b>GF / GA chips</b> — goals for and goals against per match. Rising with strong GF and low GA is better than rising only because of one messy result.</li>
         <li><b>Tags</b> — <span class="help-pill" style="color:var(--green)">RISING</span> means form and goal trend are improving; <span class="help-pill" style="color:#F0A832">WATCH</span> means promising but not fully confirmed; <span class="help-pill" style="color:var(--red)">FADING</span> means recent results or goal trend are weakening.</li>
       </ul>
@@ -2603,7 +2603,7 @@ function sportsFixtureProjection(m, momentumMap, squadMap) {
   var abs = Math.abs(gap);
   var favorite = abs < 4 ? 'No clear edge' : (gap > 0 ? m.home : m.away);
   var cls = abs < 4 ? 'close' : (abs < 12 ? 'watch' : '');
-  var tag = abs < 4 ? 'Toss-up' : (abs < 12 ? 'Lean' : (abs < 22 ? 'Moderate edge' : 'Strong edge'));
+  var tag = abs < 4 ? 'Toss-up' : (abs < 12 ? 'Watch only' : (abs < 22 ? 'Moderate edge' : 'Strong edge'));
   var reason = abs < 4
     ? 'Momentum plus squad profile is too close to call.'
     : 'Power ' + Math.max(hp, ap) + ' vs ' + Math.min(hp, ap) + ', blending form, GD trend, scoring balance and squad profile.';
@@ -2616,7 +2616,7 @@ function sportsProjectionHtml(p) {
   if (p.awaySquad) squadBits.push('Away squad ' + p.awaySquad.score + ' ' + (p.awaySquad.label || ''));
   var main = p.favorite === 'No clear edge'
     ? '<b>No clear edge</b> — ' + esc(p.reason)
-    : '<b>Projected lean: ' + esc(p.favorite) + '</b> — ' + esc(p.reason);
+    : '<b>' + (p.tag === 'Watch only' ? 'Watch-only lean: ' : 'Projected lean: ') + esc(p.favorite) + '</b> — ' + esc(p.reason);
   return '<div class="sports-projection">' +
     '<div class="sports-projection-main">' + main + '</div>' +
     '<div class="sports-projection-tag ' + esc(p.cls || '') + '">' + esc(p.tag) + '</div>' +
@@ -2710,9 +2710,9 @@ function sportsProjectionJournalHtml(wc) {
   var recent = j.recent || [];
   var rates = j.accuracyRates || [];
   var html = '<div class="sports-audit-grid">' +
-    sportsAuditCard('Alignment', sportsAuditPct(j.accuracy), (j.aligned || 0) + '/' + (j.projected || 0) + ' decisive leans right') +
-    sportsAuditCard('Coverage', sportsAuditPct(j.coverage), (j.projected || 0) + ' leans from ' + (j.evaluated || 0) + ' audited matches') +
-    sportsAuditCard('Misses', String(j.missed || 0), 'favorites that did not align') +
+    sportsAuditCard('Decisive accuracy', sportsAuditPct(j.decisiveAccuracy), (j.decisiveAligned || 0) + '/' + (j.decisive || 0) + ' strong/moderate right') +
+    sportsAuditCard('All-lean accuracy', sportsAuditPct(j.accuracy), (j.aligned || 0) + '/' + (j.projected || 0) + ' favorite leans right') +
+    sportsAuditCard('Watch-only', sportsAuditPct(j.watchOnlyAccuracy), (j.watchOnlyAligned || 0) + '/' + (j.watchOnly || 0) + ' weak leans right') +
     sportsAuditCard('Toss-ups', String(j.tossUps || 0), (j.tossUpDraws || 0) + ' finished as draws') +
   '</div>';
   if (rates.length) {

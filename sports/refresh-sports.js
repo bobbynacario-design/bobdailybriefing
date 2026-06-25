@@ -390,7 +390,7 @@ function projectionFromMomentum(m, momentumMap, squadMap) {
   var gap = hp - ap;
   var abs = Math.abs(gap);
   var favorite = abs < 4 ? null : (gap > 0 ? m.home : m.away);
-  var tag = abs < 4 ? 'Toss-up' : (abs < 12 ? 'Lean' : (abs < 22 ? 'Moderate edge' : 'Strong edge'));
+  var tag = abs < 4 ? 'Toss-up' : (abs < 12 ? 'Watch only' : (abs < 22 ? 'Moderate edge' : 'Strong edge'));
   return {
     favorite: favorite,
     tag: tag,
@@ -418,6 +418,7 @@ function buildProjectionJournal(matches, squadProfiles) {
   });
   var rows = [];
   var projected = 0, aligned = 0, missed = 0, tossUps = 0, tossUpDraws = 0;
+  var decisive = 0, decisiveAligned = 0, decisiveMissed = 0, watchOnly = 0, watchOnlyAligned = 0;
   var squadMap = {};
   (squadProfiles || []).forEach(function (s) { squadMap[teamKey(s.team)] = s; });
   var byTag = {};
@@ -446,6 +447,14 @@ function buildProjectionJournal(matches, squadProfiles) {
       didAlign = p.favorite === actual;
       if (didAlign) aligned++;
       else missed++;
+      if (p.tag === 'Strong edge' || p.tag === 'Moderate edge') {
+        decisive++;
+        if (didAlign) decisiveAligned++;
+        else decisiveMissed++;
+      } else {
+        watchOnly++;
+        if (didAlign) watchOnlyAligned++;
+      }
     }
     if (didAlign) b.aligned++;
     else b.misses++;
@@ -462,7 +471,7 @@ function buildProjectionJournal(matches, squadProfiles) {
     });
   });
   var evaluated = projected + tossUps;
-  var accuracyRates = ['Strong edge', 'Moderate edge', 'Lean', 'Toss-up'].map(function (tag) {
+  var accuracyRates = ['Strong edge', 'Moderate edge', 'Watch only', 'Toss-up'].map(function (tag) {
     var b = byTag[tag] || { tag: tag, evaluated: 0, aligned: 0, misses: 0 };
     return {
       tag: tag,
@@ -478,9 +487,16 @@ function buildProjectionJournal(matches, squadProfiles) {
     projected: projected,
     aligned: aligned,
     missed: missed,
+    decisive: decisive,
+    decisiveAligned: decisiveAligned,
+    decisiveMissed: decisiveMissed,
+    watchOnly: watchOnly,
+    watchOnlyAligned: watchOnlyAligned,
     tossUps: tossUps,
     tossUpDraws: tossUpDraws,
     accuracy: projected ? round2(aligned / projected) : null,
+    decisiveAccuracy: decisive ? round2(decisiveAligned / decisive) : null,
+    watchOnlyAccuracy: watchOnly ? round2(watchOnlyAligned / watchOnly) : null,
     coverage: evaluated ? round2(projected / evaluated) : null,
     accuracyRates: accuracyRates,
     note: 'Point-in-time audit: match form uses only matches before kickoff; squad profile uses the loaded tournament roster age/position balance.',
@@ -568,9 +584,16 @@ function setupDoc(reason) {
         projected: 0,
         aligned: 0,
         missed: 0,
+        decisive: 0,
+        decisiveAligned: 0,
+        decisiveMissed: 0,
+        watchOnly: 0,
+        watchOnlyAligned: 0,
         tossUps: 0,
         tossUpDraws: 0,
         accuracy: null,
+        decisiveAccuracy: null,
+        watchOnlyAccuracy: null,
         coverage: null,
         accuracyRates: [],
         note: 'Point-in-time audit starts after completed matches exist.',
