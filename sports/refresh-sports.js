@@ -735,9 +735,10 @@ async function writeDoc(db, dateKey, doc) {
 
 async function main() {
   var dateKey = phtDateKey();
-  var doc;
+  var doc, isFallback = false;
   if (!FOOTBALL_DATA_TOKEN) {
     doc = setupDoc('No football-data.org token configured.');
+    isFallback = true;
   } else {
     try {
       var worldCup = await fetchWorldCup();
@@ -751,6 +752,7 @@ async function main() {
     } catch (e) {
       console.warn('World Cup fetch failed:', e.message || e);
       doc = setupDoc('World Cup fetch failed: ' + (e.message || e));
+      isFallback = true;
     }
   }
 
@@ -762,6 +764,24 @@ async function main() {
     return;
   }
   var db = initAdmin();
+  // No-clobber guard: a transient football-data failure must not overwrite a good
+  // doc with the empty setup fallback (that blanks the tab). If we only have a
+  // fallback and a prior doc with real matches exists, keep the prior one.
+  if (isFallback) {
+    try {
+      var latSnap = await db.collection(COLL).doc('sports-latest').get();
+      var prevKey = latSnap.exists ? (latSnap.data() || {}).value : null;
+      if (prevKey) {
+        var prevSnap = await db.collection(COLL).doc('sports-' + prevKey).get();
+        var prevMatches = prevSnap.exists ? (((prevSnap.data() || {}).worldCup || {}).matches || []) : [];
+        if (prevMatches.length > 0) {
+          console.log('\nFetch failed/empty, but a good prior doc exists (sports-' + prevKey + ', ' +
+            prevMatches.length + ' matches) — NOT overwriting with the empty fallback.');
+          return;
+        }
+      }
+    } catch (e) { console.warn('last-good check failed (writing fallback anyway):', e.message || e); }
+  }
   await writeDoc(db, dateKey, doc);
   console.log('\nWrote briefings-bob/sports-' + dateKey + ' and sports-latest = ' + dateKey + '.');
 }
