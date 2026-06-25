@@ -26,4 +26,23 @@ $proc.WaitForExit()
 if ($stdout) { $stdout | Out-File -FilePath $log -Encoding utf8 -Append }
 if ($stderr) { $stderr | Out-File -FilePath $log -Encoding utf8 -Append }
 
+# Publish the public mirror (sports-public.json) to GitHub Pages so the
+# no-sign-in shared page (sports.html) stays current. Best-effort: the Firestore
+# write already succeeded, so a git failure here never breaks the refresh.
+if ($proc.ExitCode -eq 0) {
+  try {
+    $repo = Split-Path -Parent $here
+    Push-Location $repo
+    $changed = git status --porcelain sports-public.json
+    if ($changed) {
+      git add sports-public.json | Out-File -FilePath $log -Encoding utf8 -Append
+      git commit -m "chore(sports): refresh public mirror" | Out-File -FilePath $log -Encoding utf8 -Append
+      git push | Out-File -FilePath $log -Encoding utf8 -Append
+    } else {
+      "public mirror unchanged - no commit" | Out-File -FilePath $log -Encoding utf8 -Append
+    }
+    Pop-Location
+  } catch { "git publish failed: $_" | Out-File -FilePath $log -Encoding utf8 -Append }
+}
+
 exit $proc.ExitCode

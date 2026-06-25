@@ -15,7 +15,7 @@
 //   set SPORTS_FOLLOW_TEAMS=Australia,Philippines,England
 //   node refresh-sports.js --dry-run
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
@@ -784,6 +784,16 @@ async function main() {
   }
   await writeDoc(db, dateKey, doc);
   console.log('\nWrote briefings-bob/sports-' + dateKey + ' and sports-latest = ' + dateKey + '.');
+  // Public mirror for the friction-free shared page (sports.html on GitHub Pages
+  // reads this static file — no Firebase, no sign-in). Only on real data, never
+  // the empty fallback. The refresh-sports.ps1 wrapper commits/pushes it.
+  if (!isFallback) {
+    try {
+      var pubPath = join(__dirname, '..', 'sports-public.json');
+      writeFileSync(pubPath, JSON.stringify(doc));
+      console.log('Wrote ' + pubPath + ' (public mirror).');
+    } catch (e) { console.warn('public mirror write failed:', e.message || e); }
+  }
 }
 
 main().then(function () {
