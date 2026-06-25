@@ -1337,7 +1337,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Regime rationale</b> — in risk-off tape, the box leans harder on visible relative strength and confirmed structure; forming names become stalks rather than chases.</li>
         <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
-      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box, and it never repeats a name already in Taker Nuggets. It hunts the early zone: <b>forming</b> names where relative strength is turning up and volume is coming in <i>before</i> the &ldquo;confirmed&rdquo; screen — the one everyone else runs — lights up. It deliberately tilts away from top-of-screen names and toward emerging leadership, volume thrust, and live catalysts; raw target distance is only a capped tiebreak. The <b>asymmetry bar</b> (shown as <span class="src">bar ≥X%</span>) is adaptive — it scales with the current tape, so it stays low in a compressed risk-off field and rises when risk-on widens target distances; a name only qualifies if it's unusually asymmetric <i>for today</i>. Higher variance and non-consensus by design — treat these as early watchlist ideas, not clean confirmations.</p>
+      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box, and it never repeats a name already in Taker Nuggets. It hunts the early zone: <b>forming</b> names where relative strength is turning up and volume is coming in <i>before</i> the &ldquo;confirmed&rdquo; screen — the one everyone else runs — lights up. It deliberately tilts away from top-of-screen names and toward emerging leadership, volume thrust, and live catalysts; raw target distance is only a capped tiebreak. The <b>asymmetry bar</b> (shown as <span class="src">bar ≥X%</span>) is adaptive — it scales with the current tape, so it stays low in a compressed risk-off field and rises when risk-on widens target distances; a name only qualifies if it's unusually asymmetric <i>for today</i>. One slot is always reserved for the single biggest-upside qualifier (tagged <span class="src">Top upside</span>) so a standout fat-tail is never crowded out by names that merely lead harder; the other two fill by leadership rank. Higher variance and non-consensus by design — treat these as early watchlist ideas, not clean confirmations.</p>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
         <li><b>Asset type</b> — <span class="help-pill">All</span> / <span class="help-pill">Stocks</span> / <span class="help-pill">Crypto</span> / <span class="help-pill">Commodities</span>. Each pill shows how many names sit in it. <i>Commodities</i> = metal/energy/broad-commodity ETFs (GLD, USO, GDX…); energy <i>stocks</i> like XOM stay under Stocks.</li>
@@ -1918,13 +1918,13 @@ function radarWildcardWhy(s) {
   if (s.catalyst) bits.push('live catalyst');
   return bits.join('; ') + '.';
 }
-function radarWildcardCard(s) {
+function radarWildcardCard(s, isStandout) {
   var invalid = s.invalidation || ('Wrong below ' + radarLevel(s.stop));
   return '<div class="radar-nugget">' +
     '<div class="radar-nugget-top">' +
       '<div><div class="radar-nugget-symbol">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme || '') + '</span></div>' +
       '<span class="rel-badge ' + radarStatusClass(s.status) + '">' + esc(s.status) + '</span></div>' +
-      '<div><div class="radar-nugget-action">Wildcard</div>' +
+      '<div><div class="radar-nugget-action">' + (isStandout ? 'Top upside' : 'Wildcard') + '</div>' +
       '<div class="radar-nugget-upside">' + esc(radarUpsideLabel(s)) + '</div>' +
       '<div class="radar-wildcard-score">score ' + esc(s.score) + '</div></div>' +
     '</div>' +
@@ -1983,7 +1983,7 @@ function renderRadarWildcards(list) {
   var el = document.getElementById('radar-wildcards');
   if (!el) return;
   var upsideFloor = radarWildcardFloor(list);
-  var base = (list || []).filter(function (s) {
+  var eligible = (list || []).filter(function (s) {
     var upside = radarUpsidePct(s);
     // The early/non-obvious zone: anything the Taker box hasn't already claimed,
     // that's still alive and not already a squeaky-clean top-of-screen confirmed name.
@@ -1995,9 +1995,25 @@ function renderRadarWildcards(list) {
       (s.score || 0) >= 42 &&
       notObvious &&
       radarWildcardRank(s) > 0;
-  }).sort(function (a, b) {
+  });
+  var ranked = eligible.slice().sort(function (a, b) {
     return radarWildcardRank(b) - radarWildcardRank(a);
-  }).slice(0, 3);
+  });
+  // Reserve one slot for the single highest-upside eligible name so a standout
+  // fat-tail (big target distance) is never crowded out by names that merely lead
+  // harder. The other two slots fill by leadership rank; display stays rank-ordered.
+  var standout = eligible.reduce(function (best, s) {
+    return (best === null || radarUpsidePct(s) > radarUpsidePct(best)) ? s : best;
+  }, null);
+  var standoutSym = standout ? standout.symbol : null;
+  var picks = standout ? [standout] : [];
+  ranked.forEach(function (s) {
+    if (picks.length >= 3 || s.symbol === standoutSym) return;
+    picks.push(s);
+  });
+  var base = picks.sort(function (a, b) {
+    return radarWildcardRank(b) - radarWildcardRank(a);
+  });
   if (!base.length) {
     el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No early-edge names outside the Taker list clearing today&rsquo;s asymmetry bar (&ge;' + upsideFloor.toFixed(1) + '% upside). Nothing is setting up ahead of the crowd in this filter.</div></div></div></div>';
     return;
@@ -2008,7 +2024,7 @@ function renderRadarWildcards(list) {
     '<div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div>' +
     '<div class="radar-taker-sub">Early edge — names building leadership and volume before the &ldquo;confirmed&rdquo; screen lights up. Higher variance, deliberately non-consensus.</div></div>' +
     '<div class="radar-taker-sub">' + esc(activeFilter || 'Ahead of the crowd') + ' · bar &ge;' + upsideFloor.toFixed(1) + '%</div></div>' +
-    '<div class="radar-nuggets">' + base.map(radarWildcardCard).join('') + '</div>' +
+    '<div class="radar-nuggets">' + base.map(function (s) { return radarWildcardCard(s, s.symbol === standoutSym); }).join('') + '</div>' +
   '</div>';
 }
 function renderRadar() {
