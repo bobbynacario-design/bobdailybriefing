@@ -347,6 +347,11 @@ function buildProjectionJournal(matches) {
   });
   var rows = [];
   var projected = 0, aligned = 0, missed = 0, tossUps = 0, tossUpDraws = 0;
+  var byTag = {};
+  function bucket(tag) {
+    if (!byTag[tag]) byTag[tag] = { tag: tag, evaluated: 0, aligned: 0, misses: 0 };
+    return byTag[tag];
+  }
   finished.forEach(function (m, idx) {
     var prior = finished.slice(0, idx);
     if (!prior.length) return;
@@ -357,6 +362,8 @@ function buildProjectionJournal(matches) {
     var actual = matchWinner(m);
     if (!p || !actual) return;
     var didAlign = false;
+    var b = bucket(p.tag);
+    b.evaluated++;
     if (!p.favorite) {
       tossUps++;
       didAlign = actual === 'Draw';
@@ -367,6 +374,8 @@ function buildProjectionJournal(matches) {
       if (didAlign) aligned++;
       else missed++;
     }
+    if (didAlign) b.aligned++;
+    else b.misses++;
     rows.push({
       date: m.utcDate,
       home: m.home,
@@ -380,6 +389,17 @@ function buildProjectionJournal(matches) {
     });
   });
   var evaluated = projected + tossUps;
+  var accuracyRates = ['Strong edge', 'Moderate edge', 'Lean', 'Toss-up'].map(function (tag) {
+    var b = byTag[tag] || { tag: tag, evaluated: 0, aligned: 0, misses: 0 };
+    return {
+      tag: tag,
+      evaluated: b.evaluated,
+      aligned: b.aligned,
+      misses: b.misses,
+      accuracy: b.evaluated ? round2(b.aligned / b.evaluated) : null,
+      metric: tag === 'Toss-up' ? 'draw rate' : 'favorite alignment'
+    };
+  }).filter(function (r) { return r.evaluated > 0; });
   return {
     evaluated: evaluated,
     projected: projected,
@@ -389,6 +409,7 @@ function buildProjectionJournal(matches) {
     tossUpDraws: tossUpDraws,
     accuracy: projected ? round2(aligned / projected) : null,
     coverage: evaluated ? round2(projected / evaluated) : null,
+    accuracyRates: accuracyRates,
     note: 'Point-in-time audit: each completed match is projected using only matches before kickoff.',
     recent: rows.slice(-8).reverse()
   };
@@ -472,6 +493,7 @@ function setupDoc(reason) {
         tossUpDraws: 0,
         accuracy: null,
         coverage: null,
+        accuracyRates: [],
         note: 'Point-in-time audit starts after completed matches exist.',
         recent: []
       },

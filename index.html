@@ -1417,7 +1417,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Rising Teams</b> — the strongest current movers by score. These are the first teams to scan if you want to know who is emerging.</li>
         <li><b>Team Momentum</b> — the full ranked table. <span class="help-pill">Score</span> is the model score, <span class="help-pill">Form</span> is recent W/D/L, and <span class="help-pill">GD3</span> is goal-difference trend over recent matches.</li>
         <li><b>Next Fixtures projection</b> — a fixture-level lean based on both teams' momentum score, recent points, GD trend, goals for and goals against. <span class="help-pill">Lean</span> / <span class="help-pill">Moderate edge</span> / <span class="help-pill">Strong edge</span> describe model separation, not certainty.</li>
-        <li><b>Projection Alignment</b> — the feedback loop. It replays completed matches point-in-time, using only matches before kickoff, then checks whether the projected lean matched the result.</li>
+        <li><b>Projection Alignment</b> — the feedback loop. It persists in the generated Sports document and replays completed matches point-in-time, using only matches before kickoff, then checks whether the projected lean matched the result. The confidence table shows whether <span class="help-pill">Strong edge</span>, <span class="help-pill">Moderate edge</span>, and <span class="help-pill">Lean</span> are actually aligning at different rates.</li>
         <li><b>GF / GA chips</b> — goals for and goals against per match. Rising with strong GF and low GA is better than rising only because of one messy result.</li>
         <li><b>Tags</b> — <span class="help-pill" style="color:var(--green)">RISING</span> means form and goal trend are improving; <span class="help-pill" style="color:#F0A832">WATCH</span> means promising but not fully confirmed; <span class="help-pill" style="color:var(--red)">FADING</span> means recent results or goal trend are weakening.</li>
       </ul>
@@ -2692,12 +2692,22 @@ function sportsProjectionJournalHtml(wc) {
     return '<div class="sports-empty">Projection audit starts once there are completed matches with prior form to compare against.</div>';
   }
   var recent = j.recent || [];
+  var rates = j.accuracyRates || [];
   var html = '<div class="sports-audit-grid">' +
     sportsAuditCard('Alignment', sportsAuditPct(j.accuracy), (j.aligned || 0) + '/' + (j.projected || 0) + ' decisive leans right') +
     sportsAuditCard('Coverage', sportsAuditPct(j.coverage), (j.projected || 0) + ' leans from ' + (j.evaluated || 0) + ' audited matches') +
     sportsAuditCard('Misses', String(j.missed || 0), 'favorites that did not align') +
     sportsAuditCard('Toss-ups', String(j.tossUps || 0), (j.tossUpDraws || 0) + ' finished as draws') +
   '</div>';
+  if (rates.length) {
+    html += '<div class="sports-panel-title" style="margin-top:.85rem">Accuracy by confidence</div>' +
+      sportsTable(rates, 'No confidence buckets yet.', [
+        { h:'Bucket', v:function (r) { return r.tag || ''; } },
+        { h:'Rate', num:true, v:function (r) { return sportsAuditPct(r.accuracy); } },
+        { h:'Aligned', num:true, v:function (r) { return (r.aligned || 0) + '/' + (r.evaluated || 0); } },
+        { h:'Metric', v:function (r) { return r.metric || 'favorite alignment'; } }
+      ]);
+  }
   html += sportsTable(recent, 'No recent projection outcomes yet.', [
     { h:'Match', v:function (r) { return (r.home || '') + ' ' + (r.score || '') + ' ' + (r.away || ''); } },
     { h:'Projected', v:function (r) { return r.projected || '-'; } },
