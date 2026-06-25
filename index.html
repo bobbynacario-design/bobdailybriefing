@@ -2307,7 +2307,12 @@ function renderSports() {
       return;
     }
     if (sub) sub.textContent = (d.title || 'Sports briefing') + ' · as of ' + esc(d.asOf || d.generatedAt || '—');
-    out.innerHTML = sportsWorldCupHtml(d);
+    try {
+      out.innerHTML = sportsWorldCupHtml(d);
+    } catch (e) {
+      console.error('Sports render failed:', e);
+      out.innerHTML = '<div class="empty-state">SPORTS RENDER FAILED — CHECK CONSOLE</div>';
+    }
   });
 }
 
@@ -2802,7 +2807,7 @@ function setTick(vi,mi,val,mov) {
   }
 }
 
-function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function clearBriefing() {
   document.getElementById('raw-input').value='';
