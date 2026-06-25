@@ -193,6 +193,13 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+function teamKey(s) {
+  return String(s || '').toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 function buildTeamMomentum(matches, standings) {
   var finished = matches.filter(function (m) {
     return String(m.status || '').toUpperCase() === 'FINISHED'
@@ -287,6 +294,106 @@ function buildTeamMomentum(matches, standings) {
   });
 }
 
+function sportsProjectionPower(t) {
+  if (!t) return null;
+  var score = Number(t.score || 0);
+  var ppm = t.pointsPerMatch == null ? 1 : Number(t.pointsPerMatch);
+  var gdTrend = Number(t.goalDiffTrend || 0);
+  var attack = t.attackRate == null ? 1 : Number(t.attackRate);
+  var defense = t.defenseRate == null ? 1 : Number(t.defenseRate);
+  var form = clamp((ppm / 3) * 100, 0, 100);
+  var gd = clamp(50 + gdTrend * 8, 0, 100);
+  var attackScore = clamp(attack * 30, 0, 100);
+  var defenseScore = clamp(100 - defense * 30, 0, 100);
+  return Math.round(score * 0.46 + form * 0.22 + gd * 0.16 + attackScore * 0.09 + defenseScore * 0.07);
+}
+
+function projectionFromMomentum(m, momentumMap) {
+  if (!m || !m.home || !m.away || !momentumMap) return null;
+  var home = momentumMap[teamKey(m.home)];
+  var away = momentumMap[teamKey(m.away)];
+  if (!home && !away) return null;
+  var hp = sportsProjectionPower(home);
+  var ap = sportsProjectionPower(away);
+  if (hp == null && ap == null) return null;
+  if (hp == null) hp = 48;
+  if (ap == null) ap = 48;
+  var gap = hp - ap;
+  var abs = Math.abs(gap);
+  var favorite = abs < 4 ? null : (gap > 0 ? m.home : m.away);
+  var tag = abs < 4 ? 'Toss-up' : (abs < 12 ? 'Lean' : (abs < 22 ? 'Moderate edge' : 'Strong edge'));
+  return {
+    favorite: favorite,
+    tag: tag,
+    gap: gap,
+    homePower: hp,
+    awayPower: ap
+  };
+}
+
+function matchWinner(m) {
+  if (!m.score || m.score.home == null || m.score.away == null) return null;
+  if (m.score.home > m.score.away) return m.home;
+  if (m.score.away > m.score.home) return m.away;
+  return 'Draw';
+}
+
+function buildProjectionJournal(matches) {
+  var finished = matches.filter(function (m) {
+    return String(m.status || '').toUpperCase() === 'FINISHED'
+      && m.score && m.score.home != null && m.score.away != null;
+  }).sort(function (a, b) {
+    return String(a.utcDate).localeCompare(String(b.utcDate));
+  });
+  var rows = [];
+  var projected = 0, aligned = 0, missed = 0, tossUps = 0, tossUpDraws = 0;
+  finished.forEach(function (m, idx) {
+    var prior = finished.slice(0, idx);
+    if (!prior.length) return;
+    var momentum = buildTeamMomentum(prior, []);
+    var byTeam = {};
+    momentum.forEach(function (t) { byTeam[teamKey(t.team)] = t; });
+    var p = projectionFromMomentum(m, byTeam);
+    var actual = matchWinner(m);
+    if (!p || !actual) return;
+    var didAlign = false;
+    if (!p.favorite) {
+      tossUps++;
+      didAlign = actual === 'Draw';
+      if (didAlign) tossUpDraws++;
+    } else {
+      projected++;
+      didAlign = p.favorite === actual;
+      if (didAlign) aligned++;
+      else missed++;
+    }
+    rows.push({
+      date: m.utcDate,
+      home: m.home,
+      away: m.away,
+      score: String(m.score.home) + '-' + String(m.score.away),
+      projected: p.favorite || 'Toss-up',
+      result: actual,
+      tag: p.tag,
+      gap: p.gap,
+      aligned: didAlign
+    });
+  });
+  var evaluated = projected + tossUps;
+  return {
+    evaluated: evaluated,
+    projected: projected,
+    aligned: aligned,
+    missed: missed,
+    tossUps: tossUps,
+    tossUpDraws: tossUpDraws,
+    accuracy: projected ? round2(aligned / projected) : null,
+    coverage: evaluated ? round2(projected / evaluated) : null,
+    note: 'Point-in-time audit: each completed match is projected using only matches before kickoff.',
+    recent: rows.slice(-8).reverse()
+  };
+}
+
 async function fetchWorldCup() {
   var query = '?season=2026';
   var matchesJson = await footballData('/competitions/WC/matches' + query);
@@ -317,6 +424,7 @@ async function fetchWorldCup() {
   });
   var scorers = (scorersJson && scorersJson.scorers || []).map(normScorer);
   var momentum = buildTeamMomentum(matches, standings);
+  var projectionJournal = buildProjectionJournal(matches);
 
   return {
     name: matchesJson.competition && matchesJson.competition.name || 'FIFA World Cup',
@@ -330,6 +438,7 @@ async function fetchWorldCup() {
     standings: standings,
     scorers: scorers,
     momentum: momentum,
+    projectionJournal: projectionJournal,
     risingTeams: momentum.filter(function (t) { return t.label === 'RISING'; }).slice(0, 6),
     watchTeams: momentum.filter(function (t) { return t.label === 'WATCH'; }).slice(0, 6),
     fadingTeams: momentum.filter(function (t) { return t.label === 'FADING'; }).slice(0, 6)
@@ -354,6 +463,18 @@ function setupDoc(reason) {
       standings: [],
       scorers: [],
       momentum: [],
+      projectionJournal: {
+        evaluated: 0,
+        projected: 0,
+        aligned: 0,
+        missed: 0,
+        tossUps: 0,
+        tossUpDraws: 0,
+        accuracy: null,
+        coverage: null,
+        note: 'Point-in-time audit starts after completed matches exist.',
+        recent: []
+      },
       risingTeams: [],
       watchTeams: [],
       fadingTeams: []

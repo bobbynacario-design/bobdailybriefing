@@ -688,9 +688,14 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-momentum-meta{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.5rem}
 .sports-stat-chip{font-family:var(--mono);font-size:9px;color:var(--txt3);border:1px solid var(--rim);border-radius:20px;padding:2px 7px;background:var(--bg2);white-space:nowrap}
 .sports-momentum-note{font-size:12px;line-height:1.55;color:var(--txt2)}
+.sports-audit-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-bottom:.8rem}
+.sports-audit-card{background:var(--bg3);border:1px solid var(--rim);border-radius:10px;padding:.75rem .8rem}
+.sports-audit-label{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
+.sports-audit-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
+.sports-audit-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.4}
 .sports-empty{font-size:12px;line-height:1.7;color:var(--txt3);font-style:italic}
 @media(max-width:1100px){.sports-momentum-list{grid-template-columns:1fr}}
-@media(max-width:900px){#sports-out{max-width:none}.sports-kpis{grid-template-columns:repeat(2,1fr)}.sports-layout{grid-template-columns:1fr}}
+@media(max-width:900px){#sports-out{max-width:none}.sports-kpis{grid-template-columns:repeat(2,1fr)}.sports-audit-grid{grid-template-columns:repeat(2,1fr)}.sports-layout{grid-template-columns:1fr}}
 @media(max-width:520px){.sports-kpis{grid-template-columns:1fr}.sports-teams{grid-template-columns:1fr;gap:.25rem}.sports-score{text-align:left}.sports-team.away{text-align:left}}
 
 /* ── JOURNAL (V3) ── */
@@ -1412,6 +1417,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Rising Teams</b> — the strongest current movers by score. These are the first teams to scan if you want to know who is emerging.</li>
         <li><b>Team Momentum</b> — the full ranked table. <span class="help-pill">Score</span> is the model score, <span class="help-pill">Form</span> is recent W/D/L, and <span class="help-pill">GD3</span> is goal-difference trend over recent matches.</li>
         <li><b>Next Fixtures projection</b> — a fixture-level lean based on both teams' momentum score, recent points, GD trend, goals for and goals against. <span class="help-pill">Lean</span> / <span class="help-pill">Moderate edge</span> / <span class="help-pill">Strong edge</span> describe model separation, not certainty.</li>
+        <li><b>Projection Alignment</b> — the feedback loop. It replays completed matches point-in-time, using only matches before kickoff, then checks whether the projected lean matched the result.</li>
         <li><b>GF / GA chips</b> — goals for and goals against per match. Rising with strong GF and low GA is better than rising only because of one messy result.</li>
         <li><b>Tags</b> — <span class="help-pill" style="color:var(--green)">RISING</span> means form and goal trend are improving; <span class="help-pill" style="color:#F0A832">WATCH</span> means promising but not fully confirmed; <span class="help-pill" style="color:var(--red)">FADING</span> means recent results or goal trend are weakening.</li>
       </ul>
@@ -2672,6 +2678,38 @@ function sportsMarketRead(gap) {
   if (gap <= -0.04) return 'MARKET AHEAD';
   return 'IN LINE';
 }
+function sportsAuditPct(v) {
+  return v == null ? '-' : (v * 100).toFixed(0) + '%';
+}
+function sportsAuditCard(label, value, sub) {
+  return '<div class="sports-audit-card"><div class="sports-audit-label">' + esc(label) + '</div>' +
+    '<div class="sports-audit-value">' + esc(value) + '</div>' +
+    '<div class="sports-audit-sub">' + esc(sub || '') + '</div></div>';
+}
+function sportsProjectionJournalHtml(wc) {
+  var j = wc.projectionJournal || {};
+  if (!j.evaluated) {
+    return '<div class="sports-empty">Projection audit starts once there are completed matches with prior form to compare against.</div>';
+  }
+  var recent = j.recent || [];
+  var html = '<div class="sports-audit-grid">' +
+    sportsAuditCard('Alignment', sportsAuditPct(j.accuracy), (j.aligned || 0) + '/' + (j.projected || 0) + ' decisive leans right') +
+    sportsAuditCard('Coverage', sportsAuditPct(j.coverage), (j.projected || 0) + ' leans from ' + (j.evaluated || 0) + ' audited matches') +
+    sportsAuditCard('Misses', String(j.missed || 0), 'favorites that did not align') +
+    sportsAuditCard('Toss-ups', String(j.tossUps || 0), (j.tossUpDraws || 0) + ' finished as draws') +
+  '</div>';
+  html += sportsTable(recent, 'No recent projection outcomes yet.', [
+    { h:'Match', v:function (r) { return (r.home || '') + ' ' + (r.score || '') + ' ' + (r.away || ''); } },
+    { h:'Projected', v:function (r) { return r.projected || '-'; } },
+    { h:'Result', v:function (r) { return r.result || '-'; } },
+    { h:'Tag', v:function (r) { return r.tag || '-'; } },
+    { h:'Aligned', num:true, v:function (r) {
+      return r.aligned ? 'YES' : 'NO';
+    } }
+  ]);
+  html += '<div class="sports-empty" style="margin-top:.55rem">' + esc(j.note || 'Point-in-time audit using only pre-match information.') + '</div>';
+  return html;
+}
 function sportsMarketLens(wc, miro) {
   var momentum = wc.momentum || [];
   var markets = (miro && miro.markets || []).filter(function (m) {
@@ -2735,6 +2773,9 @@ function sportsWorldCupHtml(d, miro) {
     '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">World Cup Market Lens</div>' +
     sportsMarketLens(wc, miro) +
+    '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Projection Alignment</div>' +
+    sportsProjectionJournalHtml(wc) +
     '</div>';
   html += '<div class="sports-layout"><div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Next Fixtures</div>' +
