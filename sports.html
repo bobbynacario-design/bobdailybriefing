@@ -31,8 +31,8 @@ h1{font-family:var(--serif);font-size:30px;font-weight:700;margin:0;line-height:
 .sports-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);gap:1rem;align-items:start}
 .sports-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem}
 .sports-panel-title{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
-.sports-list{display:flex;flex-direction:column;gap:.55rem}
-.sports-match{position:relative;border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem .8rem .75rem 1rem;overflow:hidden}
+.sports-list{display:flex;flex-direction:column;gap:.7rem}
+.sports-match{position:relative;border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem .8rem .95rem 1rem;overflow:visible}
 .sports-match:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--blue)}
 .sports-match.live:before{background:var(--green)}
 .sports-match.finished:before{background:var(--gold)}
@@ -45,18 +45,19 @@ h1{font-family:var(--serif);font-size:30px;font-weight:700;margin:0;line-height:
 .sports-projection{margin-top:.65rem;border-top:1px solid var(--rim);padding-top:.6rem}
 .sports-projection.low{opacity:.64}
 .sports-projection-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
-.sports-projection-main{font-size:12px;color:var(--txt2);line-height:1.55;flex:1 1 220px}
+.sports-projection-main{font-size:12px;color:var(--txt2);line-height:1.55;flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
 .sports-projection-main b{color:var(--txt);font-weight:700}
+.sports-projection-split{display:block;margin-top:.15rem;color:var(--txt2)}
 .sports-lowconf{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em}
-.sports-projection-tag{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);border:1px solid rgba(45,184,122,.28);background:var(--green-dim);border-radius:20px;padding:2px 8px;white-space:nowrap}
+.sports-projection-tag{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);border:1px solid rgba(45,184,122,.28);background:var(--green-dim);border-radius:20px;padding:2px 8px;white-space:nowrap;flex:0 0 auto;margin-top:1px}
 .sports-projection-tag.watch{color:var(--amber);background:rgba(240,168,50,.1);border-color:rgba(240,168,50,.28)}
 .sports-projection-tag.close{color:var(--txt3);background:var(--bg2);border-color:var(--rim2)}
-.sports-prob-bar{display:flex;height:7px;border-radius:5px;overflow:hidden;background:var(--bg2);margin-top:.5rem}
+.sports-prob-bar{display:flex;height:7px;border-radius:5px;overflow:hidden;background:var(--bg2);margin-top:.55rem;min-width:100%}
 .sports-prob-bar .seg{height:100%}
 .sports-prob-bar .seg.home{background:var(--green)}
 .sports-prob-bar .seg.draw{background:var(--txt3)}
 .sports-prob-bar .seg.away{background:var(--blue)}
-.sports-confcalls{font-size:12px;color:var(--txt2);line-height:1.5;background:var(--green-dim);border:1px solid rgba(45,184,122,.25);border-radius:8px;padding:.5rem .7rem;margin-bottom:.7rem}
+.sports-confcalls{font-size:12px;color:var(--txt2);line-height:1.5;background:var(--green-dim);border:1px solid rgba(45,184,122,.25);border-radius:8px;padding:.5rem .7rem;margin-bottom:.7rem;overflow-wrap:anywhere}
 .sports-confcalls b{color:var(--txt)}
 .sports-elo{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.03em;white-space:nowrap}
 .sports-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
@@ -118,7 +119,28 @@ function sportsStatusLabel(status){var s=String(status||'').replace(/_/g,' ').to
 function sportsDate(v){if(!v)return'TBD';var d=new Date(v);if(isNaN(d.getTime()))return String(v);return d.toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})+' PHT';}
 function sportsScore(m){var s=m.score||{};if(s.home==null&&s.away==null)return'vs';return String(s.home==null?'-':s.home)+' - '+String(s.away==null?'-':s.away);}
 function sportsProb(v){return Math.round((v||0)*100);}
-function sportsProjectionHtml(m){var p=m&&m.projection;if(!p||!p.probs)return'';var pr=p.probs;var h=sportsProb(pr.home),dr=sportsProb(pr.draw),a=sportsProb(pr.away);var decisive=p.tag==='Strong edge'||p.tag==='Moderate edge';var cls=!p.favorite?'close':(decisive?'':'watch');var favPct=p.favorite===m.home?h:(p.favorite===m.away?a:Math.max(h,a));var eloBit=(p.homeElo!=null&&p.awayElo!=null)?' <span class="sports-elo">Elo '+p.homeElo+'-'+p.awayElo+'</span>':'';var split=esc(m.home)+' '+h+'% / draw '+dr+'% / '+esc(m.away)+' '+a+'%'+eloBit;var main;if(!p.favorite){main='<b>Too close to call</b> - '+split;}else if(decisive){main='<b>Projected: '+esc(p.favorite)+' '+favPct+'%</b> - '+split;}else{main='<b>Lean '+esc(p.favorite)+' '+favPct+'%</b> <span class="sports-lowconf">low confidence</span> - '+split;}var bar='<div class="sports-prob-bar" title="'+split+'"><span class="seg home" style="width:'+h+'%"></span><span class="seg draw" style="width:'+dr+'%"></span><span class="seg away" style="width:'+a+'%"></span></div>';return'<div class="sports-projection'+(decisive?'':' low')+'"><div class="sports-projection-row"><div class="sports-projection-main">'+main+'</div><div class="sports-projection-tag '+cls+'">'+esc(p.tag)+'</div></div>'+bar+'</div>';}
+function sportsProjectionHtml(m){
+  var p=m&&m.projection;
+  if(!p||!p.probs)return'';
+  var pr=p.probs;
+  var h=sportsProb(pr.home),dr=sportsProb(pr.draw),a=sportsProb(pr.away);
+  var decisive=p.tag==='Strong edge'||p.tag==='Moderate edge';
+  var cls=!p.favorite?'close':(decisive?'':'watch');
+  var favPct=p.favorite===m.home?h:(p.favorite===m.away?a:Math.max(h,a));
+  var eloBit=(p.homeElo!=null&&p.awayElo!=null)?' <span class="sports-elo">Elo '+p.homeElo+'-'+p.awayElo+'</span>':'';
+  var splitText=(m.home||'')+' '+h+'% / draw '+dr+'% / '+(m.away||'')+' '+a+'%';
+  var split='<span class="sports-projection-split">'+esc(m.home)+' '+h+'% / draw '+dr+'% / '+esc(m.away)+' '+a+'%'+eloBit+'</span>';
+  var main;
+  if(!p.favorite){
+    main='<b>Too close to call</b>'+split;
+  }else if(decisive){
+    main='<b>Projected: '+esc(p.favorite)+' '+favPct+'%</b>'+split;
+  }else{
+    main='<b>Lean '+esc(p.favorite)+' '+favPct+'%</b> <span class="sports-lowconf">low confidence</span>'+split;
+  }
+  var bar='<div class="sports-prob-bar" title="'+esc(splitText)+'"><span class="seg home" style="width:'+h+'%"></span><span class="seg draw" style="width:'+dr+'%"></span><span class="seg away" style="width:'+a+'%"></span></div>';
+  return'<div class="sports-projection'+(decisive?'':' low')+'"><div class="sports-projection-row"><div class="sports-projection-main">'+main+'</div><div class="sports-projection-tag '+cls+'">'+esc(p.tag)+'</div></div>'+bar+'</div>';
+}
 function sportsConfidentCalls(upcoming){var calls=(upcoming||[]).filter(function(m){var p=m.projection;return p&&p.favorite&&(p.tag==='Strong edge'||p.tag==='Moderate edge');}).map(function(m){var p=m.projection;var pct=sportsProb(p.favorite===m.home?p.probs.home:p.probs.away);return'<b>'+esc(p.favorite)+'</b> '+pct+'%';});if(!calls.length)return'';return'<div class="sports-confcalls">Confident calls: '+calls.slice(0,8).join(' / ')+'</div>';}
 function sportsMatchCard(m){return'<div class="sports-match '+sportsStatusClass(m.status)+'"><div class="sports-match-meta"><span>'+esc(m.stage||m.group||'World Cup')+'</span><span>'+esc(sportsDate(m.utcDate))+' / '+esc(sportsStatusLabel(m.status))+'</span></div><div class="sports-teams"><div class="sports-team">'+esc(m.home||'TBD')+'</div><div class="sports-score">'+esc(sportsScore(m))+'</div><div class="sports-team away">'+esc(m.away||'TBD')+'</div></div>'+(m.venue?'<div class="sports-note">'+esc(m.venue)+'</div>':'')+sportsProjectionHtml(m)+'</div>';}
 function sportsKpi(label,value,sub){return'<div class="sports-kpi"><div class="sports-kpi-label">'+esc(label)+'</div><div class="sports-kpi-value">'+esc(value)+'</div><div class="sports-kpi-sub">'+esc(sub||'')+'</div></div>';}
