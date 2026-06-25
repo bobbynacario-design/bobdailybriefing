@@ -1508,6 +1508,7 @@ function onSignedIn() {
     lockBtn.title = 'Sign out';
   }
   if (window.fbLoadHistory) window.fbLoadHistory();
+  navFromHash();  // open the deep-linked tab (e.g. a shared #sports link)
 }
 
 async function handleAuth() {
@@ -1691,6 +1692,7 @@ function switchPage(id, el) {
   if (id==='miro') renderMiro();
   if (id==='sports') renderSports();
   if (id==='help') renderLlmUsage();
+  setPageHash(id);
   window.scrollTo(0,0);
 }
 function switchPageMobile(id, el) {
@@ -1711,8 +1713,25 @@ function switchPageMobile(id, el) {
   if (id==='miro') renderMiro();
   if (id==='sports') renderSports();
   if (id==='help') renderLlmUsage();
+  setPageHash(id);
   window.scrollTo(0,0);
 }
+// ── Deep-linking: keep the active tab in the URL hash (so a view can be shared)
+// and open the right tab when a #hash link is loaded, pasted, or navigated. ──
+function setPageHash(id) {
+  if (!id) return;
+  if (('#' + id) !== location.hash) {
+    try { history.replaceState(null, '', '#' + id); } catch (e) { location.hash = id; }
+  }
+}
+function navFromHash() {
+  var id = (location.hash || '').replace(/^#/, '').trim();
+  if (!id) return;
+  var btn = document.querySelector('.ntab[data-page="' + id + '"]');
+  var pg = document.getElementById('page-' + id);
+  if (btn && pg && !pg.classList.contains('active')) switchPage(id, btn);
+}
+window.addEventListener('hashchange', navFromHash);
 
 // ── RADAR ──
 // Reads the latest radar doc (written daily by radar/refresh-radar.js) and
