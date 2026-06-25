@@ -1329,15 +1329,15 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>📰 catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event).</li>
         <li><b>Plan line</b> — <span class="src">Upside · Entry · Stop · Target · R:R</span>. <b>Upside</b> is target distance from entry, useful for comparing reward size. The <b>stop is the useful risk number</b>: the level where the idea is wrong.</li>
       </ul>
-      <p><b>Taker Nuggets</b> is the more opportunistic read. It pulls the best confirmed/forming signals from the current filter and names the stance:</p>
+      <p><b>Taker Nuggets</b> is the more opportunistic read — the names to press <i>now</i>. It pulls the best actionable signals from the current filter and names the stance. Confirmed structure earns priority, but a forming name already <b>leading its benchmark</b> can outrank a merely-decent confirmed one — that's edge showing up early.</p>
       <ul>
         <li><b>Press strength</b> — highest-conviction confirmed setups; scan these first if you want active opportunity.</li>
         <li><b>Stalk breakout</b> — forming setups with enough pressure to watch closely, but not fully confirmed yet.</li>
-        <li><b>Upside %</b> — the estimated move from entry to target. Use it to compare potential performance across nuggets, not as a probability that the target will hit.</li>
-        <li><b>Regime rationale</b> — in risk-off tape, the box is deliberately stricter: it favors visible relative strength and confirmed structure, while forming names become stalks rather than chases.</li>
+        <li><b>Upside %</b> — the estimated move from entry to target. Use it to compare reward size across nuggets, not as a probability that the target will hit.</li>
+        <li><b>Regime rationale</b> — in risk-off tape, the box leans harder on visible relative strength and confirmed structure; forming names become stalks rather than chases.</li>
         <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
-      <p><b>Wildcard Upside</b> is the less traditional box. It looks for non-invalidated names with bigger target distance and enough structure to stay alive, even when the setup is messier than the main Taker list. Treat these as asymmetric watchlist ideas, not clean confirmations.</p>
+      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box, and it never repeats a name already in Taker Nuggets. It hunts the early zone: <b>forming</b> names where relative strength is turning up and volume is coming in <i>before</i> the &ldquo;confirmed&rdquo; screen — the one everyone else runs — lights up. It deliberately tilts away from top-of-screen names and toward emerging leadership, volume thrust, and live catalysts; raw target distance is only a capped tiebreak. Higher variance and non-consensus by design — treat these as early watchlist ideas, not clean confirmations.</p>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
         <li><b>Asset type</b> — <span class="help-pill">All</span> / <span class="help-pill">Stocks</span> / <span class="help-pill">Crypto</span> / <span class="help-pill">Commodities</span>. Each pill shows how many names sit in it. <i>Commodities</i> = metal/energy/broad-commodity ETFs (GLD, USO, GDX…); energy <i>stocks</i> like XOM stay under Stocks.</li>
@@ -1753,6 +1753,7 @@ var radarSignals = null;          // cached signals from the last load
 var radarFilter = 'All';          // active asset-type filter
 var radarStatusFilter = 'All';    // active status sub-filter
 var radarRegimeState = null;      // cached regime label from the latest run
+var radarTakerSymbols = {};       // symbols claimed by Taker Nuggets this render (Wildcard dedupes against these)
 function radarAssetType(s) {
   if (s.theme === 'Crypto') return 'Crypto';
   if (RADAR_COMMODITY_SYMS[s.symbol] || s.theme === 'Metals/commod') return 'Commodities';
@@ -1831,6 +1832,15 @@ function renderRadarCards() {
     radarStatusFilter === 'All' ? '' : radarStatusFilter.toUpperCase()].filter(Boolean).join(' ');
   out.innerHTML = '<div class="empty-state">NO ' + esc(label) + ' SIGNALS TODAY</div>';
 }
+// Taker rank: confirmed structure earns priority, but a forming name already
+// LEADING its benchmark (positive 20d relative strength) can outrank a merely
+// decent confirmed one — that's where the early, not-yet-obvious edge lives.
+function radarTakerRank(s) {
+  var rs = s.relStrength20d;
+  var lead = rs == null ? 0 : (rs >= 0 ? Math.min(rs, 12) * 0.5 : rs * 0.4);
+  var confirmedBoost = s.status === 'confirmed' ? 6 : 0;
+  return (s.score || 0) + confirmedBoost + lead;
+}
 function radarTakerAction(s) {
   if (s.status === 'confirmed' && s.score >= 80) return 'Press strength';
   if (s.status === 'confirmed') return 'Take the clean setup';
@@ -1870,22 +1880,42 @@ function radarTakerCard(s) {
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
 }
+// Wildcard rank: hunt the edge BEFORE the crowd's "confirmed" screen lights up.
+// Note rr is fixed ~2.0 by construction, so raw upside% ≈ stop distance — it
+// rewards volatility, not edge. So we lead with the early-leadership signals
+// the score under-weights: forming structure, emerging relative strength,
+// volume thrust, and a live catalyst. Upside is kept as a capped tiebreak so
+// genuine asymmetry still counts but distance alone can't win.
 function radarWildcardRank(s) {
   var upside = radarUpsidePct(s);
   if (upside === null) return -999;
-  var statusBoost = s.status === 'forming' ? 10 : (s.status === 'confirmed' ? 6 : -40);
-  var catalystBoost = s.catalyst ? 4 : 0;
-  var riskPenalty = s.riskQuality != null && s.riskQuality < 35 ? 8 : 0;
-  return upside * 1.4 + (s.score || 0) * 0.45 + statusBoost + catalystBoost - riskPenalty;
+  // Forming is the edge zone: structure building before it's obvious. Confirmed
+  // names are already on everyone's screen, so they get little here.
+  var earlyBoost = s.status === 'forming' ? 18 : (s.status === 'confirmed' ? 4 : -60);
+  // Emerging leadership: outrunning its own benchmark over 20d. Laggards punished.
+  var rs = s.relStrength20d;
+  var leadBoost = rs == null ? 0 : (rs >= 0 ? Math.min(rs, 14) : rs * 1.5);
+  // Volume thrust = accumulation showing up before the breakout confirms.
+  var vol = s.volRatio;
+  var volThrust = vol == null ? 0 : (vol >= 1.2 ? 10 : (vol >= 1.0 ? 4 : 0));
+  var catalystBoost = s.catalyst ? 9 : 0;
+  // Asymmetry counts, but capped so a distant target can't dominate the rank.
+  var asym = Math.min(upside, 30) * 0.7;
+  // Tilt toward names not already top-of-screen (keeps Wildcard distinct from Taker).
+  var notObvious = (s.score || 0) < 75 ? 6 : 0;
+  // Broken/over-extended risk box is a real penalty even for a wildcard.
+  var riskPenalty = s.riskQuality != null && s.riskQuality < 35 ? 14 : 0;
+  return asym + earlyBoost + leadBoost + volThrust + catalystBoost + notObvious + (s.score || 0) * 0.2 - riskPenalty;
 }
 function radarWildcardWhy(s) {
   var bits = [];
-  var upside = radarUpsideLabel(s).toLowerCase();
-  bits.push(upside + ' to target');
-  bits.push(s.status === 'forming' ? 'not fully confirmed yet' : 'structure is alive');
-  bits.push('score ' + s.score);
-  if (s.riskQuality != null && s.riskQuality < 45) bits.push('messier risk box');
-  if (s.catalyst) bits.push('has a current catalyst');
+  bits.push(s.status === 'forming' ? 'forming before the crowd confirms it' : 'still alive, not yet obvious');
+  var rs = s.relStrength20d;
+  if (rs != null && rs > 0) bits.push('leading its benchmark by +' + rs.toFixed(1) + ' pts (20d)');
+  else if (rs != null && rs <= 0) bits.push('still trailing its benchmark — early/contrarian');
+  if (s.volRatio != null && s.volRatio >= 1.2) bits.push('volume running ' + s.volRatio.toFixed(2) + '× norm');
+  bits.push(radarUpsideLabel(s).toLowerCase() + ' to target');
+  if (s.catalyst) bits.push('live catalyst');
   return bits.join('; ') + '.';
 }
 function radarWildcardCard(s) {
@@ -1912,12 +1942,12 @@ function renderRadarTakerNuggets(list) {
       ? 'Mixed stance: take the cleanest pressure, keep size selective, and let weak setups pass.'
       : 'Supportive stance: press confirmed strength while the stop/tripwire remains intact.');
   var base = (list || []).filter(function (s) {
-    return s.status !== 'invalidated' && s.score >= 60;
+    return s.status !== 'invalidated' && s.score >= 58;
   }).sort(function (a, b) {
-    var sa = (a.status === 'confirmed' ? 8 : 0) + (a.score || 0);
-    var sb = (b.status === 'confirmed' ? 8 : 0) + (b.score || 0);
-    return sb - sa;
+    return radarTakerRank(b) - radarTakerRank(a);
   }).slice(0, 3);
+  radarTakerSymbols = {};
+  base.forEach(function (s) { radarTakerSymbols[s.symbol] = true; });
   if (!base.length) {
     el.innerHTML = '<div class="radar-taker"><div class="radar-taker-head"><div><div class="radar-taker-title">Taker Nuggets</div><div class="radar-taker-sub">' + esc(regimeCopy) + '</div></div><div class="radar-taker-sub">No clean taker setup in this filter.</div></div></div>';
     return;
@@ -1936,26 +1966,29 @@ function renderRadarWildcards(list) {
   if (!el) return;
   var base = (list || []).filter(function (s) {
     var upside = radarUpsidePct(s);
-    var lessClean = s.status === 'forming' || (s.score || 0) < 70 || (s.riskQuality != null && s.riskQuality < 55);
+    // The early/non-obvious zone: anything the Taker box hasn't already claimed,
+    // that's still alive and not already a squeaky-clean top-of-screen confirmed name.
+    var notObvious = s.status === 'forming' || (s.score || 0) < 74 || (s.riskQuality != null && s.riskQuality < 55);
     return s.status !== 'invalidated' &&
+      !radarTakerSymbols[s.symbol] &&
       upside !== null &&
-      upside >= 8 &&
-      (s.score || 0) >= 45 &&
-      lessClean &&
+      upside >= 6 &&
+      (s.score || 0) >= 42 &&
+      notObvious &&
       radarWildcardRank(s) > 0;
   }).sort(function (a, b) {
     return radarWildcardRank(b) - radarWildcardRank(a);
   }).slice(0, 3);
   if (!base.length) {
-    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No asymmetric-but-alive setups in this filter. That is useful information too.</div></div></div></div>';
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No early-edge names outside the Taker list right now. Nothing is setting up ahead of the crowd in this filter.</div></div></div></div>';
     return;
   }
   var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
     .filter(Boolean).join(' / ');
   el.innerHTML = '<div class="radar-taker radar-wildcard">' +
     '<div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div>' +
-    '<div class="radar-taker-sub">Higher-asymmetry names that are still alive, but less clean than Taker Nuggets.</div></div>' +
-    '<div class="radar-taker-sub">' + esc(activeFilter || 'Speculative pressure points') + '</div></div>' +
+    '<div class="radar-taker-sub">Early edge — names building leadership and volume before the &ldquo;confirmed&rdquo; screen lights up. Higher variance, deliberately non-consensus.</div></div>' +
+    '<div class="radar-taker-sub">' + esc(activeFilter || 'Ahead of the crowd') + '</div></div>' +
     '<div class="radar-nuggets">' + base.map(radarWildcardCard).join('') + '</div>' +
   '</div>';
 }
