@@ -375,6 +375,20 @@ function sportsProjectionPower(t, squad) {
   return Math.round(historyPower * historyWeight + squadScore * squadWeight);
 }
 
+// Convert the power gap into win/draw/loss probabilities. Logistic on the gap
+// for the win split, plus a draw band that peaks (~27%, football's base rate)
+// when teams are even and fades as the gap widens. Neutral-venue tournament, so
+// there is deliberately no home-advantage term.
+function projectionProbabilities(hp, ap) {
+  var diff = hp - ap;
+  // k=0.035 keeps a single knockout match realistic: even a ~50-point power gap
+  // tops out near ~85% (not 98%). Steeper k looked confident but got punished by
+  // log-loss on the inevitable upsets. Draw band ~30pt wide.
+  var pHomeCore = 1 / (1 + Math.exp(-0.035 * diff));
+  var pDraw = 0.27 * Math.exp(-Math.pow(diff / 30, 2));
+  var r3 = function (x) { return Math.round(x * 1000) / 1000; };
+  return { home: r3((1 - pDraw) * pHomeCore), draw: r3(pDraw), away: r3((1 - pDraw) * (1 - pHomeCore)) };
+}
 function projectionFromMomentum(m, momentumMap, squadMap) {
   if (!m || !m.home || !m.away || !momentumMap) return null;
   var home = momentumMap[teamKey(m.home)];
@@ -397,6 +411,7 @@ function projectionFromMomentum(m, momentumMap, squadMap) {
     gap: gap,
     homePower: hp,
     awayPower: ap,
+    probs: projectionProbabilities(hp, ap),
     homeSquad: homeSquad ? homeSquad.score : null,
     awaySquad: awaySquad ? awaySquad.score : null
   };
@@ -419,6 +434,7 @@ function buildProjectionJournal(matches, squadProfiles) {
   var rows = [];
   var projected = 0, aligned = 0, missed = 0, tossUps = 0, tossUpDraws = 0;
   var decisive = 0, decisiveAligned = 0, decisiveMissed = 0, watchOnly = 0, watchOnlyAligned = 0;
+  var probRows = [], outcomeCounts = [0, 0, 0];   // for Brier / log-loss vs a base-rate baseline
   var squadMap = {};
   (squadProfiles || []).forEach(function (s) { squadMap[teamKey(s.team)] = s; });
   var byTag = {};
@@ -435,6 +451,11 @@ function buildProjectionJournal(matches, squadProfiles) {
     var p = projectionFromMomentum(m, byTeam, squadMap);
     var actual = matchWinner(m);
     if (!p || !actual) return;
+    if (p.probs) {
+      var oi = actual === 'Draw' ? 1 : (actual === m.home ? 0 : 2);
+      probRows.push({ p: [p.probs.home, p.probs.draw, p.probs.away], oi: oi });
+      outcomeCounts[oi]++;
+    }
     var didAlign = false;
     var b = bucket(p.tag);
     b.evaluated++;
@@ -471,6 +492,23 @@ function buildProjectionJournal(matches, squadProfiles) {
     });
   });
   var evaluated = projected + tossUps;
+  // Probabilistic scoring: multi-class Brier + log-loss vs a base-rate (climatology)
+  // baseline computed from the evaluated set's own outcome frequencies. Beating the
+  // baseline means the per-match probabilities add information beyond "average match".
+  var nb = probRows.length;
+  var brier = null, logLoss = null, baselineBrier = null, baselineLogLoss = null, brierSkill = null;
+  if (nb) {
+    var base = [outcomeCounts[0] / nb, outcomeCounts[1] / nb, outcomeCounts[2] / nb];
+    var bs = 0, ls = 0, bbs = 0, bls = 0;
+    probRows.forEach(function (e) {
+      for (var i = 0; i < 3; i++) { var y = e.oi === i ? 1 : 0; bs += Math.pow(e.p[i] - y, 2); bbs += Math.pow(base[i] - y, 2); }
+      ls += -Math.log(Math.max(1e-9, e.p[e.oi]));
+      bls += -Math.log(Math.max(1e-9, base[e.oi]));
+    });
+    brier = round2(bs / nb); logLoss = round2(ls / nb);
+    baselineBrier = round2(bbs / nb); baselineLogLoss = round2(bls / nb);
+    brierSkill = bbs > 0 ? round2((bbs - bs) / bbs) : null;
+  }
   var accuracyRates = ['Strong edge', 'Moderate edge', 'Watch only', 'Toss-up'].map(function (tag) {
     var b = byTag[tag] || { tag: tag, evaluated: 0, aligned: 0, misses: 0 };
     return {
@@ -498,6 +536,12 @@ function buildProjectionJournal(matches, squadProfiles) {
     decisiveAccuracy: decisive ? round2(decisiveAligned / decisive) : null,
     watchOnlyAccuracy: watchOnly ? round2(watchOnlyAligned / watchOnly) : null,
     coverage: evaluated ? round2(projected / evaluated) : null,
+    probScored: nb,
+    brier: brier,
+    logLoss: logLoss,
+    baselineBrier: baselineBrier,
+    baselineLogLoss: baselineLogLoss,
+    brierSkill: brierSkill,
     accuracyRates: accuracyRates,
     note: 'Point-in-time audit: match form uses only matches before kickoff; squad profile uses the loaded tournament roster age/position balance.',
     recent: rows.slice(-8).reverse()
@@ -539,6 +583,11 @@ async function fetchWorldCup() {
   var squadProfiles = buildSquadProfiles((teamsJson && teamsJson.teams) || [], new Date());
   var momentum = buildTeamMomentum(matches, standings);
   var projectionJournal = buildProjectionJournal(matches, squadProfiles);
+  // Attach a stored projection to each upcoming fixture so the front end renders a
+  // single source of truth (same math the journal audits) — no client-side recompute.
+  var momByTeam = {}; momentum.forEach(function (t) { momByTeam[teamKey(t.team)] = t; });
+  var sqByTeam = {}; squadProfiles.forEach(function (s) { sqByTeam[teamKey(s.team)] = s; });
+  upcoming.forEach(function (m) { m.projection = projectionFromMomentum(m, momByTeam, sqByTeam); });
 
   return {
     name: matchesJson.competition && matchesJson.competition.name || 'FIFA World Cup',

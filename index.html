@@ -665,12 +665,22 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-team.away{text-align:right}
 .sports-score{font-family:var(--mono);font-size:17px;color:var(--gold);white-space:nowrap;text-align:center;font-variant-numeric:tabular-nums}
 .sports-note{font-size:12px;color:var(--txt2);line-height:1.55;margin-top:.55rem}
-.sports-projection{margin-top:.65rem;border-top:1px solid var(--rim);padding-top:.6rem;display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
-.sports-projection-main{font-size:12px;color:var(--txt2);line-height:1.55;flex:1 1 260px}
+.sports-projection{margin-top:.65rem;border-top:1px solid var(--rim);padding-top:.6rem}
+.sports-projection.low{opacity:.6}
+.sports-projection-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
+.sports-projection-main{font-size:12px;color:var(--txt2);line-height:1.55;flex:1 1 220px}
 .sports-projection-main b{color:var(--txt);font-weight:700}
+.sports-lowconf{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em}
 .sports-projection-tag{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);border:1px solid rgba(45,184,122,.28);background:var(--green-dim);border-radius:20px;padding:2px 8px;white-space:nowrap}
 .sports-projection-tag.watch{color:#F0A832;background:rgba(240,168,50,.1);border-color:rgba(240,168,50,.28)}
 .sports-projection-tag.close{color:var(--txt3);background:var(--bg2);border-color:var(--rim2)}
+.sports-prob-bar{display:flex;height:7px;border-radius:5px;overflow:hidden;background:var(--bg2);margin-top:.5rem}
+.sports-prob-bar .seg{height:100%}
+.sports-prob-bar .seg.home{background:var(--green)}
+.sports-prob-bar .seg.draw{background:var(--txt3)}
+.sports-prob-bar .seg.away{background:#3498DB}
+.sports-confcalls{font-size:12px;color:var(--txt2);line-height:1.5;background:var(--green-dim);border:1px solid rgba(45,184,122,.25);border-radius:8px;padding:.5rem .7rem;margin-bottom:.7rem}
+.sports-confcalls b{color:var(--txt)}
 .sports-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
 .sports-table th,.sports-table td{padding:.45rem .35rem;border-bottom:1px solid var(--rim);text-align:left}
 .sports-table th{color:var(--txt3);font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:400}
@@ -2565,65 +2575,51 @@ function sportsScore(m) {
   if (s.home == null && s.away == null) return 'vs';
   return String(s.home == null ? '-' : s.home) + ' - ' + String(s.away == null ? '-' : s.away);
 }
-function sportsProjectionPower(t, squad) {
-  if (!t && !squad) return null;
-  var score = t ? Number(t.score || 0) : 50;
-  var squadScore = squad ? Number(squad.score || 50) : 50;
-  var historyWeight = t ? 0.80 : 0.35;
-  var squadWeight = t ? 0.20 : 0.65;
-  if (t && t.played != null && t.played < 2) {
-    historyWeight = 0.65;
-    squadWeight = 0.35;
+// Projections are computed + stored on each upcoming fixture by refresh-sports.js
+// (same math the journal audits — single source of truth). The FE only renders.
+function sportsProb(v) { return Math.round((v || 0) * 100); }
+function sportsProjectionHtml(m) {
+  var p = m && m.projection;
+  if (!p || !p.probs) return '';
+  var pr = p.probs;
+  var h = sportsProb(pr.home), dr = sportsProb(pr.draw), a = sportsProb(pr.away);
+  var decisive = p.tag === 'Strong edge' || p.tag === 'Moderate edge';
+  var cls = !p.favorite ? 'close' : (decisive ? '' : 'watch');
+  var favPct = p.favorite === m.home ? h : (p.favorite === m.away ? a : Math.max(h, a));
+  var split = esc(m.home) + ' ' + h + '% · draw ' + dr + '% · ' + esc(m.away) + ' ' + a + '%';
+  var main;
+  if (!p.favorite) {
+    main = '<b>Too close to call</b> — ' + split;
+  } else if (decisive) {
+    main = '<b>Projected: ' + esc(p.favorite) + ' ' + favPct + '%</b> — ' + split;
+  } else {
+    main = '<b>Lean ' + esc(p.favorite) + ' ' + favPct + '%</b> <span class="sports-lowconf">low confidence</span> — ' + split;
   }
-  if (!t) return Math.round(squadScore);
-  var ppm = t.pointsPerMatch == null ? 1 : Number(t.pointsPerMatch);
-  var gdTrend = Number(t.goalDiffTrend || 0);
-  var attack = t.attackRate == null ? 1 : Number(t.attackRate);
-  var defense = t.defenseRate == null ? 1 : Number(t.defenseRate);
-  var form = Math.max(0, Math.min(100, (ppm / 3) * 100));
-  var gd = Math.max(0, Math.min(100, 50 + gdTrend * 8));
-  var attackScore = Math.max(0, Math.min(100, attack * 30));
-  var defenseScore = Math.max(0, Math.min(100, 100 - defense * 30));
-  var historyPower = score * 0.46 + form * 0.22 + gd * 0.16 + attackScore * 0.09 + defenseScore * 0.07;
-  return Math.round(historyPower * historyWeight + squadScore * squadWeight);
-}
-function sportsFixtureProjection(m, momentumMap, squadMap) {
-  if (!m || !m.home || !m.away || !momentumMap) return null;
-  var home = momentumMap[sportsTeamKey(m.home)];
-  var away = momentumMap[sportsTeamKey(m.away)];
-  var homeSquad = squadMap ? squadMap[sportsTeamKey(m.home)] : null;
-  var awaySquad = squadMap ? squadMap[sportsTeamKey(m.away)] : null;
-  if (!home && !away && !homeSquad && !awaySquad) return null;
-  var hp = sportsProjectionPower(home, homeSquad);
-  var ap = sportsProjectionPower(away, awaySquad);
-  if (hp == null && ap == null) return null;
-  if (hp == null) hp = 48;
-  if (ap == null) ap = 48;
-  var gap = hp - ap;
-  var abs = Math.abs(gap);
-  var favorite = abs < 4 ? 'No clear edge' : (gap > 0 ? m.home : m.away);
-  var cls = abs < 4 ? 'close' : (abs < 12 ? 'watch' : '');
-  var tag = abs < 4 ? 'Toss-up' : (abs < 12 ? 'Watch only' : (abs < 22 ? 'Moderate edge' : 'Strong edge'));
-  var reason = abs < 4
-    ? 'Momentum plus squad profile is too close to call.'
-    : 'Power ' + Math.max(hp, ap) + ' vs ' + Math.min(hp, ap) + ', blending form, GD trend, scoring balance and squad profile.';
-  return { favorite: favorite, tag: tag, cls: cls, reason: reason, homeSquad: homeSquad, awaySquad: awaySquad };
-}
-function sportsProjectionHtml(p) {
-  if (!p) return '';
-  var squadBits = [];
-  if (p.homeSquad) squadBits.push('Home squad ' + p.homeSquad.score + ' ' + (p.homeSquad.label || ''));
-  if (p.awaySquad) squadBits.push('Away squad ' + p.awaySquad.score + ' ' + (p.awaySquad.label || ''));
-  var main = p.favorite === 'No clear edge'
-    ? '<b>No clear edge</b> — ' + esc(p.reason)
-    : '<b>' + (p.tag === 'Watch only' ? 'Watch-only lean: ' : 'Projected lean: ') + esc(p.favorite) + '</b> — ' + esc(p.reason);
-  return '<div class="sports-projection">' +
-    '<div class="sports-projection-main">' + main + '</div>' +
-    '<div class="sports-projection-tag ' + esc(p.cls || '') + '">' + esc(p.tag) + '</div>' +
-    (squadBits.length ? '<div class="sports-projection-main">' + esc(squadBits.join(' · ')) + '</div>' : '') +
+  var bar = '<div class="sports-prob-bar" title="' + split + '">' +
+    '<span class="seg home" style="width:' + h + '%"></span>' +
+    '<span class="seg draw" style="width:' + dr + '%"></span>' +
+    '<span class="seg away" style="width:' + a + '%"></span></div>';
+  return '<div class="sports-projection' + (decisive ? '' : ' low') + '">' +
+    '<div class="sports-projection-row">' +
+      '<div class="sports-projection-main">' + main + '</div>' +
+      '<div class="sports-projection-tag ' + cls + '">' + esc(p.tag) + '</div>' +
+    '</div>' + bar +
   '</div>';
 }
-function sportsMatchCard(m, projection) {
+// Lead the Next Fixtures panel with the decisive (Moderate/Strong edge) calls.
+function sportsConfidentCalls(upcoming) {
+  var calls = (upcoming || []).filter(function (m) {
+    var p = m.projection;
+    return p && p.favorite && (p.tag === 'Strong edge' || p.tag === 'Moderate edge');
+  }).map(function (m) {
+    var p = m.projection;
+    var pct = sportsProb(p.favorite === m.home ? p.probs.home : p.probs.away);
+    return '<b>' + esc(p.favorite) + '</b> ' + pct + '%';
+  });
+  if (!calls.length) return '';
+  return '<div class="sports-confcalls">🎯 Confident calls: ' + calls.slice(0, 8).join(' · ') + '</div>';
+}
+function sportsMatchCard(m) {
   return '<div class="sports-match ' + sportsStatusClass(m.status) + '">' +
     '<div class="sports-match-meta"><span>' + esc(m.stage || m.group || 'World Cup') + '</span><span>' +
       esc(sportsDate(m.utcDate)) + ' · ' + esc(sportsStatusLabel(m.status)) + '</span></div>' +
@@ -2633,7 +2629,7 @@ function sportsMatchCard(m, projection) {
       '<div class="sports-team away">' + esc(m.away || 'TBD') + '</div>' +
     '</div>' +
     (m.venue ? '<div class="sports-note">' + esc(m.venue) + '</div>' : '') +
-    sportsProjectionHtml(projection) +
+    sportsProjectionHtml(m) +
   '</div>';
 }
 function sportsKpi(label, value, sub) {
@@ -2715,6 +2711,15 @@ function sportsProjectionJournalHtml(wc) {
     sportsAuditCard('Watch-only', sportsAuditPct(j.watchOnlyAccuracy), (j.watchOnlyAligned || 0) + '/' + (j.watchOnly || 0) + ' weak leans right') +
     sportsAuditCard('Toss-ups', String(j.tossUps || 0), (j.tossUpDraws || 0) + ' finished as draws') +
   '</div>';
+  if (j.brier != null) {
+    var bsk = j.brierSkill;
+    var bcol = bsk == null ? 'var(--txt3)' : (bsk > 0.02 ? 'var(--green)' : (bsk < -0.02 ? 'var(--red)' : 'var(--txt3)'));
+    var bverdict = bsk == null ? '' : (bsk > 0.02 ? 'edge over base rate' : (bsk < -0.02 ? 'below base rate' : 'about at base rate'));
+    html += '<div class="pse-caveat" style="margin-top:.2rem">📊 Win/draw/loss probabilities · ' + (j.probScored || 0) + ' scored · ' +
+      'Brier ' + j.brier + ' vs base-rate ' + j.baselineBrier +
+      ' · <span style="color:' + bcol + '">skill ' + (bsk > 0 ? '+' : '') + bsk + (bverdict ? ' (' + bverdict + ')' : '') + '</span>' +
+      ' · log-loss ' + j.logLoss + ' vs ' + j.baselineLogLoss + '</div>';
+  }
   if (rates.length) {
     html += '<div class="sports-panel-title" style="margin-top:.85rem">Accuracy by confidence</div>' +
       sportsTable(rates, 'No confidence buckets yet.', [
@@ -2778,10 +2783,6 @@ function sportsWorldCupHtml(d, miro) {
   var momentum = wc.momentum || [];
   var squadProfiles = wc.squadProfiles || [];
   var risingTeams = wc.risingTeams || momentum.slice(0, 3);
-  var momentumByTeam = {};
-  momentum.forEach(function (t) { momentumByTeam[sportsTeamKey(t.team)] = t; });
-  var squadByTeam = {};
-  squadProfiles.forEach(function (t) { squadByTeam[sportsTeamKey(t.team)] = t; });
   var upcoming = wc.upcoming || matches.filter(function (m) { return String(m.status || '').toUpperCase() !== 'FINISHED'; }).slice(0, 8);
   var recent = wc.recent || matches.filter(function (m) { return String(m.status || '').toUpperCase() === 'FINISHED'; }).slice(0, 5);
   var live = matches.filter(function (m) { return sportsStatusClass(m.status) === 'live'; }).length;
@@ -2808,9 +2809,8 @@ function sportsWorldCupHtml(d, miro) {
     '</div>';
   html += '<div class="sports-layout"><div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Next Fixtures</div>' +
-    (upcoming.length ? '<div class="sports-list">' + upcoming.slice(0, 8).map(function (m) {
-      return sportsMatchCard(m, sportsFixtureProjection(m, momentumByTeam, squadByTeam));
-    }).join('') + '</div>' : '<div class="sports-empty">No upcoming World Cup fixtures loaded.</div>') +
+    sportsConfidentCalls(upcoming) +
+    (upcoming.length ? '<div class="sports-list">' + upcoming.slice(0, 8).map(sportsMatchCard).join('') + '</div>' : '<div class="sports-empty">No upcoming World Cup fixtures loaded.</div>') +
     '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Recent Results</div>' +
     (recent.length ? '<div class="sports-list">' + recent.slice(0, 5).map(sportsMatchCard).join('') + '</div>' : '<div class="sports-empty">No completed World Cup matches loaded yet.</div>') +
