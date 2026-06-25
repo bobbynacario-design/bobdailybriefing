@@ -200,6 +200,64 @@ function teamKey(s) {
     .trim();
 }
 
+function ageYears(dob, asOf) {
+  if (!dob) return null;
+  var d = new Date(dob);
+  if (isNaN(d.getTime())) return null;
+  return (asOf.getTime() - d.getTime()) / 31557600000;
+}
+
+function buildSquadProfiles(teams, asOf) {
+  asOf = asOf || new Date();
+  return (teams || []).map(function (team) {
+    var squad = team.squad || [];
+    var positions = { Goalkeeper: 0, Defence: 0, Midfield: 0, Offence: 0, Other: 0 };
+    var ages = [];
+    squad.forEach(function (p) {
+      var pos = p.position && positions[p.position] != null ? p.position : 'Other';
+      positions[pos]++;
+      var age = ageYears(p.dateOfBirth, asOf);
+      if (age != null) ages.push(age);
+    });
+    var n = squad.length || 0;
+    var avgAge = ages.length ? ages.reduce(function (a, b) { return a + b; }, 0) / ages.length : null;
+    var prime = ages.filter(function (a) { return a >= 24 && a <= 30; }).length;
+    var young = ages.filter(function (a) { return a < 23; }).length;
+    var veteran = ages.filter(function (a) { return a >= 32; }).length;
+    var depthScore = clamp((n / 26) * 100, 0, 100);
+    var balanceScore = (
+      clamp((positions.Goalkeeper / 2) * 100, 0, 100) +
+      clamp((positions.Defence / 6) * 100, 0, 100) +
+      clamp((positions.Midfield / 6) * 100, 0, 100) +
+      clamp((positions.Offence / 4) * 100, 0, 100)
+    ) / 4;
+    var primeScore = n ? (prime / n) * 100 : 0;
+    var ageScore = avgAge == null ? 50 : clamp(100 - Math.abs(avgAge - 27.5) * 9, 35, 100);
+    var volatilityPenalty = n ? ((young / n) * 10 + (veteran / n) * 8) : 0;
+    var score = Math.round(depthScore * 0.20 + balanceScore * 0.25 + primeScore * 0.25 + ageScore * 0.30 - volatilityPenalty);
+    score = clamp(score, 0, 100);
+    var label = score >= 72 ? 'DEEP' : (score >= 60 ? 'BALANCED' : (score >= 48 ? 'THIN SPOTS' : 'UNPROVEN'));
+    return {
+      team: teamName(team),
+      score: score,
+      label: label,
+      squadSize: n,
+      avgAge: avgAge == null ? null : round2(avgAge),
+      primeShare: n ? round2(prime / n) : null,
+      youngShare: n ? round2(young / n) : null,
+      veteranShare: n ? round2(veteran / n) : null,
+      positions: positions,
+      note: label === 'DEEP'
+        ? 'Deep, balanced squad profile with a strong prime-age core.'
+        : (label === 'BALANCED'
+          ? 'Squad profile is balanced enough to support the form read.'
+          : 'Squad profile has thinner age or position balance, so form needs confirmation.')
+    };
+  }).sort(function (a, b) {
+    return b.score - a.score || b.squadSize - a.squadSize;
+  });
+}
+
 function buildTeamMomentum(matches, standings) {
   var finished = matches.filter(function (m) {
     return String(m.status || '').toUpperCase() === 'FINISHED'
@@ -294,9 +352,17 @@ function buildTeamMomentum(matches, standings) {
   });
 }
 
-function sportsProjectionPower(t) {
-  if (!t) return null;
-  var score = Number(t.score || 0);
+function sportsProjectionPower(t, squad) {
+  if (!t && !squad) return null;
+  var score = t ? Number(t.score || 0) : 50;
+  var squadScore = squad ? Number(squad.score || 50) : 50;
+  var historyWeight = t ? 0.80 : 0.35;
+  var squadWeight = t ? 0.20 : 0.65;
+  if (t && t.played != null && t.played < 2) {
+    historyWeight = 0.65;
+    squadWeight = 0.35;
+  }
+  if (!t) return Math.round(squadScore);
   var ppm = t.pointsPerMatch == null ? 1 : Number(t.pointsPerMatch);
   var gdTrend = Number(t.goalDiffTrend || 0);
   var attack = t.attackRate == null ? 1 : Number(t.attackRate);
@@ -305,16 +371,19 @@ function sportsProjectionPower(t) {
   var gd = clamp(50 + gdTrend * 8, 0, 100);
   var attackScore = clamp(attack * 30, 0, 100);
   var defenseScore = clamp(100 - defense * 30, 0, 100);
-  return Math.round(score * 0.46 + form * 0.22 + gd * 0.16 + attackScore * 0.09 + defenseScore * 0.07);
+  var historyPower = score * 0.46 + form * 0.22 + gd * 0.16 + attackScore * 0.09 + defenseScore * 0.07;
+  return Math.round(historyPower * historyWeight + squadScore * squadWeight);
 }
 
-function projectionFromMomentum(m, momentumMap) {
+function projectionFromMomentum(m, momentumMap, squadMap) {
   if (!m || !m.home || !m.away || !momentumMap) return null;
   var home = momentumMap[teamKey(m.home)];
   var away = momentumMap[teamKey(m.away)];
-  if (!home && !away) return null;
-  var hp = sportsProjectionPower(home);
-  var ap = sportsProjectionPower(away);
+  var homeSquad = squadMap ? squadMap[teamKey(m.home)] : null;
+  var awaySquad = squadMap ? squadMap[teamKey(m.away)] : null;
+  if (!home && !away && !homeSquad && !awaySquad) return null;
+  var hp = sportsProjectionPower(home, homeSquad);
+  var ap = sportsProjectionPower(away, awaySquad);
   if (hp == null && ap == null) return null;
   if (hp == null) hp = 48;
   if (ap == null) ap = 48;
@@ -327,7 +396,9 @@ function projectionFromMomentum(m, momentumMap) {
     tag: tag,
     gap: gap,
     homePower: hp,
-    awayPower: ap
+    awayPower: ap,
+    homeSquad: homeSquad ? homeSquad.score : null,
+    awaySquad: awaySquad ? awaySquad.score : null
   };
 }
 
@@ -338,7 +409,7 @@ function matchWinner(m) {
   return 'Draw';
 }
 
-function buildProjectionJournal(matches) {
+function buildProjectionJournal(matches, squadProfiles) {
   var finished = matches.filter(function (m) {
     return String(m.status || '').toUpperCase() === 'FINISHED'
       && m.score && m.score.home != null && m.score.away != null;
@@ -347,6 +418,8 @@ function buildProjectionJournal(matches) {
   });
   var rows = [];
   var projected = 0, aligned = 0, missed = 0, tossUps = 0, tossUpDraws = 0;
+  var squadMap = {};
+  (squadProfiles || []).forEach(function (s) { squadMap[teamKey(s.team)] = s; });
   var byTag = {};
   function bucket(tag) {
     if (!byTag[tag]) byTag[tag] = { tag: tag, evaluated: 0, aligned: 0, misses: 0 };
@@ -358,7 +431,7 @@ function buildProjectionJournal(matches) {
     var momentum = buildTeamMomentum(prior, []);
     var byTeam = {};
     momentum.forEach(function (t) { byTeam[teamKey(t.team)] = t; });
-    var p = projectionFromMomentum(m, byTeam);
+    var p = projectionFromMomentum(m, byTeam, squadMap);
     var actual = matchWinner(m);
     if (!p || !actual) return;
     var didAlign = false;
@@ -410,7 +483,7 @@ function buildProjectionJournal(matches) {
     accuracy: projected ? round2(aligned / projected) : null,
     coverage: evaluated ? round2(projected / evaluated) : null,
     accuracyRates: accuracyRates,
-    note: 'Point-in-time audit: each completed match is projected using only matches before kickoff.',
+    note: 'Point-in-time audit: match form uses only matches before kickoff; squad profile uses the loaded tournament roster age/position balance.',
     recent: rows.slice(-8).reverse()
   };
 }
@@ -420,10 +493,13 @@ async function fetchWorldCup() {
   var matchesJson = await footballData('/competitions/WC/matches' + query);
   var standingsJson = null;
   var scorersJson = null;
+  var teamsJson = null;
   try { standingsJson = await footballData('/competitions/WC/standings' + query); }
   catch (e) { console.warn('Standings skipped:', e.message); }
   try { scorersJson = await footballData('/competitions/WC/scorers' + query + '&limit=20'); }
   catch (e) { console.warn('Scorers skipped:', e.message); }
+  try { teamsJson = await footballData('/competitions/WC/teams' + query); }
+  catch (e) { console.warn('Teams/squads skipped:', e.message); }
 
   var matches = (matchesJson.matches || []).map(normMatch).sort(function (a, b) {
     return String(a.utcDate).localeCompare(String(b.utcDate));
@@ -444,8 +520,9 @@ async function fetchWorldCup() {
     });
   });
   var scorers = (scorersJson && scorersJson.scorers || []).map(normScorer);
+  var squadProfiles = buildSquadProfiles((teamsJson && teamsJson.teams) || [], new Date());
   var momentum = buildTeamMomentum(matches, standings);
-  var projectionJournal = buildProjectionJournal(matches);
+  var projectionJournal = buildProjectionJournal(matches, squadProfiles);
 
   return {
     name: matchesJson.competition && matchesJson.competition.name || 'FIFA World Cup',
@@ -458,6 +535,7 @@ async function fetchWorldCup() {
     watchlist: matches.filter(followedMatch).slice(0, 10),
     standings: standings,
     scorers: scorers,
+    squadProfiles: squadProfiles,
     momentum: momentum,
     projectionJournal: projectionJournal,
     risingTeams: momentum.filter(function (t) { return t.label === 'RISING'; }).slice(0, 6),
@@ -483,6 +561,7 @@ function setupDoc(reason) {
       watchlist: [],
       standings: [],
       scorers: [],
+      squadProfiles: [],
       momentum: [],
       projectionJournal: {
         evaluated: 0,

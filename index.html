@@ -666,7 +666,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-score{font-family:var(--mono);font-size:17px;color:var(--gold);white-space:nowrap;text-align:center;font-variant-numeric:tabular-nums}
 .sports-note{font-size:12px;color:var(--txt2);line-height:1.55;margin-top:.55rem}
 .sports-projection{margin-top:.65rem;border-top:1px solid var(--rim);padding-top:.6rem;display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
-.sports-projection-main{font-size:12px;color:var(--txt2);line-height:1.55}
+.sports-projection-main{font-size:12px;color:var(--txt2);line-height:1.55;flex:1 1 260px}
 .sports-projection-main b{color:var(--txt);font-weight:700}
 .sports-projection-tag{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);border:1px solid rgba(45,184,122,.28);background:var(--green-dim);border-radius:20px;padding:2px 8px;white-space:nowrap}
 .sports-projection-tag.watch{color:#F0A832;background:rgba(240,168,50,.1);border-color:rgba(240,168,50,.28)}
@@ -1416,7 +1416,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <ul>
         <li><b>Rising Teams</b> — the strongest current movers by score. These are the first teams to scan if you want to know who is emerging.</li>
         <li><b>Team Momentum</b> — the full ranked table. <span class="help-pill">Score</span> is the model score, <span class="help-pill">Form</span> is recent W/D/L, and <span class="help-pill">GD3</span> is goal-difference trend over recent matches.</li>
-        <li><b>Next Fixtures projection</b> — a fixture-level lean based on both teams' momentum score, recent points, GD trend, goals for and goals against. <span class="help-pill">Lean</span> / <span class="help-pill">Moderate edge</span> / <span class="help-pill">Strong edge</span> describe model separation, not certainty.</li>
+        <li><b>Next Fixtures projection</b> — a fixture-level lean based on both teams' momentum score, recent points, GD trend, goals for, goals against, and squad profile. <span class="help-pill">Lean</span> / <span class="help-pill">Moderate edge</span> / <span class="help-pill">Strong edge</span> describe model separation, not certainty.</li>
+        <li><b>Squad Profile</b> — roster age and position-balance from the World Cup teams feed. It helps stabilize early fixtures before form is rich, but it is not a player-rating, market-value, injury, or expected-XI model.</li>
         <li><b>Projection Alignment</b> — the feedback loop. It persists in the generated Sports document and replays completed matches point-in-time, using only matches before kickoff, then checks whether the projected lean matched the result. The confidence table shows whether <span class="help-pill">Strong edge</span>, <span class="help-pill">Moderate edge</span>, and <span class="help-pill">Lean</span> are actually aligning at different rates.</li>
         <li><b>GF / GA chips</b> — goals for and goals against per match. Rising with strong GF and low GA is better than rising only because of one messy result.</li>
         <li><b>Tags</b> — <span class="help-pill" style="color:var(--green)">RISING</span> means form and goal trend are improving; <span class="help-pill" style="color:#F0A832">WATCH</span> means promising but not fully confirmed; <span class="help-pill" style="color:var(--red)">FADING</span> means recent results or goal trend are weakening.</li>
@@ -2564,9 +2565,17 @@ function sportsScore(m) {
   if (s.home == null && s.away == null) return 'vs';
   return String(s.home == null ? '-' : s.home) + ' - ' + String(s.away == null ? '-' : s.away);
 }
-function sportsProjectionPower(t) {
-  if (!t) return null;
-  var score = Number(t.score || 0);
+function sportsProjectionPower(t, squad) {
+  if (!t && !squad) return null;
+  var score = t ? Number(t.score || 0) : 50;
+  var squadScore = squad ? Number(squad.score || 50) : 50;
+  var historyWeight = t ? 0.80 : 0.35;
+  var squadWeight = t ? 0.20 : 0.65;
+  if (t && t.played != null && t.played < 2) {
+    historyWeight = 0.65;
+    squadWeight = 0.35;
+  }
+  if (!t) return Math.round(squadScore);
   var ppm = t.pointsPerMatch == null ? 1 : Number(t.pointsPerMatch);
   var gdTrend = Number(t.goalDiffTrend || 0);
   var attack = t.attackRate == null ? 1 : Number(t.attackRate);
@@ -2575,15 +2584,18 @@ function sportsProjectionPower(t) {
   var gd = Math.max(0, Math.min(100, 50 + gdTrend * 8));
   var attackScore = Math.max(0, Math.min(100, attack * 30));
   var defenseScore = Math.max(0, Math.min(100, 100 - defense * 30));
-  return Math.round(score * 0.46 + form * 0.22 + gd * 0.16 + attackScore * 0.09 + defenseScore * 0.07);
+  var historyPower = score * 0.46 + form * 0.22 + gd * 0.16 + attackScore * 0.09 + defenseScore * 0.07;
+  return Math.round(historyPower * historyWeight + squadScore * squadWeight);
 }
-function sportsFixtureProjection(m, momentumMap) {
+function sportsFixtureProjection(m, momentumMap, squadMap) {
   if (!m || !m.home || !m.away || !momentumMap) return null;
   var home = momentumMap[sportsTeamKey(m.home)];
   var away = momentumMap[sportsTeamKey(m.away)];
-  if (!home && !away) return null;
-  var hp = sportsProjectionPower(home);
-  var ap = sportsProjectionPower(away);
+  var homeSquad = squadMap ? squadMap[sportsTeamKey(m.home)] : null;
+  var awaySquad = squadMap ? squadMap[sportsTeamKey(m.away)] : null;
+  if (!home && !away && !homeSquad && !awaySquad) return null;
+  var hp = sportsProjectionPower(home, homeSquad);
+  var ap = sportsProjectionPower(away, awaySquad);
   if (hp == null && ap == null) return null;
   if (hp == null) hp = 48;
   if (ap == null) ap = 48;
@@ -2593,18 +2605,22 @@ function sportsFixtureProjection(m, momentumMap) {
   var cls = abs < 4 ? 'close' : (abs < 12 ? 'watch' : '');
   var tag = abs < 4 ? 'Toss-up' : (abs < 12 ? 'Lean' : (abs < 22 ? 'Moderate edge' : 'Strong edge'));
   var reason = abs < 4
-    ? 'Momentum profile is too close to call.'
-    : 'Momentum power ' + Math.max(hp, ap) + ' vs ' + Math.min(hp, ap) + ', driven by form, GD trend and scoring balance.';
-  return { favorite: favorite, tag: tag, cls: cls, reason: reason };
+    ? 'Momentum plus squad profile is too close to call.'
+    : 'Power ' + Math.max(hp, ap) + ' vs ' + Math.min(hp, ap) + ', blending form, GD trend, scoring balance and squad profile.';
+  return { favorite: favorite, tag: tag, cls: cls, reason: reason, homeSquad: homeSquad, awaySquad: awaySquad };
 }
 function sportsProjectionHtml(p) {
   if (!p) return '';
+  var squadBits = [];
+  if (p.homeSquad) squadBits.push('Home squad ' + p.homeSquad.score + ' ' + (p.homeSquad.label || ''));
+  if (p.awaySquad) squadBits.push('Away squad ' + p.awaySquad.score + ' ' + (p.awaySquad.label || ''));
   var main = p.favorite === 'No clear edge'
     ? '<b>No clear edge</b> — ' + esc(p.reason)
     : '<b>Projected lean: ' + esc(p.favorite) + '</b> — ' + esc(p.reason);
   return '<div class="sports-projection">' +
     '<div class="sports-projection-main">' + main + '</div>' +
     '<div class="sports-projection-tag ' + esc(p.cls || '') + '">' + esc(p.tag) + '</div>' +
+    (squadBits.length ? '<div class="sports-projection-main">' + esc(squadBits.join(' · ')) + '</div>' : '') +
   '</div>';
 }
 function sportsMatchCard(m, projection) {
@@ -2760,9 +2776,12 @@ function sportsWorldCupHtml(d, miro) {
   var wc = d.worldCup || {};
   var matches = wc.matches || [];
   var momentum = wc.momentum || [];
+  var squadProfiles = wc.squadProfiles || [];
   var risingTeams = wc.risingTeams || momentum.slice(0, 3);
   var momentumByTeam = {};
   momentum.forEach(function (t) { momentumByTeam[sportsTeamKey(t.team)] = t; });
+  var squadByTeam = {};
+  squadProfiles.forEach(function (t) { squadByTeam[sportsTeamKey(t.team)] = t; });
   var upcoming = wc.upcoming || matches.filter(function (m) { return String(m.status || '').toUpperCase() !== 'FINISHED'; }).slice(0, 8);
   var recent = wc.recent || matches.filter(function (m) { return String(m.status || '').toUpperCase() === 'FINISHED'; }).slice(0, 5);
   var live = matches.filter(function (m) { return sportsStatusClass(m.status) === 'live'; }).length;
@@ -2790,7 +2809,7 @@ function sportsWorldCupHtml(d, miro) {
   html += '<div class="sports-layout"><div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Next Fixtures</div>' +
     (upcoming.length ? '<div class="sports-list">' + upcoming.slice(0, 8).map(function (m) {
-      return sportsMatchCard(m, sportsFixtureProjection(m, momentumByTeam));
+      return sportsMatchCard(m, sportsFixtureProjection(m, momentumByTeam, squadByTeam));
     }).join('') + '</div>' : '<div class="sports-empty">No upcoming World Cup fixtures loaded.</div>') +
     '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Recent Results</div>' +
@@ -2807,6 +2826,14 @@ function sportsWorldCupHtml(d, miro) {
       { h:'Form', v:function (r) { return r.recentForm || '-'; } },
       { h:'GD3', num:true, v:function (r) { return (r.goalDiffTrend > 0 ? '+' : '') + (r.goalDiffTrend || 0); } }
     ]) + '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Squad Profile</div>' +
+    sportsTable(squadProfiles.slice(0, 10), 'Squad profile unavailable from the current feed.', [
+      { h:'Team', v:function (r) { return r.team || ''; } },
+      { h:'Tag', v:function (r) { return r.label || ''; } },
+      { h:'Score', num:true, v:function (r) { return r.score == null ? '-' : r.score; } },
+      { h:'Age', num:true, v:function (r) { return r.avgAge == null ? '-' : r.avgAge; } },
+      { h:'Prime', num:true, v:function (r) { return sportsPct(r.primeShare); } }
+    ]) + '<div class="sports-empty" style="margin-top:.55rem">Squad profile uses available roster age and position balance from football-data.org. It is not a player-rating or injury model.</div></div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Standings</div>' +
     sportsTable((wc.standings || []).slice(0, 12), 'Standings unavailable from the current feed.', [
       { h:'Grp', v:function (r) { return r.group || '-'; } },
