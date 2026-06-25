@@ -3,141 +3,139 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>World Cup — Projections</title>
-<meta name="description" content="World Cup form, momentum and win/draw/loss projections. Framing only, not betting advice.">
+<title>Sports Briefing - World Cup</title>
+<meta name="description" content="Public World Cup projections, projection audit, team momentum, squad profile and market lens. Framing only, not betting advice.">
 <style>
-  :root{
-    --bg:#0e1116; --bg2:#161a21; --bg3:#1d222b; --rim:#262c37;
-    --txt:#e8eaed; --txt2:#aab2bd; --txt3:#6b7480;
-    --gold:#c9a84c; --green:#2db87a; --red:#e85c5c; --amber:#f0a832; --blue:#3498db;
-    --serif:Georgia,'Times New Roman',serif; --mono:'SF Mono',Consolas,Menlo,monospace;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:920px;margin:0 auto;padding:1.4rem 1.1rem 3rem}
-  header{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;flex-wrap:wrap;border-bottom:1px solid var(--rim);padding-bottom:.9rem;margin-bottom:1.2rem}
-  h1{font-family:var(--serif);font-size:24px;font-weight:700;margin:0}
-  h1 .sub{font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:.2rem}
-  .asof{font-family:var(--mono);font-size:11px;color:var(--txt3);white-space:nowrap}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:1.3rem}
-  .kpi{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.7rem .8rem}
-  .kpi-l{font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
-  .kpi-v{font-family:var(--serif);font-size:20px;font-weight:700;margin-top:.15rem;line-height:1.1}
-  .kpi-s{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:.15rem}
-  .panel{margin-bottom:1.4rem}
-  .panel-t{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin-bottom:.7rem}
-  .confcalls{font-size:13px;color:var(--txt2);line-height:1.6;background:rgba(45,184,122,.1);border:1px solid rgba(45,184,122,.25);border-radius:8px;padding:.6rem .8rem;margin-bottom:.9rem}
-  .confcalls b{color:var(--txt)}
-  .match{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.8rem .9rem;margin-bottom:.6rem}
-  .match-meta{display:flex;justify-content:space-between;gap:.5rem;font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.5rem}
-  .teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.6rem}
-  .team{font-family:var(--serif);font-size:16px;font-weight:700}
-  .team.away{text-align:right}
-  .score{font-family:var(--mono);font-size:13px;color:var(--txt3)}
-  .proj{margin-top:.6rem;border-top:1px solid var(--rim);padding-top:.55rem}
-  .proj.low{opacity:.62}
-  .proj-main{font-size:12.5px;color:var(--txt2)}
-  .proj-main b{color:var(--txt)}
-  .lowconf{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em}
-  .elo{font-family:var(--mono);font-size:9px;color:var(--txt3)}
-  .bar{display:flex;height:7px;border-radius:5px;overflow:hidden;background:var(--bg3);margin-top:.5rem}
-  .bar span{height:100%}
-  .bar .h{background:var(--green)} .bar .d{background:var(--txt3)} .bar .a{background:var(--blue)}
-  .mom{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem}
-  .mom-card{background:var(--bg2);border:1px solid var(--rim);border-left:4px solid var(--gold);border-radius:9px;padding:.7rem .8rem}
-  .mom-card.rising{border-left-color:var(--green)} .mom-card.fading{border-left-color:var(--red)} .mom-card.watch{border-left-color:var(--amber)}
-  .mom-top{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem}
-  .mom-team{font-family:var(--serif);font-size:15px;font-weight:700}
-  .mom-score{font-family:var(--mono);font-size:20px;color:var(--gold)}
-  .mom-tag{font-family:var(--mono);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}
-  .mom-note{font-size:11.5px;color:var(--txt2);margin-top:.35rem;line-height:1.5}
-  .foot{border-top:1px solid var(--rim);margin-top:1.6rem;padding-top:1rem;font-family:var(--mono);font-size:10px;color:var(--txt3);line-height:1.7}
-  .empty{font-size:12.5px;color:var(--txt3);font-style:italic}
-  @media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}.mom{grid-template-columns:1fr}.teams{grid-template-columns:1fr auto 1fr}}
+:root{
+  --bg:#0e1116;--bg2:#161a21;--bg3:#1d222b;--rim:#262c37;--rim2:#343b49;
+  --txt:#e8eaed;--txt2:#aab2bd;--txt3:#6b7480;--gold:#c9a84c;--green:#2db87a;
+  --red:#e85c5c;--amber:#f0a832;--blue:#3498db;--green-dim:rgba(45,184,122,.1);
+  --serif:Georgia,"Times New Roman",serif;--mono:"SF Mono",Consolas,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1420px;margin:0 auto;padding:1.4rem 1rem 3rem}
+.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--rim);padding-bottom:1rem;margin-bottom:1.3rem}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:.2rem}
+h1{font-family:var(--serif);font-size:30px;font-weight:700;margin:0;line-height:1.1}
+.sub{font-family:var(--mono);font-size:11px;color:var(--txt3);margin-top:.35rem}
+.actions{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);border:1px solid var(--rim2);border-radius:20px;padding:.35rem .65rem;background:var(--bg2)}
+.pill a{color:var(--gold);text-decoration:none}
+.loading{font-family:var(--mono);font-size:12px;color:var(--txt3);text-align:center;padding:5rem 1rem}
+.sports-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}
+.sports-kpi{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.85rem 1rem}
+.sports-kpi-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
+.sports-kpi-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
+.sports-kpi-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.5}
+.sports-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);gap:1rem;align-items:start}
+.sports-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem}
+.sports-panel-title{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
+.sports-list{display:flex;flex-direction:column;gap:.55rem}
+.sports-match{position:relative;border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem .8rem .75rem 1rem;overflow:hidden}
+.sports-match:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--blue)}
+.sports-match.live:before{background:var(--green)}
+.sports-match.finished:before{background:var(--gold)}
+.sports-match-meta{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.45rem}
+.sports-teams{display:grid;grid-template-columns:minmax(120px,1fr) 72px minmax(120px,1fr);gap:.55rem;align-items:center;max-width:680px;margin:0 auto}
+.sports-team{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt);line-height:1.25;min-width:0}
+.sports-team.away{text-align:right}
+.sports-score{font-family:var(--mono);font-size:17px;color:var(--gold);white-space:nowrap;text-align:center;font-variant-numeric:tabular-nums}
+.sports-note{font-size:12px;color:var(--txt2);line-height:1.55;margin-top:.55rem}
+.sports-projection{margin-top:.65rem;border-top:1px solid var(--rim);padding-top:.6rem}
+.sports-projection.low{opacity:.64}
+.sports-projection-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
+.sports-projection-main{font-size:12px;color:var(--txt2);line-height:1.55;flex:1 1 220px}
+.sports-projection-main b{color:var(--txt);font-weight:700}
+.sports-lowconf{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em}
+.sports-projection-tag{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);border:1px solid rgba(45,184,122,.28);background:var(--green-dim);border-radius:20px;padding:2px 8px;white-space:nowrap}
+.sports-projection-tag.watch{color:var(--amber);background:rgba(240,168,50,.1);border-color:rgba(240,168,50,.28)}
+.sports-projection-tag.close{color:var(--txt3);background:var(--bg2);border-color:var(--rim2)}
+.sports-prob-bar{display:flex;height:7px;border-radius:5px;overflow:hidden;background:var(--bg2);margin-top:.5rem}
+.sports-prob-bar .seg{height:100%}
+.sports-prob-bar .seg.home{background:var(--green)}
+.sports-prob-bar .seg.draw{background:var(--txt3)}
+.sports-prob-bar .seg.away{background:var(--blue)}
+.sports-confcalls{font-size:12px;color:var(--txt2);line-height:1.5;background:var(--green-dim);border:1px solid rgba(45,184,122,.25);border-radius:8px;padding:.5rem .7rem;margin-bottom:.7rem}
+.sports-confcalls b{color:var(--txt)}
+.sports-elo{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.03em;white-space:nowrap}
+.sports-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+.sports-table th,.sports-table td{padding:.45rem .35rem;border-bottom:1px solid var(--rim);text-align:left;vertical-align:top}
+.sports-table th{color:var(--txt3);font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:400}
+.sports-table td.num,.sports-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+.sports-momentum-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem;margin-bottom:1rem}
+.sports-momentum-card{background:var(--bg3);border:1px solid var(--rim);border-radius:10px;padding:.85rem .9rem;position:relative;overflow:hidden}
+.sports-momentum-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--gold)}
+.sports-momentum-card.rising:before{background:var(--green)}
+.sports-momentum-card.watch:before{background:var(--amber)}
+.sports-momentum-card.fading:before{background:var(--red)}
+.sports-momentum-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.65rem;margin-bottom:.55rem}
+.sports-momentum-team{font-family:var(--serif);font-size:17px;font-weight:700;line-height:1.25;color:var(--txt)}
+.sports-momentum-score{font-family:var(--mono);font-size:24px;color:var(--gold);line-height:1}
+.sports-momentum-meta{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.5rem}
+.sports-stat-chip{font-family:var(--mono);font-size:9px;color:var(--txt3);border:1px solid var(--rim);border-radius:20px;padding:2px 7px;background:var(--bg2);white-space:nowrap}
+.sports-momentum-note{font-size:12px;line-height:1.55;color:var(--txt2)}
+.rel-badge{display:inline-block;margin-top:.25rem;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;border-radius:20px;padding:2px 7px;border:1px solid var(--rim2);color:var(--txt3)}
+.rel-high{color:var(--green);border-color:rgba(45,184,122,.35);background:var(--green-dim)}
+.rel-med{color:var(--amber);border-color:rgba(240,168,50,.3);background:rgba(240,168,50,.1)}
+.rel-low{color:var(--red);border-color:rgba(232,92,92,.3);background:rgba(232,92,92,.1)}
+.sports-audit-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-bottom:.8rem}
+.sports-audit-card{background:var(--bg3);border:1px solid var(--rim);border-radius:10px;padding:.75rem .8rem}
+.sports-audit-label{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
+.sports-audit-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
+.sports-audit-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.4}
+.sports-empty{font-size:12px;line-height:1.7;color:var(--txt3);font-style:italic}
+.pse-caveat{font-size:12px;line-height:1.65;color:var(--txt2);background:rgba(240,168,50,.1);border:1px solid rgba(240,168,50,.25);border-radius:10px;padding:.7rem .85rem;margin-bottom:1rem}
+.foot{border-top:1px solid var(--rim);margin-top:1.6rem;padding-top:1rem;font-family:var(--mono);font-size:10px;color:var(--txt3);line-height:1.7}
+@media(max-width:1100px){.sports-momentum-list{grid-template-columns:1fr}}
+@media(max-width:900px){.sports-kpis{grid-template-columns:repeat(2,1fr)}.sports-audit-grid{grid-template-columns:repeat(2,1fr)}.sports-layout{grid-template-columns:1fr}}
+@media(max-width:620px){.wrap{padding:.9rem .75rem 2rem}.sports-kpis{grid-template-columns:1fr}.sports-teams{grid-template-columns:1fr;gap:.25rem}.sports-score{text-align:left}.sports-team.away{text-align:left}.sports-table{font-size:10px}.sports-panel{padding:.85rem}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1><span class="sub">⚽ Live projections</span><span id="title">World Cup</span></h1>
-    <div class="asof" id="asof"></div>
-  </header>
-  <div id="out"><div class="empty">Loading…</div></div>
+  <div class="topbar">
+    <div>
+      <div class="eyebrow">Public sports briefing</div>
+      <h1 id="page-title">Sports</h1>
+      <div class="sub" id="sports-sub">Loading sports data</div>
+    </div>
+    <div class="actions">
+      <span class="pill">No sign-in</span>
+      <span class="pill"><a href="index.html#sports">Full app</a></span>
+    </div>
+  </div>
+  <main id="sports-out"><div class="loading">Loading sports...</div></main>
   <div class="foot">
-    Form &amp; momentum from football-data.org; team strength from World Football Elo (eloratings.net).
-    Win/draw/loss are model estimates for framing — <b>not betting advice</b>, not guarantees.
-    Refreshed daily.
+    Sports framing only. Projections are model estimates built from fixture form, squad profile where available, and World Football Elo; they are not guarantees or betting advice.
+    Market Lens is a comparison against public market pricing when the Markets feed has matching World Cup markets.
   </div>
 </div>
 <script>
-var esc = function(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
-var pct = function(v){ return Math.round((v||0)*100); };
-function sportsDate(v){
-  if(!v) return 'TBD';
-  var d = new Date(v); if(isNaN(d.getTime())) return String(v);
-  return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
-}
-function statusLabel(s){ s=String(s||'').replace(/_/g,' ').toLowerCase(); return s?s.charAt(0).toUpperCase()+s.slice(1):'Scheduled'; }
-function momClass(l){ l=String(l||'').toLowerCase(); return l==='rising'?'rising':(l==='fading'?'fading':(l==='watch'?'watch':'')); }
-
-function projHtml(m){
-  var p = m && m.projection;
-  if(!p || !p.probs) return '';
-  var h=pct(p.probs.home), dr=pct(p.probs.draw), a=pct(p.probs.away);
-  var decisive = p.tag==='Strong edge' || p.tag==='Moderate edge';
-  var favPct = p.favorite===m.home?h:(p.favorite===m.away?a:Math.max(h,a));
-  var elo = (p.homeElo!=null&&p.awayElo!=null)?' <span class="elo">Elo '+p.homeElo+'–'+p.awayElo+'</span>':'';
-  var split = esc(m.home)+' '+h+'% · draw '+dr+'% · '+esc(m.away)+' '+a+'%'+elo;
-  var main = !p.favorite ? '<b>Too close to call</b> — '+split
-    : decisive ? '<b>Projected: '+esc(p.favorite)+' '+favPct+'%</b> — '+split
-    : '<b>Lean '+esc(p.favorite)+' '+favPct+'%</b> <span class="lowconf">low confidence</span> — '+split;
-  return '<div class="proj'+(decisive?'':' low')+'"><div class="proj-main">'+main+'</div>'+
-    '<div class="bar"><span class="h" style="width:'+h+'%"></span><span class="d" style="width:'+dr+'%"></span><span class="a" style="width:'+a+'%"></span></div></div>';
-}
-function matchCard(m){
-  var s = m.score||{};
-  var sc = (s.home==null&&s.away==null)?'vs':((s.home==null?'-':s.home)+' - '+(s.away==null?'-':s.away));
-  return '<div class="match"><div class="match-meta"><span>'+esc(m.stage||m.group||'World Cup')+'</span>'+
-    '<span>'+esc(sportsDate(m.utcDate))+' · '+esc(statusLabel(m.status))+'</span></div>'+
-    '<div class="teams"><div class="team">'+esc(m.home||'TBD')+'</div><div class="score">'+esc(sc)+'</div>'+
-    '<div class="team away">'+esc(m.away||'TBD')+'</div></div>'+ projHtml(m) +'</div>';
-}
-function confCalls(up){
-  var calls=(up||[]).filter(function(m){var p=m.projection;return p&&p.favorite&&(p.tag==='Strong edge'||p.tag==='Moderate edge');})
-    .map(function(m){var p=m.projection;var v=pct(p.favorite===m.home?p.probs.home:p.probs.away);return '<b>'+esc(p.favorite)+'</b> '+v+'%';});
-  return calls.length ? '<div class="confcalls">🎯 Confident calls: '+calls.slice(0,8).join(' · ')+'</div>' : '';
-}
-function momCard(t){
-  return '<div class="mom-card '+momClass(t.label)+'"><div class="mom-top"><div><div class="mom-team">'+esc(t.team)+'</div>'+
-    '<div class="mom-tag">'+esc(t.label||'STEADY')+'</div></div><div class="mom-score">'+esc(t.score==null?'-':t.score)+'</div></div>'+
-    '<div class="mom-note">'+esc(t.note||'')+'</div></div>';
-}
-function render(d){
-  var wc = d.worldCup||{};
-  document.getElementById('title').textContent = wc.name || 'World Cup';
-  document.getElementById('asof').textContent = 'as of '+(d.asOf||'—');
-  var matches = wc.matches||[];
-  var finished = matches.filter(function(m){return String(m.status||'').toUpperCase()==='FINISHED';});
-  var goals = finished.reduce(function(a,m){return a+((m.score&&m.score.home!=null)?Number(m.score.home||0)+Number(m.score.away||0):0);},0);
-  var up = wc.upcoming||[], rec = wc.recent||[], next = up[0];
-  var rising = (wc.risingTeams && wc.risingTeams.length ? wc.risingTeams : (wc.momentum||[])).slice(0,3);
-  var html = '<div class="kpis">'+
-    '<div class="kpi"><div class="kpi-l">Matches</div><div class="kpi-v">'+(matches.length||0)+'</div><div class="kpi-s">'+finished.length+' finished</div></div>'+
-    '<div class="kpi"><div class="kpi-l">Goals</div><div class="kpi-v">'+goals+'</div><div class="kpi-s">'+(finished.length?(goals/finished.length).toFixed(2)+'/match':'—')+'</div></div>'+
-    '<div class="kpi"><div class="kpi-l">Upcoming</div><div class="kpi-v">'+up.length+'</div><div class="kpi-s">fixtures projected</div></div>'+
-    '<div class="kpi"><div class="kpi-l">Next</div><div class="kpi-v" style="font-size:13px">'+esc(next?sportsDate(next.utcDate):'TBD')+'</div><div class="kpi-s">'+esc(next?((next.home||'TBD')+' v '+(next.away||'TBD')):'—')+'</div></div>'+
-  '</div>';
-  html += '<div class="panel"><div class="panel-t">Next Fixtures — projected outcome</div>'+ confCalls(up) +
-    (up.length ? up.slice(0,10).map(matchCard).join('') : '<div class="empty">No upcoming fixtures loaded.</div>') +'</div>';
-  html += '<div class="panel"><div class="panel-t">Rising Teams</div>'+
-    (rising.length ? '<div class="mom">'+rising.map(momCard).join('')+'</div>' : '<div class="empty">Momentum needs completed matches.</div>') +'</div>';
-  html += '<div class="panel"><div class="panel-t">Recent Results</div>'+
-    (rec.length ? rec.slice(0,6).map(matchCard).join('') : '<div class="empty">No completed matches yet.</div>') +'</div>';
-  document.getElementById('out').innerHTML = html;
-}
-fetch('./sports-public.json?t='+Date.now()).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-  .then(render)
-  .catch(function(e){ document.getElementById('out').innerHTML = '<div class="empty">Could not load sports data ('+esc(e.message)+'). Please try again shortly.</div>'; });
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function sportsStatusClass(status){var s=String(status||'').toUpperCase();if(s==='LIVE'||s==='IN_PLAY'||s==='PAUSED')return'live';if(s==='FINISHED'||s==='AWARDED')return'finished';return'';}
+function sportsStatusLabel(status){var s=String(status||'').replace(/_/g,' ').toLowerCase();return s?s.charAt(0).toUpperCase()+s.slice(1):'Scheduled';}
+function sportsDate(v){if(!v)return'TBD';var d=new Date(v);if(isNaN(d.getTime()))return String(v);return d.toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})+' PHT';}
+function sportsScore(m){var s=m.score||{};if(s.home==null&&s.away==null)return'vs';return String(s.home==null?'-':s.home)+' - '+String(s.away==null?'-':s.away);}
+function sportsProb(v){return Math.round((v||0)*100);}
+function sportsProjectionHtml(m){var p=m&&m.projection;if(!p||!p.probs)return'';var pr=p.probs;var h=sportsProb(pr.home),dr=sportsProb(pr.draw),a=sportsProb(pr.away);var decisive=p.tag==='Strong edge'||p.tag==='Moderate edge';var cls=!p.favorite?'close':(decisive?'':'watch');var favPct=p.favorite===m.home?h:(p.favorite===m.away?a:Math.max(h,a));var eloBit=(p.homeElo!=null&&p.awayElo!=null)?' <span class="sports-elo">Elo '+p.homeElo+'-'+p.awayElo+'</span>':'';var split=esc(m.home)+' '+h+'% / draw '+dr+'% / '+esc(m.away)+' '+a+'%'+eloBit;var main;if(!p.favorite){main='<b>Too close to call</b> - '+split;}else if(decisive){main='<b>Projected: '+esc(p.favorite)+' '+favPct+'%</b> - '+split;}else{main='<b>Lean '+esc(p.favorite)+' '+favPct+'%</b> <span class="sports-lowconf">low confidence</span> - '+split;}var bar='<div class="sports-prob-bar" title="'+split+'"><span class="seg home" style="width:'+h+'%"></span><span class="seg draw" style="width:'+dr+'%"></span><span class="seg away" style="width:'+a+'%"></span></div>';return'<div class="sports-projection'+(decisive?'':' low')+'"><div class="sports-projection-row"><div class="sports-projection-main">'+main+'</div><div class="sports-projection-tag '+cls+'">'+esc(p.tag)+'</div></div>'+bar+'</div>';}
+function sportsConfidentCalls(upcoming){var calls=(upcoming||[]).filter(function(m){var p=m.projection;return p&&p.favorite&&(p.tag==='Strong edge'||p.tag==='Moderate edge');}).map(function(m){var p=m.projection;var pct=sportsProb(p.favorite===m.home?p.probs.home:p.probs.away);return'<b>'+esc(p.favorite)+'</b> '+pct+'%';});if(!calls.length)return'';return'<div class="sports-confcalls">Confident calls: '+calls.slice(0,8).join(' / ')+'</div>';}
+function sportsMatchCard(m){return'<div class="sports-match '+sportsStatusClass(m.status)+'"><div class="sports-match-meta"><span>'+esc(m.stage||m.group||'World Cup')+'</span><span>'+esc(sportsDate(m.utcDate))+' / '+esc(sportsStatusLabel(m.status))+'</span></div><div class="sports-teams"><div class="sports-team">'+esc(m.home||'TBD')+'</div><div class="sports-score">'+esc(sportsScore(m))+'</div><div class="sports-team away">'+esc(m.away||'TBD')+'</div></div>'+(m.venue?'<div class="sports-note">'+esc(m.venue)+'</div>':'')+sportsProjectionHtml(m)+'</div>';}
+function sportsKpi(label,value,sub){return'<div class="sports-kpi"><div class="sports-kpi-label">'+esc(label)+'</div><div class="sports-kpi-value">'+esc(value)+'</div><div class="sports-kpi-sub">'+esc(sub||'')+'</div></div>';}
+function sportsTable(rows,empty,cols){if(!rows||!rows.length)return'<div class="sports-empty">'+esc(empty)+'</div>';return'<table class="sports-table"><thead><tr>'+cols.map(function(c){return'<th'+(c.num?' class="num"':'')+'>'+esc(c.h)+'</th>';}).join('')+'</tr></thead><tbody>'+rows.map(function(r){return'<tr>'+cols.map(function(c){return'<td'+(c.num?' class="num"':'')+'>'+esc(c.v(r))+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table>';}
+function sportsMomentumClass(label){var l=String(label||'').toLowerCase();if(l==='rising')return'rising';if(l==='watch')return'watch';if(l==='fading')return'fading';return'';}
+function sportsMomentumCard(t){return'<div class="sports-momentum-card '+sportsMomentumClass(t.label)+'"><div class="sports-momentum-top"><div><div class="sports-momentum-team">'+esc(t.team)+'</div><span class="rel-badge '+(t.label==='RISING'?'rel-high':(t.label==='FADING'?'rel-low':'rel-med'))+'">'+esc(t.label||'STEADY')+'</span></div><div class="sports-momentum-score">'+esc(t.score==null?'-':t.score)+'</div></div><div class="sports-momentum-meta"><span class="sports-stat-chip">Form '+esc(t.recentForm||'-')+'</span><span class="sports-stat-chip">GD3 '+esc((t.goalDiffTrend>0?'+':'')+(t.goalDiffTrend||0))+'</span><span class="sports-stat-chip">GF '+esc(t.attackRate==null?'-':t.attackRate+'/m')+'</span><span class="sports-stat-chip">GA '+esc(t.defenseRate==null?'-':t.defenseRate+'/m')+'</span></div><div class="sports-momentum-note">'+esc(t.note||'')+'</div></div>';}
+function sportsTeamKey(s){return String(s||'').toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,' ').trim();}
+function sportsMarketTeam(m){var label=String(m.label||m.question||'');var mm=label.match(/^(?:will\s+)?(.+?)\s+win(?:s)?\s+(?:the\s+)?(?:2026\s+)?(?:fifa\s+)?world cup/i);return mm?mm[1].trim():'';}
+function sportsPct(v){return v==null?'-':(v*100).toFixed(1)+'%';}
+function sportsMarketRead(gap){if(gap==null)return'NO MATCH';if(gap>=0.04)return'FORM AHEAD';if(gap<=-0.04)return'MARKET AHEAD';return'IN LINE';}
+function sportsAuditPct(v){return v==null?'-':(v*100).toFixed(0)+'%';}
+function sportsAuditCard(label,value,sub){return'<div class="sports-audit-card"><div class="sports-audit-label">'+esc(label)+'</div><div class="sports-audit-value">'+esc(value)+'</div><div class="sports-audit-sub">'+esc(sub||'')+'</div></div>';}
+function sportsProjectionJournalHtml(wc){var j=wc.projectionJournal||{};if(!j.evaluated){return'<div class="sports-empty">Projection audit starts once there are completed matches with prior form to compare against.</div>';}var recent=j.recent||[];var rates=j.accuracyRates||[];var html='<div class="sports-audit-grid">'+sportsAuditCard('Decisive accuracy',sportsAuditPct(j.decisiveAccuracy),(j.decisiveAligned||0)+'/'+(j.decisive||0)+' strong/moderate right')+sportsAuditCard('All-lean accuracy',sportsAuditPct(j.accuracy),(j.aligned||0)+'/'+(j.projected||0)+' favorite leans right')+sportsAuditCard('Watch-only',sportsAuditPct(j.watchOnlyAccuracy),(j.watchOnlyAligned||0)+'/'+(j.watchOnly||0)+' weak leans right')+sportsAuditCard('Toss-ups',String(j.tossUps||0),(j.tossUpDraws||0)+' finished as draws')+'</div>';if(j.brier!=null){var bsk=j.brierSkill;var bcol=bsk==null?'var(--txt3)':(bsk>0.02?'var(--green)':(bsk<-0.02?'var(--red)':'var(--txt3)'));var bverdict=bsk==null?'':(bsk>0.02?'edge over base rate':(bsk<-0.02?'below base rate':'about at base rate'));html+='<div class="pse-caveat" style="margin-top:.2rem">Win/draw/loss probabilities / '+(j.probScored||0)+' scored / Brier '+j.brier+' vs base-rate '+j.baselineBrier+' / <span style="color:'+bcol+'">skill '+(bsk>0?'+':'')+bsk+(bverdict?' ('+bverdict+')':'')+'</span> / log-loss '+j.logLoss+' vs '+j.baselineLogLoss+'</div>';}if(rates.length){html+='<div class="sports-panel-title" style="margin-top:.85rem">Accuracy by confidence</div>'+sportsTable(rates,'No confidence buckets yet.',[{h:'Bucket',v:function(r){return r.tag||'';}},{h:'Rate',num:true,v:function(r){return sportsAuditPct(r.accuracy);}},{h:'Aligned',num:true,v:function(r){return(r.aligned||0)+'/'+(r.evaluated||0);}},{h:'Metric',v:function(r){return r.metric||'favorite alignment';}}]);}html+=sportsTable(recent,'No recent projection outcomes yet.',[{h:'Match',v:function(r){return(r.home||'')+' '+(r.score||'')+' '+(r.away||'');}},{h:'Projected',v:function(r){return r.projected||'-';}},{h:'Result',v:function(r){return r.result||'-';}},{h:'Tag',v:function(r){return r.tag||'-';}},{h:'Aligned',num:true,v:function(r){return r.aligned?'YES':'NO';}}]);html+='<div class="sports-empty" style="margin-top:.55rem">'+esc(j.note||'Point-in-time audit using only pre-match information.')+'</div>';return html;}
+function sportsMarketLens(wc,miro){var momentum=wc.momentum||[];var markets=(miro&&miro.markets||[]).filter(function(m){return String(m.theme||'').toLowerCase()==='sports'&&sportsMarketTeam(m);});if(!markets.length)return'<div class="sports-empty">No World Cup outright markets loaded yet. Refresh the Markets feed to populate this lens.</div>';var byTeam={};momentum.forEach(function(t){byTeam[sportsTeamKey(t.team)]=t;});var rows=markets.map(function(m){var team=sportsMarketTeam(m);return{market:m,team:team,momentum:byTeam[sportsTeamKey(team)]||null};}).filter(function(r){return r.momentum&&r.market.impliedYes!=null;});if(!rows.length)return'<div class="sports-empty">World Cup markets loaded, but team names did not match the Sports momentum feed.</div>';var sumScore=rows.reduce(function(a,r){return a+Math.max(0,r.momentum.score||0);},0)||1;var sumImplied=rows.reduce(function(a,r){return a+Math.max(0,r.market.impliedYes||0);},0)||1;rows.forEach(function(r){r.momentumShare=Math.max(0,r.momentum.score||0)/sumScore;r.marketShare=Math.max(0,r.market.impliedYes||0)/sumImplied;r.gap=r.momentumShare-r.marketShare;r.read=sportsMarketRead(r.gap);});rows.sort(function(a,b){return Math.abs(b.gap||0)-Math.abs(a.gap||0);});return sportsTable(rows,'No matched market rows.',[{h:'Team',v:function(r){return r.team;}},{h:'Momentum',num:true,v:function(r){return sportsPct(r.momentumShare);}},{h:'Market',num:true,v:function(r){return sportsPct(r.marketShare);}},{h:'Gap',num:true,v:function(r){return r.gap==null?'-':((r.gap>0?'+':'')+(r.gap*100).toFixed(1)+' pts');}},{h:'Read',v:function(r){return r.read;}}])+'<div class="sports-empty" style="margin-top:.55rem">Both columns are shares within the matched outright market set, so the gap is a comparison lens rather than a true win probability.</div>';}
+function sportsWorldCupHtml(d){var wc=d.worldCup||{};var matches=wc.matches||[];var momentum=wc.momentum||[];var squadProfiles=wc.squadProfiles||[];var risingTeams=wc.risingTeams||momentum.slice(0,3);var upcoming=wc.upcoming||matches.filter(function(m){return String(m.status||'').toUpperCase()!=='FINISHED';}).slice(0,8);var recent=wc.recent||matches.filter(function(m){return String(m.status||'').toUpperCase()==='FINISHED';}).slice(0,5);var live=matches.filter(function(m){return sportsStatusClass(m.status)==='live';}).length;var finished=matches.filter(function(m){return String(m.status||'').toUpperCase()==='FINISHED';}).length;var goals=matches.reduce(function(a,m){return a+((m.score&&m.score.home!=null&&m.score.away!=null)?Number(m.score.home||0)+Number(m.score.away||0):0);},0);var next=upcoming[0];var html='<div class="sports-kpis">'+sportsKpi('Competition',wc.name||'FIFA World Cup',wc.season||'World Cup module')+sportsKpi('Matches',String(matches.length||'0'),finished+' finished / '+live+' live')+sportsKpi('Goals',String(goals),finished?(goals/finished).toFixed(2)+' per finished match':'Waiting for results')+sportsKpi('Next Kickoff',next?sportsDate(next.utcDate):'TBD',next?((next.home||'TBD')+' vs '+(next.away||'TBD')):'No fixture loaded')+'</div>';if(wc.providerNote)html+='<div class="pse-caveat">'+esc(wc.providerNote)+'</div>';html+='<div class="sports-panel"><div class="sports-panel-title">Rising Teams</div>'+(risingTeams.length?'<div class="sports-momentum-list">'+risingTeams.slice(0,3).map(sportsMomentumCard).join('')+'</div>':'<div class="sports-empty">Momentum model needs completed matches before it can identify rising teams.</div>')+'</div>';html+='<div class="sports-panel"><div class="sports-panel-title">World Cup Market Lens</div>'+sportsMarketLens(wc,d.miro||d.marketsDoc||null)+'</div>';html+='<div class="sports-panel"><div class="sports-panel-title">Projection Alignment</div>'+sportsProjectionJournalHtml(wc)+'</div>';html+='<div class="sports-layout"><div>';html+='<div class="sports-panel"><div class="sports-panel-title">Next Fixtures</div>'+sportsConfidentCalls(upcoming)+(upcoming.length?'<div class="sports-list">'+upcoming.slice(0,8).map(sportsMatchCard).join('')+'</div>':'<div class="sports-empty">No upcoming World Cup fixtures loaded.</div>')+'</div>';html+='<div class="sports-panel"><div class="sports-panel-title">Recent Results</div>'+(recent.length?'<div class="sports-list">'+recent.slice(0,5).map(sportsMatchCard).join('')+'</div>':'<div class="sports-empty">No completed World Cup matches loaded yet.</div>')+'</div></div><div>';html+='<div class="sports-panel"><div class="sports-panel-title">Watchlist</div>'+((wc.watchlist&&wc.watchlist.length)?'<div class="sports-list">'+wc.watchlist.map(sportsMatchCard).join('')+'</div>':'<div class="sports-empty">Set SPORTS_FOLLOW_TEAMS in sports/.env to pin teams here.</div>')+'</div>';html+='<div class="sports-panel"><div class="sports-panel-title">Team Momentum</div>'+sportsTable(momentum.slice(0,10),'Momentum unavailable until completed matches are loaded.',[{h:'Team',v:function(r){return r.team||'';}},{h:'Tag',v:function(r){return r.label||'';}},{h:'Score',num:true,v:function(r){return r.score==null?'-':r.score;}},{h:'Form',v:function(r){return r.recentForm||'-';}},{h:'GD3',num:true,v:function(r){return(r.goalDiffTrend>0?'+':'')+(r.goalDiffTrend||0);}}])+'</div>';html+='<div class="sports-panel"><div class="sports-panel-title">Squad Profile</div>'+sportsTable(squadProfiles.slice(0,10),'Squad profile unavailable from the current feed.',[{h:'Team',v:function(r){return r.team||'';}},{h:'Tag',v:function(r){return r.label||'';}},{h:'Score',num:true,v:function(r){return r.score==null?'-':r.score;}},{h:'Age',num:true,v:function(r){return r.avgAge==null?'-':r.avgAge;}},{h:'Prime',num:true,v:function(r){return sportsPct(r.primeShare);}}])+'<div class="sports-empty" style="margin-top:.55rem">Squad profile uses available roster age and position balance from football-data.org. It is not a player-rating or injury model.</div></div>';html+='<div class="sports-panel"><div class="sports-panel-title">Standings</div>'+sportsTable((wc.standings||[]).slice(0,12),'Standings unavailable from the current feed.',[{h:'Grp',v:function(r){return r.group||'-';}},{h:'Team',v:function(r){return r.team||'';}},{h:'P',num:true,v:function(r){return r.playedGames==null?'-':r.playedGames;}},{h:'GD',num:true,v:function(r){return r.goalDifference==null?'-':r.goalDifference;}},{h:'Pts',num:true,v:function(r){return r.points==null?'-':r.points;}}])+'</div>';html+='<div class="sports-panel"><div class="sports-panel-title">Top Scorers</div>'+sportsTable((wc.scorers||[]).slice(0,10),'Scorers unavailable from the current feed.',[{h:'Player',v:function(r){return r.player||'';}},{h:'Team',v:function(r){return r.team||'';}},{h:'G',num:true,v:function(r){return r.goals==null?'-':r.goals;}}])+'</div>';html+='</div></div>';return html;}
+function renderSports(d){var out=document.getElementById('sports-out');var sub=document.getElementById('sports-sub');if(!d||!d.worldCup){out.innerHTML='<div class="loading">No sports data yet. Run sports/refresh-sports.js.</div>';return;}document.getElementById('page-title').textContent=d.worldCup.name||'Sports';sub.textContent=(d.title||'Sports briefing')+' / as of '+(d.asOf||d.generatedAt||'-');out.innerHTML=sportsWorldCupHtml(d);}
+fetch('./sports-public.json?t='+Date.now()).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(renderSports).catch(function(e){document.getElementById('sports-out').innerHTML='<div class="loading">Could not load sports data ('+esc(e.message)+'). Please try again shortly.</div>';});
 </script>
 </body>
 </html>

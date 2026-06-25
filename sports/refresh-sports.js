@@ -733,6 +733,38 @@ async function writeDoc(db, dateKey, doc) {
   await db.collection(COLL).doc('sports-latest').set({ value: dateKey });
 }
 
+async function loadPublicMiroSports(db) {
+  try {
+    var lat = await db.collection(COLL).doc('miro-latest').get();
+    var key = lat.exists ? (lat.data() || {}).value : null;
+    if (!key) return null;
+    var snap = await db.collection(COLL).doc('miro-' + key).get();
+    if (!snap.exists) return null;
+    var d = snap.data() || {};
+    var markets = (d.markets || []).filter(function (m) {
+      return String(m.theme || '').toLowerCase() === 'sports';
+    }).map(function (m) {
+      return {
+        label: m.label || m.question || '',
+        question: m.question || m.label || '',
+        theme: m.theme || '',
+        impliedYes: m.impliedYes == null ? null : m.impliedYes,
+        status: m.status || '',
+        volumeNum: m.volumeNum == null ? null : m.volumeNum,
+        liquidityNum: m.liquidityNum == null ? null : m.liquidityNum
+      };
+    });
+    return {
+      asOf: d.asOf || key,
+      generatedAt: d.generatedAt || null,
+      markets: markets
+    };
+  } catch (e) {
+    console.warn('public miro mirror skipped:', e.message || e);
+    return null;
+  }
+}
+
 async function main() {
   var dateKey = phtDateKey();
   var doc, isFallback = false;
@@ -790,7 +822,10 @@ async function main() {
   if (!isFallback) {
     try {
       var pubPath = join(__dirname, '..', 'sports-public.json');
-      writeFileSync(pubPath, JSON.stringify(doc));
+      var publicDoc = doc;
+      var miro = await loadPublicMiroSports(db);
+      if (miro) publicDoc = Object.assign({}, doc, { miro: miro });
+      writeFileSync(pubPath, JSON.stringify(publicDoc));
       console.log('Wrote ' + pubPath + ' (public mirror).');
     } catch (e) { console.warn('public mirror write failed:', e.message || e); }
   }
