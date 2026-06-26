@@ -16,7 +16,7 @@
 //   node refresh-sports.js --dry-run
 
 import { readFileSync, existsSync, writeFileSync } from 'fs';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -62,6 +62,11 @@ function phtToday() {
 }
 
 function num(v) {
+  // Treat null/undefined/'' as "no value" so an UNPLAYED match (football-data
+  // sends score.fullTime = {home:null, away:null}) stores null, not 0. Otherwise
+  // Number(null) === 0 rendered every scheduled/TIMED match as a fake "0-0".
+  // A real played 0-0 still passes through as 0 (Number(0) === 0).
+  if (v === null || v === undefined || v === '') return null;
   var n = Number(v);
   return isNaN(n) ? null : n;
 }
@@ -593,7 +598,54 @@ async function fetchEloRatings() {
   } catch (e) { console.warn('Elo fetch failed:', e.message || e); return null; }
 }
 
-async function fetchWorldCup() {
+// Index a stored match list by id, keeping only the ones that were FINISHED with
+// a real score. Used to defend against provider regressions on the next fetch.
+function extractFinished(matches) {
+  var map = {};
+  (matches || []).forEach(function (m) {
+    var st = String(m.status || '').toUpperCase();
+    if ((st === 'FINISHED' || st === 'AWARDED') && m.score && m.score.home != null && m.score.away != null) {
+      map[String(m.id)] = m;
+    }
+  });
+  return map;
+}
+
+// No-regress guard. football-data.org intermittently serves a STALE snapshot of
+// the matches endpoint where an already-FINISHED match reverts to TIMED/0-0 (or
+// drops out entirely). Writing that blindly clobbers a good final result and
+// silently removes it from momentum/standings/recent — which is exactly what
+// blanked the Ecuador 2-1 Germany result. So: if we hold a previously-FINISHED
+// result for a match and the fresh fetch is NOT finished-with-score, keep the
+// stored result; and re-add any finished match the fetch dropped. Mirrors the PH
+// writePhSnapshot no-regress pattern. Mutates + returns `matches`.
+function mergeNoRegress(matches, prevFinished) {
+  if (!prevFinished || !Object.keys(prevFinished).length) return matches;
+  var present = {};
+  matches.forEach(function (m) { present[String(m.id)] = true; });
+  var restored = [], readded = [];
+  matches.forEach(function (m) {
+    var prev = prevFinished[String(m.id)];
+    if (!prev) return;
+    var st = String(m.status || '').toUpperCase();
+    var hasScore = m.score && m.score.home != null && m.score.away != null;
+    if (!((st === 'FINISHED' || st === 'AWARDED') && hasScore)) {
+      m.status = prev.status;
+      m.score = { home: prev.score.home, away: prev.score.away };
+      restored.push(prev.home + ' ' + prev.score.home + '-' + prev.score.away + ' ' + prev.away);
+    }
+  });
+  Object.keys(prevFinished).forEach(function (id) {
+    if (!present[id]) { matches.push(prevFinished[id]); readded.push(prevFinished[id].home + ' vs ' + prevFinished[id].away); }
+  });
+  if (restored.length) console.warn('NO-REGRESS: provider reverted ' + restored.length +
+    ' already-final match(es); kept stored result: ' + restored.join('; '));
+  if (readded.length) console.warn('NO-REGRESS: provider dropped ' + readded.length +
+    ' finished match(es); re-added: ' + readded.join('; '));
+  return matches;
+}
+
+async function fetchWorldCup(prevFinished) {
   var query = '?season=2026';
   var matchesJson = await footballData('/competitions/WC/matches' + query);
   var standingsJson = null;
@@ -606,7 +658,9 @@ async function fetchWorldCup() {
   try { teamsJson = await footballData('/competitions/WC/teams' + query); }
   catch (e) { console.warn('Teams/squads skipped:', e.message); }
 
-  var matches = (matchesJson.matches || []).map(normMatch).sort(function (a, b) {
+  var matches = (matchesJson.matches || []).map(normMatch);
+  matches = mergeNoRegress(matches, prevFinished);   // refuse a stale provider regression
+  matches.sort(function (a, b) {
     return String(a.utcDate).localeCompare(String(b.utcDate));
   });
   var now = phtToday().getTime();
@@ -618,6 +672,23 @@ async function fetchWorldCup() {
   }).sort(function (a, b) {
     return String(b.utcDate).localeCompare(String(a.utcDate));
   }).slice(0, 8);
+  // Surface provider lag on every run: matches that kicked off >2.5h ago but the
+  // feed has not marked FINISHED. These are excluded from momentum/recent until
+  // the provider posts the result (free tier has no live feed → results lag).
+  var pendingResults = matches.filter(function (m) {
+    var st = String(m.status).toUpperCase();
+    if (st === 'FINISHED' || st === 'AWARDED' || st === 'IN_PLAY' || st === 'PAUSED' ||
+        st === 'CANCELLED' || st === 'POSTPONED' || st === 'SUSPENDED') return false;
+    var t = new Date(m.utcDate).getTime();
+    return !isNaN(t) && t < now - 2.5 * 3600000;
+  });
+  if (pendingResults.length) {
+    console.warn('NOTE: ' + pendingResults.length + ' match(es) kicked off >2.5h ago but the provider ' +
+      'has not posted a result yet (free-tier lag); excluded from momentum until FINISHED:');
+    pendingResults.forEach(function (m) {
+      console.warn('  - ' + m.home + ' vs ' + m.away + ' (' + m.utcDate + ', status ' + m.status + ')');
+    });
+  }
   var standings = [];
   (standingsJson && standingsJson.standings || []).forEach(function (g) {
     (g.table || []).forEach(function (row) {
@@ -767,13 +838,34 @@ async function loadPublicMiroSports(db) {
 
 async function main() {
   var dateKey = phtDateKey();
+
+  // Init Firestore up front (unless dry-run) so we can read the last-good doc
+  // BEFORE fetching — the per-match no-regress guard needs prior FINISHED results.
+  var db = null;
+  if (!DRY_RUN) {
+    try { db = initAdmin(); } catch (e) { console.warn('admin init failed:', e.message || e); }
+  }
+  var prevFinished = {};
+  if (db) {
+    try {
+      var latSnap0 = await db.collection(COLL).doc('sports-latest').get();
+      var prevKey0 = latSnap0.exists ? (latSnap0.data() || {}).value : null;
+      if (prevKey0) {
+        var prevSnap0 = await db.collection(COLL).doc('sports-' + prevKey0).get();
+        var prevMatches0 = prevSnap0.exists ? (((prevSnap0.data() || {}).worldCup || {}).matches || []) : [];
+        prevFinished = extractFinished(prevMatches0);
+        console.log('No-regress baseline: ' + Object.keys(prevFinished).length + ' finished match(es) from sports-' + prevKey0 + '.');
+      }
+    } catch (e) { console.warn('prev-doc read for no-regress failed:', e.message || e); }
+  }
+
   var doc, isFallback = false;
   if (!FOOTBALL_DATA_TOKEN) {
     doc = setupDoc('No football-data.org token configured.');
     isFallback = true;
   } else {
     try {
-      var worldCup = await fetchWorldCup();
+      var worldCup = await fetchWorldCup(prevFinished);
       doc = {
         generatedAt: new Date().toISOString(),
         asOf: dateKey,
@@ -795,7 +887,7 @@ async function main() {
     console.log('\n--dry-run: NOT writing sports-' + dateKey + ' / sports-latest.');
     return;
   }
-  var db = initAdmin();
+  if (!db) { console.error('No Firestore handle (admin init failed) — cannot write.'); process.exitCode = 1; return; }
   // No-clobber guard: a transient football-data failure must not overwrite a good
   // doc with the empty setup fallback (that blanks the tab). If we only have a
   // fallback and a prior doc with real matches exists, keep the prior one.
@@ -831,9 +923,16 @@ async function main() {
   }
 }
 
-main().then(function () {
-  process.exit(0);
-}).catch(function (e) {
-  console.error('\nrefresh-sports failed:', e.message || e);
-  process.exit(1);
-});
+// Run only when executed directly (node refresh-sports.js), not when imported by
+// a test — so the pure guard helpers below can be unit-tested without network/DB.
+var __invoked = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+if (import.meta.url === __invoked) {
+  main().then(function () {
+    process.exit(0);
+  }).catch(function (e) {
+    console.error('\nrefresh-sports failed:', e.message || e);
+    process.exit(1);
+  });
+}
+
+export { mergeNoRegress, extractFinished, normMatch };
