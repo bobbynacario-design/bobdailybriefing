@@ -682,6 +682,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-match:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--blue)}
 .sports-match.live:before{background:var(--green)}
 .sports-match.finished:before{background:var(--gold)}
+.sports-match.pending:before{background:#F0A832}
+.sports-match.pending .sports-match-meta{color:#F0A832}
 .sports-match-meta{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.45rem}
 .sports-teams{display:grid;grid-template-columns:minmax(120px,1fr) 72px minmax(120px,1fr);gap:.55rem;align-items:center;max-width:680px;margin:0 auto}
 .sports-team{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt);line-height:1.25;min-width:0}
@@ -800,6 +802,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .ph-fx{margin:.6rem 0 .2rem}
 .ph-chip{font-family:var(--mono);font-size:11px;color:var(--txt3);background:var(--bg3);border:1px solid var(--rim);border-radius:6px;padding:.25rem .55rem}
 .ph-chip b{color:var(--txt);font-weight:600}
+.radar-chips{margin-top:.5rem}
+.radar-chip-brk{color:var(--green);border-color:var(--green-dim)}
 .ph-prox-rets{font-family:var(--mono);font-size:10px;color:var(--txt3);white-space:nowrap;margin-left:auto}
 .ph-cat-h{font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:.05em;text-transform:uppercase;margin:.8rem 0 .45rem}
 .ph-news{background:var(--bg2);border:1px solid var(--rim);border-left:2px solid var(--rim2);border-radius:8px;padding:.6rem .8rem;margin-bottom:.5rem}
@@ -1822,6 +1826,30 @@ function radarCatalyst(s) {
       '<span class="radar-catalyst-txt">' + esc(s.catalyst) + ' ' + asOf + '</span>' +
     '</div>';
 }
+// 52-week range bar (reuses the PSE range styles). Display-only context: where
+// today's close sits in its 1-year range, plus how far below the 52wk high.
+// Hidden until the backend has >= 60 bars (high52/low52 null before that).
+function radar52(s) {
+  if (s.high52 == null || s.low52 == null) return '';
+  var span = (s.high52 - s.low52) || 1;
+  var pos = Math.max(0, Math.min(100, (s.close - s.low52) / span * 100));
+  var fromHigh = s.pctFromHigh52 == null ? '' : ' · ' + Math.abs(s.pctFromHigh52).toFixed(1) + '% from high';
+  return '<div class="ph-range radar-range">' +
+    '<div class="ph-range-bar"><div class="ph-range-dot" style="left:' + pos.toFixed(1) + '%"></div></div>' +
+    '<div class="ph-range-lab"><span>' + radarLevel(s.low52) + '</span>' +
+      '<span class="jmut">52-wk' + esc(fromHigh) + '</span>' +
+      '<span>' + radarLevel(s.high52) + '</span></div>' +
+  '</div>';
+}
+// Context chips: market beta (vs SPY, 60d) and a "near 52w high" breakout flag.
+// Pure context — neither feeds the score; they sit alongside the structural plan.
+function radarContext(s) {
+  var bits = [];
+  if (s.beta != null) bits.push('<span class="ph-chip">β <b>' + s.beta.toFixed(2) + '</b></span>');
+  if (s.nearBreakout) bits.push('<span class="ph-chip radar-chip-brk">⚡ near 52w high</span>');
+  if (!bits.length) return '';
+  return '<div class="ph-chips radar-chips">' + bits.join('') + '</div>';
+}
 function radarCard(s) {
   var upside = radarUpsideLabel(s);
   var plan = upside + '  ·  Entry ' + radarLevel(s.entry) + '  ·  Stop ' + radarLevel(s.stop) +
@@ -1839,6 +1867,8 @@ function radarCard(s) {
     '<div class="card-body">' + esc(s.why) + '</div>' +
     radarCatalyst(s) +
     '<div class="src radar-plan">' + esc(plan) + '</div>' +
+    radar52(s) +
+    radarContext(s) +
     '<div class="card-footer"><span class="rel-text radar-invalidation">' + esc(s.invalidation) + '</span></div>' +
   '</div>';
 }
@@ -2000,13 +2030,16 @@ function radarWildcardRank(s) {
   var vol = s.volRatio;
   var volThrust = vol == null ? 0 : (vol >= 1.2 ? 10 : (vol >= 1.0 ? 4 : 0));
   var catalystBoost = s.catalyst ? 9 : 0;
+  // Pressing a 52-week high is the major level breaking BEFORE the crowd's
+  // confirmed screen lights up — exactly the early edge a wildcard wants.
+  var breakoutBoost = s.nearBreakout ? 12 : 0;
   // Asymmetry counts, but capped so a distant target can't dominate the rank.
   var asym = Math.min(upside, 30) * 0.7;
   // Tilt toward names not already top-of-screen (keeps Wildcard distinct from Taker).
   var notObvious = (s.score || 0) < 75 ? 6 : 0;
   // Broken/over-extended risk box is a real penalty even for a wildcard.
   var riskPenalty = s.riskQuality != null && s.riskQuality < 35 ? 14 : 0;
-  return asym + earlyBoost + leadBoost + volThrust + catalystBoost + notObvious + (s.score || 0) * 0.2 - riskPenalty;
+  return asym + earlyBoost + leadBoost + volThrust + catalystBoost + breakoutBoost + notObvious + (s.score || 0) * 0.2 - riskPenalty;
 }
 function radarWildcardWhy(s) {
   var bits = [];
@@ -2015,6 +2048,7 @@ function radarWildcardWhy(s) {
   if (rs != null && rs > 0) bits.push('leading its benchmark by +' + rs.toFixed(1) + ' pts (20d)');
   else if (rs != null && rs <= 0) bits.push('still trailing its benchmark — early/contrarian');
   if (s.volRatio != null && s.volRatio >= 1.2) bits.push('volume running ' + s.volRatio.toFixed(2) + '× norm');
+  if (s.nearBreakout) bits.push('pressing its 52-week high' + (s.pctFromHigh52 != null ? ' (' + Math.abs(s.pctFromHigh52).toFixed(1) + '% away)' : ''));
   bits.push(radarUpsideLabel(s).toLowerCase() + ' to target');
   if (s.catalyst) bits.push('live catalyst');
   return bits.join('; ') + '.';
@@ -2660,13 +2694,33 @@ function miroJournalBanner(j) {
 // ── SPORTS ──
 // Generic sports shell, seeded with World Cup. Data is written by
 // sports/refresh-sports.js so provider tokens never live in the browser.
-function sportsStatusClass(status) {
+// A match is "played" once it is live or final — only then is a scoreline real.
+function sportsIsPlayed(status) {
+  var s = String(status || '').toUpperCase();
+  return s === 'FINISHED' || s === 'AWARDED' || s === 'IN_PLAY' || s === 'PAUSED' || s === 'LIVE';
+}
+// "Result pending": kicked off >2.5h ago but the provider still hasn't marked it
+// finished/live (free-tier result lag). Computed at render time off the live
+// clock, so the tab self-heals between refreshes. Accepts a match object.
+function sportsIsPending(m) {
+  if (!m || typeof m !== 'object') return false;
+  var s = String(m.status || '').toUpperCase();
+  if (sportsIsPlayed(s) || s === 'CANCELLED' || s === 'POSTPONED' || s === 'SUSPENDED') return false;
+  var t = m.utcDate ? new Date(m.utcDate).getTime() : NaN;
+  return !isNaN(t) && Date.now() > t + 2.5 * 3600000;
+}
+// Accepts either a match object (preferred) or a raw status string.
+function sportsStatusClass(m) {
+  var status = (m && typeof m === 'object') ? m.status : m;
   var s = String(status || '').toUpperCase();
   if (s === 'LIVE' || s === 'IN_PLAY' || s === 'PAUSED') return 'live';
   if (s === 'FINISHED' || s === 'AWARDED') return 'finished';
+  if (sportsIsPending(m)) return 'pending';
   return '';
 }
-function sportsStatusLabel(status) {
+function sportsStatusLabel(m) {
+  if (sportsIsPending(m)) return 'Result pending';
+  var status = (m && typeof m === 'object') ? m.status : m;
   var s = String(status || '').replace(/_/g, ' ').toLowerCase();
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Scheduled';
 }
@@ -2680,6 +2734,9 @@ function sportsDate(v) {
   }) + ' PHT';
 }
 function sportsScore(m) {
+  // Only show a scoreline for a match that has actually been played. A not-yet
+  // -played match can still carry a 0-0 placeholder from the feed — render "vs".
+  if (!sportsIsPlayed(m && m.status)) return 'vs';
   var s = m.score || {};
   if (s.home == null && s.away == null) return 'vs';
   return String(s.home == null ? '-' : s.home) + ' - ' + String(s.away == null ? '-' : s.away);
@@ -2731,9 +2788,9 @@ function sportsConfidentCalls(upcoming) {
   return '<div class="sports-confcalls">🎯 Confident calls: ' + calls.slice(0, 8).join(' · ') + '</div>';
 }
 function sportsMatchCard(m) {
-  return '<div class="sports-match ' + sportsStatusClass(m.status) + '">' +
+  return '<div class="sports-match ' + sportsStatusClass(m) + '">' +
     '<div class="sports-match-meta"><span>' + esc(m.stage || m.group || 'World Cup') + '</span><span>' +
-      esc(sportsDate(m.utcDate)) + ' · ' + esc(sportsStatusLabel(m.status)) + '</span></div>' +
+      esc(sportsDate(m.utcDate)) + ' · ' + esc(sportsStatusLabel(m)) + '</span></div>' +
     '<div class="sports-teams">' +
       '<div class="sports-team">' + esc(m.home || 'TBD') + '</div>' +
       '<div class="sports-score">' + esc(sportsScore(m)) + '</div>' +
@@ -2896,7 +2953,7 @@ function sportsWorldCupHtml(d, miro) {
   var risingTeams = wc.risingTeams || momentum.slice(0, 3);
   var upcoming = wc.upcoming || matches.filter(function (m) { return String(m.status || '').toUpperCase() !== 'FINISHED'; }).slice(0, 8);
   var recent = wc.recent || matches.filter(function (m) { return String(m.status || '').toUpperCase() === 'FINISHED'; }).slice(0, 5);
-  var live = matches.filter(function (m) { return sportsStatusClass(m.status) === 'live'; }).length;
+  var live = matches.filter(function (m) { return sportsStatusClass(m) === 'live'; }).length;
   var finished = matches.filter(function (m) { return String(m.status || '').toUpperCase() === 'FINISHED'; }).length;
   var goals = matches.reduce(function (a, m) {
     return a + ((m.score && m.score.home != null && m.score.away != null) ? Number(m.score.home || 0) + Number(m.score.away || 0) : 0);
