@@ -329,6 +329,16 @@ async function writeDoc(db, dateKey, doc) {
   await db.collection(COLL).doc('miro-latest').set({ value: dateKey });
 }
 
+async function loadMiroControl(db) {
+  try {
+    var snap = await db.collection(COLL).doc('miro-control').get();
+    return snap.exists ? (snap.data() || {}) : {};
+  } catch (e) {
+    console.warn('miro-control read failed (continuing with OpenAI enabled):', e.message || e);
+    return {};
+  }
+}
+
 // ── main ──
 
 async function main() {
@@ -340,11 +350,15 @@ async function main() {
   console.log('Fetching order books from Polymarket CLOB...');
   await fetchBooks(marketsData);
 
+  var db = initAdmin();
+  var control = await loadMiroControl(db);
+  var controlPaused = control.llmPaused === true;
+
   // Lane 2: run the persona panel (independent of price), attach the reads, and
   // let the PURE engine compute haircut prob, executable edge, and the gate.
   var panel;
-  if (NO_OPENAI) {
-    console.log('--no-openai: skipping panel (implied-only).');
+  if (NO_OPENAI || controlPaused) {
+    console.log((NO_OPENAI ? '--no-openai' : 'miro-control llmPaused=true') + ': skipping panel (implied-only).');
     var emptyReads = {};
     marketsData.forEach(function (m) { emptyReads[m.slug] = []; });
     panel = { reads: emptyReads, usage: null, calls: 0 };
@@ -361,7 +375,9 @@ async function main() {
   var meta = {
     scenarioVersion: SCENARIO_VERSION,
     journalVersion: JOURNAL_VERSION,
-    model: (OPENAI_KEY && !NO_OPENAI) ? OPENAI_MODEL : 'none',
+    model: (OPENAI_KEY && !NO_OPENAI && !controlPaused) ? OPENAI_MODEL : 'none',
+    llmPaused: controlPaused,
+    llmPausedSource: controlPaused ? 'briefings-bob/miro-control' : '',
     priceSource: 'polymarket-clob-book (mid); gamma outcomePrices fallback',
     priceBlindSourcePolicy: 'panel price-blind; web_search instructed to exclude prediction-market/odds sources',
     costAssumption: 'spread paid implicitly + slippage ' + CONFIG.fees.slippage,
@@ -395,7 +411,6 @@ async function main() {
       '  mkt ' + (m.impliedYes * 100).toFixed(1) + '%  ' + book + '  ' + panel);
   });
 
-  var db = initAdmin();
   if (DRY_RUN) {
     console.log('\n--dry-run: NOT writing miro-' + dateKey + ' / miro-latest.');
   } else {
