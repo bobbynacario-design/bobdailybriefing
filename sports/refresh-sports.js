@@ -704,6 +704,16 @@ async function fetchWorldCup(prevFinished) {
     var c = TEAM_ELO_CODE[name];
     if (eloRaw[c] != null) eloByKey[teamKey(name)] = eloRaw[c];
   });
+  // Strength-aware power per team — the SAME 0.6·Elo + 0.4·form blend the fixture
+  // projections use. The Market Lens compares this against market-implied shares.
+  // Pure form-momentum compresses every team into ~65-89 after the group stage, so
+  // a 2-win minnow shows an absurd title share and a single loss barely moves it;
+  // anchoring on Elo makes the model share reflect real strength and a loss move it.
+  momentum.forEach(function (t) {
+    var elo = eloByKey[teamKey(t.team)];
+    t.elo = (elo == null ? null : elo);
+    t.power = sportsProjectionPower(t, null, elo); // falls back to form-only if Elo missing
+  });
   // Journal stays Elo-free: today's Elo already reflects the matches it would be
   // "predicting", so injecting it into the point-in-time backtest would leak
   // hindsight. The audit measures the form model; live fixtures add the Elo prior.

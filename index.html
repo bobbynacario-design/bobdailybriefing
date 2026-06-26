@@ -2922,16 +2922,25 @@ function sportsMarketLens(wc, miro) {
     return { market:m, team:team, momentum:byTeam[sportsTeamKey(team)] || null };
   }).filter(function (r) { return r.momentum && r.market.impliedYes != null; });
   if (!rows.length) return '<div class="sports-empty">World Cup markets loaded, but team names did not match the Sports momentum feed.</div>';
+  // Model strength = the same 0.6·Elo + 0.4·form `power` the fixture projections
+  // use (refresh-sports.js attaches it per team); fall back to raw momentum score
+  // for older docs that predate `power`. Anchoring on Elo stops pure form from
+  // compressing every team into one band — so a weak team's share reflects that
+  // it is weak, and a loss actually moves it.
+  function modelStrength(r) {
+    var t = r.momentum;
+    return Math.max(0, (t.power != null ? t.power : t.score) || 0);
+  }
   // Apples-to-apples: re-base BOTH sides over the SAME matched set so each is a
   // share that sums to ~100% across these teams, and the gap is a like-for-like
   // divergence. (Previously momentum was a within-group share but market was the
   // absolute implied probability — different denominators overstated the gap.)
-  var sumScore = rows.reduce(function (a, r) { return a + Math.max(0, r.momentum.score || 0); }, 0) || 1;
+  var sumModel = rows.reduce(function (a, r) { return a + modelStrength(r); }, 0) || 1;
   var sumImplied = rows.reduce(function (a, r) { return a + Math.max(0, r.market.impliedYes || 0); }, 0) || 1;
   rows.forEach(function (r) {
-    r.momentumShare = Math.max(0, r.momentum.score || 0) / sumScore;
+    r.modelShare = modelStrength(r) / sumModel;
     r.marketShare = Math.max(0, r.market.impliedYes || 0) / sumImplied;
-    r.gap = r.momentumShare - r.marketShare;
+    r.gap = r.modelShare - r.marketShare;
     r.read = sportsMarketRead(r.gap);
   });
   rows.sort(function (a, b) {
@@ -2939,11 +2948,11 @@ function sportsMarketLens(wc, miro) {
   });
   return sportsTable(rows, 'No matched market rows.', [
     { h:'Team', v:function (r) { return r.team; } },
-    { h:'Momentum', num:true, v:function (r) { return sportsPct(r.momentumShare); } },
+    { h:'Model', num:true, v:function (r) { return sportsPct(r.modelShare); } },
     { h:'Market', num:true, v:function (r) { return sportsPct(r.marketShare); } },
     { h:'Gap', num:true, v:function (r) { return r.gap == null ? '-' : ((r.gap > 0 ? '+' : '') + (r.gap * 100).toFixed(1) + ' pts'); } },
     { h:'Read', v:function (r) { return r.read; } }
-  ]) + '<div class="sports-empty" style="margin-top:.55rem">Both columns are shares <i>within</i> the teams that have an outright market loaded, so the gap is a like-for-like divergence — where momentum ranks a team higher (FORM AHEAD) or lower (MARKET AHEAD) than the market does. Raw outright prices live on the Markets tab. A comparison lens, not a win probability.</div>';
+  ]) + '<div class="sports-empty" style="margin-top:.55rem">Model = Elo strength + recent form (the same blend as the fixture projections), as a share <i>within</i> the teams that have an outright market loaded — like-for-like vs the market share, so the gap shows where the model ranks a team higher (FORM AHEAD) or lower (MARKET AHEAD) than the market. Raw outright prices live on the Markets tab. A comparison lens, not a win probability.</div>';
 }
 function sportsWorldCupHtml(d, miro) {
   var wc = d.worldCup || {};
