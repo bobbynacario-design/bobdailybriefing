@@ -115,8 +115,9 @@ async function fetchEquityBars(symbols) {
     'APCA-API-KEY-ID': ALPACA_KEY,
     'APCA-API-SECRET-KEY': ALPACA_SECRET
   };
-  // ~320 calendar days back comfortably covers the 160 trading bars we want.
-  var start = daysAgoIso(320);
+  // ~400 calendar days back comfortably covers a full 252-trading-day year
+  // (needed for an honest 52-week high/low) plus the 160 SMA/return bars.
+  var start = daysAgoIso(400);
   var pageToken = null;
   do {
     var url = 'https://data.alpaca.markets/v2/stocks/bars'
@@ -156,7 +157,7 @@ async function fetchCryptoBars(symbolToId) {
     var sym = syms[i];
     var id = symbolToId[sym];
     var url = 'https://api.coingecko.com/api/v3/coins/' + id
-      + '/market_chart?vs_currency=usd&days=200&interval=daily';
+      + '/market_chart?vs_currency=usd&days=365&interval=daily';
     var res = await fetchRetry(url, { headers: { 'accept': 'application/json' } }, 'CoinGecko ' + sym);
     if (!res.ok) {
       var body = await res.text();

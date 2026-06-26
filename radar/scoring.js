@@ -139,6 +139,67 @@ function atr(bars, n) {
   return sum / n;
 }
 
+// 52-week positioning from the bars on hand. Uses up to the last 252 bars (one
+// trading year); only populated when >= 60 bars exist so we never label a short
+// window "52-week". Equity uses real highs/lows; crypto (high=low=close proxy)
+// reduces to a close-based range. PURE and point-in-time: the journal slices
+// bars to each past date, so historical 52wk levels reconstruct with no new I/O.
+// Display/context only — never folds into the score or the status gate.
+function window52(bars, close, s20) {
+  if (!bars || bars.length < 60) {
+    return { high52: null, low52: null, pctFromHigh52: null, pctAboveLow52: null, nearBreakout: false, windowBars: bars ? bars.length : 0 };
+  }
+  var w = bars.slice(-252);
+  var hi = -Infinity, lo = Infinity;
+  for (var i = 0; i < w.length; i++) {
+    if (w[i].high > hi) hi = w[i].high;
+    if (w[i].low < lo) lo = w[i].low;
+  }
+  var pctFromHigh = hi > 0 ? (close / hi - 1) * 100 : null;  // <= 0: how far below the 52wk high
+  var pctAboveLow = lo > 0 ? (close / lo - 1) * 100 : null;  // >= 0: how far above the 52wk low
+  // "near breakout": pressing within 3% of the 52wk high AND still in an uptrend
+  // (above SMA20) — a name approaching a major level before it's an obvious move.
+  var nearBreakout = pctFromHigh != null && pctFromHigh >= -3 && s20 != null && close > s20;
+  return {
+    high52: hi, low52: lo,
+    pctFromHigh52: pctFromHigh, pctAboveLow52: pctAboveLow,
+    nearBreakout: nearBreakout, windowBars: w.length
+  };
+}
+
+// Market beta: slope of the asset's daily returns regressed on the market's
+// (SPY) daily returns over the last `n` overlapping sessions. >1 = swings more
+// than the market, <1 = less, negative = inverse. Returns are aligned BY DATE
+// (not by index) so crypto — which trades weekends — intersects cleanly onto
+// SPY's trading calendar instead of smearing returns across mismatched days.
+// Display/context only — never folds into the score.
+function marketBeta(assetBars, marketBars, n) {
+  if (!assetBars || !marketBars) return null;
+  function retsByDate(bars) {
+    var m = {};
+    for (var i = 1; i < bars.length; i++) {
+      var prev = bars[i - 1].close, cur = bars[i].close;
+      if (prev > 0) m[bars[i].date] = cur / prev - 1;
+    }
+    return m;
+  }
+  var aR = retsByDate(assetBars);
+  var mR = retsByDate(marketBars);
+  var dates = Object.keys(mR).filter(function (d) { return d in aR; }).sort();
+  if (dates.length < n) return null;
+  var use = dates.slice(-n);
+  var k = use.length, sumA = 0, sumM = 0;
+  use.forEach(function (d) { sumA += aR[d]; sumM += mR[d]; });
+  var meanA = sumA / k, meanM = sumM / k;
+  var cov = 0, varM = 0;
+  use.forEach(function (d) {
+    cov += (aR[d] - meanA) * (mR[d] - meanM);
+    varM += (mR[d] - meanM) * (mR[d] - meanM);
+  });
+  if (varM <= 0) return null;
+  return cov / varM;
+}
+
 // riskQuality (0-100): is the risk well-formed? Rewards a stop a healthy ATR
 // multiple below entry (not noise-tight, not chasing-wide) and an entry not
 // overextended above SMA20. Replaces the inert constant riskReward sub-score.
@@ -250,6 +311,9 @@ function scoreUniverse(barsByAsset, config) {
 
   var regime = computeRegime(barsByAsset);
 
+  // Market series for beta (SPY). Display/context only — beta never feeds score.
+  var marketBars = barsByAsset.SPY || null;
+
   // Per-theme regime, computed once per theme and reused across its assets.
   var themeRegimeMap = config.themeRegime || {};
   var themeRegimeCache = {};
@@ -280,6 +344,8 @@ function scoreUniverse(barsByAsset, config) {
     var rs = relStrengthMetrics(closes, benchCloses);
     var rr = riskRewardMetrics(close, priorLow, s20);
     var atrVal = atr(bars, 14);
+    var pos52 = window52(bars, close, s20);
+    var beta = marketBeta(bars, marketBars, 60);
     var themeReg = regimeForTheme(item.theme);
     var sub = {
       trend: trendScore(close, s20, s50),
@@ -314,6 +380,14 @@ function scoreUniverse(barsByAsset, config) {
       target: round(rr.target, 2),
       rr: round(rr.rr, 2),
       riskQuality: sub.riskQuality,
+      // 52-week positioning + market beta — display/context only, never scored.
+      // 52wk levels are null until >= 60 bars exist (no short window mislabeled).
+      high52: round(pos52.high52, 2),
+      low52: round(pos52.low52, 2),
+      pctFromHigh52: round(pos52.pctFromHigh52, 1),
+      pctAboveLow52: round(pos52.pctAboveLow52, 1),
+      nearBreakout: pos52.nearBreakout,
+      beta: round(beta, 2),
       // theme regime that drove this signal's regime sub-score + status gate.
       regimeScore: themeReg.score,
       regimeBasis: themeReg.basis,
