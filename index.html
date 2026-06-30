@@ -731,6 +731,37 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-audit-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
 .sports-audit-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.4}
 .sports-empty{font-size:12px;line-height:1.7;color:var(--txt3);font-style:italic}
+.sports-ko-tracker{margin-bottom:1rem}
+.sports-ko-count{font-family:var(--mono);font-size:11px;color:var(--txt3);letter-spacing:.04em;margin-bottom:.6rem}
+.sports-ko-count b{font-family:var(--serif);font-size:22px;color:var(--gold);margin-right:.4rem;letter-spacing:0}
+.sports-ko-chips{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.55rem}
+.sports-ko-chip{font-family:var(--mono);font-size:11px;color:var(--green);border:1px solid rgba(45,184,122,.28);background:var(--green-dim);border-radius:20px;padding:2px 9px;white-space:nowrap}
+.sports-ko-chip.champ{color:var(--gold);border-color:rgba(201,168,76,.4);background:var(--gold-dim);font-weight:700}
+.sports-ko-elim{font-family:var(--mono);font-size:10px;color:var(--txt3);line-height:1.6}
+.sports-bracket-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:.5rem}
+.sports-bracket{display:flex;gap:.7rem;min-width:max-content;align-items:flex-start}
+.sports-bracket-col{flex:0 0 178px;display:flex;flex-direction:column;gap:.55rem}
+.sports-bracket-head{display:flex;align-items:baseline;justify-content:space-between;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);padding-bottom:.3rem;border-bottom:1px solid var(--rim2);margin-bottom:.15rem}
+.sports-bracket-head span{color:var(--txt3);font-size:9px}
+.sports-bracket-sublabel{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-top:.45rem}
+.sports-bm{position:relative;border:1px solid var(--rim);border-radius:9px;background:var(--bg3);padding:.5rem .55rem .5rem .65rem;overflow:hidden}
+.sports-bm:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue)}
+.sports-bm.live:before{background:var(--green)}
+.sports-bm.finished:before{background:var(--gold)}
+.sports-bm.pending:before{background:#F0A832}
+.sports-bm.tbd-col{font-family:var(--mono);font-size:10px;color:var(--txt3);font-style:italic;text-align:center;padding:.7rem .5rem}
+.sports-bm.tbd-col:before{background:var(--rim2)}
+.sports-bm-meta{display:flex;justify-content:space-between;gap:.4rem;font-family:var(--mono);font-size:8px;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem}
+.sports-bm-team{display:flex;align-items:baseline;justify-content:space-between;gap:.4rem;font-family:var(--serif);font-size:13px;font-weight:600;color:var(--txt2);line-height:1.35}
+.sports-bm-team .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sports-bm-team .gl{font-family:var(--mono);font-size:12px;color:var(--txt3);flex:0 0 auto}
+.sports-bm-team.win{color:var(--txt);font-weight:700}
+.sports-bm-team.win .gl{color:var(--gold)}
+.sports-bm-team.lose{color:var(--txt3)}
+.sports-bm-team.lose .nm{text-decoration:line-through;text-decoration-color:var(--rim3)}
+.sports-bm-team.tbd{color:var(--txt3);font-style:italic;font-weight:400}
+.sports-bm-pick{font-family:var(--mono);font-size:9px;letter-spacing:.03em;color:var(--green);margin-top:.4rem;padding-top:.35rem;border-top:1px solid var(--rim);overflow-wrap:anywhere}
+.sports-bm-pick.low{color:var(--txt3)}
 @media(max-width:1100px){.sports-momentum-list{grid-template-columns:1fr}}
 @media(max-width:900px){#sports-out{max-width:none}.sports-kpis{grid-template-columns:repeat(2,1fr)}.sports-audit-grid{grid-template-columns:repeat(2,1fr)}.sports-layout{grid-template-columns:1fr}}
 @media(max-width:520px){.sports-kpis{grid-template-columns:1fr}.sports-teams{grid-template-columns:1fr;gap:.25rem}.sports-score{text-align:left}.sports-team.away{text-align:left}}
@@ -2954,6 +2985,121 @@ function sportsMarketLens(wc, miro) {
     { h:'Read', v:function (r) { return r.read; } }
   ]) + '<div class="sports-empty" style="margin-top:.55rem">Model = Elo strength + recent form (the same blend as the fixture projections), as a share <i>within</i> the teams that have an outright market loaded — like-for-like vs the market share, so the gap shows where the model ranks a team higher (FORM AHEAD) or lower (MARKET AHEAD) than the market. Raw outright prices live on the Markets tab. A comparison lens, not a win probability.</div>';
 }
+// Knockout bracket + remaining-teams tracker. Pure render off the stored matches
+// (stage / provider-filled home-away / score / projection) — no recompute, no
+// hardcoded bracket map. As each tie finishes the provider advances the winner
+// into the next round's slot, so the matchups appear here as soon as they resolve;
+// unresolved slots stay "TBD". Penalty-decided ties show their full-time score
+// (the feed only carries fullTime), and alive/out is read from provider
+// advancement, which sidesteps not knowing the shootout result.
+var SPORTS_KO_ROUNDS = [
+  { key:'LAST_32', label:'Round of 32' },
+  { key:'LAST_16', label:'Round of 16' },
+  { key:'QUARTER_FINALS', label:'Quarter-finals' },
+  { key:'SEMI_FINALS', label:'Semi-finals' },
+  { key:'FINAL', label:'Final' }
+];
+var SPORTS_KO_KEYS = ['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','THIRD_PLACE','FINAL'];
+function sportsRealTeam(t) { return (t && t !== 'TBD') ? t : null; }
+function sportsKoFinished(m) { var s = String(m && m.status || '').toUpperCase(); return s === 'FINISHED' || s === 'AWARDED'; }
+function sportsKoWinner(m) {
+  var s = m && m.score || {};
+  if (s.home == null || s.away == null || s.home === s.away) return null;
+  return s.home > s.away ? sportsRealTeam(m.home) : sportsRealTeam(m.away);
+}
+function sportsKoTime(m) { var t = m && m.utcDate ? new Date(m.utcDate).getTime() : NaN; return isNaN(t) ? 0 : t; }
+// One team's status across the bracket: still has an unplayed tie, or won its
+// latest finished tie but the next slot is not drawn yet (brief feed lag) → alive.
+function sportsKoSurvivors(ko) {
+  var rec = {};
+  ko.forEach(function (m) {
+    [sportsRealTeam(m.home), sportsRealTeam(m.away)].forEach(function (team) {
+      if (!team) return;
+      var r = rec[team] || (rec[team] = { future:false, lastFin:-1, wonLast:false });
+      if (!sportsKoFinished(m)) { r.future = true; return; }
+      var t = sportsKoTime(m);
+      if (t >= r.lastFin) { r.lastFin = t; r.wonLast = (sportsKoWinner(m) === team); }
+    });
+  });
+  var all = Object.keys(rec);
+  var alive = all.filter(function (team) { return rec[team].future || rec[team].wonLast; });
+  return { all:all, alive:alive, rec:rec };
+}
+function sportsKoMatchCard(m) {
+  var s = m.score || {};
+  var played = sportsKoFinished(m) && s.home != null && s.away != null;
+  var w = sportsKoWinner(m);
+  function row(name, goals, side) {
+    var n = sportsRealTeam(name);
+    var win = played && w && w === n;
+    var lose = played && w && n && w !== n;
+    var cls = n == null ? 'tbd' : (win ? 'win' : (lose ? 'lose' : ''));
+    return '<div class="sports-bm-team ' + cls + '">' +
+      '<span class="nm">' + esc(n || 'TBD') + (win ? ' ✓' : '') + '</span>' +
+      '<span class="gl">' + (played && goals != null ? esc(goals) : '') + '</span></div>';
+  }
+  var pick = '';
+  var p = m.projection;
+  if (!sportsKoFinished(m) && p && p.favorite && p.probs && sportsRealTeam(m.home) && sportsRealTeam(m.away)) {
+    var pct = sportsProb(p.favorite === m.home ? p.probs.home : (p.favorite === m.away ? p.probs.away : Math.max(p.probs.home, p.probs.away)));
+    var decisive = p.tag === 'Strong edge' || p.tag === 'Moderate edge';
+    pick = '<div class="sports-bm-pick' + (decisive ? '' : ' low') + '">' + (decisive ? 'Pick ' : 'Lean ') + esc(p.favorite) + ' ' + pct + '%</div>';
+  }
+  return '<div class="sports-bm ' + sportsStatusClass(m) + '">' +
+    '<div class="sports-bm-meta"><span>' + esc(sportsDate(m.utcDate)) + '</span><span>' + esc(sportsStatusLabel(m)) + '</span></div>' +
+    row(m.home, s.home) + row(m.away, s.away) + pick +
+  '</div>';
+}
+function sportsKnockoutBracket(wc) {
+  var matches = wc.matches || [];
+  var ko = matches.filter(function (m) { return SPORTS_KO_KEYS.indexOf(m.stage) >= 0; });
+  var hasTeams = ko.some(function (m) { return sportsRealTeam(m.home) || sportsRealTeam(m.away); });
+  if (!ko.length || !hasTeams) {
+    return '<div class="sports-empty">The knockout bracket appears once the group stage finishes and the Round of 32 is drawn.</div>';
+  }
+  var surv = sportsKoSurvivors(ko);
+  // Rank survivor chips by model power (Elo+form) so the strongest lead.
+  var power = {};
+  (wc.momentum || []).forEach(function (t) { power[t.team] = (t.power != null ? t.power : t.score) || 0; });
+  var alive = surv.alive.slice().sort(function (a, b) { return (power[b] || 0) - (power[a] || 0); });
+  var eliminated = surv.all.filter(function (t) { return surv.alive.indexOf(t) < 0; });
+  // Champion = the team that won a finished Final (tournament over).
+  var finalM = ko.filter(function (m) { return m.stage === 'FINAL'; }).sort(function (a, b) { return sportsKoTime(b) - sportsKoTime(a); })[0];
+  var champion = (finalM && sportsKoFinished(finalM)) ? sportsKoWinner(finalM) : null;
+  // Current stage = earliest round that still has an unplayed tie.
+  var current = '';
+  for (var i = 0; i < SPORTS_KO_ROUNDS.length; i++) {
+    var r = SPORTS_KO_ROUNDS[i];
+    if (ko.some(function (m) { return m.stage === r.key && !sportsKoFinished(m); })) { current = r.label; break; }
+  }
+  var chips = alive.map(function (t) {
+    var champ = champion && t === champion;
+    return '<span class="sports-ko-chip' + (champ ? ' champ' : '') + '">' + (champ ? '🏆 ' : '') + esc(t) + '</span>';
+  }).join('');
+  var tracker = '<div class="sports-ko-tracker">' +
+    '<div class="sports-ko-count"><b>' + alive.length + '</b><span> of ' + surv.all.length + ' teams still in' +
+      (champion ? '' : (current ? ' · ' + esc(current) : '')) + '</span></div>' +
+    (chips ? '<div class="sports-ko-chips">' + chips + '</div>' : '') +
+    (eliminated.length ? '<div class="sports-ko-elim">Out (' + eliminated.length + '): ' + esc(eliminated.join(', ')) + '</div>' : '') +
+  '</div>';
+  // Bracket columns. Final column also carries the 3rd-place playoff beneath it.
+  var cols = SPORTS_KO_ROUNDS.map(function (r) {
+    var ties = ko.filter(function (m) { return m.stage === r.key; }).sort(function (a, b) { return sportsKoTime(a) - sportsKoTime(b); });
+    var done = ties.filter(sportsKoFinished).length;
+    var body = ties.length ? ties.map(sportsKoMatchCard).join('') : '<div class="sports-bm tbd-col">Awaiting earlier rounds</div>';
+    var extra = '';
+    if (r.key === 'FINAL') {
+      var third = ko.filter(function (m) { return m.stage === 'THIRD_PLACE'; }).sort(function (a, b) { return sportsKoTime(a) - sportsKoTime(b); });
+      if (third.length) extra = '<div class="sports-bracket-sublabel">3rd-place playoff</div>' + third.map(sportsKoMatchCard).join('');
+    }
+    return '<div class="sports-bracket-col">' +
+      '<div class="sports-bracket-head">' + esc(r.label) + '<span>' + (ties.length ? done + '/' + ties.length : '—') + '</span></div>' +
+      body + extra +
+    '</div>';
+  }).join('');
+  return tracker + '<div class="sports-bracket-scroll"><div class="sports-bracket">' + cols + '</div></div>' +
+    '<div class="sports-empty" style="margin-top:.55rem">Matchups fill in as ties finish and the winner is advanced by football-data.org; unresolved slots show TBD. “Pick/Lean” is the same Elo+form projection used elsewhere — a model lean, not advice. Knockout scores are full-time; ties decided on penalties show the full-time line.</div>';
+}
 function sportsWorldCupHtml(d, miro) {
   var wc = d.worldCup || {};
   var matches = wc.matches || [];
@@ -2975,6 +3121,9 @@ function sportsWorldCupHtml(d, miro) {
     sportsKpi('Next Kickoff', next ? sportsDate(next.utcDate) : 'TBD', next ? ((next.home || 'TBD') + ' vs ' + (next.away || 'TBD')) : 'No fixture loaded') +
   '</div>';
   if (wc.providerNote) html += '<div class="pse-caveat">' + esc(wc.providerNote) + '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Knockout Bracket</div>' +
+    sportsKnockoutBracket(wc) +
+    '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Rising Teams</div>' +
     (risingTeams.length ? '<div class="sports-momentum-list">' + risingTeams.slice(0, 3).map(sportsMomentumCard).join('') + '</div>' : '<div class="sports-empty">Momentum model needs completed matches before it can identify rising teams.</div>') +
     '</div>';
