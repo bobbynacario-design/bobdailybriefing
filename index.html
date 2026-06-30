@@ -274,6 +274,78 @@ window.fbDeleteReport = async function(id) {
   }
 };
 
+// Decision journal (journal-bob, uid-scoped) — Bob's calls, not model signals.
+const DCOLL = 'journal-bob';
+
+window.fbSaveDecision = async function(entry) {
+  var uid = getUid();
+  if (!uid) { setSyncStatus('error','Not authenticated'); throw new Error('Not authenticated'); }
+  var now = Date.now();
+  var id = entry.id || ('dec-' + now);
+  try {
+    setSyncStatus('syncing','Saving decision...');
+    await setDoc(doc(db, DCOLL, id), {
+      uid: uid,
+      saved: entry.saved || now,
+      updated: now,
+      createdDate: entry.createdDate || '',
+      asset: entry.asset || '',
+      source: entry.source || 'manual',
+      action: entry.action || 'watched',
+      direction: entry.direction || 'none',
+      conviction: Number(entry.conviction || 3),
+      reason: entry.reason || '',
+      invalidator: entry.invalidator || '',
+      linkedSignal: entry.linkedSignal || null,
+      status: entry.status || 'open',
+      outcome: entry.outcome || null,
+      outcomeNote: entry.outcomeNote || '',
+      beatBenchmark: entry.beatBenchmark == null ? null : !!entry.beatBenchmark,
+      mistakeType: entry.mistakeType || 'none'
+    });
+    setSyncStatus('ok','Decision saved');
+    return id;
+  } catch(e) {
+    setSyncStatus('error','Decision save failed');
+    console.error(e);
+    throw e;
+  }
+};
+
+window.fbLoadDecisions = async function() {
+  var uid = getUid();
+  if (!uid) return [];
+  try {
+    var q = query(collection(db, DCOLL), where('uid','==',uid), orderBy('saved','desc'), limit(100));
+    var snap = await getDocs(q);
+    var out = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      data.id = d.id;
+      out.push(data);
+    });
+    return out;
+  } catch(e) {
+    setSyncStatus('error','Decisions load failed');
+    console.error(e);
+    return [];
+  }
+};
+
+window.fbDeleteDecision = async function(id) {
+  var uid = getUid();
+  if (!uid) { setSyncStatus('error','Not authenticated'); throw new Error('Not authenticated'); }
+  try {
+    setSyncStatus('syncing','Deleting...');
+    await deleteDoc(doc(db, DCOLL, id));
+    setSyncStatus('ok','Deleted');
+  } catch(e) {
+    setSyncStatus('error','Delete failed');
+    console.error(e);
+    throw e;
+  }
+};
+
 // Kick off a deep-research report (long-running; poller finishes it server-side)
 window.fbGenerateDeepResearch = async function(topic, premium) {
   var uid = getUid();
@@ -785,6 +857,35 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 @media(max-width:768px){.jbar-label{width:74px}.jbar-meta{min-width:0}.jbar-row{flex-wrap:wrap}.jbar-row .jbar-meta{width:100%;text-align:left;margin-top:.3rem}.jbar-row .trend-bar-wrap{flex:1 1 120px}}
 
 /* ── HELP ── */
+/* DECISIONS */
+.decision-actions{display:flex;justify-content:space-between;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap}
+.decision-kicker{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em;text-transform:uppercase;line-height:1.6}
+.decision-form{display:none;background:var(--bg2);border:1px solid var(--rim2);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1.25rem}
+.decision-form.active{display:block}
+.decision-form-head{display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start;margin-bottom:.75rem}
+.decision-form-title{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase}
+.decision-linked{font-family:var(--mono);font-size:10px;color:var(--txt3);line-height:1.5;margin-top:.25rem}
+.decision-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}
+.decision-wide{grid-column:span 2}
+.decision-field label{display:block;font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:.3rem}
+.decision-field input,.decision-field select,.decision-field textarea{width:100%;background:var(--bg3);border:1px solid var(--rim2);border-radius:8px;color:var(--txt);font-family:var(--mono);font-size:12px;padding:.55rem .65rem;outline:none}
+.decision-field textarea{min-height:70px;resize:vertical;line-height:1.5}
+.decision-field input:focus,.decision-field select:focus,.decision-field textarea:focus{border-color:var(--gold)}
+.decision-row{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.8rem .95rem;margin-bottom:.55rem}
+.decision-row.closed{opacity:.86}
+.decision-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:.45rem}
+.decision-asset{font-family:var(--serif);font-size:18px;font-weight:700;color:var(--txt);line-height:1.2}
+.decision-meta{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.35rem}
+.decision-body{font-size:12.5px;line-height:1.65;color:var(--txt2)}
+.decision-body b{color:var(--txt)}
+.decision-foot{display:flex;align-items:center;justify-content:space-between;gap:.65rem;margin-top:.65rem;flex-wrap:wrap}
+.decision-mini{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.03em}
+.decision-buttons{display:flex;gap:.4rem;flex-wrap:wrap}
+.decision-empty{font-size:12px;color:var(--txt3);font-style:italic;padding:.65rem 0}
+.decision-stat-note{font-size:12px;line-height:1.6;color:var(--txt2);margin:-.4rem 0 1rem}
+@media(max-width:860px){.decision-grid{grid-template-columns:1fr 1fr}.decision-wide{grid-column:span 2}}
+@media(max-width:560px){.decision-grid{grid-template-columns:1fr}.decision-wide{grid-column:span 1}.decision-top{display:block}.decision-foot{display:block}.decision-buttons{margin-top:.55rem}}
+
 .help-body{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
 .help-body>.help-wide{grid-column:1 / -1}
 @media(max-width:768px){.help-body{grid-template-columns:1fr}}
@@ -1055,6 +1156,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 <nav class="nav">
   <div class="nav-brand">INTELLIGENCE <span>// BOB</span></div>
   <div class="nav-center">
+    <button class="ntab" data-page="decisions" onclick="switchPage('decisions',this)">Decisions</button>
     <button class="ntab active" data-page="today" onclick="switchPage('today',this)">📰 Today</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
     <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
@@ -1363,6 +1465,122 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 </div>
 
 <!-- ═══════════════ PSE (PH SNAPSHOT) PAGE ═══════════════ -->
+<!-- DECISIONS PAGE -->
+<div class="page" id="page-decisions">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Decision Journal</div>
+    <div class="hero-date" style="font-size:22px">Decisions</div>
+    <div class="hero-sub" id="decisions-sub">Bob's calls, graded as process</div>
+    <div class="hero-divider"></div>
+  </div>
+
+  <div class="decision-actions">
+    <div class="decision-kicker">Fast capture first. Outcome and mistake review can happen later.</div>
+    <button class="btn-primary" onclick="openDecisionFormManual()">+ New decision</button>
+  </div>
+
+  <div class="decision-form" id="decision-form">
+    <div class="decision-form-head">
+      <div>
+        <div class="decision-form-title" id="decision-form-title">Log decision</div>
+        <div class="decision-linked" id="decision-linked">Manual entry</div>
+      </div>
+      <button class="btn-sec" onclick="closeDecisionForm()">Cancel</button>
+    </div>
+    <div class="decision-grid">
+      <div class="decision-field">
+        <label>Asset</label>
+        <input id="decision-asset" placeholder="NVDA, BTC, SOL">
+      </div>
+      <div class="decision-field">
+        <label>Source</label>
+        <select id="decision-source">
+          <option value="radar">Radar</option>
+          <option value="miro">Markets</option>
+          <option value="sports">Sports</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <div class="decision-field">
+        <label>Action</label>
+        <select id="decision-action">
+          <option value="watched">Watched</option>
+          <option value="took">Took</option>
+          <option value="skipped">Skipped</option>
+        </select>
+      </div>
+      <div class="decision-field">
+        <label>Direction</label>
+        <select id="decision-direction">
+          <option value="none">None</option>
+          <option value="long">Long</option>
+          <option value="short">Short</option>
+        </select>
+      </div>
+      <div class="decision-field">
+        <label>Conviction</label>
+        <select id="decision-conviction">
+          <option value="1">1 - low</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="5">5 - high</option>
+        </select>
+      </div>
+      <div class="decision-field">
+        <label>Status</label>
+        <select id="decision-status" onchange="syncDecisionOutcomeFields()">
+          <option value="open">Open</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+      <div class="decision-field">
+        <label>Outcome</label>
+        <select id="decision-outcome">
+          <option value="">Pending</option>
+          <option value="win">Win</option>
+          <option value="loss">Loss</option>
+          <option value="scratch">Scratch</option>
+        </select>
+      </div>
+      <div class="decision-field">
+        <label>Beat benchmark</label>
+        <select id="decision-beat">
+          <option value="">Unknown</option>
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+      <div class="decision-field decision-wide">
+        <label>Reason</label>
+        <textarea id="decision-reason" placeholder="Why this call made sense at the time."></textarea>
+      </div>
+      <div class="decision-field decision-wide">
+        <label>What would change my mind</label>
+        <textarea id="decision-invalidator" placeholder="Typed reflection only, not a computed trade level."></textarea>
+      </div>
+      <div class="decision-field decision-wide">
+        <label>Mistake type</label>
+        <select id="decision-mistake"></select>
+      </div>
+      <div class="decision-field decision-wide">
+        <label>Outcome note</label>
+        <textarea id="decision-outcome-note" placeholder="Fill on review: what actually happened, and what to learn."></textarea>
+      </div>
+    </div>
+    <div class="paste-actions">
+      <span class="paste-hint">No entries, targets, or instructions are generated here.</span>
+      <div class="btn-row">
+        <button class="btn-sec" onclick="closeDecisionForm()">CANCEL</button>
+        <button class="btn-primary" onclick="saveDecisionForm()">SAVE DECISION</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="decisions-out"><div class="empty-state">LOADING DECISIONS...</div></div>
+  <div class="radar-disclaimer">Private process journal only. It records what you decided and why, then grades behavior patterns later. It does not generate trade instructions.</div>
+</div>
+
 <div class="page" id="page-pse">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Philippine Market</div>
@@ -1528,6 +1746,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
+  <button class="mob-tab" id="mob-decisions" onclick="switchPageMobile('decisions',this)"><span class="mob-tab-icon">◇</span>CALLS</button>
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
   <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
@@ -1757,6 +1976,7 @@ function switchPage(id, el) {
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
   if (id==='journal') renderJournal();
+  if (id==='decisions') renderDecisions();
   if (id==='pse') renderPh();
   if (id==='miro') renderMiro();
   if (id==='sports') renderSports();
@@ -1778,6 +1998,7 @@ function switchPageMobile(id, el) {
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
   if (id==='journal') renderJournal();
+  if (id==='decisions') renderDecisions();
   if (id==='pse') renderPh();
   if (id==='miro') renderMiro();
   if (id==='sports') renderSports();
@@ -1900,7 +2121,8 @@ function radarCard(s) {
     '<div class="src radar-plan">' + esc(plan) + '</div>' +
     radar52(s) +
     radarContext(s) +
-    '<div class="card-footer"><span class="rel-text radar-invalidation">' + esc(s.invalidation) + '</span></div>' +
+    '<div class="card-footer"><span class="rel-text radar-invalidation">' + esc(s.invalidation) + '</span>' +
+      '<button class="btn-sec" onclick="openDecisionFormFromRadar(\'' + esc(s.symbol) + '\')">Log decision</button></div>' +
   '</div>';
 }
 // ── Asset-type quick filter ──
@@ -1915,6 +2137,7 @@ var radarSignals = null;          // cached signals from the last load
 var radarFilter = 'All';          // active asset-type filter
 var radarStatusFilter = 'All';    // active status sub-filter
 var radarRegimeState = null;      // cached regime label from the latest run
+var radarAsOf = null;             // latest radar date for linked decision snapshots
 var radarTakerSymbols = {};       // symbols claimed by Taker Nuggets this render (Wildcard dedupes against these)
 function radarAssetType(s) {
   if (s.theme === 'Crypto') return 'Crypto';
@@ -2218,6 +2441,7 @@ function renderRadar() {
     }
     var rg = radarRegimeLabel(data.regime ? data.regime.score : 0);
     radarRegimeState = rg;
+    radarAsOf = data.asOf || null;
     if (regimeEl) {
       regimeEl.innerHTML = '<div class="radar-regime-line">Regime: ' +
         '<span class="rel-badge ' + rg.cls + '">' + rg.txt + '</span>' +
@@ -2342,6 +2566,355 @@ function renderJournal() {
 
 // ── PH MARKET HEALTH (read-only; not scored) ──
 function phRet(v) { return v == null ? '<span class="jmut">—</span>' : jSign(v); }
+// DECISIONS - Bob's process journal. Captures calls and post-mortems without
+// turning Radar into an execution surface.
+var decisionEntries = [];
+var decisionEditingId = null;
+var decisionEditingSaved = null;
+var decisionEditingCreatedDate = null;
+var decisionLinkedSignal = null;
+var DECISION_MISTAKES = [
+  ['none', 'None / not reviewed'],
+  ['good-process-good-outcome', 'Good process, good outcome'],
+  ['good-process-bad-luck', 'Good process, bad luck'],
+  ['fomo-chase', 'FOMO chase'],
+  ['no-real-edge', 'No real edge'],
+  ['ignored-regime', 'Ignored regime'],
+  ['sized-wrong', 'Sized wrong'],
+  ['moved-stop', 'Moved stop'],
+  ['held-too-long', 'Held too long'],
+  ['early-exit', 'Early exit']
+];
+var DECISION_MISTAKE_LABELS = DECISION_MISTAKES.reduce(function (m, p) { m[p[0]] = p[1]; return m; }, {});
+
+function manilaDateKey() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+function ensureDecisionMistakeOptions() {
+  var el = document.getElementById('decision-mistake');
+  if (!el || el.options.length) return;
+  el.innerHTML = DECISION_MISTAKES.map(function (p) {
+    return '<option value="' + esc(p[0]) + '">' + esc(p[1]) + '</option>';
+  }).join('');
+}
+function setDecisionField(id, v) {
+  var el = document.getElementById(id);
+  if (el) el.value = v == null ? '' : v;
+}
+function getDecisionField(id) {
+  var el = document.getElementById(id);
+  return el ? el.value : '';
+}
+function decisionBeatValue(v) {
+  if (v === true) return 'true';
+  if (v === false) return 'false';
+  return '';
+}
+function decisionBeatFromForm(v) {
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  return null;
+}
+function decisionLinkedText(linked) {
+  if (!linked) return 'Manual entry';
+  var bits = [
+    linked.date || 'latest',
+    linked.theme || '',
+    linked.status || '',
+    linked.score == null ? '' : ('score ' + linked.score),
+    linked.regimeAtDecision ? ('regime ' + linked.regimeAtDecision) : ''
+  ].filter(Boolean);
+  return 'Linked Radar snapshot: ' + bits.join(' / ');
+}
+function openDecisionForm(entry) {
+  ensureDecisionMistakeOptions();
+  entry = entry || {};
+  decisionEditingId = entry.id || null;
+  decisionEditingSaved = entry.saved || null;
+  decisionEditingCreatedDate = entry.createdDate || manilaDateKey();
+  decisionLinkedSignal = entry.linkedSignal || null;
+  var form = document.getElementById('decision-form');
+  if (form) form.classList.add('active');
+  var title = document.getElementById('decision-form-title');
+  if (title) title.textContent = decisionEditingId ? 'Edit decision' : 'Log decision';
+  var linked = document.getElementById('decision-linked');
+  if (linked) linked.textContent = decisionLinkedText(decisionLinkedSignal);
+  setDecisionField('decision-asset', entry.asset || '');
+  setDecisionField('decision-source', entry.source || (decisionLinkedSignal ? 'radar' : 'manual'));
+  setDecisionField('decision-action', entry.action || 'watched');
+  setDecisionField('decision-direction', entry.direction || 'none');
+  setDecisionField('decision-conviction', entry.conviction || 3);
+  setDecisionField('decision-status', entry.status || 'open');
+  setDecisionField('decision-outcome', entry.outcome || '');
+  setDecisionField('decision-beat', decisionBeatValue(entry.beatBenchmark));
+  setDecisionField('decision-reason', entry.reason || '');
+  setDecisionField('decision-invalidator', entry.invalidator || '');
+  setDecisionField('decision-mistake', entry.mistakeType || 'none');
+  setDecisionField('decision-outcome-note', entry.outcomeNote || '');
+  syncDecisionOutcomeFields();
+  var asset = document.getElementById('decision-asset');
+  if (asset) asset.focus();
+}
+function openDecisionFormManual() {
+  openDecisionForm({
+    source: 'manual',
+    action: 'watched',
+    direction: 'none',
+    conviction: 3,
+    status: 'open',
+    createdDate: manilaDateKey()
+  });
+}
+function openDecisionFormFromRadar(symbol) {
+  var s = (radarSignals || []).filter(function (x) { return x.symbol === symbol; })[0];
+  if (!s) { showToast('Radar signal not found', 'warn'); return; }
+  var btn = document.querySelector('.ntab[data-page="decisions"]');
+  switchPage('decisions', btn);
+  openDecisionForm({
+    asset: s.symbol,
+    source: 'radar',
+    action: 'watched',
+    direction: 'none',
+    conviction: 3,
+    status: 'open',
+    reason: s.why || '',
+    invalidator: s.invalidation || '',
+    createdDate: manilaDateKey(),
+    linkedSignal: {
+      date: radarAsOf || manilaDateKey(),
+      theme: s.theme || '',
+      status: s.status || '',
+      score: s.score == null ? null : s.score,
+      takerRank: Math.round(radarTakerRank(s) * 10) / 10,
+      regimeAtDecision: radarRegimeState ? radarRegimeState.txt : ''
+    }
+  });
+}
+function closeDecisionForm() {
+  var form = document.getElementById('decision-form');
+  if (form) form.classList.remove('active');
+  decisionEditingId = null;
+  decisionEditingSaved = null;
+  decisionEditingCreatedDate = null;
+  decisionLinkedSignal = null;
+}
+function syncDecisionOutcomeFields() {
+  var closed = getDecisionField('decision-status') === 'closed';
+  ['decision-outcome', 'decision-beat', 'decision-mistake', 'decision-outcome-note'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.disabled = !closed;
+  });
+}
+async function saveDecisionForm() {
+  var asset = getDecisionField('decision-asset').trim().toUpperCase();
+  if (!asset) { showToast('Add an asset or subject first', 'warn'); return; }
+  if (!window.fbSaveDecision) { showToast('Decision journal is not ready', 'error'); return; }
+  var status = getDecisionField('decision-status') || 'open';
+  var entry = {
+    id: decisionEditingId,
+    saved: decisionEditingSaved,
+    createdDate: decisionEditingCreatedDate || manilaDateKey(),
+    asset: asset,
+    source: getDecisionField('decision-source') || 'manual',
+    action: getDecisionField('decision-action') || 'watched',
+    direction: getDecisionField('decision-direction') || 'none',
+    conviction: Number(getDecisionField('decision-conviction') || 3),
+    reason: getDecisionField('decision-reason').trim(),
+    invalidator: getDecisionField('decision-invalidator').trim(),
+    linkedSignal: decisionLinkedSignal,
+    status: status,
+    outcome: status === 'closed' ? (getDecisionField('decision-outcome') || null) : null,
+    outcomeNote: status === 'closed' ? getDecisionField('decision-outcome-note').trim() : '',
+    beatBenchmark: status === 'closed' ? decisionBeatFromForm(getDecisionField('decision-beat')) : null,
+    mistakeType: status === 'closed' ? (getDecisionField('decision-mistake') || 'none') : 'none'
+  };
+  try {
+    await window.fbSaveDecision(entry);
+    closeDecisionForm();
+    showToast('Decision saved', 'ok');
+    renderDecisions();
+  } catch (e) {
+    showToast('Decision save failed: ' + (e && e.message ? e.message : 'check rules'), 'error');
+  }
+}
+function editDecision(id) {
+  var entry = decisionEntries.filter(function (d) { return d.id === id; })[0];
+  if (!entry) return;
+  openDecisionForm(entry);
+  window.scrollTo(0, 0);
+}
+function closeOutDecision(id) {
+  var entry = decisionEntries.filter(function (d) { return d.id === id; })[0];
+  if (!entry) return;
+  entry = Object.assign({}, entry, { status: 'closed' });
+  openDecisionForm(entry);
+  window.scrollTo(0, 0);
+}
+async function deleteDecision(id) {
+  if (!window.fbDeleteDecision) { showToast('Decision journal is not ready', 'error'); return; }
+  if (!confirm('Delete this decision entry?')) return;
+  try {
+    await window.fbDeleteDecision(id);
+    showToast('Decision deleted', 'ok');
+    renderDecisions();
+  } catch (e) {
+    showToast('Delete failed: ' + (e && e.message ? e.message : 'check rules'), 'error');
+  }
+}
+function buildDecisionStats(entries) {
+  var stats = {
+    total: entries.length,
+    taken: 0,
+    skipped: 0,
+    watched: 0,
+    open: 0,
+    closed: 0,
+    wins: 0,
+    losses: 0,
+    scratches: 0,
+    hitRate: null,
+    beatRate: null,
+    beatKnown: 0,
+    beatWins: 0,
+    mistakes: {},
+    bySource: {},
+    bySignalStatus: {}
+  };
+  entries.forEach(function (e) {
+    var action = e.action || 'watched';
+    stats[action] = (stats[action] || 0) + 1;
+    var status = e.status || 'open';
+    stats[status] = (stats[status] || 0) + 1;
+    var src = e.source || 'manual';
+    if (!stats.bySource[src]) stats.bySource[src] = { n: 0, taken: 0, wins: 0, losses: 0 };
+    stats.bySource[src].n++;
+    if (action === 'took') stats.bySource[src].taken++;
+    if (status === 'closed' && action === 'took') {
+      if (e.outcome === 'win') { stats.wins++; stats.bySource[src].wins++; }
+      if (e.outcome === 'loss') { stats.losses++; stats.bySource[src].losses++; }
+      if (e.outcome === 'scratch') stats.scratches++;
+      if (e.beatBenchmark === true || e.beatBenchmark === false) {
+        stats.beatKnown++;
+        if (e.beatBenchmark === true) stats.beatWins++;
+      }
+    }
+    if (status === 'closed') {
+      var mt = e.mistakeType || 'none';
+      stats.mistakes[mt] = (stats.mistakes[mt] || 0) + 1;
+    }
+    if (action === 'took' && e.linkedSignal && e.linkedSignal.status) {
+      var ss = e.linkedSignal.status;
+      if (!stats.bySignalStatus[ss]) stats.bySignalStatus[ss] = { n: 0, wins: 0, losses: 0 };
+      stats.bySignalStatus[ss].n++;
+      if (e.outcome === 'win') stats.bySignalStatus[ss].wins++;
+      if (e.outcome === 'loss') stats.bySignalStatus[ss].losses++;
+    }
+  });
+  var resolved = stats.wins + stats.losses;
+  stats.hitRate = resolved ? Math.round(stats.wins / resolved * 100) : null;
+  stats.beatRate = stats.beatKnown ? Math.round(stats.beatWins / stats.beatKnown * 100) : null;
+  return stats;
+}
+function decisionRate(w, l) {
+  var n = (w || 0) + (l || 0);
+  return n ? Math.round((w || 0) / n * 100) + '%' : 'n/a';
+}
+function decisionStatsHtml(stats) {
+  var mistakeRows = Object.keys(stats.mistakes).sort(function (a, b) {
+    return stats.mistakes[b] - stats.mistakes[a];
+  }).slice(0, 5);
+  var sourceRows = Object.keys(stats.bySource).sort().map(function (src) {
+    var s = stats.bySource[src];
+    return '<div class="jrow"><span class="jrow-sym">' + esc(src) + '</span>' +
+      '<span class="decision-mini">n=' + s.n + ' / took ' + s.taken + '</span>' +
+      '<span class="jrow-date">hit ' + decisionRate(s.wins, s.losses) + '</span></div>';
+  }).join('');
+  var signalRows = Object.keys(stats.bySignalStatus).sort().map(function (st) {
+    var s = stats.bySignalStatus[st];
+    return '<div class="jrow"><span class="rel-badge ' + radarStatusClass(st) + '">' + esc(st) + '</span>' +
+      '<span class="decision-mini">taken ' + s.n + '</span>' +
+      '<span class="jrow-date">hit ' + decisionRate(s.wins, s.losses) + '</span></div>';
+  }).join('');
+  var html = '<div class="archive-summary">' +
+    jTile(stats.total, 'Decisions') +
+    jTile(stats.taken + '/' + stats.skipped + '/' + stats.watched, 'Took / skip / watch') +
+    jTile(stats.hitRate == null ? 'n/a' : stats.hitRate + '%', 'Taken hit rate') +
+    jTile(stats.beatRate == null ? 'n/a' : stats.beatRate + '%', 'Beat benchmark') +
+  '</div>';
+  html += '<div class="decision-stat-note">This grades behavior, not the Radar model. Benchmark-beat and mistake type are manual v1 review fields.</div>';
+  if (mistakeRows.length) {
+    html += '<div class="journal-section">Mistake pattern</div><div class="jlist">' +
+      mistakeRows.map(function (mt) {
+        return '<div class="jrow"><span class="decision-mini">' + esc(DECISION_MISTAKE_LABELS[mt] || mt) + '</span><span class="jrow-date">n=' + stats.mistakes[mt] + '</span></div>';
+      }).join('') + '</div>';
+  }
+  if (sourceRows) html += '<div class="journal-section">By source</div><div class="jlist">' + sourceRows + '</div>';
+  if (signalRows) html += '<div class="journal-section">Radar status on taken calls</div><div class="jlist">' + signalRows + '</div>';
+  return html;
+}
+function decisionPill(txt, cls) {
+  return '<span class="rel-badge ' + (cls || 'rel-none-b') + '">' + esc(txt) + '</span>';
+}
+function decisionRow(e) {
+  var closed = (e.status || 'open') === 'closed';
+  var actionCls = e.action === 'took' ? 'rel-high' : (e.action === 'skipped' ? 'rel-low' : 'rel-med');
+  var outcomeCls = e.outcome === 'win' ? 'rel-high' : (e.outcome === 'loss' ? 'rel-low' : 'rel-med');
+  var linked = e.linkedSignal ? decisionPill(e.linkedSignal.status || 'radar', radarStatusClass(e.linkedSignal.status)) : '';
+  var beat = e.beatBenchmark == null ? '' : decisionPill(e.beatBenchmark ? 'beat benchmark' : 'lagged benchmark', e.beatBenchmark ? 'rel-high' : 'rel-low');
+  return '<div class="decision-row' + (closed ? ' closed' : '') + '">' +
+    '<div class="decision-top"><div><div class="decision-asset">' + esc(e.asset || 'Untitled') + '</div>' +
+      '<div class="decision-meta">' +
+        decisionPill(e.source || 'manual') +
+        decisionPill(e.action || 'watched', actionCls) +
+        decisionPill(e.direction || 'none') +
+        decisionPill('conviction ' + (e.conviction || 3)) +
+        linked + beat +
+      '</div></div>' +
+      '<div class="decision-mini">' + esc(e.createdDate || '') + '</div></div>' +
+    '<div class="decision-body">' +
+      (e.reason ? '<div><b>Reason:</b> ' + esc(e.reason) + '</div>' : '') +
+      (e.invalidator ? '<div><b>Change-my-mind:</b> ' + esc(e.invalidator) + '</div>' : '') +
+      (closed ? '<div><b>Review:</b> ' + decisionPill(e.outcome || 'closed', outcomeCls) + ' ' +
+        esc(DECISION_MISTAKE_LABELS[e.mistakeType || 'none'] || e.mistakeType || 'none') +
+        (e.outcomeNote ? ' - ' + esc(e.outcomeNote) : '') + '</div>' : '') +
+    '</div>' +
+    '<div class="decision-foot"><span class="decision-mini">' + esc(decisionLinkedText(e.linkedSignal)) + '</span>' +
+      '<div class="decision-buttons">' +
+        (closed ? '' : '<button class="btn-primary" onclick="closeOutDecision(\'' + esc(e.id) + '\')">Close out</button>') +
+        '<button class="btn-sec" onclick="editDecision(\'' + esc(e.id) + '\')">Edit</button>' +
+        '<button class="btn-danger" onclick="deleteDecision(\'' + esc(e.id) + '\')">Delete</button>' +
+      '</div></div>' +
+  '</div>';
+}
+function renderDecisionGroup(title, rows) {
+  var html = '<div class="journal-section">' + esc(title) + '</div>';
+  if (!rows.length) return html + '<div class="decision-empty">No ' + esc(title.toLowerCase()) + ' entries.</div>';
+  return html + rows.map(decisionRow).join('');
+}
+function renderDecisions() {
+  ensureDecisionMistakeOptions();
+  var out = document.getElementById('decisions-out');
+  var sub = document.getElementById('decisions-sub');
+  if (!out) return;
+  if (!window.fbLoadDecisions) { out.innerHTML = '<div class="empty-state">DECISION JOURNAL UNAVAILABLE</div>'; return; }
+  out.innerHTML = '<div class="empty-state">LOADING DECISIONS...</div>';
+  window.fbLoadDecisions().then(function (entries) {
+    decisionEntries = entries || [];
+    var stats = buildDecisionStats(decisionEntries);
+    if (sub) sub.textContent = stats.open + ' open / ' + stats.closed + ' closed / ' + stats.taken + ' taken';
+    var open = decisionEntries.filter(function (e) { return (e.status || 'open') !== 'closed'; });
+    var closed = decisionEntries.filter(function (e) { return (e.status || 'open') === 'closed'; });
+    out.innerHTML = decisionStatsHtml(stats) +
+      renderDecisionGroup('Open', open) +
+      renderDecisionGroup('Closed', closed);
+  });
+}
+
 function phRow(p) {
   return '<div class="jrow">' +
     '<span class="jrow-sym">' + esc(p.symbol) + '</span>' +
