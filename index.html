@@ -2979,11 +2979,12 @@ function sportsMarketLens(wc, miro) {
   });
   return sportsTable(rows, 'No matched market rows.', [
     { h:'Team', v:function (r) { return r.team; } },
+    { h:'Outright', num:true, v:function (r) { return sportsPct(r.market.impliedYes); } },
     { h:'Model', num:true, v:function (r) { return sportsPct(r.modelShare); } },
     { h:'Market', num:true, v:function (r) { return sportsPct(r.marketShare); } },
     { h:'Gap', num:true, v:function (r) { return r.gap == null ? '-' : ((r.gap > 0 ? '+' : '') + (r.gap * 100).toFixed(1) + ' pts'); } },
     { h:'Read', v:function (r) { return r.read; } }
-  ]) + '<div class="sports-empty" style="margin-top:.55rem">Model = Elo strength + recent form (the same blend as the fixture projections), as a share <i>within</i> the teams that have an outright market loaded — like-for-like vs the market share, so the gap shows where the model ranks a team higher (FORM AHEAD) or lower (MARKET AHEAD) than the market. Raw outright prices live on the Markets tab. A comparison lens, not a win probability.</div>';
+  ]) + '<div class="sports-empty" style="margin-top:.55rem"><b>Outright</b> is the raw implied price straight from the 🎲 Markets tab (these ' + rows.length + ' teams sum to ' + sportsPct(sumImplied) + ', not 100% — most of the field has no market). <b>Model</b> (Elo + recent form) and <b>Market</b> are those re-based to a share <i>within just these teams</i> so both sum to 100% — that is why Market differs from Outright, and it makes the <b>Gap</b> like-for-like: FORM AHEAD = model ranks the team higher than the market, MARKET AHEAD = lower. A comparison lens, not a win probability.</div>';
 }
 // Knockout bracket + remaining-teams tracker. Pure render off the stored matches
 // (stage / provider-filled home-away / score / projection) — no recompute, no
