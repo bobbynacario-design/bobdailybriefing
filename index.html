@@ -860,6 +860,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 /* DECISIONS */
 .decision-actions{display:flex;justify-content:space-between;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap}
 .decision-kicker{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em;text-transform:uppercase;line-height:1.6}
+.radar-decision-actions{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+.radar-decision-btn{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;padding:.32rem .55rem;border-radius:6px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;white-space:nowrap}
+.radar-decision-btn:hover{border-color:var(--rim2);color:var(--txt)}
+.radar-decision-btn.watch{color:#F0A832;border-color:rgba(240,168,50,.25);background:rgba(240,168,50,.08)}
+.radar-decision-btn.skip{color:var(--red);border-color:rgba(232,92,92,.25);background:var(--red-dim)}
+.radar-decision-btn.took{color:var(--green);border-color:rgba(45,184,122,.25);background:var(--green-dim)}
+.radar-decision-btn.note{color:var(--txt3)}
 .decision-form{display:none;background:var(--bg2);border:1px solid var(--rim2);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1.25rem}
 .decision-form.active{display:block}
 .decision-form-head{display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start;margin-bottom:.75rem}
@@ -883,6 +890,21 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .decision-buttons{display:flex;gap:.4rem;flex-wrap:wrap}
 .decision-empty{font-size:12px;color:var(--txt3);font-style:italic;padding:.65rem 0}
 .decision-stat-note{font-size:12px;line-height:1.6;color:var(--txt2);margin:-.4rem 0 1rem}
+.decision-deck{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:1rem;align-items:start}
+.decision-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.05rem;margin-bottom:1rem}
+.decision-panel.warn{border-color:rgba(240,168,50,.32);background:rgba(240,168,50,.06)}
+.decision-panel.learned{border-color:rgba(45,184,122,.24)}
+.decision-panel-title{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;margin-bottom:.65rem;display:flex;justify-content:space-between;gap:.75rem;align-items:center}
+.decision-panel-title span{color:var(--txt3);font-size:10px;letter-spacing:.04em}
+.decision-pulse{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;margin-bottom:1rem}
+.decision-pulse-card{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.75rem .85rem}
+.decision-pulse-value{font-family:var(--serif);font-size:24px;font-weight:700;color:var(--txt);line-height:1}
+.decision-pulse-label{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-top:.35rem}
+.decision-pattern-list{display:flex;flex-direction:column;gap:.45rem}
+.decision-pattern-row{display:flex;align-items:center;justify-content:space-between;gap:.6rem;border-bottom:1px solid var(--rim);padding:.45rem 0;font-family:var(--mono);font-size:10px;color:var(--txt3)}
+.decision-pattern-row:last-child{border-bottom:none}
+.decision-review-hint{font-size:12px;line-height:1.6;color:var(--txt2);margin:-.15rem 0 .65rem}
+@media(max-width:960px){.decision-deck{grid-template-columns:1fr}.decision-pulse{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:860px){.decision-grid{grid-template-columns:1fr 1fr}.decision-wide{grid-column:span 2}}
 @media(max-width:560px){.decision-grid{grid-template-columns:1fr}.decision-wide{grid-column:span 1}.decision-top{display:block}.decision-foot{display:block}.decision-buttons{margin-top:.55rem}}
 
@@ -1156,7 +1178,6 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 <nav class="nav">
   <div class="nav-brand">INTELLIGENCE <span>// BOB</span></div>
   <div class="nav-center">
-    <button class="ntab" data-page="decisions" onclick="switchPage('decisions',this)">Decisions</button>
     <button class="ntab active" data-page="today" onclick="switchPage('today',this)">📰 Today</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
     <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
@@ -1167,6 +1188,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">🎲 Markets</button>
     <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">⚽ Sports</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">❔ Help</button>
+    <button class="ntab" data-page="decisions" onclick="switchPage('decisions',this)">Decisions</button>
   </div>
   <div class="nav-right">
     <div class="nav-clock" id="nav-clock">--:--</div>
@@ -1469,20 +1491,20 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 <div class="page" id="page-decisions">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Decision Journal</div>
-    <div class="hero-date" style="font-size:22px">Decisions</div>
-    <div class="hero-sub" id="decisions-sub">Bob's calls, graded as process</div>
+    <div class="hero-date" style="font-size:22px">Decision Review Deck</div>
+    <div class="hero-sub" id="decisions-sub">Today's calls, review queue, and behavior patterns</div>
     <div class="hero-divider"></div>
   </div>
 
   <div class="decision-actions">
-    <div class="decision-kicker">Fast capture first. Outcome and mistake review can happen later.</div>
-    <button class="btn-primary" onclick="openDecisionFormManual()">+ New decision</button>
+    <div class="decision-kicker">Capture from Radar in one tap. Use this tab to review what happened and what it says about your process.</div>
+    <button class="btn-primary" onclick="openDecisionFormManual()">+ Manual note</button>
   </div>
 
   <div class="decision-form" id="decision-form">
     <div class="decision-form-head">
       <div>
-        <div class="decision-form-title" id="decision-form-title">Log decision</div>
+        <div class="decision-form-title" id="decision-form-title">Decision details</div>
         <div class="decision-linked" id="decision-linked">Manual entry</div>
       </div>
       <button class="btn-sec" onclick="closeDecisionForm()">Cancel</button>
@@ -1746,13 +1768,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
-  <button class="mob-tab" id="mob-decisions" onclick="switchPageMobile('decisions',this)"><span class="mob-tab-icon">◇</span>CALLS</button>
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
   <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
   <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
   <button class="mob-tab" id="mob-radar" onclick="switchPageMobile('radar',this)"><span class="mob-tab-icon">📡</span>RADAR</button>
   <button class="mob-tab" id="mob-journal" onclick="switchPageMobile('journal',this)"><span class="mob-tab-icon">📓</span>JOURNAL</button>
+  <button class="mob-tab" id="mob-decisions" onclick="switchPageMobile('decisions',this)"><span class="mob-tab-icon">◇</span>CALLS</button>
   <button class="mob-tab" id="mob-pse" onclick="switchPageMobile('pse',this)"><span class="mob-tab-icon">🇵🇭</span>PSE</button>
   <button class="mob-tab" id="mob-miro" onclick="switchPageMobile('miro',this)"><span class="mob-tab-icon">🎲</span>MKTS</button>
   <button class="mob-tab" id="mob-sports" onclick="switchPageMobile('sports',this)"><span class="mob-tab-icon">⚽</span>SPORT</button>
@@ -2122,7 +2144,12 @@ function radarCard(s) {
     radar52(s) +
     radarContext(s) +
     '<div class="card-footer"><span class="rel-text radar-invalidation">' + esc(s.invalidation) + '</span>' +
-      '<button class="btn-sec" onclick="openDecisionFormFromRadar(\'' + esc(s.symbol) + '\')">Log decision</button></div>' +
+      '<div class="radar-decision-actions">' +
+        '<button class="radar-decision-btn watch" onclick="quickLogDecisionFromRadar(\'' + esc(s.symbol) + '\',\'watched\')">Watched</button>' +
+        '<button class="radar-decision-btn skip" onclick="quickLogDecisionFromRadar(\'' + esc(s.symbol) + '\',\'skipped\')">Skipped</button>' +
+        '<button class="radar-decision-btn took" onclick="quickLogDecisionFromRadar(\'' + esc(s.symbol) + '\',\'took\')">Took</button>' +
+        '<button class="radar-decision-btn note" onclick="openDecisionFormFromRadar(\'' + esc(s.symbol) + '\')">Note</button>' +
+      '</div></div>' +
   '</div>';
 }
 // ── Asset-type quick filter ──
@@ -2670,30 +2697,56 @@ function openDecisionFormManual() {
     createdDate: manilaDateKey()
   });
 }
+function findRadarSignal(symbol) {
+  return (radarSignals || []).filter(function (x) { return x.symbol === symbol; })[0] || null;
+}
+function radarDecisionSnapshot(s) {
+  return {
+    date: radarAsOf || manilaDateKey(),
+    theme: s.theme || '',
+    status: s.status || '',
+    score: s.score == null ? null : s.score,
+    takerRank: Math.round(radarTakerRank(s) * 10) / 10,
+    regimeAtDecision: radarRegimeState ? radarRegimeState.txt : ''
+  };
+}
+function radarDecisionDraft(s, action) {
+  return {
+    id: 'dec-radar-' + (radarAsOf || manilaDateKey()) + '-' + s.symbol,
+    asset: s.symbol,
+    source: 'radar',
+    action: action || 'watched',
+    direction: 'none',
+    conviction: action === 'took' ? 4 : 3,
+    status: 'open',
+    reason: '',
+    invalidator: '',
+    createdDate: radarAsOf || manilaDateKey(),
+    linkedSignal: radarDecisionSnapshot(s)
+  };
+}
+async function quickLogDecisionFromRadar(symbol, action) {
+  var s = findRadarSignal(symbol);
+  if (!s) { showToast('Radar signal not found', 'warn'); return; }
+  if (!window.fbSaveDecision) { showToast('Decision journal is not ready', 'error'); return; }
+  try {
+    await window.fbSaveDecision(radarDecisionDraft(s, action));
+    var label = action === 'took' ? 'Took' : (action === 'skipped' ? 'Skipped' : 'Watched');
+    showToast(label + ' logged for ' + s.symbol, 'ok');
+  } catch (e) {
+    showToast('Decision save failed: ' + (e && e.message ? e.message : 'check rules'), 'error');
+  }
+}
 function openDecisionFormFromRadar(symbol) {
-  var s = (radarSignals || []).filter(function (x) { return x.symbol === symbol; })[0];
+  var s = findRadarSignal(symbol);
   if (!s) { showToast('Radar signal not found', 'warn'); return; }
   var btn = document.querySelector('.ntab[data-page="decisions"]');
   switchPage('decisions', btn);
-  openDecisionForm({
-    asset: s.symbol,
-    source: 'radar',
-    action: 'watched',
-    direction: 'none',
-    conviction: 3,
-    status: 'open',
-    reason: s.why || '',
-    invalidator: s.invalidation || '',
-    createdDate: manilaDateKey(),
-    linkedSignal: {
-      date: radarAsOf || manilaDateKey(),
-      theme: s.theme || '',
-      status: s.status || '',
-      score: s.score == null ? null : s.score,
-      takerRank: Math.round(radarTakerRank(s) * 10) / 10,
-      regimeAtDecision: radarRegimeState ? radarRegimeState.txt : ''
-    }
-  });
+  var draft = radarDecisionDraft(s, 'watched');
+  draft.reason = s.why || '';
+  draft.invalidator = s.invalidation || '';
+  draft.id = null;
+  openDecisionForm(draft);
 }
 function closeDecisionForm() {
   var form = document.getElementById('decision-form');
@@ -2857,6 +2910,39 @@ function decisionStatsHtml(stats) {
   if (signalRows) html += '<div class="journal-section">Radar status on taken calls</div><div class="jlist">' + signalRows + '</div>';
   return html;
 }
+function decisionPulseHtml(stats, todayCount, reviewCount) {
+  return '<div class="decision-pulse">' +
+    '<div class="decision-pulse-card"><div class="decision-pulse-value">' + todayCount + '</div><div class="decision-pulse-label">Today</div></div>' +
+    '<div class="decision-pulse-card"><div class="decision-pulse-value">' + reviewCount + '</div><div class="decision-pulse-label">Needs review</div></div>' +
+    '<div class="decision-pulse-card"><div class="decision-pulse-value">' + stats.taken + '/' + stats.skipped + '/' + stats.watched + '</div><div class="decision-pulse-label">Took / skip / watch</div></div>' +
+    '<div class="decision-pulse-card"><div class="decision-pulse-value">' + (stats.hitRate == null ? 'n/a' : stats.hitRate + '%') + '</div><div class="decision-pulse-label">Taken hit rate</div></div>' +
+  '</div>';
+}
+function decisionPatternDeckHtml(stats) {
+  var html = '<div class="decision-panel"><div class="decision-panel-title">Patterns <span>process read</span></div>' +
+    '<div class="decision-review-hint">This is the only thing the deck is trying to teach: where your decisions leak, and whether Radar-sourced calls behave differently from manual ones.</div>';
+  var mistakeRows = Object.keys(stats.mistakes).sort(function (a, b) {
+    return stats.mistakes[b] - stats.mistakes[a];
+  }).slice(0, 6);
+  if (mistakeRows.length) {
+    html += '<div class="decision-pattern-list">' + mistakeRows.map(function (mt) {
+      return '<div class="decision-pattern-row"><span>' + esc(DECISION_MISTAKE_LABELS[mt] || mt) + '</span><b>n=' + stats.mistakes[mt] + '</b></div>';
+    }).join('') + '</div>';
+  } else {
+    html += '<div class="decision-empty">No closed reviews yet. The deck wakes up once you close decisions.</div>';
+  }
+  var sourceRows = Object.keys(stats.bySource).sort().map(function (src) {
+    var s = stats.bySource[src];
+    return '<div class="decision-pattern-row"><span>' + esc(src) + ' source</span><b>' + s.taken + ' taken / hit ' + decisionRate(s.wins, s.losses) + '</b></div>';
+  }).join('');
+  if (sourceRows) html += '<div class="journal-section">Source read</div><div class="decision-pattern-list">' + sourceRows + '</div>';
+  var statusRows = Object.keys(stats.bySignalStatus).sort().map(function (st) {
+    var s = stats.bySignalStatus[st];
+    return '<div class="decision-pattern-row"><span>' + esc(st) + ' when taken</span><b>' + s.n + ' / hit ' + decisionRate(s.wins, s.losses) + '</b></div>';
+  }).join('');
+  if (statusRows) html += '<div class="journal-section">Radar status read</div><div class="decision-pattern-list">' + statusRows + '</div>';
+  return html + '</div>';
+}
 function decisionPill(txt, cls) {
   return '<span class="rel-badge ' + (cls || 'rel-none-b') + '">' + esc(txt) + '</span>';
 }
@@ -2896,6 +2982,12 @@ function renderDecisionGroup(title, rows) {
   if (!rows.length) return html + '<div class="decision-empty">No ' + esc(title.toLowerCase()) + ' entries.</div>';
   return html + rows.map(decisionRow).join('');
 }
+function renderDecisionPanel(title, rows, sub, extraClass) {
+  return '<div class="decision-panel ' + (extraClass || '') + '">' +
+    '<div class="decision-panel-title">' + esc(title) + '<span>' + esc(sub || '') + '</span></div>' +
+    (rows.length ? rows.map(decisionRow).join('') : '<div class="decision-empty">Nothing here yet.</div>') +
+  '</div>';
+}
 function renderDecisions() {
   ensureDecisionMistakeOptions();
   var out = document.getElementById('decisions-out');
@@ -2906,12 +2998,22 @@ function renderDecisions() {
   window.fbLoadDecisions().then(function (entries) {
     decisionEntries = entries || [];
     var stats = buildDecisionStats(decisionEntries);
-    if (sub) sub.textContent = stats.open + ' open / ' + stats.closed + ' closed / ' + stats.taken + ' taken';
-    var open = decisionEntries.filter(function (e) { return (e.status || 'open') !== 'closed'; });
+    var today = manilaDateKey();
+    var todaysCalls = decisionEntries.filter(function (e) { return (e.createdDate || '') === today; });
+    var needsReview = decisionEntries.filter(function (e) {
+      return (e.status || 'open') !== 'closed' && e.action === 'took' && (e.createdDate || '') !== today;
+    });
     var closed = decisionEntries.filter(function (e) { return (e.status || 'open') === 'closed'; });
-    out.innerHTML = decisionStatsHtml(stats) +
-      renderDecisionGroup('Open', open) +
-      renderDecisionGroup('Closed', closed);
+    if (sub) sub.textContent = todaysCalls.length + ' today / ' + needsReview.length + ' needs review / ' + stats.closed + ' closed';
+    out.innerHTML = decisionPulseHtml(stats, todaysCalls.length, needsReview.length) +
+      '<div class="decision-deck">' +
+        '<div>' +
+          renderDecisionPanel("Today's Calls", todaysCalls, 'captured from Radar or manual notes') +
+          renderDecisionPanel('Needs Review', needsReview, 'older taken calls still open', 'warn') +
+          renderDecisionPanel('Closed / Learned', closed.slice(0, 16), 'latest reviewed decisions', 'learned') +
+        '</div>' +
+        '<div>' + decisionPatternDeckHtml(stats) + '</div>' +
+      '</div>';
   });
 }
 
