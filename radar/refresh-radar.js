@@ -158,26 +158,31 @@ async function fetchCryptoBars(symbolToId) {
     var id = symbolToId[sym];
     var url = 'https://api.coingecko.com/api/v3/coins/' + id
       + '/market_chart?vs_currency=usd&days=365&interval=daily';
-    var res = await fetchRetry(url, { headers: { 'accept': 'application/json' } }, 'CoinGecko ' + sym);
-    if (!res.ok) {
-      var body = await res.text();
-      throw new Error('CoinGecko ' + sym + ' ' + res.status + ': ' + body.slice(0, 200));
+    try {
+      var res = await fetchRetry(url, { headers: { 'accept': 'application/json' } }, 'CoinGecko ' + sym);
+      if (!res.ok) {
+        var body = await res.text();
+        throw new Error('CoinGecko ' + sym + ' ' + res.status + ': ' + body.slice(0, 200));
+      }
+      var json = await res.json();
+      var prices = json.prices || [];
+      var vols = json.total_volumes || [];
+      var volByDay = {};
+      vols.forEach(function (v) { volByDay[isoDateOf(new Date(v[0]))] = v[1]; });
+      var bars = [];
+      var seen = {};
+      prices.forEach(function (p) {
+        var day = isoDateOf(new Date(p[0]));
+        if (seen[day]) return; // collapse to one bar per day
+        seen[day] = true;
+        var c = p[1];
+        bars.push({ date: day, open: c, high: c, low: c, close: c, volume: volByDay[day] || 0 });
+      });
+      out[sym] = bars;
+    } catch (e) {
+      out[sym] = [];
+      console.log('  ' + sym + ' crypto bars skipped: ' + (e.message || e));
     }
-    var json = await res.json();
-    var prices = json.prices || [];
-    var vols = json.total_volumes || [];
-    var volByDay = {};
-    vols.forEach(function (v) { volByDay[isoDateOf(new Date(v[0]))] = v[1]; });
-    var bars = [];
-    var seen = {};
-    prices.forEach(function (p) {
-      var day = isoDateOf(new Date(p[0]));
-      if (seen[day]) return; // collapse to one bar per day
-      seen[day] = true;
-      var c = p[1];
-      bars.push({ date: day, open: c, high: c, low: c, close: c, volume: volByDay[day] || 0 });
-    });
-    out[sym] = bars;
     // gentle pacing for the free tier
     if (i < syms.length - 1) await new Promise(function (r) { setTimeout(r, 1500); });
   }
