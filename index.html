@@ -1757,7 +1757,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <p>The Sports tab starts with World Cup data. It combines fixtures/results with a simple <b>0–100 team momentum score</b>. Higher means the team is currently showing stronger form, not that it is guaranteed to win.</p>
       <ul>
         <li><b>Rising Teams</b> — the strongest current movers by score. These are the first teams to scan if you want to know who is emerging.</li>
-        <li><b>Team Momentum</b> — the full ranked table. <span class="help-pill">Score</span> is the model score, <span class="help-pill">Form</span> is recent W/D/L, and <span class="help-pill">GD3</span> is goal-difference trend over recent matches.</li>
+        <li><b>Team Momentum</b> — top ranked teams plus any teams in upcoming fixtures. <span class="help-pill">Score</span> is the model score, <span class="help-pill">Form</span> is recent W/D/L, and <span class="help-pill">GD3</span> is goal-difference trend over recent matches.</li>
         <li><b>Next Fixtures projection</b> — a fixture-level lean based on both teams' momentum score, recent points, GD trend, goals for, goals against, and squad profile. <span class="help-pill">Watch only</span> is weak separation; <span class="help-pill">Moderate edge</span> / <span class="help-pill">Strong edge</span> are the only decisive projection buckets.</li>
         <li><b>Squad Profile</b> — roster age and position-balance from the World Cup teams feed. It helps stabilize early fixtures before form is rich, but it is not a player-rating, market-value, injury, or expected-XI model.</li>
         <li><b>Projection Alignment</b> — the feedback loop. It persists in the generated Sports document and replays completed matches point-in-time, using only matches before kickoff, then checks whether the projected lean matched the result. The headline uses <b>Decisive accuracy</b> for strong/moderate calls; weak <span class="help-pill">Watch only</span> calls are tracked separately so they do not dress up noise.</li>
@@ -3566,6 +3566,27 @@ function sportsMomentumCard(t) {
     '<div class="sports-momentum-note">' + esc(t.note || '') + '</div>' +
   '</div>';
 }
+function sportsMomentumRows(wc, baseLimit) {
+  var momentum = (wc && wc.momentum) || [];
+  var rows = momentum.slice(0, baseLimit || 10);
+  var seen = {};
+  var byTeam = {};
+  rows.forEach(function (r) {
+    if (r && r.team) seen[r.team] = true;
+  });
+  momentum.forEach(function (r) {
+    if (r && r.team) byTeam[r.team] = r;
+  });
+  ((wc && wc.upcoming) || []).forEach(function (m) {
+    [m.home, m.away].forEach(function (team) {
+      if (team && team !== 'TBD' && byTeam[team] && !seen[team]) {
+        rows.push(byTeam[team]);
+        seen[team] = true;
+      }
+    });
+  });
+  return rows;
+}
 function sportsTeamKey(s) {
   return String(s || '').toLowerCase()
     .replace(/&/g, 'and')
@@ -3843,7 +3864,7 @@ function sportsWorldCupHtml(d, miro) {
     (wc.watchlist && wc.watchlist.length ? '<div class="sports-list">' + wc.watchlist.map(sportsMatchCard).join('') + '</div>' : '<div class="sports-empty">Set SPORTS_FOLLOW_TEAMS in sports/.env to pin teams here.</div>') +
     '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Team Momentum</div>' +
-    sportsTable(momentum.slice(0, 10), 'Momentum unavailable until completed matches are loaded.', [
+    sportsTable(sportsMomentumRows(wc, 10), 'Momentum unavailable until completed matches are loaded.', [
       { h:'Team', v:function (r) { return r.team || ''; } },
       { h:'Tag', v:function (r) { return r.label || ''; } },
       { h:'Score', num:true, v:function (r) { return r.score == null ? '-' : r.score; } },
