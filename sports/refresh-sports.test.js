@@ -1,15 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   normNbaGame,
   normNbaStandings,
   buildNbaMomentum,
+  addNbaRestSignals,
+  normNbaInjuries,
+  normNbaPlayerWatch,
   nbaSeasonYear,
   parsePvlSchedule,
   parsePvlRecaps,
   parsePvlStandings,
+  parsePvlLeaders,
+  scheduleReadiness,
   buildPvlMomentum
 } from './refresh-sports.js';
+
+var fixtureDir = join(dirname(fileURLToPath(import.meta.url)), 'test-fixtures');
+function fixture(name) { return readFileSync(join(fixtureDir, name), 'utf8'); }
 
 function event(id, date, state, home, away, homeScore, awayScore) {
   return {
@@ -75,12 +86,39 @@ test('uses ESPN ending-year season labels', function () {
   assert.equal(nbaSeasonYear(new Date('2026-10-01T00:00:00Z')), 2027);
 });
 
+test('adds NBA rest and back-to-back signals from the schedule', function () {
+  var games = [
+    normNbaGame(event('1', '2026-01-01T01:00:00Z', 'post', 'Knicks', 'Celtics', '110', '100')),
+    normNbaGame(event('2', '2026-01-02T01:00:00Z', 'pre', 'Knicks', 'Warriors', '0', '0')),
+    normNbaGame(event('3', '2026-01-04T01:00:00Z', 'pre', 'Knicks', 'Spurs', '0', '0'))
+  ];
+  var enriched = addNbaRestSignals(games);
+  assert.equal(enriched[1].rest.home.days, 0);
+  assert.equal(enriched[1].rest.home.backToBack, true);
+  assert.equal(enriched[2].rest.home.days, 1);
+  assert.equal(enriched[2].rest.home.backToBack, false);
+});
+
+test('normalizes ESPN NBA availability and recent game leaders', function () {
+  var injuries = normNbaInjuries({ injuries: [{
+    displayName: 'New York Knicks',
+    injuries: [{ status: 'Day-To-Day', date: '2026-07-18T00:00:00Z', shortComment: 'Ankle soreness.', athlete: { displayName: 'Test Player' } }]
+  }] });
+  assert.equal(injuries[0].team, 'New York Knicks');
+  assert.equal(injuries[0].status, 'Day-To-Day');
+
+  var game = event('4', '2026-06-14T00:30:00Z', 'post', 'San Antonio Spurs', 'New York Knicks', '90', '94');
+  game.competitions[0].competitors[0].leaders = [{
+    name: 'rating', displayName: 'Rating',
+    leaders: [{ displayValue: '19 PTS, 14 REB, 5 BLK', athlete: { displayName: 'Victor Wembanyama' } }]
+  }];
+  var watch = normNbaPlayerWatch([game]);
+  assert.equal(watch[0].player, 'Victor Wembanyama');
+  assert.equal(watch[0].line, '19 PTS, 14 REB, 5 BLK');
+});
+
 test('parses official PVL schedule cards with shared date and venue headings', function () {
-  var html = '<div class="row schedule-grid">' +
-    '<div class="col-12">Sat Jul 25 | Vigan City, Ilocos Sur</div>' +
-    '<div class="col-md-6"><div class="match-card"><div class="match-card-teams"><h3>NXL</h3><h3>CAP</h3></div><div class="match-card-time">04:00 PM</div><div class="match-card-time">Match-Up</div></div></div>' +
-    '<div class="col-md-6"><div class="match-card"><div class="match-card-teams"><h3>HSH</h3><h3>CMF</h3></div><div class="match-card-time">06:30 PM</div><div class="match-card-time">Match-Up</div></div></div>' +
-    '</div>';
+  var html = fixture('pvl-schedule.html');
   var games = parsePvlSchedule(html, new Date('2026-07-18T00:00:00Z'));
   assert.equal(games.length, 2);
   assert.equal(games[0].home, 'Nxled Chameleons');
@@ -91,8 +129,8 @@ test('parses official PVL schedule cards with shared date and venue headings', f
 });
 
 test('parses PVL recaps and standings into momentum-ready rows', function () {
-  var recap = '<div class="match-card"><div class="match-card-teams"><h3>ZUS</h3><div class="match-card-score">3</div><div class="match-card-score">1</div><h3>AKA</h3></div><div class="match-card-date">Wed Jul 08</div><div class="match-card-date">Match-Up</div><div class="match-card-time">04:00 PM</div></div>';
-  var standingsHtml = '<table><tr><th>Rank</th><th>Team</th></tr><tr><th>1</th><td>ZUS COFFEE THUNDERBELLES</td><td>2</td><td>0</td><td>6</td><td>2</td><td>6</td><td>1</td><td>6.000</td><td>176</td><td>136</td><td>1.294</td></tr><tr><th>2</th><td>AKARI CHARGERS</td><td>0</td><td>1</td><td>0</td><td>1</td><td>1</td><td>3</td><td>0.333</td><td>79</td><td>101</td><td>0.782</td></tr></table>';
+  var recap = fixture('pvl-recap-standings.html');
+  var standingsHtml = recap;
   var games = parsePvlRecaps(recap, new Date('2026-07-18T00:00:00Z'));
   var standings = parsePvlStandings(standingsHtml);
   var momentum = buildPvlMomentum(games, standings);
@@ -102,4 +140,29 @@ test('parses PVL recaps and standings into momentum-ready rows', function () {
   assert.equal(standings[0].points, 6);
   assert.equal(momentum[0].team, 'ZUS Coffee Thunderbelles');
   assert.equal(momentum[0].recentForm, 'W');
+});
+
+test('parses official PVL leader tables with conference metadata', function () {
+  var parsed = parsePvlLeaders(fixture('pvl-leaders.html'), 'scorers');
+  assert.equal(parsed.conference, '2026 All Filipino Conference');
+  assert.equal(parsed.label, 'Scorer');
+  assert.equal(parsed.leaders[0].name, 'BELEN, MHICAELA');
+  assert.equal(parsed.leaders[0].valueLabel, 'Total');
+  assert.equal(parsed.leaders[0].value, '49');
+});
+
+test('scheduler readiness requires successful refreshes on three distinct PHT days', function () {
+  var history = [
+    { completedAt:'2026-07-18T00:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } },
+    { completedAt:'2026-07-18T05:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } },
+    { completedAt:'2026-07-19T00:00:00Z', modules:{ pvl:{ refreshStatus:'fallback' } } },
+    { completedAt:'2026-07-20T00:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } }
+  ];
+  var blocked = scheduleReadiness(history, 'pvl', 3);
+  assert.equal(blocked.ready, false);
+  assert.equal(blocked.successfulDays.length, 2);
+  var ready = scheduleReadiness(history.concat([
+    { completedAt:'2026-07-21T00:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } }
+  ]), 'pvl', 3);
+  assert.equal(ready.ready, true);
 });

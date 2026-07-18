@@ -21,3 +21,5 @@ sports/node_modules/
 sports/serviceAccountKey.json
 sports/.env
 sports/refresh.log
+sports/refresh-*.log
+sports/run-history.json

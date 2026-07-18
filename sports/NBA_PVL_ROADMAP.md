@@ -6,11 +6,15 @@ Created: 2026-07-18
 
 - NBA MVP: implemented on 2026-07-18 using ESPN's public basketball feed.
 - NBA output: rolling games, recent results, conference standings, last-five momentum, and configurable watchlist.
+- NBA enrichment: rest/back-to-back flags, recent game leaders, and ESPN availability entries.
 - NBA resilience: the refresh retains the last good NBA snapshot when the provider fails.
 - NBA refresh: remains manual during the offseason; no Windows schedule has been restored.
 - PVL MVP: implemented on 2026-07-18 using official pvl.ph schedule, homepage recap, and standings pages.
 - PVL output: upcoming matches with venues, current recaps, standings, set-based momentum, and configurable watchlist.
+- PVL enrichment: official scorer, spiker, blocker, server, digger, setter, and receiver leader tables with conference labels.
 - PVL resilience: the refresh retains the last good PVL snapshot when the official page structure or network fails.
+- Shared freshness: each module publishes last-success, attempted-refresh, stale threshold, and fallback status fields; both UIs render a visible health banner.
+- Operations: module-specific logs and run history are implemented. The guarded scheduler installer requires three successful PHT days before registration.
 
 ## Decision
 
@@ -67,11 +71,16 @@ The first NBA version should include:
 
 ### Later NBA Enhancements
 
-Add only after the basic feed is stable:
+Implemented after the basic feed stabilized:
 
-- Player watchlist for stars and rookies.
+- Recent player/game-leader watch.
 - Injuries and availability.
-- Lineup/rest alerts.
+- Rest and back-to-back alerts.
+
+Still optional later:
+
+- Configurable star and rookie watchlists.
+- Confirmed lineup alerts when a reliable source is available.
 - NBA Cup group tracking.
 - Playoff bracket mode.
 - Market Lens only if there is a clean, legal, and useful market source.
@@ -123,7 +132,7 @@ The first PVL version should include:
 
 ### Later PVL Enhancements
 
-- Player leaderboards: scorer, spiker, blocker, server, digger, setter, receiver.
+- Player leaderboards: scorer, spiker, blocker, server, digger, setter, receiver. Implemented.
 - Conference stage tracking.
 - Finals/playoff bracket when available.
 - Team detail pages/cards.
@@ -228,7 +237,9 @@ node refresh-sports.js --module pvl
 
 ### Phase 2: Scheduled Refresh
 
-Re-add a scheduler only after at least 3 successful manual refreshes.
+The guarded installer is implemented in `install-sports-schedule.ps1`. It refuses
+to register a task until `run-history.json` contains successful refreshes on at
+least three distinct PHT days for that module.
 
 Suggested cadence:
 
@@ -240,7 +251,7 @@ Do not restore the old every-30-minutes FIFA cadence. It is too noisy for these 
 
 ## Implementation Steps
 
-### Step 1: Split the Sports Data Builder
+### Step 1: Split the Sports Data Builder - Complete
 
 Refactor `sports/refresh-sports.js` into module builders:
 
@@ -257,7 +268,7 @@ node refresh-sports.js --module pvl
 node refresh-sports.js --module all
 ```
 
-### Step 2: NBA MVP
+### Step 2: NBA MVP - Complete
 
 Build NBA feed and renderer first:
 
@@ -268,7 +279,7 @@ Build NBA feed and renderer first:
 - basic team momentum
 - Firestore write to `briefings-bob/sports-nba-<date>` and pointer `sports-nba-latest`
 
-### Step 3: PVL MVP
+### Step 3: PVL MVP - Complete
 
 Build PVL scraper/feed:
 
@@ -278,7 +289,7 @@ Build PVL scraper/feed:
 - basic team pulse
 - Firestore write to `briefings-bob/sports-pvl-<date>` and pointer `sports-pvl-latest`
 
-### Step 4: UI Migration
+### Step 4: UI Migration - Complete
 
 Update `index.html` Sports tab:
 
@@ -289,7 +300,7 @@ Update `index.html` Sports tab:
 
 Update `sports.html` public page only after the main app is stable.
 
-### Step 5: Validation
+### Step 5: Validation - In Progress
 
 Before enabling schedule:
 
@@ -299,7 +310,7 @@ Before enabling schedule:
 - Verify Firestore latest pointers update correctly.
 - Confirm stale-data banners work.
 
-### Step 6: Scheduler Reintroduction
+### Step 6: Scheduler Reintroduction - Guarded Installer Complete
 
 Only after stable manual runs:
 
@@ -318,12 +329,7 @@ Only after stable manual runs:
 
 ## Recommended Next Action
 
-Build NBA MVP first, but keep the PH Local/PVL schema in mind so the renderer is reusable.
-
-Concrete next task:
-
-1. Add module flags to `sports/refresh-sports.js`.
-2. Stub `nba` and `pvl` module outputs.
-3. Render module tabs in the Sports tab.
-4. Fill NBA data first.
-5. Fill PVL once the shared renderer is stable.
+Complete the three-distinct-day reliability trial for PVL, then install its
+guarded schedule. Keep NBA weekly/manual during the offseason. The next product
+work after operations stabilize is PVL stage/bracket support and configurable NBA
+star/rookie watchlists.

@@ -12,10 +12,12 @@ Private daily intelligence briefing desk for Bob.
   Brier-score journal. The honest version of "MiroFish" — research framing, never
   a bet or execution. Docs: [`miro/README.md`](miro/README.md).
 - **⚽ Sports** — a provider-backed sports briefing tab. NBA is the default lane,
-  with rolling results, conference standings, a last-five momentum model, and a
-  configurable team watchlist from ESPN's public basketball feed. PH Local/PVL
-  adds official fixtures, recaps, standings, and set-based momentum from pvl.ph,
-  while FIFA World Cup remains available as an archive. The local
+  with rolling results, conference standings, a last-five momentum model, rest/
+  back-to-back flags, recent game leaders, availability, and a configurable team
+  watchlist from ESPN's public basketball feed. PH Local/PVL adds official
+  fixtures, recaps, standings, set-based momentum, and player leaderboards from
+  pvl.ph, while FIFA World Cup remains available as an archive. Each module shows
+  explicit current, stale, failed, or fallback freshness status. The local
   runner writes `briefings-bob/sports-*` docs and a `sports-public.json` mirror.
 
 - **💰 LLM usage & cost** (Help tab) — every OpenAI call across the app (briefing,
@@ -42,16 +44,28 @@ set PVL_FOLLOW_TEAMS=Creamline,Choco Mucho,PLDT,ZUS Coffee
 npm run dry-run:nba
 npm run dry-run:pvl
 npm run refresh
+npm run refresh:nba
+npm run refresh:pvl
 ```
 
 Use `npm run dry-run:nba` to inspect NBA only, or `npm run dry-run` to inspect the
 combined document without writing `briefings-bob/sports-<date>` and
 `briefings-bob/sports-latest`.
 
-**Auto-refresh:** paused after the FIFA lane. The previous Windows Task Scheduler
-job `BobDailyBriefing-SportsRefresh` has been removed; run the script manually
-when a new sports module is active. The app reads the latest Firestore doc when
-the Sports tab opens.
+**Auto-refresh:** the old FIFA task remains removed. Manual production refreshes
+write local validation history to ignored `sports/run-history.json`; failed or
+fallback runs do not count. After three successful PHT days for a module, install
+its guarded Windows task:
+
+```powershell
+.\install-sports-schedule.ps1 -Module pvl
+.\install-sports-schedule.ps1 -Module nba
+```
+
+PVL installs at 08:00 and 21:30 PHT. NBA installs weekly on Sunday at 09:00 PHT
+during the offseason. Each module writes a separate ignored log such as
+`sports/refresh-pvl.log`. A module-specific refresh preserves the other module in
+the shared Firestore/public document.
 
 ## OpenAI generation
 

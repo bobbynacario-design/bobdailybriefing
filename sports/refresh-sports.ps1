@@ -1,7 +1,13 @@
+param(
+  [ValidateSet('all', 'nba', 'pvl')]
+  [string]$Module = 'all',
+  [switch]$NoPublish
+)
+
 $ErrorActionPreference = 'Stop'
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$log = Join-Path $here 'refresh.log'
+$log = Join-Path $here ("refresh-{0}.log" -f $Module)
 
 Set-Location $here
 
@@ -12,7 +18,7 @@ $node = (Get-Command node.exe -ErrorAction Stop).Source
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $node
-$psi.Arguments = 'refresh-sports.js'
+$psi.Arguments = 'refresh-sports.js --module ' + $Module
 $psi.WorkingDirectory = $here
 $psi.UseShellExecute = $false
 $psi.RedirectStandardOutput = $true
@@ -29,7 +35,7 @@ if ($stderr) { $stderr | Out-File -FilePath $log -Encoding utf8 -Append }
 # Publish the public mirror (sports-public.json) to GitHub Pages so the
 # no-sign-in shared page (sports.html) stays current. Best-effort: the Firestore
 # write already succeeded, so a git failure here never breaks the refresh.
-if ($proc.ExitCode -eq 0) {
+if ($proc.ExitCode -eq 0 -and -not $NoPublish) {
   try {
     $repo = Split-Path -Parent $here
     Push-Location $repo

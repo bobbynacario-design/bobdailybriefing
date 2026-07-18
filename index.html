@@ -828,6 +828,11 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-audit-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
 .sports-audit-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.4}
 .sports-empty{font-size:12px;line-height:1.7;color:var(--txt3);font-style:italic}
+.sports-health{font-family:var(--mono);font-size:11px;line-height:1.6;border:1px solid var(--rim2);border-left:3px solid var(--green);background:rgba(45,212,160,.08);padding:.7rem .85rem;margin-bottom:1rem}
+.sports-health.warn{border-left-color:#F0A832;background:rgba(240,168,50,.1);color:var(--txt)}
+.sports-health.error{border-left-color:var(--red);background:var(--red-dim);color:var(--txt)}
+.sports-rest{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.35rem;display:flex;justify-content:space-between;gap:.75rem}
+.sports-rest b{color:#F0A832;font-weight:600}
 .sports-ko-tracker{margin-bottom:1rem}
 .sports-ko-count{font-family:var(--mono);font-size:11px;color:var(--txt3);letter-spacing:.04em;margin-bottom:.6rem}
 .sports-ko-count b{font-family:var(--serif);font-size:22px;color:var(--gold);margin-right:.4rem;letter-spacing:0}
@@ -1767,25 +1772,16 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     </div>
 
     <div class="help-card">
-      <div class="help-h">⚽ Sports — who is rising, and what does the market think?</div>
-      <p>The Sports tab starts with World Cup data. It combines fixtures/results with a simple <b>0–100 team momentum score</b>. Higher means the team is currently showing stronger form, not that it is guaranteed to win.</p>
+      <div class="help-h">⚽ Sports — NBA momentum and PH local volleyball</div>
+      <p>The Sports tab defaults to <b>NBA</b>, with <b>PH Local / PVL</b> beside it and FIFA retained as an archive. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
       <ul>
-        <li><b>Rising Teams</b> — the strongest current movers by score. These are the first teams to scan if you want to know who is emerging.</li>
-        <li><b>Team Momentum</b> — top ranked teams plus any teams in upcoming fixtures. <span class="help-pill">Score</span> is the model score, <span class="help-pill">Form</span> is recent W/D/L, and <span class="help-pill">GD3</span> is goal-difference trend over recent matches.</li>
-        <li><b>Next Fixtures projection</b> — a fixture-level lean based on both teams' momentum score, recent points, GD trend, goals for, goals against, and squad profile. <span class="help-pill">Watch only</span> is weak separation; <span class="help-pill">Moderate edge</span> / <span class="help-pill">Strong edge</span> are the only decisive projection buckets.</li>
-        <li><b>Squad Profile</b> — roster age and position-balance from the World Cup teams feed. It helps stabilize early fixtures before form is rich, but it is not a player-rating, market-value, injury, or expected-XI model.</li>
-        <li><b>Projection Alignment</b> — the feedback loop. It persists in the generated Sports document and replays completed matches point-in-time, using only matches before kickoff, then checks whether the projected lean matched the result. The headline uses <b>Decisive accuracy</b> for strong/moderate calls; weak <span class="help-pill">Watch only</span> calls are tracked separately so they do not dress up noise.</li>
-        <li><b>GF / GA chips</b> — goals for and goals against per match. Rising with strong GF and low GA is better than rising only because of one messy result.</li>
-        <li><b>Tags</b> — <span class="help-pill" style="color:var(--green)">RISING</span> means form and goal trend are improving; <span class="help-pill" style="color:#F0A832">WATCH</span> means promising but not fully confirmed; <span class="help-pill" style="color:var(--red)">FADING</span> means recent results or goal trend are weakening.</li>
+        <li><b>Freshness banner</b> — says DATA CURRENT, STALE DATA, FALLBACK SNAPSHOT, or REFRESH FAILED and shows the last successful provider update.</li>
+        <li><b>NBA</b> — schedule/results, conference standings, last-five form and margin, rest/back-to-back flags, recent game leaders, and ESPN availability entries.</li>
+        <li><b>PVL</b> — official fixtures, venues, recaps, standings, recent set differential, and leaders for scoring, spiking, blocking, serving, digging, setting, and receiving.</li>
+        <li><b>Team Momentum</b> — <span class="help-pill">Score</span> combines recent wins, form margin or set differential, and current standings. <span class="help-pill" style="color:var(--green)">RISING</span> is strongest, <span class="help-pill" style="color:#F0A832">WATCH</span> needs confirmation, and <span class="help-pill" style="color:var(--red)">FADING</span> is weakening.</li>
+        <li><b>Watchlist</b> — configurable NBA and PVL teams with their current record and recent form.</li>
       </ul>
-      <p><b>World Cup Market Lens</b> finds where the Sports momentum signal disagrees with the Markets tab's World Cup outright prices. Both sides are re-based over the <i>same</i> set of teams (those with an outright market loaded), so the comparison is like-for-like — not a win probability:</p>
-      <ul>
-        <li><b>Momentum %</b> — the team's share of momentum within that matched set.</li>
-        <li><b>Market %</b> — the team's share of market-implied probability within the same set. (Raw outright prices are on the Markets tab.)</li>
-        <li><b>Gap</b> — momentum % minus market %. Positive = momentum ranks the team ahead of where the market prices it; negative = the market ranks it ahead of current form.</li>
-        <li><b>Read</b> — <span class="help-pill">FORM AHEAD</span>, <span class="help-pill">MARKET AHEAD</span>, or <span class="help-pill">IN LINE</span>. A watchlist divergence to dig into, not an instruction to bet.</li>
-      </ul>
-      <p class="help-key">Best use: compare <b>RISING</b> teams with <b>FORM AHEAD</b> market reads, then check the fixtures and path. If a team is RISING but the market is already far ahead, the story may be real but already priced in.</p>
+      <p class="help-key">Best use: start with the freshness banner, scan RISING and WATCH teams, then check the actual fixtures, rest, availability, and recent results. Momentum is context, not a prediction or betting recommendation.</p>
     </div>
 
     <div class="help-card help-takeaway">
@@ -1794,7 +1790,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Radar</b> = today's framing: what's strong, why, and where it breaks. Use the status + stop + catalyst.</li>
         <li><b>Journal</b> = the reality check: look at <b>excess</b>, not raw. It currently says "we've mostly been long the AI trade" — so weight the radar accordingly.</li>
         <li><b>Markets</b> = is a betting market mispriced? Compare <b>mkt %</b> to our <b>panel %</b>; treat a <span class="help-pill" style="color:var(--green)">RESEARCH FLAG</span> as watch-only, and even then check the journal's <b>skill</b>. Mostly "no edge" is the honest, expected answer.</li>
-        <li><b>Sports</b> = who is moving up or down. Use Momentum for form, and Market Lens for whether the market already agrees.</li>
+        <li><b>Sports</b> = who is moving up or down in NBA and PVL. Check freshness first, then use Momentum alongside fixtures, rest, availability, and official results.</li>
       </ul>
     </div>
 
@@ -3475,6 +3471,34 @@ function sportsDate(v) {
     hour: '2-digit', minute: '2-digit', hour12: false
   }) + ' PHT';
 }
+function sportsFreshnessHtml(mod) {
+  mod = mod || {};
+  var last = mod.lastSuccessfulAt || mod.generatedAt || '';
+  var attempted = mod.refreshAttemptedAt || mod.generatedAt || '';
+  var lastMs = new Date(last).getTime();
+  var ageHours = isNaN(lastMs) ? null : Math.max(0, (Date.now() - lastMs) / 3600000);
+  var threshold = Number(mod.staleAfterHours || 48);
+  var fallback = mod.fallback || mod.refreshStatus === 'fallback';
+  var failed = mod.refreshStatus === 'error';
+  var stale = ageHours != null && ageHours > threshold;
+  var cls = failed ? ' error' : ((fallback || stale) ? ' warn' : '');
+  var status = failed ? 'REFRESH FAILED' : (fallback ? 'FALLBACK SNAPSHOT' : (stale ? 'STALE DATA' : 'DATA CURRENT'));
+  var detail = last ? 'Last successful refresh ' + sportsDate(last) + '.' : 'No successful refresh has been recorded.';
+  if (fallback && attempted) detail += ' Latest attempt ' + sportsDate(attempted) + ' failed; retained data is shown.';
+  if (stale) detail += ' Expected freshness window: ' + threshold + ' hours.';
+  return '<div class="sports-health' + cls + '"><b>' + esc(status) + '</b> / ' + esc(detail) + '</div>';
+}
+function sportsRestHtml(m) {
+  var rest = m && m.rest;
+  if (!rest) return '';
+  function label(side, team) {
+    var row = rest[side] || {};
+    if (row.days == null) return '';
+    return '<span>' + esc(team || '') + ': ' + (row.backToBack ? '<b>B2B</b>' : esc(row.days + 'd rest')) + '</span>';
+  }
+  var home = label('home', m.home), away = label('away', m.away);
+  return home || away ? '<div class="sports-rest">' + home + away + '</div>' : '';
+}
 function sportsScore(m) {
   // Only show a scoreline for a match that has actually been played. A not-yet
   // -played match can still carry a 0-0 placeholder from the feed — render "vs".
@@ -3539,6 +3563,7 @@ function sportsMatchCard(m) {
       '<div class="sports-team away">' + esc(m.away || 'TBD') + '</div>' +
     '</div>' +
     (m.venue ? '<div class="sports-note">' + esc(m.venue) + '</div>' : '') +
+    sportsRestHtml(m) +
     sportsProjectionHtml(m) +
   '</div>';
 }
@@ -3949,8 +3974,9 @@ function sportsGenericModuleHtml(mod, key) {
     sportsKpi('Module', title, mod.provider || 'manual refresh') +
     sportsKpi('Phase', mod.phase || 'setup', mod.asOf ? 'as of ' + mod.asOf : 'ready for feed wiring') +
     sportsKpi('Upcoming', String(upcoming.length || 0), next ? (next.home ? ((next.home || 'TBD') + ' vs ' + (next.away || 'TBD')) : (next.label || next.date || 'next milestone')) : 'No fixtures loaded') +
-    sportsKpi('Recent', String(recent.length || 0), mod.generatedAt ? 'refreshed ' + sportsDate(mod.generatedAt) : 'No results loaded') +
+    sportsKpi('Recent', String(recent.length || 0), (mod.lastSuccessfulAt || mod.generatedAt) ? 'refreshed ' + sportsDate(mod.lastSuccessfulAt || mod.generatedAt) : 'No results loaded') +
   '</div>';
+  html += sportsFreshnessHtml(mod);
   if (mod.providerNote) html += '<div class="pse-caveat">' + esc(mod.providerNote) + '</div>';
   if (mod.setupNote) html += '<div class="sports-empty" style="margin-bottom:1rem">' + esc(mod.setupNote) + '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Key Dates</div>' +
@@ -3988,6 +4014,38 @@ function sportsGenericModuleHtml(mod, key) {
       { h:'L', num:true, v:function (r) { return r.losses == null ? (r.l == null ? '-' : r.l) : r.losses; } },
       { h:'Pct/Pts', num:true, v:function (r) { return r.pct == null ? (r.points == null ? '-' : r.points) : r.pct; } }
     ]) + '</div>';
+  if (key === 'nba') {
+    html += '<div class="sports-panel"><div class="sports-panel-title">Player Watch</div>' +
+      sportsTable((mod.playerWatch || []).slice(0, 12), 'Recent ESPN game leaders are unavailable.', [
+        { h:'Player', v:function (r) { return r.player || ''; } },
+        { h:'Team', v:function (r) { return r.team || ''; } },
+        { h:'Line', v:function (r) { return r.line || r.category || '-'; } },
+        { h:'Date', v:function (r) { return r.date ? sportsDate(r.date) : '-'; } }
+      ]) + '</div>';
+    html += '<div class="sports-panel"><div class="sports-panel-title">Availability</div>' +
+      sportsTable((mod.injuries || []).slice(0, 15), mod.availabilityStatus === 'unavailable' ? 'ESPN availability feed is temporarily unavailable.' : 'No current availability entries.', [
+        { h:'Team', v:function (r) { return r.team || ''; } },
+        { h:'Player', v:function (r) { return r.player || ''; } },
+        { h:'Status', v:function (r) { return r.status || '-'; } },
+        { h:'Update', v:function (r) { return r.note || '-'; } }
+      ]) + '</div>';
+  }
+  if (key === 'pvl') {
+    var leaderData = mod.playerLeaders || {};
+    var leaderRows = [];
+    (leaderData.categories || []).forEach(function (category) {
+      (category.leaders || []).slice(0, 3).forEach(function (leader) {
+        leaderRows.push({ category:category.label, player:leader.name, value:leader.value, metric:leader.valueLabel });
+      });
+    });
+    html += '<div class="sports-panel"><div class="sports-panel-title">Player Leaders</div>' +
+      (leaderData.conference ? '<div class="sports-empty" style="margin-bottom:.55rem">' + esc(leaderData.conference) + '</div>' : '') +
+      sportsTable(leaderRows, 'Official PVL player leader tables are currently unavailable.', [
+        { h:'Category', v:function (r) { return r.category || ''; } },
+        { h:'Player', v:function (r) { return r.player || ''; } },
+        { h:'Metric', v:function (r) { return (r.metric || 'Value') + ': ' + (r.value || '-'); } }
+      ]) + '</div>';
+  }
   html += '</div></div>';
   return html;
 }

@@ -282,6 +282,86 @@ function buildNbaMomentum(matches, standings) {
   });
 }
 
+function nbaRestDays(previousDate, gameDate) {
+  if (!previousDate || !gameDate) return null;
+  var gapHours = (new Date(gameDate).getTime() - new Date(previousDate).getTime()) / 3600000;
+  if (!isFinite(gapHours) || gapHours <= 0) return null;
+  return Math.max(0, Math.round(gapHours / 24) - 1);
+}
+
+function addNbaRestSignals(matches) {
+  var ordered = (matches || []).slice().sort(function (a, b) {
+    return String(a.utcDate).localeCompare(String(b.utcDate));
+  });
+  var previousByTeam = {};
+  return ordered.map(function (match) {
+    var copy = Object.assign({}, match);
+    copy.rest = {};
+    [['home', match.home], ['away', match.away]].forEach(function (pair) {
+      var side = pair[0];
+      var team = pair[1];
+      var previous = previousByTeam[team] || null;
+      var days = nbaRestDays(previous && previous.utcDate, match.utcDate);
+      copy.rest[side] = {
+        days: days,
+        backToBack: days === 0,
+        previousGame: previous ? previous.utcDate : ''
+      };
+      previousByTeam[team] = match;
+    });
+    return copy;
+  });
+}
+
+function normNbaInjuries(json) {
+  var out = [];
+  ((json && json.injuries) || []).forEach(function (teamRow) {
+    var team = teamRow.displayName || teamRow.name || '';
+    (teamRow.injuries || []).forEach(function (row) {
+      var athlete = row.athlete || {};
+      out.push({
+        team: team,
+        player: athlete.displayName || athlete.fullName || '',
+        status: row.status || 'Unknown',
+        date: row.date || '',
+        note: cleanPvlText(row.shortComment || row.longComment || '').slice(0, 240)
+      });
+    });
+  });
+  return out.filter(function (row) { return row.team && row.player; }).sort(function (a, b) {
+    return String(b.date).localeCompare(String(a.date));
+  });
+}
+
+function normNbaPlayerWatch(events) {
+  var seen = {};
+  var out = [];
+  (events || []).slice().sort(function (a, b) {
+    return String(b.date || '').localeCompare(String(a.date || ''));
+  }).forEach(function (event) {
+    if (nbaStatus(event) !== 'FINISHED') return;
+    var comp = ((event && event.competitions) || [])[0] || {};
+    (comp.competitors || []).forEach(function (competitor) {
+      var leaders = competitor.leaders || [];
+      var category = leaders.find(function (row) { return row.name === 'rating'; }) ||
+        leaders.find(function (row) { return row.name === 'points'; });
+      var leader = category && (category.leaders || [])[0];
+      var athlete = leader && leader.athlete || {};
+      var player = athlete.displayName || athlete.fullName || '';
+      if (!player || seen[player]) return;
+      seen[player] = true;
+      out.push({
+        player: player,
+        team: nbaTeamName(competitor),
+        line: leader.displayValue || (leader.value == null ? '' : String(leader.value)),
+        category: category.displayName || category.name || 'Game leader',
+        date: event.date || comp.date || ''
+      });
+    });
+  });
+  return out.slice(0, 12);
+}
+
 var PVL_TEAM_NAMES = {
   AKA: 'Akari Chargers',
   CAP: 'Capital1 Solar Spikers',
@@ -296,6 +376,7 @@ var PVL_TEAM_NAMES = {
   PGA: 'Petro Gazz Angels',
   ZUS: 'ZUS Coffee Thunderbelles'
 };
+var PVL_LEADER_CATEGORIES = ['scorers', 'spikers', 'blockers', 'servers', 'diggers', 'setters', 'receivers'];
 
 function cleanPvlText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -438,6 +519,38 @@ function parsePvlStandings(html) {
     });
   });
   return out.sort(function (a, b) { return (a.position || 99) - (b.position || 99); });
+}
+
+function parsePvlLeaders(html, category) {
+  var $ = cheerio.load(html || '');
+  var table = $('#record-table').first();
+  var selected = $('select option[selected]').first();
+  var conference = cleanPvlText(selected.text());
+  var headers = table.find('thead th').map(function () { return cleanPvlText($(this).text()); }).get();
+  var rows = [];
+  table.find('tbody tr').each(function () {
+    var row = $(this);
+    var rank = num(cleanPvlText(row.find('th').first().text()));
+    var cells = row.find('td').map(function () { return cleanPvlText($(this).text()); }).get();
+    if (!rank || cells.length < 2 || !cells[0]) return;
+    var metrics = {};
+    cells.slice(1).forEach(function (value, idx) {
+      metrics[headers[idx + 2] || ('Metric ' + (idx + 1))] = value;
+    });
+    rows.push({
+      rank: rank,
+      name: cells[0],
+      value: cells[cells.length - 1],
+      valueLabel: headers[headers.length - 1] || 'Value',
+      metrics: metrics
+    });
+  });
+  return {
+    key: category || '',
+    label: (category || 'leaders').replace(/s$/, '').replace(/^./, function (c) { return c.toUpperCase(); }),
+    conference: conference,
+    leaders: rows.slice(0, 10)
+  };
 }
 
 function buildPvlMomentum(matches, standings) {
@@ -1189,6 +1302,7 @@ function activeSportsList() {
 }
 
 function emptyModule(kind, title, phase, provider, note) {
+  var attemptedAt = new Date().toISOString();
   return {
     enabled: true,
     kind: kind,
@@ -1201,7 +1315,13 @@ function emptyModule(kind, title, phase, provider, note) {
     standings: [],
     momentum: [],
     watchlist: [],
-    keyDates: []
+    keyDates: [],
+    generatedAt: attemptedAt,
+    refreshAttemptedAt: attemptedAt,
+    lastSuccessfulAt: '',
+    refreshStatus: 'error',
+    fallback: false,
+    staleAfterHours: kind === 'pvl' ? 36 : 168
   };
 }
 
@@ -1249,7 +1369,11 @@ async function fetchNbaModule() {
   var seasonYear = nbaSeasonYear(now);
   var payloads = await Promise.all([
     espnNba('/site/v2/sports/basketball/nba/scoreboard?dates=' + start + '-' + end + '&limit=1000'),
-    espnNba('/v2/sports/basketball/nba/standings?season=' + seasonYear)
+    espnNba('/v2/sports/basketball/nba/standings?season=' + seasonYear),
+    espnNba('/site/v2/sports/basketball/nba/injuries').catch(function (e) {
+      console.warn('NBA injuries unavailable:', e.message || e);
+      return null;
+    })
   ]);
   var events = (payloads[0] && payloads[0].events) || [];
   var standings = normNbaStandings(payloads[1]);
@@ -1257,11 +1381,12 @@ async function fetchNbaModule() {
     standings = normNbaStandings(await espnNba('/v2/sports/basketball/nba/standings?season=' + (seasonYear - 1)));
     seasonYear--;
   }
-  var matches = events.map(normNbaGame).filter(function (m) { return m.id && m.utcDate; });
-  matches.sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); });
+  var matches = addNbaRestSignals(events.map(normNbaGame).filter(function (m) { return m.id && m.utcDate; }));
   var upcoming = matches.filter(function (m) { return m.status !== 'FINISHED'; }).slice(0, 20);
   var recent = matches.filter(function (m) { return m.status === 'FINISHED'; }).slice(-20).reverse();
   var momentum = buildNbaMomentum(matches, standings);
+  var injuries = normNbaInjuries(payloads[2]).slice(0, 60);
+  var playerWatch = normNbaPlayerWatch(events);
   var keyDates = [];
   if (upcoming[0]) {
     keyDates.push({
@@ -1284,21 +1409,30 @@ async function fetchNbaModule() {
       note: 'No future NBA fixture is published in the current provider window yet.'
     });
   }
+  var generatedAt = new Date().toISOString();
   return {
     enabled: true,
     kind: 'nba',
     title: 'NBA Momentum Radar',
     phase: nbaModulePhase(now, upcoming),
     provider: 'ESPN basketball feed',
-    providerNote: 'NBA schedule, results and standings are refreshed from ESPN\'s public basketball feed. Momentum uses each team\'s latest five completed games in the rolling window.',
+    providerNote: 'NBA schedule, results, standings, game leaders and availability are refreshed from ESPN\'s public basketball feed. Momentum uses each team\'s latest five completed games in the rolling window.',
     season: String(seasonYear - 1) + '-' + String(seasonYear).slice(-2),
     asOf: phtDateKey(),
-    generatedAt: new Date().toISOString(),
+    generatedAt: generatedAt,
+    refreshAttemptedAt: generatedAt,
+    lastSuccessfulAt: generatedAt,
+    refreshStatus: 'ok',
+    fallback: false,
+    staleAfterHours: upcoming.length ? 36 : 168,
     matches: matches,
     upcoming: upcoming,
     recent: recent,
     standings: standings,
     momentum: momentum,
+    injuries: injuries,
+    availabilityStatus: payloads[2] ? 'ok' : 'unavailable',
+    playerWatch: playerWatch,
     watchlist: nbaWatchlist(standings, momentum),
     keyDates: keyDates
   };
@@ -1333,11 +1467,17 @@ function pvlWatchlist(standings, momentum) {
 
 async function fetchPvlModule() {
   var now = new Date();
-  var pages = await Promise.all([
-    pvlFetch('/schedule'),
-    pvlFetch('/'),
-    pvlFetch('/standings')
+  var fetched = await Promise.all([
+    Promise.all([
+      pvlFetch('/schedule'),
+      pvlFetch('/'),
+      pvlFetch('/standings')
+    ]),
+    Promise.allSettled(PVL_LEADER_CATEGORIES.map(function (category) {
+      return pvlFetch('/leaders/' + category);
+    }))
   ]);
+  var pages = fetched[0];
   var upcoming = parsePvlSchedule(pages[0], now).filter(function (m) {
     return new Date(m.utcDate).getTime() >= now.getTime() - 21600000;
   }).slice(0, 20);
@@ -1350,6 +1490,17 @@ async function fetchPvlModule() {
   if (!upcoming.length && !recent.length) throw new Error('PVL schedule and recap pages returned no matches.');
   if (!standings.length) throw new Error('PVL standings page returned no table rows.');
   var momentum = buildPvlMomentum(recent, standings);
+  var leaderCategories = fetched[1].map(function (result, idx) {
+    if (result.status !== 'fulfilled') {
+      console.warn('PVL ' + PVL_LEADER_CATEGORIES[idx] + ' leaders unavailable:', result.reason && (result.reason.message || result.reason));
+      return null;
+    }
+    return parsePvlLeaders(result.value, PVL_LEADER_CATEGORIES[idx]);
+  }).filter(function (category) { return category && category.leaders.length; });
+  var playerLeaders = {
+    conference: leaderCategories[0] ? leaderCategories[0].conference : '',
+    categories: leaderCategories
+  };
   var keyDates = [];
   if (upcoming[0]) {
     keyDates.push({
@@ -1365,20 +1516,27 @@ async function fetchPvlModule() {
       note: recent[0].home + ' ' + recent[0].score.home + ', ' + recent[0].away + ' ' + recent[0].score.away
     });
   }
+  var generatedAt = new Date().toISOString();
   return {
     enabled: true,
     kind: 'pvl',
     title: 'PH Local Pulse: PVL',
-    phase: upcoming[0] && upcoming[0].stage ? upcoming[0].stage : 'active',
+    phase: upcoming.length ? 'active schedule' : 'between fixtures',
     provider: 'official pvl.ph pages',
-    providerNote: 'PVL fixtures, recaps and standings are refreshed from the official pvl.ph pages. Momentum blends recent match wins, set differential and the active standings table.',
+    providerNote: 'PVL fixtures, recaps, standings and player leaders are refreshed from official pvl.ph pages. Momentum blends recent match wins, set differential and the active standings table.',
     asOf: phtDateKey(),
-    generatedAt: new Date().toISOString(),
+    generatedAt: generatedAt,
+    refreshAttemptedAt: generatedAt,
+    lastSuccessfulAt: generatedAt,
+    refreshStatus: 'ok',
+    fallback: false,
+    staleAfterHours: 36,
     matches: recent.slice().reverse().concat(upcoming),
     upcoming: upcoming,
     recent: recent,
     standings: standings,
     momentum: momentum,
+    playerLeaders: playerLeaders,
     watchlist: pvlWatchlist(standings, momentum),
     keyDates: keyDates
   };
@@ -1418,6 +1576,60 @@ function initAdmin() {
 async function writeDoc(db, dateKey, doc) {
   await db.collection(COLL).doc('sports-' + dateKey).set(doc);
   await db.collection(COLL).doc('sports-latest').set({ value: dateKey });
+}
+
+function scheduleReadiness(history, moduleName, minimumDistinctDays) {
+  minimumDistinctDays = minimumDistinctDays || 3;
+  var days = {};
+  (history || []).forEach(function (run) {
+    var status = run && run.modules && run.modules[moduleName];
+    if (!status || status.refreshStatus !== 'ok' || !run.completedAt) return;
+    var day = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date(run.completedAt));
+    days[day] = true;
+  });
+  var successfulDays = Object.keys(days).sort();
+  return {
+    ready: successfulDays.length >= minimumDistinctDays,
+    successfulDays: successfulDays,
+    requiredDays: minimumDistinctDays,
+    remainingDays: Math.max(0, minimumDistinctDays - successfulDays.length)
+  };
+}
+
+function recordRunHistory(doc) {
+  var historyPath = join(__dirname, 'run-history.json');
+  var history = [];
+  try {
+    if (existsSync(historyPath)) history = JSON.parse(readFileSync(historyPath, 'utf8'));
+    if (!Array.isArray(history)) history = [];
+  } catch (e) {
+    console.warn('run history read failed; starting a new local history:', e.message || e);
+    history = [];
+  }
+  var modules = {};
+  Object.keys((doc && doc.modules) || {}).forEach(function (key) {
+    var mod = doc.modules[key] || {};
+    var requested = wantsModule(key);
+    modules[key] = {
+      refreshStatus: requested ? (mod.refreshStatus || 'unknown') : 'not-requested',
+      lastSuccessfulAt: mod.lastSuccessfulAt || mod.generatedAt || '',
+      matches: (mod.matches || []).length,
+      standings: (mod.standings || []).length
+    };
+  });
+  history.push({
+    completedAt: new Date().toISOString(),
+    requestedModules: SELECTED_MODULES.slice(),
+    modules: modules
+  });
+  writeFileSync(historyPath, JSON.stringify(history.slice(-90), null, 2));
+  Object.keys(modules).forEach(function (key) {
+    var readiness = scheduleReadiness(history, key, 3);
+    console.log('Schedule gate ' + key + ': ' + readiness.successfulDays.length + '/3 successful PHT days' +
+      (readiness.ready ? ' (ready).' : ' (' + readiness.remainingDays + ' remaining).'));
+  });
 }
 
 async function loadPublicMiroSports(db) {
@@ -1484,6 +1696,16 @@ async function main() {
     sports: activeSportsList(),
     modules: buildForwardModules('')
   };
+  // Module-specific refreshes share one Firestore/public document. Preserve the
+  // other forward lane so a scheduled PVL run cannot erase NBA (and vice versa).
+  ['nba', 'pvl'].forEach(function (key) {
+    if (!wantsModule(key) && prevDocData && prevDocData.modules && prevDocData.modules[key]) {
+      doc.modules[key] = prevDocData.modules[key];
+    }
+  });
+  if (!wantsModule('worldcup') && prevDocData && prevDocData.worldCup) {
+    doc.worldCup = prevDocData.worldCup;
+  }
   if (wantsModule('nba')) {
     try {
       doc.modules.nba = await fetchNbaModule();
@@ -1494,6 +1716,11 @@ async function main() {
       var priorNba = prevDocData && prevDocData.modules && prevDocData.modules.nba;
       if (priorNba && ((priorNba.matches || []).length || (priorNba.standings || []).length)) {
         doc.modules.nba = priorNba;
+        doc.modules.nba.lastSuccessfulAt = priorNba.lastSuccessfulAt || priorNba.generatedAt || '';
+        doc.modules.nba.refreshAttemptedAt = new Date().toISOString();
+        doc.modules.nba.refreshStatus = 'fallback';
+        doc.modules.nba.fallback = true;
+        doc.modules.nba.staleAfterHours = priorNba.staleAfterHours || 168;
         doc.modules.nba.providerNote = 'Showing the last good NBA snapshot because the current refresh failed: ' + (e.message || e);
         console.warn('NBA: retained the last good module snapshot.');
       } else {
@@ -1513,6 +1740,11 @@ async function main() {
       var priorPvl = prevDocData && prevDocData.modules && prevDocData.modules.pvl;
       if (priorPvl && ((priorPvl.matches || []).length || (priorPvl.standings || []).length)) {
         doc.modules.pvl = priorPvl;
+        doc.modules.pvl.lastSuccessfulAt = priorPvl.lastSuccessfulAt || priorPvl.generatedAt || '';
+        doc.modules.pvl.refreshAttemptedAt = new Date().toISOString();
+        doc.modules.pvl.refreshStatus = 'fallback';
+        doc.modules.pvl.fallback = true;
+        doc.modules.pvl.staleAfterHours = priorPvl.staleAfterHours || 36;
         doc.modules.pvl.providerNote = 'Showing the last good PVL snapshot because the current refresh failed: ' + (e.message || e);
         console.warn('PVL: retained the last good module snapshot.');
       } else {
@@ -1587,6 +1819,7 @@ async function main() {
       console.log('Wrote ' + pubPath + ' (public mirror).');
     } catch (e) { console.warn('public mirror write failed:', e.message || e); }
   }
+  try { recordRunHistory(doc); } catch (e) { console.warn('run history write failed:', e.message || e); }
 }
 
 // Run only when executed directly (node refresh-sports.js), not when imported by
@@ -1608,9 +1841,14 @@ export {
   normNbaGame,
   normNbaStandings,
   buildNbaMomentum,
+  addNbaRestSignals,
+  normNbaInjuries,
+  normNbaPlayerWatch,
   nbaSeasonYear,
   parsePvlSchedule,
   parsePvlRecaps,
   parsePvlStandings,
+  parsePvlLeaders,
+  scheduleReadiness,
   buildPvlMomentum
 };
