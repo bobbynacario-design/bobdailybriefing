@@ -833,6 +833,16 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-health.error{border-left-color:var(--red);background:var(--red-dim);color:var(--txt)}
 .sports-rest{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.35rem;display:flex;justify-content:space-between;gap:.75rem}
 .sports-rest b{color:#F0A832;font-weight:600}
+.sports-series{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.7rem}
+.sports-series-round{border-left:2px solid var(--gold);padding-left:.65rem;min-width:0}
+.sports-series-round h4{font-family:var(--mono);font-size:10px;text-transform:uppercase;color:var(--gold);margin:0 0 .5rem}
+.sports-series-row{border-top:1px solid var(--rim2);padding:.5rem 0;font-size:12px;line-height:1.5}
+.sports-series-teams{display:flex;justify-content:space-between;gap:.6rem;font-weight:600}.sports-series-teams span{min-width:0}
+.sports-series-summary{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:.2rem}
+.sports-team-select{width:100%;max-width:360px;background:var(--bg2);color:var(--txt);border:1px solid var(--rim2);padding:.6rem .7rem;font:12px var(--mono);margin-bottom:.8rem}
+.sports-team-profile{border-top:1px solid var(--rim2);padding-top:.8rem}.sports-team-profile h3{font-family:var(--serif);font-size:20px;margin:0 0 .65rem}
+.sports-team-facts{display:flex;flex-wrap:wrap;gap:.45rem 1.25rem;font-family:var(--mono);font-size:10px;color:var(--txt3);margin-bottom:.75rem}.sports-team-facts b{color:var(--txt);font-size:12px}
+.sports-team-line{font-size:12px;line-height:1.6;color:var(--txt2);padding:.35rem 0;border-top:1px solid var(--rim)}
 .sports-ko-tracker{margin-bottom:1rem}
 .sports-ko-count{font-family:var(--mono);font-size:11px;color:var(--txt3);letter-spacing:.04em;margin-bottom:.6rem}
 .sports-ko-count b{font-family:var(--serif);font-size:22px;color:var(--gold);margin-right:.4rem;letter-spacing:0}
@@ -1778,6 +1788,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Freshness banner</b> — says DATA CURRENT, STALE DATA, FALLBACK SNAPSHOT, or REFRESH FAILED and shows the last successful provider update.</li>
         <li><b>NBA</b> — schedule/results, conference standings, last-five form and margin, rest/back-to-back flags, recent game leaders, and ESPN availability entries.</li>
         <li><b>PVL</b> — official fixtures, venues, recaps, standings, recent set differential, and leaders for scoring, spiking, blocking, serving, digging, setting, and receiving.</li>
+        <li><b>Competition Bracket</b> — uses provider-published NBA round/series data and activates for PVL when official match stages become quarterfinals, semifinals, or finals.</li>
+        <li><b>Team Detail</b> — select a team to see record, momentum, average margin or set differential, next/latest match, and current availability count.</li>
         <li><b>Team Momentum</b> — <span class="help-pill">Score</span> combines recent wins, form margin or set differential, and current standings. <span class="help-pill" style="color:var(--green)">RISING</span> is strongest, <span class="help-pill" style="color:#F0A832">WATCH</span> needs confirmation, and <span class="help-pill" style="color:var(--red)">FADING</span> is weakening.</li>
         <li><b>Watchlist</b> — configurable NBA and PVL teams with their current record and recent form.</li>
       </ul>
@@ -3499,6 +3511,48 @@ function sportsRestHtml(m) {
   var home = label('home', m.home), away = label('away', m.away);
   return home || away ? '<div class="sports-rest">' + home + away + '</div>' : '';
 }
+function sportsBracketHtml(mod, key) {
+  var bracket = mod && mod.bracket || {};
+  var rounds = bracket.rounds || [];
+  if (!rounds.length) {
+    return '<div class="sports-empty">No ' + esc(key === 'pvl' ? 'PVL elimination bracket' : 'active NBA playoff bracket') + ' is published in the current provider window.</div>';
+  }
+  return '<div class="sports-series">' + rounds.map(function (round) {
+    return '<div class="sports-series-round"><h4>' + esc(round.label || round.key || 'Round') + '</h4>' +
+      (round.series || []).map(function (series) {
+        var homeScore = series.homeWins == null ? '-' : series.homeWins;
+        var awayScore = series.awayWins == null ? '-' : series.awayWins;
+        return '<div class="sports-series-row"><div class="sports-series-teams"><span>' + esc(series.home || 'TBD') + ' ' + esc(homeScore) + '</span><span>' + esc(awayScore) + ' ' + esc(series.away || 'TBD') + '</span></div>' +
+          '<div class="sports-series-summary">' + esc(series.summary || (series.completed ? 'Complete' : 'Scheduled')) + '</div></div>';
+      }).join('') + '</div>';
+  }).join('') + '</div>';
+}
+function sportsSelectTeamProfile(select) {
+  var root = select && select.closest('.sports-team-browser');
+  if (!root) return;
+  Array.prototype.forEach.call(root.querySelectorAll('[data-team-profile]'), function (profile) {
+    profile.style.display = profile.getAttribute('data-team-profile') === select.value ? 'block' : 'none';
+  });
+}
+function sportsProfileMatchLine(label, match) {
+  if (!match) return '<div class="sports-team-line"><b>' + esc(label) + ':</b> None in current window</div>';
+  return '<div class="sports-team-line"><b>' + esc(label) + ':</b> ' + esc((match.home || 'TBD') + ' ' + sportsScore(match) + ' ' + (match.away || 'TBD')) + ' / ' + esc(sportsDate(match.utcDate)) + '</div>';
+}
+function sportsTeamProfilesHtml(mod, key) {
+  var profiles = mod && mod.teamProfiles || [];
+  if (!profiles.length) return '<div class="sports-empty">Team profiles are unavailable from the current provider snapshot.</div>';
+  var options = profiles.map(function (profile, idx) { return '<option value="' + idx + '">' + esc(profile.team || 'Team') + '</option>'; }).join('');
+  var panes = profiles.map(function (profile, idx) {
+    var record = profile.wins + '-' + profile.losses + (profile.points == null ? '' : ' / ' + profile.points + ' pts');
+    var margin = profile.margin == null ? '-' : ((profile.margin > 0 ? '+' : '') + profile.margin);
+    var availability = (profile.availability || []).map(function (row) { return (row.player || '') + ' (' + (row.status || 'Unknown') + ')'; }).join(', ');
+    return '<div class="sports-team-profile" data-team-profile="' + idx + '" style="display:' + (idx ? 'none' : 'block') + '"><h3>' + esc(profile.team || '') + '</h3>' +
+      '<div class="sports-team-facts"><span>RECORD<br><b>' + esc(record) + '</b></span><span>MOMENTUM<br><b>' + esc((profile.momentumLabel || '-') + ' ' + (profile.momentumScore == null ? '-' : profile.momentumScore)) + '</b></span><span>' + esc(key === 'pvl' ? 'SET +/-' : 'AVG MARGIN') + '<br><b>' + esc(margin) + '</b></span><span>AVAILABILITY<br><b>' + esc(String(profile.availabilityCount || 0)) + '</b></span></div>' +
+      sportsProfileMatchLine('Next', profile.next) + sportsProfileMatchLine('Latest', profile.latest) +
+      (availability ? '<div class="sports-team-line"><b>Availability:</b> ' + esc(availability) + '</div>' : '') + '</div>';
+  }).join('');
+  return '<div class="sports-team-browser"><select class="sports-team-select" onchange="sportsSelectTeamProfile(this)" aria-label="Select team">' + options + '</select>' + panes + '</div>';
+}
 function sportsScore(m) {
   // Only show a scoreline for a match that has actually been played. A not-yet
   // -played match can still carry a 0-0 placeholder from the feed — render "vs".
@@ -3979,6 +4033,8 @@ function sportsGenericModuleHtml(mod, key) {
   html += sportsFreshnessHtml(mod);
   if (mod.providerNote) html += '<div class="pse-caveat">' + esc(mod.providerNote) + '</div>';
   if (mod.setupNote) html += '<div class="sports-empty" style="margin-bottom:1rem">' + esc(mod.setupNote) + '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Competition Bracket</div>' + sportsBracketHtml(mod, key) + '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Team Detail</div>' + sportsTeamProfilesHtml(mod, key) + '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Key Dates</div>' +
     sportsTable(keyDates, 'No key dates loaded yet.', [
       { h:'Date', v:function (r) { return r.date || '-'; } },

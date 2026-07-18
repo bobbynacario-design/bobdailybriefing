@@ -10,11 +10,15 @@ import {
   addNbaRestSignals,
   normNbaInjuries,
   normNbaPlayerWatch,
+  nbaPlayoffRound,
+  buildNbaBracket,
   nbaSeasonYear,
   parsePvlSchedule,
   parsePvlRecaps,
   parsePvlStandings,
   parsePvlLeaders,
+  buildPvlBracket,
+  buildTeamProfiles,
   scheduleReadiness,
   buildPvlMomentum
 } from './refresh-sports.js';
@@ -31,8 +35,8 @@ function event(id, date, state, home, away, homeScore, awayScore) {
     competitions: [{
       venue: { fullName: 'Test Arena' },
       competitors: [
-        { homeAway: 'home', score: homeScore, team: { displayName: home } },
-        { homeAway: 'away', score: awayScore, team: { displayName: away } }
+        { id: 'home-' + id, homeAway: 'home', score: homeScore, team: { id: 'home-' + id, displayName: home } },
+        { id: 'away-' + id, homeAway: 'away', score: awayScore, team: { id: 'away-' + id, displayName: away } }
       ]
     }]
   };
@@ -117,6 +121,23 @@ test('normalizes ESPN NBA availability and recent game leaders', function () {
   assert.equal(watch[0].line, '19 PTS, 14 REB, 5 BLK');
 });
 
+test('normalizes ESPN playoff rounds and builds current series bracket rows', function () {
+  assert.equal(nbaPlayoffRound('West Semifinals - Game 4').key, 'west-semifinals');
+  var playoff = event('5', '2026-05-15T00:00:00Z', 'post', 'New York Knicks', 'Boston Celtics', '112', '105');
+  playoff.season.slug = 'post-season';
+  playoff.competitions[0].notes = [{ headline:'East Finals - Game 6' }];
+  playoff.competitions[0].series = {
+    summary:'NY wins series 4-2', completed:true,
+    competitors:[{ id:'home-5', wins:4 }, { id:'away-5', wins:2 }]
+  };
+  var match = normNbaGame(playoff);
+  var bracket = buildNbaBracket([match]);
+  assert.equal(match.round, 'east-finals');
+  assert.equal(match.series.homeWins, 4);
+  assert.equal(bracket.rounds[0].series[0].summary, 'NY wins series 4-2');
+  assert.equal(bracket.rounds[0].series[0].completed, true);
+});
+
 test('parses official PVL schedule cards with shared date and venue headings', function () {
   var html = fixture('pvl-schedule.html');
   var games = parsePvlSchedule(html, new Date('2026-07-18T00:00:00Z'));
@@ -149,6 +170,23 @@ test('parses official PVL leader tables with conference metadata', function () {
   assert.equal(parsed.leaders[0].name, 'BELEN, MHICAELA');
   assert.equal(parsed.leaders[0].valueLabel, 'Total');
   assert.equal(parsed.leaders[0].value, '49');
+});
+
+test('builds PVL postseason rounds and team detail profiles only from official match fields', function () {
+  var matches = [{
+    id:'pvl-final', utcDate:'2026-08-30T10:00:00Z', status:'SCHEDULED', stage:'Semifinals',
+    home:'Creamline Cool Smashers', away:'ZUS Coffee Thunderbelles', score:{home:null,away:null}
+  }];
+  var bracket = buildPvlBracket(matches);
+  assert.equal(bracket.active, true);
+  assert.equal(bracket.rounds[0].label, 'Semifinals');
+  var profiles = buildTeamProfiles('pvl', [
+    { team:'Creamline Cool Smashers', position:1, wins:3, losses:0, points:9, setRatio:4 }
+  ], [
+    { team:'Creamline Cool Smashers', score:88, label:'RISING', recentForm:'WWW', averageSetDiff:2 }
+  ], matches, []);
+  assert.equal(profiles[0].momentumScore, 88);
+  assert.equal(profiles[0].next.away, 'ZUS Coffee Thunderbelles');
 });
 
 test('scheduler readiness requires successful refreshes on three distinct PHT days', function () {

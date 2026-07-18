@@ -40,6 +40,7 @@ npm install
 set FOOTBALL_DATA_TOKEN=your_token_here
 set SPORTS_FOLLOW_TEAMS=Australia,England
 set NBA_FOLLOW_TEAMS=Lakers,Warriors,Knicks,Spurs,Mavericks
+set NBA_FOLLOW_PLAYERS=Jalen Brunson,Victor Wembanyama,Stephen Curry
 set PVL_FOLLOW_TEAMS=Creamline,Choco Mucho,PLDT,ZUS Coffee
 npm run dry-run:nba
 npm run dry-run:pvl

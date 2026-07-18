@@ -7,11 +7,14 @@ Created: 2026-07-18
 - NBA MVP: implemented on 2026-07-18 using ESPN's public basketball feed.
 - NBA output: rolling games, recent results, conference standings, last-five momentum, and configurable watchlist.
 - NBA enrichment: rest/back-to-back flags, recent game leaders, and ESPN availability entries.
+- NBA postseason: ESPN round labels and series scores drive an event-based bracket; configurable player pins are supported through `NBA_FOLLOW_PLAYERS`.
 - NBA resilience: the refresh retains the last good NBA snapshot when the provider fails.
 - NBA refresh: remains manual during the offseason; no Windows schedule has been restored.
 - PVL MVP: implemented on 2026-07-18 using official pvl.ph schedule, homepage recap, and standings pages.
 - PVL output: upcoming matches with venues, current recaps, standings, set-based momentum, and configurable watchlist.
 - PVL enrichment: official scorer, spiker, blocker, server, digger, setter, and receiver leader tables with conference labels.
+- Shared team detail: each NBA/PVL team profile combines record, momentum, next/latest match, margin, and availability where supplied.
+- PVL postseason: quarterfinal, semifinal, third-place, and final stage labels automatically activate the shared bracket renderer.
 - PVL resilience: the refresh retains the last good PVL snapshot when the official page structure or network fails.
 - Shared freshness: each module publishes last-success, attempted-refresh, stale threshold, and fallback status fields; both UIs render a visible health banner.
 - Operations: module-specific logs and run history are implemented. The guarded scheduler installer requires three successful PHT days before registration.
@@ -82,7 +85,7 @@ Still optional later:
 - Configurable star and rookie watchlists.
 - Confirmed lineup alerts when a reliable source is available.
 - NBA Cup group tracking.
-- Playoff bracket mode.
+- Richer bracket seeding only if ESPN exposes a stable seed contract.
 - Market Lens only if there is a clean, legal, and useful market source.
 
 ### NBA Data Options
@@ -134,8 +137,8 @@ The first PVL version should include:
 
 - Player leaderboards: scorer, spiker, blocker, server, digger, setter, receiver. Implemented.
 - Conference stage tracking.
-- Finals/playoff bracket when available.
-- Team detail pages/cards.
+- Finals/playoff bracket when available. Renderer implemented; activates from official stage labels.
+- Team detail pages/cards. Implemented.
 
 ### PBA Position
 

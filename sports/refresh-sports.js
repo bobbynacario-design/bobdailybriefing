@@ -57,6 +57,10 @@ var NBA_FOLLOW_TEAMS = (process.env.NBA_FOLLOW_TEAMS || 'Lakers,Warriors,Knicks,
   .split(',')
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
+var NBA_FOLLOW_PLAYERS = (process.env.NBA_FOLLOW_PLAYERS || '')
+  .split(',')
+  .map(function (s) { return s.trim(); })
+  .filter(Boolean);
 var PVL_FOLLOW_TEAMS = (process.env.PVL_FOLLOW_TEAMS || 'Creamline,Choco Mucho,PLDT,ZUS Coffee')
   .split(',')
   .map(function (s) { return s.trim(); })
@@ -175,6 +179,16 @@ function nbaTeamName(competitor) {
   return team.displayName || [team.location, team.name].filter(Boolean).join(' ') || team.shortDisplayName || 'TBD';
 }
 
+function nbaPlayoffRound(headline) {
+  var label = String(headline || '').replace(/\s*-\s*Game\s+\d+.*$/i, '').trim();
+  var conference = /^East\b/i.test(label) ? 'East' : (/^West\b/i.test(label) ? 'West' : 'League');
+  if (/1st Round/i.test(label)) return { key: conference.toLowerCase() + '-first', label: label, conference: conference, order: conference === 'East' ? 10 : 11 };
+  if (/Semifinals/i.test(label)) return { key: conference.toLowerCase() + '-semifinals', label: label, conference: conference, order: conference === 'East' ? 20 : 21 };
+  if (/\bFinals\b/i.test(label) && conference !== 'League') return { key: conference.toLowerCase() + '-finals', label: label, conference: conference, order: conference === 'East' ? 30 : 31 };
+  if (/NBA Finals/i.test(label)) return { key: 'nba-finals', label: 'NBA Finals', conference: 'League', order: 40 };
+  return null;
+}
+
 function normNbaGame(event) {
   var comp = ((event && event.competitions) || [])[0] || {};
   var home = nbaCompetitor(comp, 'home');
@@ -182,6 +196,17 @@ function normNbaGame(event) {
   var status = nbaStatus(event);
   var hasScore = status === 'FINISHED' || status === 'LIVE';
   var season = (event && event.season) || {};
+  var notes = Array.isArray(comp.notes) ? comp.notes : (comp.notes ? [comp.notes] : []);
+  var headline = ((notes[0] || {}).headline) || '';
+  var round = nbaPlayoffRound(headline);
+  var series = comp.series || null;
+  var seriesCompetitors = series && series.competitors || [];
+  var homeTeamId = String(((home || {}).team || {}).id || home.id || '');
+  var awayTeamId = String(((away || {}).team || {}).id || away.id || '');
+  function seriesWins(teamId) {
+    var row = seriesCompetitors.find(function (item) { return String(item.id || '') === teamId; });
+    return row && row.wins != null ? Number(row.wins) : null;
+  }
   return {
     id: String((event && event.id) || comp.id || ''),
     utcDate: (event && event.date) || comp.date || '',
@@ -194,7 +219,17 @@ function normNbaGame(event) {
     score: {
       home: hasScore ? num(home.score) : null,
       away: hasScore ? num(away.score) : null
-    }
+    },
+    round: round ? round.key : '',
+    roundLabel: round ? round.label : '',
+    roundOrder: round ? round.order : null,
+    conference: round ? round.conference : '',
+    series: series ? {
+      summary: series.summary || '',
+      completed: Boolean(series.completed),
+      homeWins: seriesWins(homeTeamId),
+      awayWins: seriesWins(awayTeamId)
+    } : null
   };
 }
 
@@ -333,7 +368,9 @@ function normNbaInjuries(json) {
   });
 }
 
-function normNbaPlayerWatch(events) {
+function normNbaPlayerWatch(events, followedPlayers) {
+  followedPlayers = followedPlayers || [];
+  var followedKeys = followedPlayers.map(teamKey);
   var seen = {};
   var out = [];
   (events || []).slice().sort(function (a, b) {
@@ -355,11 +392,58 @@ function normNbaPlayerWatch(events) {
         team: nbaTeamName(competitor),
         line: leader.displayValue || (leader.value == null ? '' : String(leader.value)),
         category: category.displayName || category.name || 'Game leader',
-        date: event.date || comp.date || ''
+        date: event.date || comp.date || '',
+        pinned: followedKeys.indexOf(teamKey(player)) >= 0
       });
     });
   });
-  return out.slice(0, 12);
+  followedPlayers.forEach(function (player) {
+    if (seen[player] || out.some(function (row) { return teamKey(row.player) === teamKey(player); })) return;
+    out.push({
+      player: player,
+      team: '',
+      line: 'No recent game-leader line in the current window.',
+      category: 'Pinned player',
+      date: '',
+      pinned: true
+    });
+  });
+  return out.sort(function (a, b) {
+    return Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || String(b.date).localeCompare(String(a.date));
+  }).slice(0, 16);
+}
+
+function buildNbaBracket(matches) {
+  var bySeries = {};
+  (matches || []).filter(function (match) { return match.round; }).forEach(function (match) {
+    var teams = [match.home, match.away].sort();
+    var key = match.round + '|' + teams.join('|');
+    if (!bySeries[key] || String(match.utcDate) > String(bySeries[key].utcDate)) bySeries[key] = match;
+  });
+  var byRound = {};
+  Object.keys(bySeries).forEach(function (key) {
+    var match = bySeries[key];
+    if (!byRound[match.round]) {
+      byRound[match.round] = {
+        key: match.round,
+        label: match.roundLabel || match.round,
+        conference: match.conference || '',
+        order: match.roundOrder == null ? 99 : match.roundOrder,
+        series: []
+      };
+    }
+    byRound[match.round].series.push({
+      home: match.home,
+      away: match.away,
+      homeWins: match.series && match.series.homeWins,
+      awayWins: match.series && match.series.awayWins,
+      summary: match.series && match.series.summary || '',
+      completed: Boolean(match.series && match.series.completed),
+      lastGame: match.utcDate
+    });
+  });
+  var rounds = Object.keys(byRound).map(function (key) { return byRound[key]; }).sort(function (a, b) { return a.order - b.order; });
+  return { active: rounds.length > 0, rounds: rounds };
 }
 
 var PVL_TEAM_NAMES = {
@@ -597,6 +681,84 @@ function buildPvlMomentum(matches, standings) {
         : 'No completed match is present in the current recap window; score is table-based.'
     };
   }).sort(function (a, b) { return b.score - a.score || b.averageSetDiff - a.averageSetDiff; });
+}
+
+function pvlPostseasonRound(stage) {
+  var value = cleanPvlText(stage);
+  if (/quarter/i.test(value)) return { key: 'quarterfinals', label: 'Quarterfinals', order: 10 };
+  if (/semi/i.test(value)) return { key: 'semifinals', label: 'Semifinals', order: 20 };
+  if (/third|bronze/i.test(value)) return { key: 'third-place', label: 'Third Place', order: 30 };
+  if (/final|championship/i.test(value)) return { key: 'finals', label: 'Finals', order: 40 };
+  return null;
+}
+
+function buildPvlBracket(matches) {
+  var rounds = {};
+  (matches || []).forEach(function (match) {
+    var round = pvlPostseasonRound(match.stage);
+    if (!round) return;
+    if (!rounds[round.key]) rounds[round.key] = { key:round.key, label:round.label, order:round.order, series:[] };
+    rounds[round.key].series.push({
+      home: match.home,
+      away: match.away,
+      homeWins: match.score && match.score.home,
+      awayWins: match.score && match.score.away,
+      summary: match.status === 'FINISHED' && match.score ? match.score.home + '-' + match.score.away : sportsDateLabel(match.utcDate),
+      completed: match.status === 'FINISHED',
+      lastGame: match.utcDate
+    });
+  });
+  var out = Object.keys(rounds).map(function (key) { return rounds[key]; }).sort(function (a, b) { return a.order - b.order; });
+  return { active: out.length > 0, rounds: out };
+}
+
+function sportsDateLabel(value) {
+  if (!value) return 'Scheduled';
+  return new Intl.DateTimeFormat('en-PH', {
+    timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  }).format(new Date(value)) + ' PHT';
+}
+
+function buildTeamProfiles(kind, standings, momentum, matches, injuries) {
+  var standingByTeam = {};
+  var momentumByTeam = {};
+  (standings || []).forEach(function (row) { standingByTeam[row.team] = row; });
+  (momentum || []).forEach(function (row) { momentumByTeam[row.team] = row; });
+  var teams = Object.keys(standingByTeam);
+  Object.keys(momentumByTeam).forEach(function (team) { if (teams.indexOf(team) < 0) teams.push(team); });
+  return teams.map(function (team) {
+    var teamMatches = (matches || []).filter(function (match) { return match.home === team || match.away === team; });
+    var next = teamMatches.filter(function (match) { return match.status !== 'FINISHED'; }).sort(function (a, b) {
+      return String(a.utcDate).localeCompare(String(b.utcDate));
+    })[0] || null;
+    var latest = teamMatches.filter(function (match) { return match.status === 'FINISHED'; }).sort(function (a, b) {
+      return String(b.utcDate).localeCompare(String(a.utcDate));
+    })[0] || null;
+    var standing = standingByTeam[team] || {};
+    var form = momentumByTeam[team] || {};
+    var teamInjuries = (injuries || []).filter(function (row) { return row.team === team; });
+    return {
+      team: team,
+      kind: kind,
+      conference: standing.conference || '',
+      position: standing.position == null ? null : standing.position,
+      wins: standing.wins == null ? (standing.w || 0) : standing.wins,
+      losses: standing.losses == null ? (standing.l || 0) : standing.losses,
+      points: standing.points == null ? null : standing.points,
+      setRatio: standing.setRatio == null ? null : standing.setRatio,
+      pointRatio: standing.pointRatio == null ? null : standing.pointRatio,
+      momentumScore: form.score == null ? null : form.score,
+      momentumLabel: form.label || '',
+      recentForm: form.recentForm || '',
+      margin: kind === 'pvl' ? form.averageSetDiff : form.averagePointDiff,
+      next: next,
+      latest: latest,
+      availabilityCount: teamInjuries.length,
+      availability: teamInjuries.slice(0, 5)
+    };
+  }).sort(function (a, b) {
+    return String(a.conference).localeCompare(String(b.conference)) || (a.position || 99) - (b.position || 99) || String(a.team).localeCompare(String(b.team));
+  });
 }
 
 function teamName(t) {
@@ -1386,7 +1548,9 @@ async function fetchNbaModule() {
   var recent = matches.filter(function (m) { return m.status === 'FINISHED'; }).slice(-20).reverse();
   var momentum = buildNbaMomentum(matches, standings);
   var injuries = normNbaInjuries(payloads[2]).slice(0, 60);
-  var playerWatch = normNbaPlayerWatch(events);
+  var playerWatch = normNbaPlayerWatch(events, NBA_FOLLOW_PLAYERS);
+  var bracket = buildNbaBracket(matches);
+  var teamProfiles = buildTeamProfiles('nba', standings, momentum, matches, injuries);
   var keyDates = [];
   if (upcoming[0]) {
     keyDates.push({
@@ -1433,6 +1597,9 @@ async function fetchNbaModule() {
     injuries: injuries,
     availabilityStatus: payloads[2] ? 'ok' : 'unavailable',
     playerWatch: playerWatch,
+    followedPlayers: NBA_FOLLOW_PLAYERS,
+    bracket: bracket,
+    teamProfiles: teamProfiles,
     watchlist: nbaWatchlist(standings, momentum),
     keyDates: keyDates
   };
@@ -1501,6 +1668,9 @@ async function fetchPvlModule() {
     conference: leaderCategories[0] ? leaderCategories[0].conference : '',
     categories: leaderCategories
   };
+  var moduleMatches = recent.slice().reverse().concat(upcoming);
+  var bracket = buildPvlBracket(moduleMatches);
+  var teamProfiles = buildTeamProfiles('pvl', standings, momentum, moduleMatches, []);
   var keyDates = [];
   if (upcoming[0]) {
     keyDates.push({
@@ -1531,12 +1701,14 @@ async function fetchPvlModule() {
     refreshStatus: 'ok',
     fallback: false,
     staleAfterHours: 36,
-    matches: recent.slice().reverse().concat(upcoming),
+    matches: moduleMatches,
     upcoming: upcoming,
     recent: recent,
     standings: standings,
     momentum: momentum,
     playerLeaders: playerLeaders,
+    bracket: bracket,
+    teamProfiles: teamProfiles,
     watchlist: pvlWatchlist(standings, momentum),
     keyDates: keyDates
   };
@@ -1844,11 +2016,15 @@ export {
   addNbaRestSignals,
   normNbaInjuries,
   normNbaPlayerWatch,
+  nbaPlayoffRound,
+  buildNbaBracket,
   nbaSeasonYear,
   parsePvlSchedule,
   parsePvlRecaps,
   parsePvlStandings,
   parsePvlLeaders,
+  buildPvlBracket,
+  buildTeamProfiles,
   scheduleReadiness,
   buildPvlMomentum
 };
