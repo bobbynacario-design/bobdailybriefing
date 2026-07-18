@@ -44,10 +44,10 @@ npm run refresh
 Use `npm run dry-run` to inspect the generated document without writing
 `briefings-bob/sports-<date>` and `briefings-bob/sports-latest`.
 
-**Auto-refresh:** a Windows Task Scheduler job
-`BobDailyBriefing-SportsRefresh` runs `sports/refresh-sports.ps1` every 30 minutes,
-logging to `sports/refresh.log`. The app reads the latest Firestore doc when the
-Sports tab opens.
+**Auto-refresh:** paused after the FIFA lane. The previous Windows Task Scheduler
+job `BobDailyBriefing-SportsRefresh` has been removed; run the script manually
+when a new sports module is active. The app reads the latest Firestore doc when
+the Sports tab opens.
 
 ## OpenAI generation
 
