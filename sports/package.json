@@ -6,7 +6,9 @@
   "main": "refresh-sports.js",
   "scripts": {
     "refresh": "node refresh-sports.js",
-    "dry-run": "node refresh-sports.js --dry-run"
+    "dry-run": "node refresh-sports.js --dry-run",
+    "dry-run:nba": "node refresh-sports.js --module nba --dry-run",
+    "dry-run:pvl": "node refresh-sports.js --module pvl --dry-run"
   },
   "engines": {
     "node": ">=20"

@@ -753,6 +753,10 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 /* ── SPORTS ── */
 #sports-out{max-width:1420px;margin:0 auto}
 .sports-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}
+.sports-module-tabs{display:flex;gap:.45rem;flex-wrap:wrap;margin:0 0 1rem}
+.sports-module-tab{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:.45rem .8rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}
+.sports-module-tab:hover{color:var(--txt);border-color:var(--rim2)}
+.sports-module-tab.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.35)}
 .sports-kpi{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.85rem 1rem}
 .sports-kpi-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
 .sports-kpi-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
@@ -1656,7 +1660,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Sports Briefing</div>
     <div class="hero-date" style="font-size:22px">⚽ Sports</div>
-    <div class="hero-sub" id="sports-sub">World Cup first, more sports later</div>
+    <div class="hero-sub" id="sports-sub">NBA first, PH Local next, FIFA archived</div>
     <div class="hero-divider"></div>
   </div>
   <div id="sports-out"><div class="empty-state">LOADING SPORTS…</div></div>
@@ -3896,6 +3900,105 @@ function sportsWorldCupHtml(d, miro) {
   html += '</div></div>';
   return html;
 }
+function sportsModuleTitle(key, mod) {
+  if (key === 'nba') return 'NBA';
+  if (key === 'pvl') return 'PH Local';
+  if (key === 'worldcup') return 'FIFA Archive';
+  return (mod && (mod.title || mod.name)) || key;
+}
+function sportsAvailableModules(d) {
+  var out = [];
+  var mods = d && d.modules || {};
+  if (mods.nba && mods.nba.enabled !== false) out.push({ key:'nba', label:'NBA', module:mods.nba });
+  if (mods.pvl && mods.pvl.enabled !== false) out.push({ key:'pvl', label:'PH Local', module:mods.pvl });
+  if (d && d.worldCup) out.push({ key:'worldcup', label:'FIFA Archive', module:d.worldCup });
+  return out;
+}
+function sportsModuleTabs(d) {
+  var mods = sportsAvailableModules(d);
+  if (!mods.length) return '';
+  if (!sportsActiveModule || !mods.some(function (m) { return m.key === sportsActiveModule; })) {
+    sportsActiveModule = mods.some(function (m) { return m.key === 'nba'; }) ? 'nba' : mods[0].key;
+  }
+  return '<div class="sports-module-tabs">' + mods.map(function (m) {
+    return '<button class="sports-module-tab' + (m.key === sportsActiveModule ? ' active' : '') +
+      '" onclick="sportsShowModule(\'' + m.key + '\')">' + esc(m.label) + '</button>';
+  }).join('') + '</div>';
+}
+function sportsGenericModuleHtml(mod, key) {
+  mod = mod || {};
+  var upcoming = mod.upcoming || [];
+  var recent = mod.recent || [];
+  var momentum = mod.momentum || [];
+  var standings = mod.standings || [];
+  var watchlist = mod.watchlist || [];
+  var keyDates = mod.keyDates || [];
+  var next = upcoming[0] || keyDates[0];
+  var title = mod.title || sportsModuleTitle(key, mod);
+  var html = '<div class="sports-kpis">' +
+    sportsKpi('Module', title, mod.provider || 'manual refresh') +
+    sportsKpi('Phase', mod.phase || 'setup', mod.asOf ? 'as of ' + mod.asOf : 'ready for feed wiring') +
+    sportsKpi('Upcoming', String(upcoming.length || 0), next ? (next.home ? ((next.home || 'TBD') + ' vs ' + (next.away || 'TBD')) : (next.label || next.date || 'next milestone')) : 'No fixtures loaded') +
+    sportsKpi('Recent', String(recent.length || 0), mod.generatedAt ? 'refreshed ' + sportsDate(mod.generatedAt) : 'No results loaded') +
+  '</div>';
+  if (mod.providerNote) html += '<div class="pse-caveat">' + esc(mod.providerNote) + '</div>';
+  if (mod.setupNote) html += '<div class="sports-empty" style="margin-bottom:1rem">' + esc(mod.setupNote) + '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Key Dates</div>' +
+    sportsTable(keyDates, 'No key dates loaded yet.', [
+      { h:'Date', v:function (r) { return r.date || '-'; } },
+      { h:'Item', v:function (r) { return r.label || ''; } },
+      { h:'Note', v:function (r) { return r.note || ''; } }
+    ]) + '</div>';
+  html += '<div class="sports-layout"><div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Next Games</div>' +
+    (upcoming.length ? '<div class="sports-list">' + upcoming.slice(0, 10).map(sportsMatchCard).join('') + '</div>' : '<div class="sports-empty">No upcoming games loaded for this module yet.</div>') +
+    '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Recent Results</div>' +
+    (recent.length ? '<div class="sports-list">' + recent.slice(0, 10).map(sportsMatchCard).join('') + '</div>' : '<div class="sports-empty">No recent results loaded for this module yet.</div>') +
+    '</div></div><div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Team Momentum</div>' +
+    sportsTable(momentum.slice(0, 12), 'Momentum will appear once this module has completed games.', [
+      { h:'Team', v:function (r) { return r.team || ''; } },
+      { h:'Tag', v:function (r) { return r.label || ''; } },
+      { h:'Score', num:true, v:function (r) { return r.score == null ? '-' : r.score; } },
+      { h:'Form', v:function (r) { return r.recentForm || '-'; } },
+      { h:'Net', num:true, v:function (r) { return r.netRating == null ? '-' : (r.netRating > 0 ? '+' : '') + r.netRating; } }
+    ]) + '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Watchlist</div>' +
+    sportsTable(watchlist, 'No watchlist teams configured for this module.', [
+      { h:'Team', v:function (r) { return r.team || r.name || ''; } },
+      { h:'Note', v:function (r) { return r.note || r.status || ''; } }
+    ]) + '</div>';
+  html += '<div class="sports-panel"><div class="sports-panel-title">Standings</div>' +
+    sportsTable(standings.slice(0, 16), 'Standings unavailable until the feed is connected.', [
+      { h:'Team', v:function (r) { return r.team || ''; } },
+      { h:'W', num:true, v:function (r) { return r.wins == null ? (r.w == null ? '-' : r.w) : r.wins; } },
+      { h:'L', num:true, v:function (r) { return r.losses == null ? (r.l == null ? '-' : r.l) : r.losses; } },
+      { h:'Pct/Pts', num:true, v:function (r) { return r.pct == null ? (r.points == null ? '-' : r.points) : r.pct; } }
+    ]) + '</div>';
+  html += '</div></div>';
+  return html;
+}
+var sportsActiveModule = null;
+var sportsCachedData = null;
+var sportsCachedMiro = null;
+function sportsRenderActive() {
+  var out = document.getElementById('sports-out');
+  if (!out || !sportsCachedData) return;
+  var d = sportsCachedData;
+  var miro = sportsCachedMiro;
+  var tabs = sportsModuleTabs(d);
+  if (sportsActiveModule === 'worldcup') {
+    out.innerHTML = tabs + sportsWorldCupHtml(d, miro);
+    return;
+  }
+  var mod = d.modules && d.modules[sportsActiveModule];
+  out.innerHTML = tabs + sportsGenericModuleHtml(mod, sportsActiveModule);
+}
+function sportsShowModule(key) {
+  sportsActiveModule = key;
+  sportsRenderActive();
+}
 function renderSports() {
   var out = document.getElementById('sports-out');
   var sub = document.getElementById('sports-sub');
@@ -3905,14 +4008,16 @@ function renderSports() {
   var mp = window.fbLoadMiro ? window.fbLoadMiro().catch(function () { return null; }) : Promise.resolve(null);
   Promise.all([window.fbLoadSports(), mp]).then(function (res) {
     var d = res[0], miro = res[1];
-    if (!d || !d.worldCup) {
+    if (!d || (!d.worldCup && !d.modules)) {
       if (sub) sub.textContent = 'No sports data yet';
       out.innerHTML = '<div class="empty-state">NO SPORTS DATA YET — RUN sports/refresh-sports.js</div>';
       return;
     }
     if (sub) sub.textContent = (d.title || 'Sports briefing') + ' · as of ' + esc(d.asOf || d.generatedAt || '—');
     try {
-      out.innerHTML = sportsWorldCupHtml(d, miro);
+      sportsCachedData = d;
+      sportsCachedMiro = miro;
+      sportsRenderActive();
     } catch (e) {
       console.error('Sports render failed:', e);
       out.innerHTML = '<div class="empty-state">SPORTS RENDER FAILED — CHECK CONSOLE</div>';

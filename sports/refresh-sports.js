@@ -1,6 +1,7 @@
 // sports/refresh-sports.js
 //
 // Local runner for the Daily Briefer Sports tab. First lane: FIFA World Cup.
+// Current forward lanes: NBA Momentum Radar and PH Local Pulse (PVL).
 // It fetches provider data, normalises it into a small UI document, and writes:
 //   briefings-bob/sports-YYYY-MM-DD
 //   briefings-bob/sports-latest
@@ -14,6 +15,7 @@
 // Optional:
 //   set SPORTS_FOLLOW_TEAMS=Australia,Philippines,England
 //   node refresh-sports.js --dry-run
+//   node refresh-sports.js --module nba --dry-run
 
 import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -48,8 +50,33 @@ var FOLLOW_TEAMS = (process.env.SPORTS_FOLLOW_TEAMS || '')
   .split(',')
   .map(function (s) { return s.trim().toLowerCase(); })
   .filter(Boolean);
+var NBA_FOLLOW_TEAMS = (process.env.NBA_FOLLOW_TEAMS || 'Lakers,Warriors,Knicks,Spurs,Mavericks')
+  .split(',')
+  .map(function (s) { return s.trim(); })
+  .filter(Boolean);
+var PVL_FOLLOW_TEAMS = (process.env.PVL_FOLLOW_TEAMS || '')
+  .split(',')
+  .map(function (s) { return s.trim(); })
+  .filter(Boolean);
 var ARGV = process.argv.slice(2);
 var DRY_RUN = ARGV.indexOf('--dry-run') !== -1;
+var MODULE_ARG = argValue('--module') || process.env.SPORTS_MODULE || 'all';
+var SELECTED_MODULES = MODULE_ARG.split(',')
+  .map(function (s) { return s.trim().toLowerCase(); })
+  .filter(Boolean);
+if (!SELECTED_MODULES.length) SELECTED_MODULES = ['all'];
+
+function argValue(name) {
+  var idx = ARGV.indexOf(name);
+  if (idx >= 0 && ARGV[idx + 1] && ARGV[idx + 1].indexOf('--') !== 0) return ARGV[idx + 1];
+  var prefix = name + '=';
+  var hit = ARGV.find(function (a) { return a.indexOf(prefix) === 0; });
+  return hit ? hit.slice(prefix.length) : '';
+}
+
+function wantsModule(name) {
+  return SELECTED_MODULES.indexOf('all') >= 0 || SELECTED_MODULES.indexOf(name) >= 0;
+}
 
 function phtDateKey() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -751,7 +778,8 @@ function setupDoc(reason) {
     generatedAt: new Date().toISOString(),
     asOf: phtDateKey(),
     title: 'Sports briefing setup',
-    sports: ['worldcup'],
+    sports: activeSportsList(),
+    modules: buildForwardModules(reason),
     worldCup: {
       name: 'FIFA World Cup',
       season: '2026',
@@ -790,6 +818,82 @@ function setupDoc(reason) {
       fadingTeams: []
     }
   };
+}
+
+function activeSportsList() {
+  var out = [];
+  if (wantsModule('nba')) out.push('nba');
+  if (wantsModule('pvl')) out.push('pvl');
+  if (wantsModule('worldcup')) out.push('worldcup');
+  if (!out.length || wantsModule('all')) out = ['nba', 'pvl', 'worldcup'];
+  return out;
+}
+
+function emptyModule(kind, title, phase, provider, note) {
+  return {
+    enabled: true,
+    kind: kind,
+    title: title,
+    phase: phase,
+    provider: provider,
+    providerNote: note,
+    upcoming: [],
+    recent: [],
+    standings: [],
+    momentum: [],
+    watchlist: [],
+    keyDates: []
+  };
+}
+
+function buildNbaModule() {
+  var m = emptyModule(
+    'nba',
+    'NBA Momentum Radar',
+    'offseason',
+    'manual scaffold',
+    'NBA live feed is not wired yet. This module is ready for manual refresh and UI validation; next step is schedule/results ingestion.'
+  );
+  m.watchlist = NBA_FOLLOW_TEAMS.map(function (team) {
+    return { team: team, note: 'Pinned for the NBA watchlist once live data is connected.' };
+  });
+  m.keyDates = [
+    { date: '2026-07-19', label: 'NBA Summer League closes', note: 'Useful for rookies and development-watch context only.' },
+    { date: '2026-10-09', label: 'NBA preseason international window', note: 'First clean restart point for team-level refresh.' },
+    { date: '2026-10-30', label: 'NBA Cup group play begins', note: 'Good first milestone for standings and momentum split views.' }
+  ];
+  return m;
+}
+
+function buildPvlModule() {
+  var m = emptyModule(
+    'pvl',
+    'PH Local Pulse: PVL',
+    'feed setup',
+    'pvl.ph manual scaffold',
+    'PVL live scraping/feed is not wired yet. Use this module as the PH local placeholder until schedule and standings parsing are validated.'
+  );
+  m.watchlist = PVL_FOLLOW_TEAMS.map(function (team) {
+    return { team: team, note: 'Pinned for PH Local Pulse once PVL data is connected.' };
+  });
+  m.keyDates = [
+    { date: phtDateKey(), label: 'PVL feed validation', note: 'Next implementation step: parse schedule, recent recaps and standings.' }
+  ];
+  return m;
+}
+
+function buildForwardModules(reason) {
+  var modules = {};
+  if (wantsModule('nba')) modules.nba = buildNbaModule();
+  if (wantsModule('pvl')) modules.pvl = buildPvlModule();
+  if (wantsModule('all')) {
+    if (!modules.nba) modules.nba = buildNbaModule();
+    if (!modules.pvl) modules.pvl = buildPvlModule();
+  }
+  Object.keys(modules).forEach(function (k) {
+    modules[k].setupNote = reason || '';
+  });
+  return modules;
 }
 
 function initAdmin() {
@@ -869,24 +973,26 @@ async function main() {
     } catch (e) { console.warn('prev-doc read for no-regress failed:', e.message || e); }
   }
 
-  var doc, isFallback = false;
-  if (!FOOTBALL_DATA_TOKEN) {
-    doc = setupDoc('No football-data.org token configured.');
-    isFallback = true;
-  } else {
-    try {
-      var worldCup = await fetchWorldCup(prevFinished);
-      doc = {
-        generatedAt: new Date().toISOString(),
-        asOf: dateKey,
-        title: 'Sports briefing',
-        sports: ['worldcup'],
-        worldCup: worldCup
-      };
-    } catch (e) {
-      console.warn('World Cup fetch failed:', e.message || e);
-      doc = setupDoc('World Cup fetch failed: ' + (e.message || e));
+  var doc = {
+    generatedAt: new Date().toISOString(),
+    asOf: dateKey,
+    title: 'Sports briefing',
+    sports: activeSportsList(),
+    modules: buildForwardModules('')
+  };
+  var isFallback = false;
+  if (wantsModule('worldcup')) {
+    if (!FOOTBALL_DATA_TOKEN) {
+      doc.worldCup = setupDoc('No football-data.org token configured.').worldCup;
       isFallback = true;
+    } else {
+      try {
+        doc.worldCup = await fetchWorldCup(prevFinished);
+      } catch (e) {
+        console.warn('World Cup fetch failed:', e.message || e);
+        doc.worldCup = setupDoc('World Cup fetch failed: ' + (e.message || e)).worldCup;
+        isFallback = true;
+      }
     }
   }
 
