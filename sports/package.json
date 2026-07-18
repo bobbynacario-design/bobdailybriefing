@@ -8,7 +8,8 @@
     "refresh": "node refresh-sports.js",
     "dry-run": "node refresh-sports.js --dry-run",
     "dry-run:nba": "node refresh-sports.js --module nba --dry-run",
-    "dry-run:pvl": "node refresh-sports.js --module pvl --dry-run"
+    "dry-run:pvl": "node refresh-sports.js --module pvl --dry-run",
+    "test": "node --test refresh-sports.test.js"
   },
   "engines": {
     "node": ">=20"

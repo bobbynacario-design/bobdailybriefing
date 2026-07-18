@@ -11,13 +11,11 @@ Private daily intelligence briefing desk for Bob.
   market price vs an independent AI panel, executable edge, GO/NO-GO, and a
   Brier-score journal. The honest version of "MiroFish" — research framing, never
   a bet or execution. Docs: [`miro/README.md`](miro/README.md).
-- **⚽ Sports** — a provider-backed sports briefing tab. First lane is FIFA World
-  Cup fixtures/results, standings, scorers, and followed-team watchlist. The local
-  runner writes `briefings-bob/sports-*` docs that the browser reads. It also
-  computes a first-pass team momentum score from recent form, goal-difference
-  trend, attack/defense rates, and opponent-quality proxy. The Sports tab also
-  joins World Cup momentum to the Markets tab's outright odds and shows a
-  price-vs-form "Market Lens" for matched teams.
+- **⚽ Sports** — a provider-backed sports briefing tab. NBA is the default lane,
+  with rolling results, conference standings, a last-five momentum model, and a
+  configurable team watchlist from ESPN's public basketball feed. PH Local/PVL is
+  the next module, while FIFA World Cup remains available as an archive. The local
+  runner writes `briefings-bob/sports-*` docs and a `sports-public.json` mirror.
 
 - **💰 LLM usage & cost** (Help tab) — every OpenAI call across the app (briefing,
   deep-research, radar catalyst, Markets panel) records token usage to a shared
@@ -30,19 +28,22 @@ the front end reads — no Cloud Functions, no build step.
 
 ## Sports refresh
 
-The Sports tab starts with the FIFA World Cup through football-data.org. Keep the
-provider token local/server-side; the browser only reads Firestore.
+The Sports tab defaults to NBA. NBA ingestion needs no API key. The archived FIFA
+module still uses football-data.org; keep that token local/server-side.
 
 ```powershell
 cd C:\Users\AO\projects\bobdailybriefing\sports
 npm install
 set FOOTBALL_DATA_TOKEN=your_token_here
 set SPORTS_FOLLOW_TEAMS=Australia,England
+set NBA_FOLLOW_TEAMS=Lakers,Warriors,Knicks,Spurs,Mavericks
+npm run dry-run:nba
 npm run refresh
 ```
 
-Use `npm run dry-run` to inspect the generated document without writing
-`briefings-bob/sports-<date>` and `briefings-bob/sports-latest`.
+Use `npm run dry-run:nba` to inspect NBA only, or `npm run dry-run` to inspect the
+combined document without writing `briefings-bob/sports-<date>` and
+`briefings-bob/sports-latest`.
 
 **Auto-refresh:** paused after the FIFA lane. The previous Windows Task Scheduler
 job `BobDailyBriefing-SportsRefresh` has been removed; run the script manually

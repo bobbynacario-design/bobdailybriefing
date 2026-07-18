@@ -45,6 +45,7 @@ var __radar = join(__dirname, '..', 'radar');
 var PROJECT_ID = 'pokerhq-a67e4';
 var COLL = 'briefings-bob';
 var FOOTBALL_DATA = 'https://api.football-data.org/v4';
+var ESPN_NBA = 'https://site.api.espn.com/apis';
 var FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
 var FOLLOW_TEAMS = (process.env.SPORTS_FOLLOW_TEAMS || '')
   .split(',')
@@ -125,6 +126,158 @@ async function footballData(path) {
     throw new Error('football-data ' + res.status + ': ' + (await res.text()).slice(0, 300));
   }
   return res.json();
+}
+
+async function espnNba(path) {
+  var url = ESPN_NBA + path;
+  var res = await fetchRetry(url, {
+    headers: { 'accept': 'application/json', 'user-agent': 'BobDailyBriefing/1.0' }
+  }, 'ESPN NBA ' + path);
+  if (!res.ok) {
+    throw new Error('ESPN NBA ' + res.status + ': ' + (await res.text()).slice(0, 300));
+  }
+  return res.json();
+}
+
+function dateKeyUtc(date) {
+  return date.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+function shiftedDate(date, days) {
+  var d = new Date(date.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function nbaSeasonYear(date) {
+  // ESPN labels a season by its ending year. The next season begins appearing
+  // in its feed around September, so July/August still belongs to the prior one.
+  return date.getUTCMonth() >= 8 ? date.getUTCFullYear() + 1 : date.getUTCFullYear();
+}
+
+function nbaCompetitor(comp, homeAway) {
+  return ((comp && comp.competitors) || []).find(function (c) {
+    return c.homeAway === homeAway;
+  }) || {};
+}
+
+function nbaStatus(event) {
+  var state = (((event || {}).status || {}).type || {}).state || '';
+  if (state === 'post') return 'FINISHED';
+  if (state === 'in') return 'LIVE';
+  return 'SCHEDULED';
+}
+
+function nbaTeamName(competitor) {
+  var team = (competitor && competitor.team) || {};
+  return team.displayName || [team.location, team.name].filter(Boolean).join(' ') || team.shortDisplayName || 'TBD';
+}
+
+function normNbaGame(event) {
+  var comp = ((event && event.competitions) || [])[0] || {};
+  var home = nbaCompetitor(comp, 'home');
+  var away = nbaCompetitor(comp, 'away');
+  var status = nbaStatus(event);
+  var hasScore = status === 'FINISHED' || status === 'LIVE';
+  var season = (event && event.season) || {};
+  return {
+    id: String((event && event.id) || comp.id || ''),
+    utcDate: (event && event.date) || comp.date || '',
+    status: status,
+    stage: season.slug || ((comp.type || {}).abbreviation || ''),
+    group: '',
+    home: nbaTeamName(home),
+    away: nbaTeamName(away),
+    venue: ((comp.venue || {}).fullName) || '',
+    score: {
+      home: hasScore ? num(home.score) : null,
+      away: hasScore ? num(away.score) : null
+    }
+  };
+}
+
+function statValue(entry, name, fallback) {
+  var row = ((entry && entry.stats) || []).find(function (s) { return s.name === name; });
+  if (!row || row.value == null || isNaN(Number(row.value))) return fallback;
+  return Number(row.value);
+}
+
+function normNbaStandings(json) {
+  var out = [];
+  ((json && json.children) || []).forEach(function (conference) {
+    var conferenceName = conference.abbreviation || conference.name || '';
+    ((((conference || {}).standings || {}).entries) || []).forEach(function (entry) {
+      var team = entry.team || {};
+      out.push({
+        conference: conferenceName,
+        position: statValue(entry, 'playoffSeed', null),
+        team: team.displayName || [team.location, team.name].filter(Boolean).join(' ') || team.shortDisplayName || 'TBD',
+        abbreviation: team.abbreviation || '',
+        wins: statValue(entry, 'wins', 0),
+        losses: statValue(entry, 'losses', 0),
+        pct: round2(statValue(entry, 'winPercent', 0)),
+        streak: (((entry.stats || []).find(function (s) { return s.name === 'streak'; }) || {}).displayValue) || '',
+        lastTen: (((entry.stats || []).find(function (s) { return s.name === 'Last Ten Games'; }) || {}).displayValue) || '',
+        differential: round2(statValue(entry, 'differential', 0))
+      });
+    });
+  });
+  return out.sort(function (a, b) {
+    return String(a.conference).localeCompare(String(b.conference)) || (a.position || 99) - (b.position || 99);
+  });
+}
+
+function nbaGameResult(match, team) {
+  if (!match || match.status !== 'FINISHED' || !match.score || match.score.home == null || match.score.away == null) return '';
+  var own = match.home === team ? match.score.home : match.score.away;
+  var opp = match.home === team ? match.score.away : match.score.home;
+  return own > opp ? 'W' : 'L';
+}
+
+function nbaPointDiff(match, team) {
+  if (!match || !match.score || match.score.home == null || match.score.away == null) return 0;
+  return match.home === team ? match.score.home - match.score.away : match.score.away - match.score.home;
+}
+
+function buildNbaMomentum(matches, standings) {
+  var byTeam = {};
+  (matches || []).filter(function (m) { return m.status === 'FINISHED'; }).forEach(function (m) {
+    [m.home, m.away].forEach(function (team) {
+      if (!team || team === 'TBD') return;
+      if (!byTeam[team]) byTeam[team] = [];
+      byTeam[team].push(m);
+    });
+  });
+  var standingByTeam = {};
+  (standings || []).forEach(function (s) { standingByTeam[s.team] = s; });
+  return Object.keys(byTeam).map(function (team) {
+    var games = byTeam[team].slice().sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); }).slice(-5);
+    var form = games.map(function (m) { return nbaGameResult(m, team); });
+    var wins = form.filter(function (r) { return r === 'W'; }).length;
+    var diff = games.reduce(function (sum, m) { return sum + nbaPointDiff(m, team); }, 0);
+    var averageDiff = games.length ? diff / games.length : 0;
+    var standing = standingByTeam[team] || {};
+    var seasonPct = standing.pct == null ? 0.5 : standing.pct;
+    var score = Math.round(clamp((wins / Math.max(1, games.length)) * 65 + clamp(50 + averageDiff * 2.5, 0, 100) * 0.25 + seasonPct * 100 * 0.10, 0, 100));
+    var label = score >= 72 ? 'RISING' : (score >= 58 ? 'WATCH' : (score <= 38 ? 'FADING' : 'STEADY'));
+    return {
+      team: team,
+      score: score,
+      label: label,
+      recentForm: form.join(''),
+      recentGames: games.length,
+      recentWins: wins,
+      averagePointDiff: round2(averageDiff),
+      seasonPct: round2(seasonPct),
+      note: label === 'RISING'
+        ? 'Recent wins and point differential are both trending positively.'
+        : (label === 'FADING'
+          ? 'Recent results and scoring margin are below the league momentum line.'
+          : 'Recent form is mixed and needs another result for confirmation.')
+    };
+  }).sort(function (a, b) {
+    return b.score - a.score || b.averagePointDiff - a.averagePointDiff;
+  });
 }
 
 function teamName(t) {
@@ -850,19 +1003,99 @@ function buildNbaModule() {
   var m = emptyModule(
     'nba',
     'NBA Momentum Radar',
-    'offseason',
-    'manual scaffold',
-    'NBA live feed is not wired yet. This module is ready for manual refresh and UI validation; next step is schedule/results ingestion.'
+    'feed unavailable',
+    'ESPN basketball feed',
+    'NBA data is temporarily unavailable. The refresh job will keep the last good snapshot when one exists.'
   );
   m.watchlist = NBA_FOLLOW_TEAMS.map(function (team) {
-    return { team: team, note: 'Pinned for the NBA watchlist once live data is connected.' };
+    return { team: team, note: 'Pinned for the NBA watchlist.' };
   });
-  m.keyDates = [
-    { date: '2026-07-19', label: 'NBA Summer League closes', note: 'Useful for rookies and development-watch context only.' },
-    { date: '2026-10-09', label: 'NBA preseason international window', note: 'First clean restart point for team-level refresh.' },
-    { date: '2026-10-30', label: 'NBA Cup group play begins', note: 'Good first milestone for standings and momentum split views.' }
-  ];
   return m;
+}
+
+function nbaModulePhase(now, upcoming) {
+  var next = (upcoming || [])[0];
+  if (next && next.stage === 'post-season') return 'playoffs';
+  if (next && next.stage === 'preseason') return 'preseason';
+  if (next) return 'regular season';
+  var month = now.getUTCMonth();
+  return month >= 5 && month <= 8 ? 'offseason' : 'schedule pending';
+}
+
+function nbaWatchlist(standings, momentum) {
+  return NBA_FOLLOW_TEAMS.map(function (needle) {
+    var key = teamKey(needle);
+    var standing = (standings || []).find(function (s) { return teamKey(s.team).indexOf(key) !== -1; });
+    var team = standing ? standing.team : needle;
+    var form = (momentum || []).find(function (m) { return m.team === team; });
+    var details = [];
+    if (standing) details.push(standing.wins + '-' + standing.losses + ' ' + standing.conference);
+    if (form && form.recentForm) details.push('last ' + form.recentGames + ': ' + form.recentForm);
+    return { team: team, note: details.join(' / ') || 'Pinned for the NBA watchlist.' };
+  });
+}
+
+async function fetchNbaModule() {
+  var now = new Date();
+  var offseason = now.getUTCMonth() >= 5 && now.getUTCMonth() <= 8;
+  var start = dateKeyUtc(shiftedDate(now, offseason ? -150 : -45));
+  var end = dateKeyUtc(shiftedDate(now, offseason ? 120 : 30));
+  var seasonYear = nbaSeasonYear(now);
+  var payloads = await Promise.all([
+    espnNba('/site/v2/sports/basketball/nba/scoreboard?dates=' + start + '-' + end + '&limit=1000'),
+    espnNba('/v2/sports/basketball/nba/standings?season=' + seasonYear)
+  ]);
+  var events = (payloads[0] && payloads[0].events) || [];
+  var standings = normNbaStandings(payloads[1]);
+  if (!standings.length && seasonYear > now.getUTCFullYear()) {
+    standings = normNbaStandings(await espnNba('/v2/sports/basketball/nba/standings?season=' + (seasonYear - 1)));
+    seasonYear--;
+  }
+  var matches = events.map(normNbaGame).filter(function (m) { return m.id && m.utcDate; });
+  matches.sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); });
+  var upcoming = matches.filter(function (m) { return m.status !== 'FINISHED'; }).slice(0, 20);
+  var recent = matches.filter(function (m) { return m.status === 'FINISHED'; }).slice(-20).reverse();
+  var momentum = buildNbaMomentum(matches, standings);
+  var keyDates = [];
+  if (upcoming[0]) {
+    keyDates.push({
+      date: String(upcoming[0].utcDate).slice(0, 10),
+      label: 'Next NBA game',
+      note: upcoming[0].away + ' at ' + upcoming[0].home
+    });
+  }
+  if (recent[0]) {
+    keyDates.push({
+      date: String(recent[0].utcDate).slice(0, 10),
+      label: 'Latest NBA result',
+      note: recent[0].away + ' ' + recent[0].score.away + ', ' + recent[0].home + ' ' + recent[0].score.home
+    });
+  }
+  if (!upcoming.length) {
+    keyDates.push({
+      date: phtDateKey(),
+      label: 'Schedule monitor',
+      note: 'No future NBA fixture is published in the current provider window yet.'
+    });
+  }
+  return {
+    enabled: true,
+    kind: 'nba',
+    title: 'NBA Momentum Radar',
+    phase: nbaModulePhase(now, upcoming),
+    provider: 'ESPN basketball feed',
+    providerNote: 'NBA schedule, results and standings are refreshed from ESPN\'s public basketball feed. Momentum uses each team\'s latest five completed games in the rolling window.',
+    season: String(seasonYear - 1) + '-' + String(seasonYear).slice(-2),
+    asOf: phtDateKey(),
+    generatedAt: new Date().toISOString(),
+    matches: matches,
+    upcoming: upcoming,
+    recent: recent,
+    standings: standings,
+    momentum: momentum,
+    watchlist: nbaWatchlist(standings, momentum),
+    keyDates: keyDates
+  };
 }
 
 function buildPvlModule() {
@@ -960,13 +1193,15 @@ async function main() {
     try { db = initAdmin(); } catch (e) { console.warn('admin init failed:', e.message || e); }
   }
   var prevFinished = {};
+  var prevDocData = null;
   if (db) {
     try {
       var latSnap0 = await db.collection(COLL).doc('sports-latest').get();
       var prevKey0 = latSnap0.exists ? (latSnap0.data() || {}).value : null;
       if (prevKey0) {
         var prevSnap0 = await db.collection(COLL).doc('sports-' + prevKey0).get();
-        var prevMatches0 = prevSnap0.exists ? (((prevSnap0.data() || {}).worldCup || {}).matches || []) : [];
+        prevDocData = prevSnap0.exists ? (prevSnap0.data() || {}) : null;
+        var prevMatches0 = prevDocData ? (((prevDocData || {}).worldCup || {}).matches || []) : [];
         prevFinished = extractFinished(prevMatches0);
         console.log('No-regress baseline: ' + Object.keys(prevFinished).length + ' finished match(es) from sports-' + prevKey0 + '.');
       }
@@ -980,6 +1215,24 @@ async function main() {
     sports: activeSportsList(),
     modules: buildForwardModules('')
   };
+  if (wantsModule('nba')) {
+    try {
+      doc.modules.nba = await fetchNbaModule();
+      console.log('NBA: loaded ' + doc.modules.nba.matches.length + ' games, ' +
+        doc.modules.nba.standings.length + ' standings rows and ' + doc.modules.nba.momentum.length + ' momentum rows.');
+    } catch (e) {
+      console.warn('NBA fetch failed:', e.message || e);
+      var priorNba = prevDocData && prevDocData.modules && prevDocData.modules.nba;
+      if (priorNba && ((priorNba.matches || []).length || (priorNba.standings || []).length)) {
+        doc.modules.nba = priorNba;
+        doc.modules.nba.providerNote = 'Showing the last good NBA snapshot because the current refresh failed: ' + (e.message || e);
+        console.warn('NBA: retained the last good module snapshot.');
+      } else {
+        doc.modules.nba = buildNbaModule();
+        doc.modules.nba.setupNote = 'NBA fetch failed: ' + (e.message || e);
+      }
+    }
+  }
   var isFallback = false;
   if (wantsModule('worldcup')) {
     if (!FOOTBALL_DATA_TOKEN) {
@@ -993,6 +1246,11 @@ async function main() {
         doc.worldCup = setupDoc('World Cup fetch failed: ' + (e.message || e)).worldCup;
         isFallback = true;
       }
+    }
+    if (isFallback && prevDocData && prevDocData.worldCup && (prevDocData.worldCup.matches || []).length) {
+      doc.worldCup = prevDocData.worldCup;
+      isFallback = false;
+      console.warn('World Cup: retained the last good module snapshot.');
     }
   }
 
@@ -1027,7 +1285,9 @@ async function main() {
   // Public mirror for the friction-free shared page (sports.html on GitHub Pages
   // reads this static file — no Firebase, no sign-in). Only on real data, never
   // the empty fallback. The refresh-sports.ps1 wrapper commits/pushes it.
-  if (!isFallback) {
+  var hasForwardData = doc.modules && doc.modules.nba &&
+    (((doc.modules.nba.matches || []).length > 0) || ((doc.modules.nba.standings || []).length > 0));
+  if (!isFallback || hasForwardData) {
     try {
       var pubPath = join(__dirname, '..', 'sports-public.json');
       var publicDoc = doc;
@@ -1051,4 +1311,12 @@ if (import.meta.url === __invoked) {
   });
 }
 
-export { mergeNoRegress, extractFinished, normMatch };
+export {
+  mergeNoRegress,
+  extractFinished,
+  normMatch,
+  normNbaGame,
+  normNbaStandings,
+  buildNbaMomentum,
+  nbaSeasonYear
+};

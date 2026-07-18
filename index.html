@@ -3962,7 +3962,7 @@ function sportsGenericModuleHtml(mod, key) {
       { h:'Tag', v:function (r) { return r.label || ''; } },
       { h:'Score', num:true, v:function (r) { return r.score == null ? '-' : r.score; } },
       { h:'Form', v:function (r) { return r.recentForm || '-'; } },
-      { h:'Net', num:true, v:function (r) { return r.netRating == null ? '-' : (r.netRating > 0 ? '+' : '') + r.netRating; } }
+      { h:'Net', num:true, v:function (r) { var n = r.netRating == null ? r.averagePointDiff : r.netRating; return n == null ? '-' : (n > 0 ? '+' : '') + n; } }
     ]) + '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Watchlist</div>' +
     sportsTable(watchlist, 'No watchlist teams configured for this module.', [
@@ -3970,7 +3970,9 @@ function sportsGenericModuleHtml(mod, key) {
       { h:'Note', v:function (r) { return r.note || r.status || ''; } }
     ]) + '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Standings</div>' +
-    sportsTable(standings.slice(0, 16), 'Standings unavailable until the feed is connected.', [
+    sportsTable(standings.slice(0, 30), 'Standings unavailable until the feed is connected.', [
+      { h:'Conf', v:function (r) { return r.conference || '-'; } },
+      { h:'#', num:true, v:function (r) { return r.position == null ? '-' : r.position; } },
       { h:'Team', v:function (r) { return r.team || ''; } },
       { h:'W', num:true, v:function (r) { return r.wins == null ? (r.w == null ? '-' : r.w) : r.wins; } },
       { h:'L', num:true, v:function (r) { return r.losses == null ? (r.l == null ? '-' : r.l) : r.losses; } },

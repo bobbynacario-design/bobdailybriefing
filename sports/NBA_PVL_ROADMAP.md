@@ -2,6 +2,14 @@
 
 Created: 2026-07-18
 
+## Implementation Status
+
+- NBA MVP: implemented on 2026-07-18 using ESPN's public basketball feed.
+- NBA output: rolling games, recent results, conference standings, last-five momentum, and configurable watchlist.
+- NBA resilience: the refresh retains the last good NBA snapshot when the provider fails.
+- NBA refresh: remains manual during the offseason; no Windows schedule has been restored.
+- PVL MVP: pending.
+
 ## Decision
 
 Replace the paused FIFA World Cup sports lane with two basketball/volleyball-oriented tracks:
