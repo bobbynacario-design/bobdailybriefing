@@ -455,17 +455,27 @@ window.fbLoadMiroJournal = async function() {
 
 // Load the latest Sports briefing doc. Written by sports/refresh-sports.js with
 // no uid so it follows the same shared-read pattern as Radar and Markets.
+async function loadPublicSports() {
+  try {
+    var res = await fetch('./sports-public.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } catch (e) {
+    console.error('Public sports mirror load failed:', e);
+    return null;
+  }
+}
 window.fbLoadSports = async function() {
   try {
     var latestSnap = await getDoc(doc(db, COLL, 'sports-latest'));
-    if (!latestSnap.exists()) return null;
+    if (!latestSnap.exists()) return loadPublicSports();
     var dateKey = latestSnap.data().value;
-    if (!dateKey) return null;
+    if (!dateKey) return loadPublicSports();
     var docSnap = await getDoc(doc(db, COLL, 'sports-' + dateKey));
-    return docSnap.exists() ? docSnap.data() : null;
+    return docSnap.exists() ? docSnap.data() : loadPublicSports();
   } catch(e) {
-    console.error('Sports load failed:', e);
-    return null;
+    console.warn('Firestore sports load failed; using public mirror:', e);
+    return loadPublicSports();
   }
 };
 
