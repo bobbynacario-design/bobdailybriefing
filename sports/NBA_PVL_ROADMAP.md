@@ -8,7 +8,9 @@ Created: 2026-07-18
 - NBA output: rolling games, recent results, conference standings, last-five momentum, and configurable watchlist.
 - NBA resilience: the refresh retains the last good NBA snapshot when the provider fails.
 - NBA refresh: remains manual during the offseason; no Windows schedule has been restored.
-- PVL MVP: pending.
+- PVL MVP: implemented on 2026-07-18 using official pvl.ph schedule, homepage recap, and standings pages.
+- PVL output: upcoming matches with venues, current recaps, standings, set-based momentum, and configurable watchlist.
+- PVL resilience: the refresh retains the last good PVL snapshot when the official page structure or network fails.
 
 ## Decision
 

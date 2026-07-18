@@ -22,6 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import * as cheerio from 'cheerio';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var __radar = join(__dirname, '..', 'radar');
@@ -46,6 +47,7 @@ var PROJECT_ID = 'pokerhq-a67e4';
 var COLL = 'briefings-bob';
 var FOOTBALL_DATA = 'https://api.football-data.org/v4';
 var ESPN_NBA = 'https://site.api.espn.com/apis';
+var PVL_SITE = 'https://www.pvl.ph';
 var FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
 var FOLLOW_TEAMS = (process.env.SPORTS_FOLLOW_TEAMS || '')
   .split(',')
@@ -55,7 +57,7 @@ var NBA_FOLLOW_TEAMS = (process.env.NBA_FOLLOW_TEAMS || 'Lakers,Warriors,Knicks,
   .split(',')
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
-var PVL_FOLLOW_TEAMS = (process.env.PVL_FOLLOW_TEAMS || '')
+var PVL_FOLLOW_TEAMS = (process.env.PVL_FOLLOW_TEAMS || 'Creamline,Choco Mucho,PLDT,ZUS Coffee')
   .split(',')
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
@@ -278,6 +280,210 @@ function buildNbaMomentum(matches, standings) {
   }).sort(function (a, b) {
     return b.score - a.score || b.averagePointDiff - a.averagePointDiff;
   });
+}
+
+var PVL_TEAM_NAMES = {
+  AKA: 'Akari Chargers',
+  CAP: 'Capital1 Solar Spikers',
+  CCS: 'Creamline Cool Smashers',
+  CMF: 'Choco Mucho Flying Titans',
+  CSS: 'Cignal Super Spikers',
+  CTC: 'Chery Tiggo Crossovers',
+  FFF: 'Farm Fresh Foxies',
+  GTH: 'Galeries Tower Highrisers',
+  HSH: 'PLDT Home Fiber High Speed Hitters',
+  NXL: 'Nxled Chameleons',
+  PGA: 'Petro Gazz Angels',
+  ZUS: 'ZUS Coffee Thunderbelles'
+};
+
+function cleanPvlText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function pvlTeamName(value) {
+  var raw = cleanPvlText(value);
+  var code = raw.toUpperCase();
+  if (PVL_TEAM_NAMES[code]) return PVL_TEAM_NAMES[code];
+  var canonical = Object.keys(PVL_TEAM_NAMES).find(function (key) {
+    return teamKey(PVL_TEAM_NAMES[key]) === teamKey(raw);
+  });
+  return canonical ? PVL_TEAM_NAMES[canonical] : raw;
+}
+
+function pvlMatchId(utcDate, home, away) {
+  return 'pvl-' + utcDate.slice(0, 10) + '-' +
+    teamKey(home).replace(/ /g, '-').slice(0, 12).replace(/-+$/, '') + '-' +
+    teamKey(away).replace(/ /g, '-').slice(0, 12).replace(/-+$/, '');
+}
+
+async function pvlFetch(path) {
+  var res = await fetchRetry(PVL_SITE + path, {
+    headers: {
+      'accept': 'text/html,application/xhtml+xml',
+      'user-agent': 'BobDailyBriefing/1.0 (+https://bobbynacario-design.github.io/bobdailybriefing/)'
+    }
+  }, 'PVL ' + path);
+  if (!res.ok) throw new Error('PVL ' + path + ' HTTP ' + res.status);
+  return res.text();
+}
+
+function pvlDateTime(dateText, timeText, now, preferFuture) {
+  var months = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  var dm = cleanPvlText(dateText).match(/\b([A-Z][a-z]{2})\s+(\d{1,2})\b/);
+  if (!dm || months[dm[1]] == null) return '';
+  var tm = cleanPvlText(timeText).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  var hour = tm ? Number(tm[1]) % 12 + (String(tm[3]).toUpperCase() === 'PM' ? 12 : 0) : 12;
+  var minute = tm ? Number(tm[2]) : 0;
+  now = now || new Date();
+  var phtYear = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric' }).format(now));
+  var year = phtYear;
+  var ms = Date.UTC(year, months[dm[1]], Number(dm[2]), hour - 8, minute);
+  var tolerance = 45 * 86400000;
+  if (preferFuture && ms < now.getTime() - tolerance) year++;
+  if (!preferFuture && ms > now.getTime() + tolerance) year--;
+  return new Date(Date.UTC(year, months[dm[1]], Number(dm[2]), hour - 8, minute)).toISOString();
+}
+
+function parsePvlSchedule(html, now) {
+  var $ = cheerio.load(html || '');
+  var firstCard = $('.match-card').first();
+  if (!firstCard.length) return [];
+  var container = firstCard.parent().parent();
+  var dateText = '';
+  var venue = '';
+  var out = [];
+  container.children().each(function () {
+    var child = $(this);
+    var card = child.find('.match-card').first();
+    if (!card.length) {
+      var heading = cleanPvlText(child.text());
+      var dateMatch = heading.match(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+[A-Z][a-z]{2}\s+\d{1,2}\b/);
+      if (dateMatch) {
+        dateText = dateMatch[0];
+        venue = cleanPvlText(heading.replace(dateMatch[0], '').replace(/^\s*\|\s*/, ''));
+      }
+      return;
+    }
+    var teams = card.find('.match-card-teams h3').map(function () { return cleanPvlText($(this).text()); }).get();
+    var times = card.find('.match-card-time').map(function () { return cleanPvlText($(this).text()); }).get();
+    var utcDate = pvlDateTime(dateText, times[0], now, true);
+    if (teams.length < 2 || !utcDate) return;
+    var home = pvlTeamName(teams[0]);
+    var away = pvlTeamName(teams[1]);
+    out.push({
+      id: pvlMatchId(utcDate, home, away),
+      utcDate: utcDate,
+      status: 'SCHEDULED',
+      stage: times[1] || 'PVL',
+      group: '',
+      home: home,
+      away: away,
+      venue: venue,
+      score: { home: null, away: null }
+    });
+  });
+  return out.sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); });
+}
+
+function parsePvlRecaps(html, now) {
+  var $ = cheerio.load(html || '');
+  var out = [];
+  $('.match-card').each(function () {
+    var card = $(this);
+    var scores = card.find('.match-card-score').map(function () { return num(cleanPvlText($(this).text())); }).get();
+    if (scores.length < 2) return;
+    var teams = card.find('.match-card-teams h3').map(function () { return cleanPvlText($(this).text()); }).get();
+    var dates = card.find('.match-card-date').map(function () { return cleanPvlText($(this).text()); }).get();
+    var time = cleanPvlText(card.find('.match-card-time').first().text());
+    var utcDate = pvlDateTime(dates[0], time, now, false);
+    if (teams.length < 2 || !utcDate) return;
+    var home = pvlTeamName(teams[0]);
+    var away = pvlTeamName(teams[1]);
+    out.push({
+      id: pvlMatchId(utcDate, home, away),
+      utcDate: utcDate,
+      status: 'FINISHED',
+      stage: dates[1] || 'PVL',
+      group: '',
+      home: home,
+      away: away,
+      venue: '',
+      score: { home: scores[0], away: scores[1] }
+    });
+  });
+  return out.sort(function (a, b) { return String(b.utcDate).localeCompare(String(a.utcDate)); });
+}
+
+function parsePvlStandings(html) {
+  var $ = cheerio.load(html || '');
+  var out = [];
+  $('table').first().find('tr').each(function () {
+    var row = $(this);
+    var cells = row.find('td').map(function () { return cleanPvlText($(this).text()); }).get();
+    if (cells.length < 11) return;
+    out.push({
+      position: num(cleanPvlText(row.find('th').first().text())),
+      team: pvlTeamName(cells[0]),
+      wins: num(cells[1]) || 0,
+      losses: num(cells[2]) || 0,
+      points: num(cells[3]) || 0,
+      playedGames: num(cells[4]) || 0,
+      setsWon: num(cells[5]) || 0,
+      setsLost: num(cells[6]) || 0,
+      setRatio: num(cells[7]) || 0,
+      pointsWon: num(cells[8]) || 0,
+      pointsLost: num(cells[9]) || 0,
+      pointRatio: num(cells[10]) || 0
+    });
+  });
+  return out.sort(function (a, b) { return (a.position || 99) - (b.position || 99); });
+}
+
+function buildPvlMomentum(matches, standings) {
+  var byTeam = {};
+  (standings || []).forEach(function (s) { byTeam[s.team] = []; });
+  (matches || []).forEach(function (m) {
+    [m.home, m.away].forEach(function (team) {
+      if (!byTeam[team]) byTeam[team] = [];
+      byTeam[team].push(m);
+    });
+  });
+  var standingByTeam = {};
+  (standings || []).forEach(function (s) { standingByTeam[s.team] = s; });
+  return Object.keys(byTeam).map(function (team) {
+    var games = byTeam[team].slice().sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); }).slice(-5);
+    var form = games.map(function (m) {
+      var own = m.home === team ? m.score.home : m.score.away;
+      var opp = m.home === team ? m.score.away : m.score.home;
+      return own > opp ? 'W' : 'L';
+    });
+    var recentWins = form.filter(function (r) { return r === 'W'; }).length;
+    var setDiff = games.reduce(function (sum, m) {
+      return sum + (m.home === team ? m.score.home - m.score.away : m.score.away - m.score.home);
+    }, 0);
+    var averageSetDiff = games.length ? setDiff / games.length : 0;
+    var standing = standingByTeam[team] || {};
+    var standingGames = (standing.wins || 0) + (standing.losses || 0);
+    var standingPct = standingGames ? standing.wins / standingGames : 0.5;
+    var recentPct = games.length ? recentWins / games.length : standingPct;
+    var score = Math.round(clamp(recentPct * 55 + standingPct * 20 + clamp(50 + averageSetDiff * 18, 0, 100) * 0.25, 0, 100));
+    var label = score >= 72 ? 'RISING' : (score >= 58 ? 'WATCH' : (score <= 38 ? 'FADING' : 'STEADY'));
+    return {
+      team: team,
+      score: score,
+      label: label,
+      recentForm: form.join(''),
+      recentGames: games.length,
+      recentWins: recentWins,
+      averageSetDiff: round2(averageSetDiff),
+      averagePointDiff: round2(averageSetDiff),
+      standingPct: round2(standingPct),
+      note: games.length
+        ? 'Momentum blends recent match wins, set differential and the current PVL table.'
+        : 'No completed match is present in the current recap window; score is table-based.'
+    };
+  }).sort(function (a, b) { return b.score - a.score || b.averageSetDiff - a.averageSetDiff; });
 }
 
 function teamName(t) {
@@ -1102,17 +1308,80 @@ function buildPvlModule() {
   var m = emptyModule(
     'pvl',
     'PH Local Pulse: PVL',
-    'feed setup',
-    'pvl.ph manual scaffold',
-    'PVL live scraping/feed is not wired yet. Use this module as the PH local placeholder until schedule and standings parsing are validated.'
+    'feed unavailable',
+    'official pvl.ph pages',
+    'PVL data is temporarily unavailable. The refresh job will keep the last good snapshot when one exists.'
   );
   m.watchlist = PVL_FOLLOW_TEAMS.map(function (team) {
-    return { team: team, note: 'Pinned for PH Local Pulse once PVL data is connected.' };
+    return { team: team, note: 'Pinned for PH Local Pulse.' };
   });
-  m.keyDates = [
-    { date: phtDateKey(), label: 'PVL feed validation', note: 'Next implementation step: parse schedule, recent recaps and standings.' }
-  ];
   return m;
+}
+
+function pvlWatchlist(standings, momentum) {
+  return PVL_FOLLOW_TEAMS.map(function (needle) {
+    var key = teamKey(needle);
+    var standing = (standings || []).find(function (s) { return teamKey(s.team).indexOf(key) !== -1; });
+    var team = standing ? standing.team : needle;
+    var form = (momentum || []).find(function (m) { return m.team === team; });
+    var details = [];
+    if (standing) details.push(standing.wins + '-' + standing.losses + ', ' + standing.points + ' pts');
+    if (form && form.recentForm) details.push('recent: ' + form.recentForm);
+    return { team: team, note: details.join(' / ') || 'Pinned for PH Local Pulse.' };
+  });
+}
+
+async function fetchPvlModule() {
+  var now = new Date();
+  var pages = await Promise.all([
+    pvlFetch('/schedule'),
+    pvlFetch('/'),
+    pvlFetch('/standings')
+  ]);
+  var upcoming = parsePvlSchedule(pages[0], now).filter(function (m) {
+    return new Date(m.utcDate).getTime() >= now.getTime() - 21600000;
+  }).slice(0, 20);
+  var parsedRecent = parsePvlRecaps(pages[1], now);
+  var latestRecentMs = parsedRecent.length ? new Date(parsedRecent[0].utcDate).getTime() : 0;
+  var recent = parsedRecent.filter(function (m) {
+    return !latestRecentMs || latestRecentMs - new Date(m.utcDate).getTime() <= 45 * 86400000;
+  }).slice(0, 20);
+  var standings = parsePvlStandings(pages[2]);
+  if (!upcoming.length && !recent.length) throw new Error('PVL schedule and recap pages returned no matches.');
+  if (!standings.length) throw new Error('PVL standings page returned no table rows.');
+  var momentum = buildPvlMomentum(recent, standings);
+  var keyDates = [];
+  if (upcoming[0]) {
+    keyDates.push({
+      date: upcoming[0].utcDate.slice(0, 10),
+      label: 'Next PVL match',
+      note: upcoming[0].home + ' vs ' + upcoming[0].away + (upcoming[0].venue ? ' / ' + upcoming[0].venue : '')
+    });
+  }
+  if (recent[0]) {
+    keyDates.push({
+      date: recent[0].utcDate.slice(0, 10),
+      label: 'Latest PVL result',
+      note: recent[0].home + ' ' + recent[0].score.home + ', ' + recent[0].away + ' ' + recent[0].score.away
+    });
+  }
+  return {
+    enabled: true,
+    kind: 'pvl',
+    title: 'PH Local Pulse: PVL',
+    phase: upcoming[0] && upcoming[0].stage ? upcoming[0].stage : 'active',
+    provider: 'official pvl.ph pages',
+    providerNote: 'PVL fixtures, recaps and standings are refreshed from the official pvl.ph pages. Momentum blends recent match wins, set differential and the active standings table.',
+    asOf: phtDateKey(),
+    generatedAt: new Date().toISOString(),
+    matches: recent.slice().reverse().concat(upcoming),
+    upcoming: upcoming,
+    recent: recent,
+    standings: standings,
+    momentum: momentum,
+    watchlist: pvlWatchlist(standings, momentum),
+    keyDates: keyDates
+  };
 }
 
 function buildForwardModules(reason) {
@@ -1233,6 +1502,25 @@ async function main() {
       }
     }
   }
+  if (wantsModule('pvl')) {
+    try {
+      doc.modules.pvl = await fetchPvlModule();
+      console.log('PVL: loaded ' + doc.modules.pvl.upcoming.length + ' upcoming, ' +
+        doc.modules.pvl.recent.length + ' recent, ' + doc.modules.pvl.standings.length +
+        ' standings rows and ' + doc.modules.pvl.momentum.length + ' momentum rows.');
+    } catch (e) {
+      console.warn('PVL fetch failed:', e.message || e);
+      var priorPvl = prevDocData && prevDocData.modules && prevDocData.modules.pvl;
+      if (priorPvl && ((priorPvl.matches || []).length || (priorPvl.standings || []).length)) {
+        doc.modules.pvl = priorPvl;
+        doc.modules.pvl.providerNote = 'Showing the last good PVL snapshot because the current refresh failed: ' + (e.message || e);
+        console.warn('PVL: retained the last good module snapshot.');
+      } else {
+        doc.modules.pvl = buildPvlModule();
+        doc.modules.pvl.setupNote = 'PVL fetch failed: ' + (e.message || e);
+      }
+    }
+  }
   var isFallback = false;
   if (wantsModule('worldcup')) {
     if (!FOOTBALL_DATA_TOKEN) {
@@ -1285,8 +1573,10 @@ async function main() {
   // Public mirror for the friction-free shared page (sports.html on GitHub Pages
   // reads this static file — no Firebase, no sign-in). Only on real data, never
   // the empty fallback. The refresh-sports.ps1 wrapper commits/pushes it.
-  var hasForwardData = doc.modules && doc.modules.nba &&
-    (((doc.modules.nba.matches || []).length > 0) || ((doc.modules.nba.standings || []).length > 0));
+  var hasForwardData = doc.modules && ['nba', 'pvl'].some(function (key) {
+    var mod = doc.modules[key];
+    return mod && (((mod.matches || []).length > 0) || ((mod.standings || []).length > 0));
+  });
   if (!isFallback || hasForwardData) {
     try {
       var pubPath = join(__dirname, '..', 'sports-public.json');
@@ -1318,5 +1608,9 @@ export {
   normNbaGame,
   normNbaStandings,
   buildNbaMomentum,
-  nbaSeasonYear
+  nbaSeasonYear,
+  parsePvlSchedule,
+  parsePvlRecaps,
+  parsePvlStandings,
+  buildPvlMomentum
 };

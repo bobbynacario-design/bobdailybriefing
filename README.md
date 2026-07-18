@@ -13,8 +13,9 @@ Private daily intelligence briefing desk for Bob.
   a bet or execution. Docs: [`miro/README.md`](miro/README.md).
 - **⚽ Sports** — a provider-backed sports briefing tab. NBA is the default lane,
   with rolling results, conference standings, a last-five momentum model, and a
-  configurable team watchlist from ESPN's public basketball feed. PH Local/PVL is
-  the next module, while FIFA World Cup remains available as an archive. The local
+  configurable team watchlist from ESPN's public basketball feed. PH Local/PVL
+  adds official fixtures, recaps, standings, and set-based momentum from pvl.ph,
+  while FIFA World Cup remains available as an archive. The local
   runner writes `briefings-bob/sports-*` docs and a `sports-public.json` mirror.
 
 - **💰 LLM usage & cost** (Help tab) — every OpenAI call across the app (briefing,
@@ -37,7 +38,9 @@ npm install
 set FOOTBALL_DATA_TOKEN=your_token_here
 set SPORTS_FOLLOW_TEAMS=Australia,England
 set NBA_FOLLOW_TEAMS=Lakers,Warriors,Knicks,Spurs,Mavericks
+set PVL_FOLLOW_TEAMS=Creamline,Choco Mucho,PLDT,ZUS Coffee
 npm run dry-run:nba
+npm run dry-run:pvl
 npm run refresh
 ```
 

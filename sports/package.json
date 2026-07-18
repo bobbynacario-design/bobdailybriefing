@@ -1,6 +1,6 @@
 {
   "name": "bobdailybriefing-sports",
-  "description": "Local sports refresh: fetch World Cup data -> write Firestore doc",
+  "description": "Local NBA, PVL, and archived World Cup refresh -> Firestore and public JSON",
   "private": true,
   "type": "module",
   "main": "refresh-sports.js",
@@ -15,6 +15,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "cheerio": "^1.2.0",
     "firebase-admin": "^13.6.0"
   }
 }

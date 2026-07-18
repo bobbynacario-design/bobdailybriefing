@@ -4,7 +4,11 @@ import {
   normNbaGame,
   normNbaStandings,
   buildNbaMomentum,
-  nbaSeasonYear
+  nbaSeasonYear,
+  parsePvlSchedule,
+  parsePvlRecaps,
+  parsePvlStandings,
+  buildPvlMomentum
 } from './refresh-sports.js';
 
 function event(id, date, state, home, away, homeScore, awayScore) {
@@ -69,4 +73,33 @@ test('ranks a winning NBA team above a losing team', function () {
 test('uses ESPN ending-year season labels', function () {
   assert.equal(nbaSeasonYear(new Date('2026-07-18T00:00:00Z')), 2026);
   assert.equal(nbaSeasonYear(new Date('2026-10-01T00:00:00Z')), 2027);
+});
+
+test('parses official PVL schedule cards with shared date and venue headings', function () {
+  var html = '<div class="row schedule-grid">' +
+    '<div class="col-12">Sat Jul 25 | Vigan City, Ilocos Sur</div>' +
+    '<div class="col-md-6"><div class="match-card"><div class="match-card-teams"><h3>NXL</h3><h3>CAP</h3></div><div class="match-card-time">04:00 PM</div><div class="match-card-time">Match-Up</div></div></div>' +
+    '<div class="col-md-6"><div class="match-card"><div class="match-card-teams"><h3>HSH</h3><h3>CMF</h3></div><div class="match-card-time">06:30 PM</div><div class="match-card-time">Match-Up</div></div></div>' +
+    '</div>';
+  var games = parsePvlSchedule(html, new Date('2026-07-18T00:00:00Z'));
+  assert.equal(games.length, 2);
+  assert.equal(games[0].home, 'Nxled Chameleons');
+  assert.equal(games[0].away, 'Capital1 Solar Spikers');
+  assert.equal(games[0].venue, 'Vigan City, Ilocos Sur');
+  assert.equal(games[1].utcDate, '2026-07-25T10:30:00.000Z');
+  assert.deepEqual(games[1].score, { home: null, away: null });
+});
+
+test('parses PVL recaps and standings into momentum-ready rows', function () {
+  var recap = '<div class="match-card"><div class="match-card-teams"><h3>ZUS</h3><div class="match-card-score">3</div><div class="match-card-score">1</div><h3>AKA</h3></div><div class="match-card-date">Wed Jul 08</div><div class="match-card-date">Match-Up</div><div class="match-card-time">04:00 PM</div></div>';
+  var standingsHtml = '<table><tr><th>Rank</th><th>Team</th></tr><tr><th>1</th><td>ZUS COFFEE THUNDERBELLES</td><td>2</td><td>0</td><td>6</td><td>2</td><td>6</td><td>1</td><td>6.000</td><td>176</td><td>136</td><td>1.294</td></tr><tr><th>2</th><td>AKARI CHARGERS</td><td>0</td><td>1</td><td>0</td><td>1</td><td>1</td><td>3</td><td>0.333</td><td>79</td><td>101</td><td>0.782</td></tr></table>';
+  var games = parsePvlRecaps(recap, new Date('2026-07-18T00:00:00Z'));
+  var standings = parsePvlStandings(standingsHtml);
+  var momentum = buildPvlMomentum(games, standings);
+  assert.equal(games.length, 1);
+  assert.deepEqual(games[0].score, { home: 3, away: 1 });
+  assert.equal(standings.length, 2);
+  assert.equal(standings[0].points, 6);
+  assert.equal(momentum[0].team, 'ZUS Coffee Thunderbelles');
+  assert.equal(momentum[0].recentForm, 'W');
 });
