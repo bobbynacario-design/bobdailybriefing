@@ -761,6 +761,122 @@ function buildTeamProfiles(kind, standings, momentum, matches, injuries) {
   });
 }
 
+function buildModuleChanges(kind, current, previous) {
+  current = current || {};
+  previous = previous || null;
+  var result = {
+    since: previous && (previous.lastSuccessfulAt || previous.generatedAt) || '',
+    generatedAt: current.lastSuccessfulAt || current.generatedAt || new Date().toISOString(),
+    items: []
+  };
+  if (!previous) return result;
+
+  var previousMatches = {};
+  (previous.matches || []).forEach(function (match) { if (match && match.id) previousMatches[match.id] = match; });
+  (current.recent || []).forEach(function (match) {
+    var before = match && match.id ? previousMatches[match.id] : null;
+    if (!match || !match.id || (before && before.status === 'FINISHED')) return;
+    result.items.push({
+      type: 'result', importance: 'high', at: match.utcDate || '',
+      title: (match.home || 'TBD') + ' ' + match.score.home + '-' + match.score.away + ' ' + (match.away || 'TBD'),
+      detail: 'New final result' + (match.stage ? ' / ' + match.stage : '')
+    });
+  });
+  (current.upcoming || []).forEach(function (match) {
+    if (!match || !match.id || previousMatches[match.id]) return;
+    result.items.push({
+      type: 'fixture', importance: 'medium', at: match.utcDate || '',
+      title: (match.home || 'TBD') + ' vs ' + (match.away || 'TBD'),
+      detail: 'New fixture' + (match.venue ? ' / ' + match.venue : '')
+    });
+  });
+
+  var previousStandings = {};
+  (previous.standings || []).forEach(function (row) { if (row && row.team) previousStandings[row.team] = row; });
+  (current.standings || []).forEach(function (row) {
+    var before = previousStandings[row.team];
+    if (!before) return;
+    var positionChanged = row.position != null && before.position != null && row.position !== before.position;
+    var recordChanged = row.wins !== before.wins || row.losses !== before.losses || row.points !== before.points;
+    if (!positionChanged && !recordChanged) return;
+    var detail = [];
+    if (positionChanged) detail.push('#' + before.position + ' to #' + row.position);
+    if (recordChanged) {
+      detail.push(kind === 'pvl'
+        ? row.wins + '-' + row.losses + ' / ' + row.points + ' pts'
+        : row.wins + '-' + row.losses);
+    }
+    result.items.push({
+      type: 'standing', importance: positionChanged ? 'high' : 'medium', team: row.team,
+      title: row.team + (positionChanged ? (row.position < before.position ? ' moved up' : ' moved down') : ' record updated'),
+      detail: detail.join(' / ')
+    });
+  });
+
+  var previousMomentum = {};
+  (previous.momentum || []).forEach(function (row) { if (row && row.team) previousMomentum[row.team] = row; });
+  (current.momentum || []).forEach(function (row) {
+    var before = previousMomentum[row.team];
+    if (!before) return;
+    var delta = Number(row.score || 0) - Number(before.score || 0);
+    if (row.label === before.label && Math.abs(delta) < 8) return;
+    result.items.push({
+      type: 'momentum', importance: Math.abs(delta) >= 15 ? 'high' : 'medium', team: row.team,
+      title: row.team + ' is ' + String(row.label || 'steady').toLowerCase(),
+      detail: 'Momentum ' + (delta > 0 ? '+' : '') + delta + ' / form ' + (row.recentForm || '-')
+    });
+  });
+
+  if (kind === 'nba') {
+    var previousAvailability = {};
+    (previous.injuries || []).forEach(function (row) {
+      if (row && row.player) previousAvailability[teamKey(row.team) + '|' + teamKey(row.player)] = row;
+    });
+    (current.injuries || []).forEach(function (row) {
+      var before = previousAvailability[teamKey(row.team) + '|' + teamKey(row.player)];
+      if (before && before.status === row.status && before.note === row.note) return;
+      result.items.push({
+        type: 'availability', importance: 'medium', team: row.team,
+        title: row.player + ' / ' + (row.status || 'Update'),
+        detail: row.team + (row.note ? ' / ' + row.note : '')
+      });
+    });
+  }
+
+  var priority = { result: 0, fixture: 1, standing: 2, momentum: 3, availability: 4 };
+  result.items.sort(function (a, b) {
+    var aPriority = priority[a.type] == null ? 9 : priority[a.type];
+    var bPriority = priority[b.type] == null ? 9 : priority[b.type];
+    return aPriority - bPriority || String(b.at || '').localeCompare(String(a.at || ''));
+  });
+  var limits = { result: 4, fixture: 6, standing: 3, momentum: 3, availability: 4 };
+  var counts = {};
+  result.items = result.items.filter(function (item) {
+    counts[item.type] = (counts[item.type] || 0) + 1;
+    return counts[item.type] <= (limits[item.type] || 2);
+  }).slice(0, 12);
+  if (!result.items.length && previous.changes && (previous.changes.items || []).length) {
+    var previousChangeDay = phtDateKeyFor(previous.changes.generatedAt || previous.lastSuccessfulAt);
+    var currentChangeDay = phtDateKeyFor(result.generatedAt);
+    if (previousChangeDay && previousChangeDay === currentChangeDay) {
+      result.since = previous.changes.since || result.since;
+      result.generatedAt = previous.changes.generatedAt || result.generatedAt;
+      result.items = (previous.changes.items || []).filter(function (item) {
+        counts[item.type] = (counts[item.type] || 0) + 1;
+        return counts[item.type] <= (limits[item.type] || 2);
+      }).slice(0, 12);
+    }
+  }
+  return result;
+}
+
+function phtDateKeyFor(value) {
+  if (!value || isNaN(new Date(value).getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date(value));
+}
+
 function teamName(t) {
   return (t && (t.shortName || t.name || t.tla)) || 'TBD';
 }
@@ -1925,6 +2041,15 @@ async function main() {
       }
     }
   }
+  ['nba', 'pvl'].forEach(function (key) {
+    if (!wantsModule(key) || !doc.modules[key]) return;
+    var previousModule = prevDocData && prevDocData.modules && prevDocData.modules[key];
+    if (doc.modules[key].refreshStatus === 'fallback' && previousModule && previousModule.changes) {
+      doc.modules[key].changes = previousModule.changes;
+      return;
+    }
+    doc.modules[key].changes = buildModuleChanges(key, doc.modules[key], previousModule);
+  });
   var isFallback = false;
   if (wantsModule('worldcup')) {
     if (!FOOTBALL_DATA_TOKEN) {
@@ -2025,6 +2150,7 @@ export {
   parsePvlLeaders,
   buildPvlBracket,
   buildTeamProfiles,
+  buildModuleChanges,
   scheduleReadiness,
   buildPvlMomentum
 };

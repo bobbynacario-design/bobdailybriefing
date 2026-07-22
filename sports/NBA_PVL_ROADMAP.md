@@ -14,6 +14,9 @@ Created: 2026-07-18
 - PVL output: upcoming matches with venues, current recaps, standings, set-based momentum, and configurable watchlist.
 - PVL enrichment: official scorer, spiker, blocker, server, digger, setter, and receiver leader tables with conference labels.
 - Shared team detail: each NBA/PVL team profile combines record, momentum, next/latest match, margin, and availability where supplied.
+- Daily briefing: the default view prioritizes Next Up, changes since the prior refresh, followed teams, and followed players; full league tables remain available under League details.
+- Personalization: team and player follows can be changed in the Sports tab and persist locally in the browser.
+- Change detection: refreshes compare results, fixtures, standings, momentum, and NBA availability against the prior sports snapshot.
 - PVL postseason: quarterfinal, semifinal, third-place, and final stage labels automatically activate the shared bracket renderer.
 - PVL resilience: the refresh retains the last good PVL snapshot when the official page structure or network fails.
 - Shared freshness: each module publishes last-success, attempted-refresh, stale threshold, and fallback status fields; both UIs render a visible health banner.

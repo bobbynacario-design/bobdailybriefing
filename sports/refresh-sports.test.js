@@ -19,6 +19,7 @@ import {
   parsePvlLeaders,
   buildPvlBracket,
   buildTeamProfiles,
+  buildModuleChanges,
   scheduleReadiness,
   buildPvlMomentum
 } from './refresh-sports.js';
@@ -187,6 +188,38 @@ test('builds PVL postseason rounds and team detail profiles only from official m
   ], matches, []);
   assert.equal(profiles[0].momentumScore, 88);
   assert.equal(profiles[0].next.away, 'ZUS Coffee Thunderbelles');
+});
+
+test('builds a concise refresh delta from results, fixtures and standings movement', function () {
+  var previous = {
+    lastSuccessfulAt:'2026-07-20T00:00:00Z',
+    matches:[
+      { id:'done-later', status:'SCHEDULED' },
+      { id:'known-next', status:'SCHEDULED' }
+    ],
+    standings:[{ team:'Creamline', position:2, wins:1, losses:0, points:3 }],
+    momentum:[{ team:'Creamline', score:55, label:'WATCH', recentForm:'W' }]
+  };
+  var current = {
+    lastSuccessfulAt:'2026-07-22T00:00:00Z',
+    recent:[{ id:'done-later', utcDate:'2026-07-21T10:00:00Z', status:'FINISHED', stage:'Match-Up', home:'Creamline', away:'Akari', score:{ home:3, away:1 } }],
+    upcoming:[{ id:'new-next', utcDate:'2026-07-25T10:00:00Z', status:'SCHEDULED', home:'Creamline', away:'PLDT', venue:'Test Arena' }],
+    standings:[{ team:'Creamline', position:1, wins:2, losses:0, points:6 }],
+    momentum:[{ team:'Creamline', score:74, label:'RISING', recentForm:'WW' }]
+  };
+  var changes = buildModuleChanges('pvl', current, previous);
+  assert.equal(changes.since, '2026-07-20T00:00:00Z');
+  assert.deepEqual(changes.items.map(function (item) { return item.type; }), ['result', 'fixture', 'standing', 'momentum']);
+  assert.match(changes.items[2].detail, /#2 to #1/);
+
+  var repeated = buildModuleChanges('pvl', {
+    lastSuccessfulAt:'2026-07-22T04:00:00Z', recent:[], upcoming:[], standings:[], momentum:[]
+  }, {
+    lastSuccessfulAt:'2026-07-22T00:00:00Z', matches:[], standings:[], momentum:[],
+    changes:changes
+  });
+  assert.equal(repeated.items.length, 4);
+  assert.equal(repeated.since, '2026-07-20T00:00:00Z');
 });
 
 test('scheduler readiness requires successful refreshes on three distinct PHT days', function () {
