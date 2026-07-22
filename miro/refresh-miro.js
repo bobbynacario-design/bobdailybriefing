@@ -31,6 +31,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { aggregatePanel } from './scenario.js';
 import { buildMiroJournal } from './journal-miro.js';
+import { enrichMarketChanges } from './briefing.js';
 import { extractUsage, addUsage, recordUsage } from '../lib/llm-usage.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -153,11 +154,14 @@ async function fetchMarkets(markets) {
       slug: cfg.slug,
       label: cfg.label,
       theme: cfg.theme,
+      priority: cfg.priority == null ? 3 : cfg.priority,
+      why: cfg.why || '',
       question: r.question || cfg.label,
       yesOutcome: outcomes[yesIdx] != null ? String(outcomes[yesIdx]) : (cfg.yesOutcome || 'Yes'),
       impliedYes: impliedYes,
       endDate: r.endDateIso || (r.endDate ? String(r.endDate).slice(0, 10) : null),
       volumeNum: num(r.volumeNum),
+      volume24hr: num(r.volume24hr),
       liquidityNum: num(r.liquidityNum),
       closed: !!r.closed,
       conditionId: r.conditionId || null,
@@ -339,6 +343,19 @@ async function loadMiroControl(db) {
   }
 }
 
+async function loadPreviousMiro(db) {
+  try {
+    var pointer = await db.collection(COLL).doc('miro-latest').get();
+    var value = pointer.exists && pointer.data() && pointer.data().value;
+    if (!value) return null;
+    var snap = await db.collection(COLL).doc('miro-' + value).get();
+    return snap.exists ? (snap.data() || null) : null;
+  } catch (e) {
+    console.warn('previous Markets snapshot read failed:', e.message || e);
+    return null;
+  }
+}
+
 // ── main ──
 
 async function main() {
@@ -351,6 +368,7 @@ async function main() {
   await fetchBooks(marketsData);
 
   var db = initAdmin();
+  var previousDoc = await loadPreviousMiro(db);
   var control = await loadMiroControl(db);
   var controlPaused = control.llmPaused === true;
 
@@ -370,6 +388,8 @@ async function main() {
   marketsData = aggregatePanel(marketsData, CONFIG);
   // Drop the raw reads from the persisted doc (keep panelN as the count).
   marketsData.forEach(function (m) { delete m.panelReads; });
+  var briefing = enrichMarketChanges(marketsData, previousDoc);
+  marketsData = briefing.markets;
 
   var dateKey = phtDateKey();
   var meta = {
@@ -395,7 +415,8 @@ async function main() {
     lane: 3,
     meta: meta,
     disclaimer: 'Research framing only. Implied probabilities are Polymarket prices; the panel read is an independent, uncertainty-haircut estimate compared to that price. The verdict is a research flag — not advice, not a recommendation, no execution.',
-    markets: marketsData
+    markets: marketsData,
+    changes: briefing.changes
   };
 
   console.log('\n===== briefings-bob/miro-' + dateKey + ' =====');

@@ -1018,6 +1018,37 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .miro-llm-btn.paused{border-color:rgba(232,92,92,.35);background:var(--red-dim);color:var(--red)}
 .miro-llm-btn.running{border-color:rgba(45,184,122,.35);background:var(--green-dim);color:var(--green)}
 .miro-llm-status{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;line-height:1.5}
+.miro-settings{border-bottom:1px solid var(--rim);padding:.1rem 0 .9rem;margin-bottom:.2rem}
+.miro-settings>summary,.miro-all>summary{cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);list-style:none}
+.miro-settings>summary::-webkit-details-marker,.miro-all>summary::-webkit-details-marker{display:none}
+.miro-settings>summary:before,.miro-all>summary:before{content:'+';display:inline-block;width:1rem;color:var(--gold)}
+.miro-settings[open]>summary:before,.miro-all[open]>summary:before{content:'-'}
+.miro-settings-body{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.85rem 0 .1rem;flex-wrap:wrap}
+.miro-theme-options{display:flex;gap:.45rem .9rem;flex-wrap:wrap;max-width:760px}
+.miro-theme-option{display:flex;align-items:center;gap:.4rem;font-size:11px;color:var(--txt2)}
+.miro-theme-option input{accent-color:var(--gold)}
+.miro-brief-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:1.5rem;align-items:start}
+.miro-section{padding:1rem 0;border-bottom:1px solid var(--rim)}
+.miro-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;margin-bottom:.7rem}
+.miro-section-head h3{font-family:var(--serif);font-size:19px;line-height:1.25;margin:0}
+.miro-section-meta{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}
+.miro-signal-list,.miro-change-list{display:flex;flex-direction:column}
+.miro-signal{display:grid;grid-template-columns:minmax(0,1fr) 90px 70px;gap:.8rem;align-items:center;padding:.72rem 0;border-bottom:1px solid var(--rim)}
+.miro-signal:last-child,.miro-change:last-child{border-bottom:0}
+.miro-signal-theme{font-family:var(--mono);font-size:8px;letter-spacing:.07em;text-transform:uppercase;color:var(--gold);margin-bottom:.22rem}
+.miro-signal-name{font-size:13px;font-weight:700;color:var(--txt);line-height:1.4}
+.miro-signal-why{font-size:10.5px;color:var(--txt3);line-height:1.45;margin-top:.2rem}
+.miro-prob{font-family:var(--mono);font-size:19px;color:var(--txt);text-align:right;font-variant-numeric:tabular-nums}
+.miro-delta{font-family:var(--mono);font-size:10px;text-align:right;white-space:nowrap}
+.miro-delta.up{color:var(--green)}.miro-delta.down{color:var(--red)}.miro-delta.flat{color:var(--txt3)}
+.miro-change{display:grid;grid-template-columns:68px minmax(0,1fr) auto;gap:.65rem;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--rim)}
+.miro-change-theme{font-family:var(--mono);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+.miro-change-name{font-size:11px;font-weight:700;line-height:1.4}
+.miro-health{border-left:3px solid var(--gold);background:var(--gold-dim);padding:.75rem .85rem;font-size:11px;color:var(--txt2);line-height:1.6}
+.miro-health strong{color:var(--txt)}
+.miro-empty{font-size:11px;color:var(--txt3);line-height:1.6;padding:.55rem 0}
+.miro-all{padding:1rem 0}.miro-all-body{padding-top:1rem}.miro-all-body .radar-grid{margin:0}
+@media(max-width:760px){.miro-brief-grid{grid-template-columns:1fr}.miro-signal{grid-template-columns:minmax(0,1fr) 72px}.miro-delta{grid-column:2}.miro-settings-body{display:block}.miro-controls{margin:.8rem 0 0}.miro-change{grid-template-columns:58px minmax(0,1fr)}}
 
 /* ── WATCH CARD ── */
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
@@ -1164,6 +1195,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 @media(max-width:768px){
   .nav{padding:.55rem 1rem}
   .nav-center{display:none}
+  .nav-right{width:100%;max-width:100%;min-width:0;overflow-x:auto;flex-wrap:nowrap}
   .nav-clock{display:none}
   .page{padding:1rem}
   .hero{padding:1rem 1.25rem}
@@ -1174,8 +1206,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   .brief-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
   .brief-desk{grid-template-columns:1fr}
   .archive-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--rim);z-index:200;padding:.5rem 0 calc(.5rem + env(safe-area-inset-bottom))}
-  .mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:.42rem .2rem;border:none;background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;transition:color .15s}
+  .mobile-nav{display:flex;position:fixed;bottom:0;left:0;width:100%;overflow-x:auto;background:var(--bg2);border-top:1px solid var(--rim);z-index:200;padding:.5rem 0 calc(.5rem + env(safe-area-inset-bottom))}
+  .mob-tab{flex:0 0 56px;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:.42rem .2rem;border:none;background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;transition:color .15s}
   .mob-tab.active{color:var(--gold)}
   .mob-tab-icon{font-size:19px;line-height:1}
   #mob-today{order:1}
@@ -1195,6 +1227,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   .card-hl{font-size:14px}
   .search-input{font-size:16px}
   .hist-delete{opacity:1}
+  #page-miro .hero::after{width:88px;height:88px;right:1rem}
+  #page-miro .hero-eyebrow,#page-miro .hero-date,#page-miro .hero-sub,#page-miro .hero-divider{max-width:calc(100% - 94px)}
 }
 @media(max-width:520px){
   .brief-summary{grid-template-columns:1fr}
@@ -1672,17 +1706,23 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 <!-- ═══════════════ MARKETS (EVENT-MARKET SCENARIO READ) PAGE ═══════════════ -->
 <div class="page" id="page-miro">
   <div class="hero" style="margin-bottom:1.25rem">
-    <div class="hero-eyebrow">Event-Market Scenario Read</div>
-    <div class="hero-date" style="font-size:22px">🎲 Markets</div>
+    <div class="hero-eyebrow">Decision-Relevant Event Signals</div>
+    <div class="hero-date" style="font-size:22px">Markets</div>
     <div class="hero-sub" id="miro-sub">Loading…</div>
     <div class="hero-divider"></div>
   </div>
-  <div class="miro-controls">
-    <button class="miro-llm-btn" id="miro-llm-toggle" onclick="toggleMiroLlmCalls()">LLM calls: loading</button>
-    <div class="miro-llm-status" id="miro-llm-status">Controls the next scheduled Markets refresh.</div>
-  </div>
+  <details class="miro-settings" id="miro-settings" ontoggle="miroSettingsToggled(this)">
+    <summary>Manage followed themes and model settings</summary>
+    <div class="miro-settings-body">
+      <div class="miro-theme-options" id="miro-theme-options"></div>
+      <div class="miro-controls">
+        <button class="miro-llm-btn" id="miro-llm-toggle" onclick="toggleMiroLlmCalls()">LLM calls: loading</button>
+        <div class="miro-llm-status" id="miro-llm-status">Controls the next scheduled Markets refresh.</div>
+      </div>
+    </div>
+  </details>
   <div id="miro-out"><div class="empty-state">LOADING MARKETS…</div></div>
-  <div class="radar-disclaimer">Research framing only. Implied probabilities are Polymarket's own prices; any "scenario" read is a haircut research estimate compared to that price — never a recommendation to bet, and no execution. If a check fails it's a NO-GO: you don't have a trade, you have a story.</div>
+  <div class="radar-disclaimer">Event-market probabilities are noisy external signals, not facts or recommendations. Use changes as prompts for further research; no betting execution is provided.</div>
 </div>
 
 <!-- ═══════════════ SPORTS PAGE ═══════════════ -->
@@ -1768,22 +1808,17 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     </div>
 
     <div class="help-card">
-      <div class="help-h">🎲 Markets — is a betting market mispriced?</div>
-      <p>Each card is one <b>event market</b> on Polymarket (e.g. "Will France win the 2026 World Cup?"). It compares the <b>market's own price</b> to an independent read, and tells you whether that's a real disagreement — or just noise. Read a card left to right:</p>
+      <div class="help-h">Markets — what changed in decision-relevant events?</div>
+      <p>The Markets tab treats event-market probabilities as an external intelligence signal. Its watchlist is limited to Philippine policy, macro and rates, energy, regional security, trade, and AI industry events.</p>
       <ul>
-        <li><b>mkt X% YES</b> — the market's current price, read as the implied probability the answer is YES. This is the number to beat.</li>
-        <li><b>Panel Y% (haircut)</b> — our estimate. 5 AI "personas" (a base-rate historian, an insider specialist, a contrarian, a newsdesk reporter, a calibrated generalist) each guess the probability <i>without being told the price</i>, so they're an independent read, not the price echoed back. We then <b>haircut</b> it — pull it most of the way back toward the market price — because a panel built from one model shares that model's blind spots and its confidence is partly cosmetic.</li>
-        <li><b>spread ±</b> — how much the personas disagreed. A wide spread means low conviction, and the haircut pulls harder.</li>
-        <li><b>est. edge after costs</b> — the gap that's actually left after the haircut and the bid/ask spread, with the <b>side</b> of the discrepancy (YES or NO). It's a research signal, not a trade ticket.</li>
-        <li><b>verdict badge</b> — the research call:
-          <ul>
-            <li><span class="help-pill" style="color:var(--green)">RESEARCH FLAG</span> — a real, liquid, agreed-upon discrepancy that clears costs. "Watch only — not advice."</li>
-            <li><span class="help-pill" style="color:var(--red)">NO EDGE / PANEL SPLIT / TOO THIN / SPREAD TOO WIDE / CLOSED</span> — a check failed, and the badge says which: too close to the price, personas disagree, can't actually trade size, spread too wide, or already resolved.</li>
-          </ul>
-        </li>
+        <li><b>Priority Signals</b> — the six most relevant followed events, ranked by configured importance, probability movement, and market liquidity.</li>
+        <li><b>Probability</b> — the market's current implied chance that the event resolves YES. It is a noisy crowd estimate, not a fact.</li>
+        <li><b>Last refresh</b> — the change from the preceding successful refresh. A new event needs one more run before a genuine delta exists.</li>
+        <li><b>What Changed</b> — isolates moves of at least 0.5 percentage points so unchanged markets do not demand attention.</li>
+        <li><b>Followed themes</b> — choose which topics belong in the priority brief. The complete market data remains available below.</li>
+        <li><b>Evidence Check</b> — states whether the optional forecasting panel has actually demonstrated an edge. "Unproven" means exactly that.</li>
       </ul>
-      <p>The <b>📓 Journal banner</b> up top is the honesty check. As markets resolve it scores our read against the market price using a <b>Brier score</b> (lower = better calibrated). <b>Skill</b> is the only number that matters: positive means we beat the price, negative means we didn't.</p>
-      <p class="help-key">Expect mostly <b>NO-GO</b>, and expect skill near zero — these markets are close to efficient, so a handful of AI guesses rarely beats the crowd's price. That's the tool being honest: <b>if even one check fails, you don't have a trade, you have a story.</b> Nothing here is a bet or advice.</p>
+      <p class="help-key">Best use: scan meaningful probability changes, ask what new information could explain them, then verify against primary reporting. The tab surfaces research prompts; it does not recommend bets or execute trades.</p>
     </div>
 
     <div class="help-card">
@@ -1806,7 +1841,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <ul>
         <li><b>Radar</b> = today's framing: what's strong, why, and where it breaks. Use the status + stop + catalyst.</li>
         <li><b>Journal</b> = the reality check: look at <b>excess</b>, not raw. It currently says "we've mostly been long the AI trade" — so weight the radar accordingly.</li>
-        <li><b>Markets</b> = is a betting market mispriced? Compare <b>mkt %</b> to our <b>panel %</b>; treat a <span class="help-pill" style="color:var(--green)">RESEARCH FLAG</span> as watch-only, and even then check the journal's <b>skill</b>. Mostly "no edge" is the honest, expected answer.</li>
+        <li><b>Markets</b> = what changed in event probabilities that matter to your Philippine, macro, regional-risk, energy, trade, or AI context. Use moves as research prompts, not recommendations.</li>
         <li><b>Sports</b> = who is moving up or down in NBA and PVL. Check freshness first, then use Momentum alongside fixtures, rest, availability, and official results.</li>
       </ul>
     </div>
@@ -3397,53 +3432,122 @@ function toggleMiroLlmCalls() {
     _miroLlmBusy = false;
   });
 }
+// Personal event-signal brief: theme follows, ranked probabilities, changes and
+// an explicit evidence check before the raw market/model details.
+var _miroCachedData = null;
+var _miroCachedJournal = null;
+var _miroSettingsOpen = false;
+function miroSettingsToggled(details) { _miroSettingsOpen = !!(details && details.open); }
+function miroThemeStorageKey() { return 'bob-markets-followed-themes'; }
+function miroThemes(d) {
+  return (d.markets || []).map(function (market) { return market.theme || 'Other'; })
+    .filter(function (theme, index, all) { return all.indexOf(theme) === index; });
+}
+function miroFollowedThemes(d) {
+  var defaults = miroThemes(d);
+  try {
+    var raw = localStorage.getItem(miroThemeStorageKey());
+    if (raw !== null) {
+      var saved = JSON.parse(raw);
+      if (Array.isArray(saved)) return saved;
+    }
+  } catch (e) {}
+  return defaults;
+}
+function miroToggleTheme(input) {
+  if (!_miroCachedData) return;
+  var theme = input && input.getAttribute('data-theme') || '';
+  var followed = miroFollowedThemes(_miroCachedData);
+  var index = followed.indexOf(theme);
+  if (input.checked && index < 0) followed.push(theme);
+  if (!input.checked && index >= 0) followed.splice(index, 1);
+  _miroSettingsOpen = true;
+  try { localStorage.setItem(miroThemeStorageKey(), JSON.stringify(followed)); } catch (e) {}
+  miroRenderData(_miroCachedData, _miroCachedJournal);
+}
+function miroThemeSettingsHtml(d) {
+  var followed = miroFollowedThemes(d);
+  return miroThemes(d).map(function (theme) {
+    return '<label class="miro-theme-option"><input type="checkbox" data-theme="' + esc(theme) + '" onchange="miroToggleTheme(this)"' +
+      (followed.indexOf(theme) >= 0 ? ' checked' : '') + '><span>' + esc(theme) + '</span></label>';
+  }).join('');
+}
+function miroDeltaHtml(change, isNew) {
+  if (change == null) return '<div class="miro-delta flat">' + (isNew ? 'new signal' : 'no baseline') + '</div>';
+  if (Math.abs(change) < 0.0005) return '<div class="miro-delta flat">unchanged</div>';
+  var cls = change > 0 ? 'up' : 'down';
+  return '<div class="miro-delta ' + cls + '">' + (change > 0 ? '+' : '') + (change * 100).toFixed(1) + ' pts</div>';
+}
+function miroSignalHtml(market) {
+  return '<div class="miro-signal"><div><div class="miro-signal-theme">' + esc(market.theme || 'Signal') + '</div>' +
+    '<div class="miro-signal-name">' + esc(market.label || market.slug) + '</div>' +
+    '<div class="miro-signal-why">' + esc(market.why || market.question || '') + '</div></div>' +
+    '<div class="miro-prob">' + miroPct(market.impliedYes) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + '</div>';
+}
+function miroChangesHtml(d, followed) {
+  var items = ((d.changes && d.changes.items) || []).filter(function (item) {
+    return followed.indexOf(item.theme || 'Other') >= 0;
+  }).slice(0, 6);
+  if (!items.length) return '<div class="miro-empty">No material probability move since the previous refresh. New signals need one more scheduled run to establish a baseline.</div>';
+  return '<div class="miro-change-list">' + items.map(function (item) {
+    return '<div class="miro-change"><div class="miro-change-theme">' + esc(item.theme || 'Signal') + '</div>' +
+      '<div class="miro-change-name">' + esc(item.label || item.slug) + '</div>' + miroDeltaHtml(item.change, false) + '</div>';
+  }).join('') + '</div>';
+}
+function miroHealthHtml(j, d) {
+  var stats = j && j.stats || {};
+  var resolved = stats.nResolved || 0;
+  var state = resolved ? (stats.skill > 0 ? 'Beating market baseline' : 'Not beating market baseline') : 'Unproven';
+  var detail = resolved
+    ? resolved + ' forecasts resolved; Brier skill ' + (stats.skill == null ? 'not available' : stats.skill) + '.'
+    : 'No forecasts have resolved, so the model has no demonstrated forecasting edge.';
+  if (stats.meanClvTowardPanel != null && stats.nClv) {
+    detail += ' Early price drift toward the panel is ' + (stats.meanClvTowardPanel > 0 ? '+' : '') +
+      (stats.meanClvTowardPanel * 100).toFixed(1) + ' points across ' + stats.nClv + ' observations.';
+  }
+  if (d.meta && d.meta.llmPaused) detail += ' The LLM panel is paused.';
+  return '<div class="miro-health"><strong>Model calibration: ' + esc(state) + '.</strong> ' + esc(detail) + '</div>';
+}
+function miroRenderData(d, j) {
+  var out = document.getElementById('miro-out');
+  var sub = document.getElementById('miro-sub');
+  var settings = document.getElementById('miro-settings');
+  var options = document.getElementById('miro-theme-options');
+  var followed = miroFollowedThemes(d);
+  var signals = d.markets.filter(function (market) { return followed.indexOf(market.theme || 'Other') >= 0; })
+    .sort(function (a, b) { return (b.attentionScore || b.priority || 0) - (a.attentionScore || a.priority || 0); });
+  if (settings) settings.open = _miroSettingsOpen;
+  if (options) options.innerHTML = miroThemeSettingsHtml(d);
+  if (sub) sub.textContent = d.markets.length + ' active signals / refreshed ' + (d.asOf || 'today') + ' / ' + followed.length + ' themes followed';
+  var html = '<div class="miro-brief-grid"><div><section class="miro-section"><div class="miro-section-head"><h3>Priority Signals</h3><span class="miro-section-meta">probability / last refresh</span></div>' +
+    (signals.length ? '<div class="miro-signal-list">' + signals.slice(0, 6).map(miroSignalHtml).join('') + '</div>' : '<div class="miro-empty">No themes followed. Open Manage followed themes above to choose what belongs in your brief.</div>') +
+    '</section></div><div><section class="miro-section"><div class="miro-section-head"><h3>What Changed</h3><span class="miro-section-meta">moves of 0.5+ pts</span></div>' + miroChangesHtml(d, followed) +
+    '</section><section class="miro-section"><div class="miro-section-head"><h3>Evidence Check</h3><span class="miro-section-meta">forecast journal</span></div>' + miroHealthHtml(j, d) + '</section></div></div>';
+  html += '<details class="miro-all"><summary>All market data / ' + d.markets.length + ' signals</summary><div class="miro-all-body"><div class="radar-grid">' + d.markets.map(miroCard).join('') + '</div></div></details>';
+  out.innerHTML = html;
+}
 function renderMiro() {
   var out = document.getElementById('miro-out');
   var sub = document.getElementById('miro-sub');
   if (!out) return;
   loadMiroLlmControl();
   if (!window.fbLoadMiro) { out.innerHTML = '<div class="empty-state">MARKETS UNAVAILABLE</div>'; return; }
-  out.innerHTML = '<div class="empty-state">LOADING MARKETS…</div>';
-  var jp = window.fbLoadMiroJournal ? window.fbLoadMiroJournal() : Promise.resolve(null);
-  Promise.all([window.fbLoadMiro(), jp]).then(function (res) {
-    var d = res[0], j = res[1];
-    if (!d || !d.markets || !d.markets.length) {
+  out.innerHTML = '<div class="empty-state">LOADING MARKETS...</div>';
+  var journalPromise = window.fbLoadMiroJournal ? window.fbLoadMiroJournal() : Promise.resolve(null);
+  Promise.all([window.fbLoadMiro(), journalPromise]).then(function (result) {
+    var data = result[0], journal = result[1];
+    if (!data || !data.markets || !data.markets.length) {
       if (sub) sub.textContent = 'No data yet';
-      out.innerHTML = '<div class="empty-state">NO MARKETS YET — RUN miro/refresh-miro.js</div>';
+      out.innerHTML = '<div class="empty-state">NO MARKET SIGNALS YET - RUN miro/refresh-miro.js</div>';
       return;
     }
-    var hasPanel = d.markets.some(function (m) { return m.haircutProb != null; });
-    if (sub) sub.textContent = d.markets.length + ' markets · as of ' + esc(d.asOf) +
-      (hasPanel ? '' : ' · implied prices only (scenario panel pending)');
-    out.innerHTML = miroJournalBanner(j) + '<div class="radar-grid">' + d.markets.map(miroCard).join('') + '</div>';
+    _miroCachedData = data;
+    _miroCachedJournal = journal;
+    miroRenderData(data, journal);
+  }).catch(function (error) {
+    if (sub) sub.textContent = 'Could not load market signals';
+    out.innerHTML = '<div class="empty-state">MARKETS LOAD FAILED: ' + esc(error && error.message || 'unknown error') + '</div>';
   });
-}
-// Journal summary banner: Brier(ours) vs Brier(market price). skill > 0 means the
-// panel read beat the price. Until markets resolve it shows the accumulating state.
-function miroJournalBanner(j) {
-  if (!j || !j.stats) return '';
-  var s = j.stats;
-  // Closing-line value: did the price drift toward our read? Early feedback well
-  // before resolution. Shown in percentage points.
-  var clvTxt = '';
-  if (s.meanClvTowardPanel != null && s.nClv) {
-    var c = s.meanClvTowardPanel, ccol = c > 0 ? 'var(--green)' : (c < 0 ? 'var(--red)' : 'var(--txt3)');
-    clvTxt = ' · <span style="color:' + ccol + '">price drift toward our read ' +
-      (c > 0 ? '+' : '') + (c * 100).toFixed(1) + ' pts</span> (' + s.nClv + ')';
-  }
-  if (!s.nResolved) {
-    return '<div class="pse-caveat">📓 Journal accumulating — ' + (s.nOpen || 0) +
-      ' prediction(s) logged, 0 resolved yet. Brier vs the market price appears as markets settle.' +
-      clvTxt + '</div>';
-  }
-  var skill = s.skill;
-  var col = skill == null ? 'var(--txt3)' : (skill > 0 ? 'var(--green)' : 'var(--red)');
-  var verdict = skill == null ? '' : (skill > 0 ? 'beating the price' : 'not beating the price');
-  var ll = s.logLossSkill == null ? '' : ' · log-loss skill ' + (s.logLossSkill > 0 ? '+' : '') + s.logLossSkill;
-  return '<div class="pse-caveat">📓 Journal · ' + s.nResolved + ' resolved · ' +
-    'Brier ours ' + s.brierOurs + ' vs market ' + s.brierMarket +
-    ' · <span style="color:' + col + '">skill ' + (skill > 0 ? '+' : '') + skill + ' (' + verdict + ')</span>' +
-    ll + clvTxt + '</div>';
 }
 
 // ── SPORTS ──

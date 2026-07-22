@@ -5,7 +5,8 @@
   "type": "module",
   "main": "refresh-miro.js",
   "scripts": {
-    "refresh": "node refresh-miro.js"
+    "refresh": "node refresh-miro.js",
+    "test": "node --test briefing.test.js"
   },
   "engines": {
     "node": ">=20"

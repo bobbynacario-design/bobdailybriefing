@@ -24,20 +24,15 @@
 // against. Prices are not pinned at 0/1, so there is room for a read to differ.
 // Edit freely — this is your watchlist; the journal stays honest as it changes.
 var MARKETS = [
-  // Geopolitics
-  { slug: 'will-the-us-invade-iran-before-2027',   label: 'US invades Iran before 2027',    theme: 'Geopolitics', yesOutcome: 'Yes' },
-  { slug: 'will-china-invade-taiwan-before-2027',  label: 'China invades Taiwan by end 2026', theme: 'Geopolitics', yesOutcome: 'Yes' },
-
-  // Sports — 2026 FIFA World Cup outright (resolve ~2026-07-20)
-  { slug: 'will-france-win-the-2026-fifa-world-cup-924',    label: 'France win 2026 World Cup',    theme: 'Sports', yesOutcome: 'Yes' },
-  { slug: 'will-spain-win-the-2026-fifa-world-cup-963',     label: 'Spain win 2026 World Cup',     theme: 'Sports', yesOutcome: 'Yes' },
-  { slug: 'will-argentina-win-the-2026-fifa-world-cup-245', label: 'Argentina win 2026 World Cup', theme: 'Sports', yesOutcome: 'Yes' },
-  { slug: 'will-england-win-the-2026-fifa-world-cup-937',   label: 'England win 2026 World Cup',   theme: 'Sports', yesOutcome: 'Yes' },
-  { slug: 'will-usa-win-the-2026-fifa-world-cup-467',       label: 'USA win 2026 World Cup',       theme: 'Sports', yesOutcome: 'Yes' },
-
-  // Control / sanity market — the panel should strongly disagree DOWNWARD; a
-  // useful check that the haircut + gate behave (it must never produce a "GO").
-  { slug: 'will-jesus-christ-return-before-2027', label: 'Second Coming before 2027', theme: 'Control', yesOutcome: 'Yes' }
+  { slug: 'will-the-philippine-senate-convict-sara-duterte', label: 'Philippine Senate convicts Sara Duterte', theme: 'Philippines', priority: 5, why: 'Direct Philippine political and policy signal.', yesOutcome: 'Yes' },
+  { slug: 'us-recession-by-end-of-2026', label: 'US recession by end-2026', theme: 'Macro & Rates', priority: 5, why: 'Global growth and risk-appetite proxy with PH spillovers.', yesOutcome: 'Yes' },
+  { slug: 'will-no-fed-rate-hikes-happen-in-2026-20260623190852889', label: 'No Fed rate hikes in 2026', theme: 'Macro & Rates', priority: 5, why: 'Rates regime signal for the dollar, peso and equities.', yesOutcome: 'Yes' },
+  { slug: 'will-crude-oil-reach-a-new-all-time-high-by-december-31', label: 'Crude oil reaches a new high by year-end', theme: 'Energy', priority: 5, why: 'Inflation and import-cost tail risk for the Philippines.', yesOutcome: 'Yes' },
+  { slug: 'china-x-taiwan-military-clash-before-2027', label: 'China-Taiwan military clash before 2027', theme: 'Regional Risk', priority: 5, why: 'High-impact regional security and supply-chain risk.', yesOutcome: 'Yes' },
+  { slug: 'will-china-blockade-taiwan-by-in-2026', label: 'China blockades Taiwan in 2026', theme: 'Regional Risk', priority: 4, why: 'Semiconductor, shipping and regional-security tail risk.', yesOutcome: 'Yes' },
+  { slug: 'us-x-china-tariff-agreement-by-december-31', label: 'US-China tariff agreement by year-end', theme: 'Trade', priority: 4, why: 'Trade and manufacturing sentiment signal for Asia.', yesOutcome: 'Yes' },
+  { slug: 'will-openai-ipo-by-december-31-2026', label: 'OpenAI IPO by year-end', theme: 'AI & Technology', priority: 3, why: 'AI capital-markets and commercialization signal.', yesOutcome: 'Yes' },
+  { slug: 'will-a-chinese-company-have-one-of-the-top-3-ai-models-by-december-31', label: 'Chinese company has a top-3 AI model by year-end', theme: 'AI & Technology', priority: 3, why: 'AI competition and technology-policy signal.', yesOutcome: 'Yes' }
 ];
 
 // Trading-cost assumption. The real edge has to clear the price you can actually
