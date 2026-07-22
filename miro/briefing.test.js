@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { enrichMarketChanges } from './briefing.js';
+import { enrichMarketChanges, probabilityInterpretation } from './briefing.js';
+
+test('interprets implied probabilities without assuming a positive event', function () {
+  assert.equal(probabilityInterpretation(0.82), 'Market strongly expects this');
+  assert.equal(probabilityInterpretation(0.61), 'Market leans this happens');
+  assert.equal(probabilityInterpretation(0.50), 'Market sees an open question');
+  assert.equal(probabilityInterpretation(0.31), 'Market leans this does not happen');
+  assert.equal(probabilityInterpretation(0.12), 'Market sees this as a tail risk');
+});
 
 test('adds price changes and ranks material moves', function () {
   var previous = {

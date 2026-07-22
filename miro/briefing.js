@@ -6,6 +6,16 @@ function numberOrNull(value) {
   return isFinite(n) ? n : null;
 }
 
+function probabilityInterpretation(value) {
+  var probability = numberOrNull(value);
+  if (probability == null) return 'Probability unavailable';
+  if (probability >= 0.75) return 'Market strongly expects this';
+  if (probability >= 0.55) return 'Market leans this happens';
+  if (probability >= 0.45) return 'Market sees an open question';
+  if (probability >= 0.25) return 'Market leans this does not happen';
+  return 'Market sees this as a tail risk';
+}
+
 function enrichMarketChanges(markets, previousDoc) {
   var previous = {};
   ((previousDoc && previousDoc.markets) || []).forEach(function (market) {
@@ -25,6 +35,7 @@ function enrichMarketChanges(markets, previousDoc) {
     return Object.assign({}, market, {
       previousImpliedYes: priorPrice,
       priceChange: change,
+      probabilityRead: probabilityInterpretation(currentPrice),
       attentionScore: (priority == null ? 3 : priority) * 10 + movementPoints + liquidityPoints
     });
   });
@@ -55,4 +66,4 @@ function enrichMarketChanges(markets, previousDoc) {
   };
 }
 
-export { enrichMarketChanges };
+export { enrichMarketChanges, probabilityInterpretation };

@@ -1038,6 +1038,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .miro-signal-theme{font-family:var(--mono);font-size:8px;letter-spacing:.07em;text-transform:uppercase;color:var(--gold);margin-bottom:.22rem}
 .miro-signal-name{font-size:13px;font-weight:700;color:var(--txt);line-height:1.4}
 .miro-signal-why{font-size:10.5px;color:var(--txt3);line-height:1.45;margin-top:.2rem}
+.miro-signal-read{font-family:var(--mono);font-size:9px;color:var(--blue);line-height:1.4;margin-top:.3rem;text-transform:uppercase;letter-spacing:.04em}
 .miro-prob{font-family:var(--mono);font-size:19px;color:var(--txt);text-align:right;font-variant-numeric:tabular-nums}
 .miro-delta{font-family:var(--mono);font-size:10px;text-align:right;white-space:nowrap}
 .miro-delta.up{color:var(--green)}.miro-delta.down{color:var(--red)}.miro-delta.flat{color:var(--txt3)}
@@ -1812,7 +1813,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <p>The Markets tab treats event-market probabilities as an external intelligence signal. Its watchlist is limited to Philippine policy, macro and rates, energy, regional security, trade, and AI industry events.</p>
       <ul>
         <li><b>Priority Signals</b> — the six most relevant followed events, ranked by configured importance, probability movement, and market liquidity.</li>
-        <li><b>Probability</b> — the market's current implied chance that the event resolves YES. It is a noisy crowd estimate, not a fact.</li>
+        <li><b>Probability and market read</b> — the market's current implied chance that the event resolves YES, translated into plain language from "strongly expects this" through "open question" to "tail risk." It is a noisy crowd estimate, not a fact.</li>
         <li><b>Last refresh</b> — the change from the preceding successful refresh. A new event needs one more run before a genuine delta exists.</li>
         <li><b>What Changed</b> — isolates moves of at least 0.5 percentage points so unchanged markets do not demand attention.</li>
         <li><b>Followed themes</b> — choose which topics belong in the priority brief. The complete market data remains available below.</li>
@@ -3340,6 +3341,7 @@ function miroCard(m) {
   html += '<div style="font-family:var(--mono);font-size:13px;color:var(--blue);min-width:108px;text-align:right">' +
     'mkt ' + miroPct(imp) + ' YES</div>';
   html += '</div>';
+  html += '<div class="miro-signal-read">' + esc(m.probabilityRead || miroProbabilityRead(imp)) + '</div>';
   // panel read (Lane 2): only shown when present. Framed as a research estimate.
   if (hasPanel) {
     var edge = m.edge;
@@ -3478,10 +3480,19 @@ function miroDeltaHtml(change, isNew) {
   var cls = change > 0 ? 'up' : 'down';
   return '<div class="miro-delta ' + cls + '">' + (change > 0 ? '+' : '') + (change * 100).toFixed(1) + ' pts</div>';
 }
+function miroProbabilityRead(probability) {
+  if (probability == null) return 'Probability unavailable';
+  if (probability >= 0.75) return 'Market strongly expects this';
+  if (probability >= 0.55) return 'Market leans this happens';
+  if (probability >= 0.45) return 'Market sees an open question';
+  if (probability >= 0.25) return 'Market leans this does not happen';
+  return 'Market sees this as a tail risk';
+}
 function miroSignalHtml(market) {
   return '<div class="miro-signal"><div><div class="miro-signal-theme">' + esc(market.theme || 'Signal') + '</div>' +
     '<div class="miro-signal-name">' + esc(market.label || market.slug) + '</div>' +
-    '<div class="miro-signal-why">' + esc(market.why || market.question || '') + '</div></div>' +
+    '<div class="miro-signal-why">' + esc(market.why || market.question || '') + '</div>' +
+    '<div class="miro-signal-read">' + esc(market.probabilityRead || miroProbabilityRead(market.impliedYes)) + '</div></div>' +
     '<div class="miro-prob">' + miroPct(market.impliedYes) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + '</div>';
 }
 function miroChangesHtml(d, followed) {
