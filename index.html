@@ -4008,7 +4008,9 @@ function sportsAvailableModules(d) {
   if (d && d.worldCup) out.push({ key:'worldcup', label:'FIFA Archive', module:d.worldCup });
   return out;
 }
+var sportsFollowPanels = {};
 function sportsFollowKey(key, type) { return 'bob-sports-follow-' + key + '-' + type; }
+function sportsFollowPanelToggled(details, key) { sportsFollowPanels[key] = !!(details && details.open); }
 function sportsFollowed(mod, key, type) {
   var defaults = type === 'teams'
     ? (mod.watchlist || []).map(function (row) { return row.team || row.name || ''; }).filter(Boolean)
@@ -4029,6 +4031,7 @@ function sportsToggleFollow(input, key, type) {
   var idx = names.indexOf(name);
   if (input.checked && idx < 0) names.push(name);
   if (!input.checked && idx >= 0) names.splice(idx, 1);
+  sportsFollowPanels[key] = true;
   try { localStorage.setItem(sportsFollowKey(key, type), JSON.stringify(names)); } catch (e) {}
   sportsRenderActive();
 }
@@ -4060,7 +4063,7 @@ function sportsFollowSettingsHtml(mod, key) {
       return '<label class="sports-follow-option"><input type="checkbox" data-follow-name="' + esc(name) + '" onchange="sportsToggleFollow(this,\'' + key + '\',\'' + type + '\')"' + (followed.indexOf(name) >= 0 ? ' checked' : '') + '><span>' + esc(name) + '</span></label>';
     }).join('') + '</div>';
   }
-  return '<details class="sports-follow-settings"><summary>Manage follows / ' + followedTeams.length + ' teams / ' + followedPlayers.length + ' players</summary><div class="sports-follow-body">' +
+  return '<details class="sports-follow-settings"' + (sportsFollowPanels[key] ? ' open' : '') + ' ontoggle="sportsFollowPanelToggled(this,\'' + key + '\')"><summary>Manage follows / ' + followedTeams.length + ' teams / ' + followedPlayers.length + ' players</summary><div class="sports-follow-body">' +
     '<div class="sports-follow-group"><h3>Teams</h3>' + options(teams, followedTeams, 'teams') + '</div>' +
     '<div class="sports-follow-group"><h3>Players</h3>' + options(players, followedPlayers, 'players') + '</div></div></details>';
 }
