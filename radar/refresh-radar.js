@@ -13,6 +13,10 @@
 //   set OPENAI_API_KEY=...         (optional — enables V2 catalyst tagging)
 //   node refresh-radar.js
 //
+// A run is a no-op if today's radar-<PHT date> doc already exists (so the 08:30
+// catch-up trigger costs nothing when the 06:00 run succeeded). Pass --force
+// (or RADAR_FORCE=1) to re-run and overwrite the day.
+//
 // Firestore auth (firebase-admin, Admin SDK — bypasses security rules):
 //   place a service-account key at radar/serviceAccountKey.json (gitignored),
 //   OR set GOOGLE_APPLICATION_CREDENTIALS to a key file path.
@@ -23,6 +27,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { lookup as dnsLookup } from 'dns/promises';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
@@ -32,6 +37,29 @@ import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 import { extractUsage, recordUsage } from '../lib/llm-usage.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ── run banner ──
+// refresh.log is append-only and used to have no timestamps, so a run that
+// started 97 minutes late (Task Scheduler catch-up after a Modern-Standby
+// resume) was indistinguishable from one that never happened. Every run now
+// brackets itself with a stamped header/footer.
+
+function nowStamp() {
+  var d = new Date();
+  var pht = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  }).format(d).replace(', ', ' ');
+  return pht + ' PHT (' + d.toISOString() + ')';
+}
+
+var RUN_STARTED = Date.now();
+console.log('\n===== refresh-radar run started ' + nowStamp() + ' =====');
+
+function runFooter(outcome) {
+  console.log('===== refresh-radar ' + outcome + ' ' + nowStamp() +
+    ' after ' + Math.round((Date.now() - RUN_STARTED) / 1000) + 's =====');
+}
 
 // Load radar/.env (gitignored) into process.env before any keys are read, so a
 // single local file holds all secrets — no per-run env setup, Task-Scheduler-friendly.
@@ -86,8 +114,10 @@ function daysAgoIso(n) {
 // fetch with retry + backoff. This box's network intermittently resets
 // connections (ECONNRESET), so a single transient failure should not abort
 // the whole run — important for unattended Task Scheduler runs.
+// Budget ~22s (1.5/3/6/12) so a brief mid-run drop is survivable; a cold link
+// at startup is handled by waitForNetwork() below, not here.
 async function fetchRetry(url, opts, label) {
-  var attempts = 4;
+  var attempts = 5;
   var lastErr;
   for (var i = 0; i < attempts; i++) {
     try {
@@ -96,11 +126,53 @@ async function fetchRetry(url, opts, label) {
     } catch (e) {
       lastErr = e;
       var code = (e && e.cause && e.cause.code) || e.message;
-      console.log('  ' + (label || 'fetch') + ' transient error (' + code + '), retry ' + (i + 1) + '/' + (attempts - 1));
-      await new Promise(function (r) { setTimeout(r, 1500 * (i + 1)); });
+      console.log('  ' + (label || 'fetch') + ' transient error (' + code + '), attempt ' + (i + 1) + '/' + attempts);
+      if (i === attempts - 1) break;
+      await new Promise(function (r) { setTimeout(r, Math.min(1500 * Math.pow(2, i), 12000)); });
     }
   }
   throw lastErr;
+}
+
+// ── network preflight ──
+// The scheduled run fires at 06:00, and on this Modern-Standby (S0) box it
+// often starts seconds after a resume — before Wi-Fi has associated and DNS is
+// up. fetchRetry's ladder is a mid-session safety net, far too short for that:
+// runs died on the very first Alpaca call with four ENOTFOUNDs inside 15s
+// (2026-07-04/05/09/11/25). Wait for real connectivity before touching any API.
+
+var NET_WAIT_MS = Number(process.env.RADAR_NET_WAIT_MS || 300000); // 5 min
+var NET_PROBE_HOST = process.env.RADAR_NET_PROBE_HOST || 'data.alpaca.markets';
+
+async function waitForNetwork() {
+  var started = Date.now();
+  var deadline = started + NET_WAIT_MS;
+  var attempt = 0;
+  for (;;) {
+    attempt++;
+    try {
+      await dnsLookup(NET_PROBE_HOST);
+      // DNS can answer from cache while the link is still dead, so make one
+      // real request too. Any HTTP status proves the path works.
+      await fetch('https://' + NET_PROBE_HOST + '/', {
+        method: 'HEAD', signal: AbortSignal.timeout(8000)
+      });
+      if (attempt > 1) {
+        console.log('Network ready after ' + Math.round((Date.now() - started) / 1000) +
+          's (' + attempt + ' probes).');
+      }
+      return;
+    } catch (e) {
+      // dns.lookup puts the code on .code; undici fetch nests it under .cause.
+      var code = (e && e.cause && e.cause.code) || (e && e.code) || e.name || e.message;
+      if (Date.now() >= deadline) {
+        throw new Error('no network after ' + Math.round(NET_WAIT_MS / 1000) +
+          's waiting on ' + NET_PROBE_HOST + ' (last: ' + code + ')');
+      }
+      if (attempt === 1) console.log('Waiting for network to come up (' + code + ')...');
+      await new Promise(function (r) { setTimeout(r, 5000); });
+    }
+  }
 }
 
 // ── data: Alpaca daily bars for all equity/ETF symbols ──
@@ -302,7 +374,10 @@ async function fetchCatalysts(signals) {
 
 // ── Firestore (Admin SDK) ──
 
+var _db = null;
+
 function initAdmin() {
+  if (_db) return _db; // initializeApp throws if called twice
   var keyPath = join(__dirname, 'serviceAccountKey.json');
   if (existsSync(keyPath)) {
     var sa = JSON.parse(readFileSync(keyPath, 'utf8'));
@@ -312,7 +387,8 @@ function initAdmin() {
     initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID });
     console.log('firebase-admin: using application default credentials');
   }
-  return getFirestore();
+  _db = getFirestore();
+  return _db;
 }
 
 async function writeDoc(db, dateKey, doc) {
@@ -325,6 +401,25 @@ async function writeDoc(db, dateKey, doc) {
 // ── main ──
 
 async function main() {
+  await waitForNetwork();
+
+  var dateKey = phtDateKey();
+  var db = initAdmin();
+
+  // Idempotence guard. The 08:30 catch-up trigger exists only to cover a 06:00
+  // run that never fired or died on a cold network; when 06:00 succeeded there
+  // is no new data and no reason to pay for a second OpenAI catalyst call.
+  if (process.env.RADAR_FORCE === '1' || process.argv.includes('--force')) {
+    console.log('--force: re-running and overwriting radar-' + dateKey + '.');
+  } else {
+    var existing = await db.collection(COLL).doc('radar-' + dateKey).get();
+    if (existing.exists) {
+      console.log('radar-' + dateKey + ' already written at ' +
+        ((existing.data() || {}).generatedAt || '?') + ' — nothing to do (--force to re-run).');
+      return;
+    }
+  }
+
   var barsByAsset = await fetchAll();
 
   var counts = Object.keys(barsByAsset).map(function (s) {
@@ -333,7 +428,6 @@ async function main() {
   console.log('Bars loaded -> ' + counts.join('  '));
 
   var result = scoreUniverse(barsByAsset, CONFIG);
-  var dateKey = phtDateKey();
 
   // V2: tag each signal with a recent catalyst (display-only; score unchanged).
   var catResult = await fetchCatalysts(result.signals);
@@ -406,7 +500,6 @@ async function main() {
   });
   console.log('  ' + wc.note);
 
-  var db = initAdmin();
   await writeDoc(db, dateKey, doc);
   await db.collection(COLL).doc('radar-journal').set(journalDoc);
   console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', and radar-journal.');
@@ -427,8 +520,10 @@ async function main() {
 }
 
 main().then(function () {
+  runFooter('OK');
   process.exit(0);
 }).catch(function (e) {
   console.error('\nrefresh-radar failed:', e.message || e);
+  runFooter('FAILED');
   process.exit(1);
 });

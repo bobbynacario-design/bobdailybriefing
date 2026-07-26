@@ -211,6 +211,30 @@ The script loads `.env` automatically, so a Windows Task Scheduler job needs no
 extra environment setup. It logs the exact doc it writes and a one-line journal
 summary. Markets are closed on weekends, so `asOf` will be the last trading day.
 
+### Scheduling and unattended reliability
+
+`BobDailyBriefing-RadarRefresh` runs the script **twice daily — 06:00 and 08:30
+PHT**. The 08:30 run is a catch-up, not a second refresh: `main()` exits in ~2s
+if `radar-<today PHT>` already exists. Pass `--force` (or `RADAR_FORCE=1`) to
+re-run and overwrite a day deliberately.
+
+This matters because the box is Modern Standby (S0) and the task does **not**
+wake it. Through July 2026 the 06:00 run missed roughly 1 day in 4: either the
+machine was asleep (no run at all) or Task Scheduler's `StartWhenAvailable`
+caught up seconds after a resume — before Wi-Fi had associated — and every
+Alpaca call died `ENOTFOUND` inside the 15s retry ladder. So:
+
+- `waitForNetwork()` runs before any API call and polls DNS + one real HTTPS
+  request for up to 5 min (`RADAR_NET_WAIT_MS`, host `RADAR_NET_PROBE_HOST`).
+- `fetchRetry` covers mid-run drops with a ~22s exponential ladder.
+- Every run brackets `refresh.log` with a timestamped
+  `===== refresh-radar run started … =====` / `OK|FAILED … after Ns` banner, so
+  a late run is distinguishable from one that never fired.
+
+Still unfixed by design: wake timers are disabled on battery in the active power
+plan, and `WakeToRun` is off — an unplugged, sleeping box will still miss 06:00
+and rely on the catch-up.
+
 **Data providers:** Alpaca (equities/ETFs, free IEX daily bars), CoinGecko (free,
 no key, crypto), OpenAI (catalysts; reuses the app's existing integration).
 
