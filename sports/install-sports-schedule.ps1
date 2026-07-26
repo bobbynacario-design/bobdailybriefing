@@ -42,6 +42,14 @@ if ($Module -eq 'pvl') {
   $description = 'NBA offseason refresh each Sunday at 09:00 PHT. Replace with in-season cadence when the schedule resumes.'
 }
 
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 20)
+# Match the hand-fixed settings on the radar/miro/ph tasks. The cmdlet defaults
+# are actively wrong for this box: DisallowStartIfOnBatteries and
+# StopIfGoingOnBatteries BOTH default to $true, so an unplugged laptop would
+# silently skip the run, or kill it mid-flight if it was unplugged while running.
+# WakeToRun matters because this is a Modern Standby (S0) machine that is asleep
+# at 08:00 / 09:00 — it needs "Allow wake timers" enabled on battery too, which
+# is a machine-level power-plan setting, not a task setting.
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 20) `
+  -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -WakeToRun -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Settings $settings -Description $description -Force | Out-Null
 Write-Host ("Installed {0}. Successful validation days: {1}." -f $taskName, ($successfulDays -join ', '))
