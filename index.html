@@ -297,6 +297,10 @@ window.fbSaveDecision = async function(entry) {
       reason: entry.reason || '',
       invalidator: entry.invalidator || '',
       linkedSignal: entry.linkedSignal || null,
+      // Optional position economics. Null when Bob does not bother — the tab
+      // still derives a % move from the radar close on the decision date.
+      entryPrice: entry.entryPrice == null ? null : Number(entry.entryPrice),
+      size: entry.size == null ? null : Number(entry.size),
       status: entry.status || 'open',
       outcome: entry.outcome || null,
       outcomeNote: entry.outcomeNote || '',
@@ -377,6 +381,21 @@ window.fbLoadRadar = async function() {
     return docSnap.data();
   } catch(e) {
     console.error('Radar load failed:', e);
+    return null;
+  }
+};
+
+// Load a specific dated radar doc (briefings-bob/radar-YYYY-MM-DD). Used by the
+// Decisions tab to backfill a reference price for calls logged before the
+// snapshot carried one — the close on the decision date is already stored.
+// Returns null (never throws) so a missing day just degrades to "no ref price".
+window.fbLoadRadarByDate = async function(dateKey) {
+  if (!dateKey) return null;
+  try {
+    var snap = await getDoc(doc(db, COLL, 'radar-' + dateKey));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    console.error('Radar-by-date load failed (' + dateKey + '):', e);
     return null;
   }
 };
@@ -922,6 +941,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .decision-field label{display:block;font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:.3rem}
 .decision-field input,.decision-field select,.decision-field textarea{width:100%;background:var(--bg3);border:1px solid var(--rim2);border-radius:8px;color:var(--txt);font-family:var(--mono);font-size:12px;padding:.55rem .65rem;outline:none}
 .decision-field textarea{min-height:70px;resize:vertical;line-height:1.5}
+.decision-opt{color:var(--txt3);opacity:.7;letter-spacing:.04em;text-transform:none}
 .decision-field input:focus,.decision-field select:focus,.decision-field textarea:focus{border-color:var(--gold)}
 .decision-row{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.8rem .95rem;margin-bottom:.55rem}
 .decision-row.closed{opacity:.86}
@@ -948,6 +968,20 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .decision-pattern-list{display:flex;flex-direction:column;gap:.45rem}
 .decision-pattern-row{display:flex;align-items:center;justify-content:space-between;gap:.6rem;border-bottom:1px solid var(--rim);padding:.45rem 0;font-family:var(--mono);font-size:10px;color:var(--txt3)}
 .decision-pattern-row:last-child{border-bottom:none}
+/* live position layer on open decision rows */
+.dec-live{margin:.6rem 0 .1rem;padding:.6rem .7rem;background:var(--bg3);border:1px solid var(--rim);border-radius:9px}
+.dec-live-head{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+.dec-live-px{font-family:var(--mono);font-size:12.5px;color:var(--txt)}
+.dec-live-move{font-family:var(--mono);font-size:15px;font-weight:700}
+.dec-live-note{font-family:var(--mono);font-size:9.5px;color:var(--txt3);letter-spacing:.04em;text-transform:uppercase}
+.dec-live-chips{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.5rem}
+.dec-chip{font-family:var(--mono);font-size:9.5px;letter-spacing:.03em;padding:.24rem .45rem;border-radius:5px;border:1px solid var(--rim2);color:var(--txt2);white-space:nowrap}
+.dec-chip.good{color:var(--green);border-color:rgba(45,184,122,.3);background:var(--green-dim)}
+.dec-chip.bad{color:var(--red);border-color:rgba(232,92,92,.3);background:var(--red-dim)}
+.dec-chip.warn{color:#F0A832;border-color:rgba(240,168,50,.3);background:rgba(240,168,50,.08)}
+.dec-live-econ{margin-top:.5rem;padding-top:.45rem;border-top:1px solid var(--rim);font-family:var(--mono);font-size:11.5px;color:var(--txt2);display:flex;gap:.9rem;flex-wrap:wrap}
+.dec-live-cat{margin-top:.45rem;font-size:11.5px;line-height:1.55;color:var(--txt3)}
+.dec-live-drift{margin-top:.5rem;padding:.45rem .55rem;border-radius:7px;font-size:11.5px;line-height:1.5;background:var(--red-dim);border:1px solid rgba(232,92,92,.28);color:var(--txt2)}
 .decision-review-hint{font-size:12px;line-height:1.6;color:var(--txt2);margin:-.15rem 0 .65rem}
 @media(max-width:960px){.decision-deck{grid-template-columns:1fr}.decision-pulse{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:860px){.decision-grid{grid-template-columns:1fr 1fr}.decision-wide{grid-column:span 2}}
@@ -1639,6 +1673,14 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
           <option value="4">4</option>
           <option value="5">5 - high</option>
         </select>
+      </div>
+      <div class="decision-field">
+        <label>Entry price <span class="decision-opt">optional</span></label>
+        <input id="decision-entry" inputmode="decimal" placeholder="e.g. 182.40">
+      </div>
+      <div class="decision-field">
+        <label>Size <span class="decision-opt">optional</span></label>
+        <input id="decision-size" inputmode="decimal" placeholder="units / shares">
       </div>
       <div class="decision-field">
         <label>Status</label>
@@ -2685,6 +2727,140 @@ var decisionEditingId = null;
 var decisionEditingSaved = null;
 var decisionEditingCreatedDate = null;
 var decisionLinkedSignal = null;
+
+// ── DECISIONS: live position layer ────────────────────────────────────────
+// A logged call is frozen text. This layer re-reads today's radar and answers
+// the two questions a still-open call actually raises: how has it moved since
+// I logged it, and does the setup still say what it said then? Everything is
+// DERIVED from data already stored — no entries, targets or instructions are
+// generated here, consistent with the rest of the tab.
+
+var decisionRadarLive = null;    // {SYMBOL: signal} from the latest radar doc
+var decisionRadarAsOf = null;    // asOf of that doc
+var decisionRefPrice = {};       // decision id -> {px, src}
+var decisionDatedCache = {};     // 'YYYY-MM-DD' -> {SYMBOL: signal} | null
+var DECISION_STATUS_RANK = { invalidated: 0, forming: 1, confirmed: 2 };
+
+function decisionSignalMap(radarDoc) {
+  var m = {};
+  ((radarDoc && radarDoc.signals) || []).forEach(function (s) {
+    if (s && s.symbol) m[String(s.symbol).toUpperCase()] = s;
+  });
+  return m;
+}
+
+// Resolve one reference price per entry, best source first: an explicit entry
+// price Bob typed, then the close captured in the signal snapshot, then the
+// close from the dated radar doc for the day the call was logged (this is what
+// backfills calls made before the snapshot carried a price). Dated docs are
+// fetched once per distinct date and cached, so re-rendering costs no reads.
+async function loadDecisionMarketContext(entries) {
+  if (!decisionRadarLive && window.fbLoadRadar) {
+    var live = await window.fbLoadRadar().catch(function () { return null; });
+    if (live) {
+      decisionRadarLive = decisionSignalMap(live);
+      decisionRadarAsOf = live.asOf || null;
+    }
+  }
+  var universe = decisionRadarLive || {};
+  var need = {};
+  entries.forEach(function (e) {
+    if (decisionRefPrice[e.id]) return;
+    var ep = decisionNum(e.entryPrice);
+    if (ep) { decisionRefPrice[e.id] = { px: ep, src: 'entry' }; return; }
+    var snap = e.linkedSignal && e.linkedSignal.close;
+    if (snap != null) { decisionRefPrice[e.id] = { px: Number(snap), src: 'logged' }; return; }
+    var sym = (e.asset || '').toUpperCase();
+    var d = e.createdDate || '';
+    // Only worth a read if the radar actually tracks this asset.
+    if (sym && universe[sym] && /^\d{4}-\d{2}-\d{2}$/.test(d) && !(d in decisionDatedCache)) need[d] = 1;
+  });
+  var dates = Object.keys(need);
+  if (dates.length && window.fbLoadRadarByDate) {
+    var docs = await Promise.all(dates.map(function (d) {
+      return window.fbLoadRadarByDate(d).catch(function () { return null; });
+    }));
+    dates.forEach(function (d, i) {
+      decisionDatedCache[d] = docs[i] ? decisionSignalMap(docs[i]) : null;
+    });
+  }
+  entries.forEach(function (e) {
+    if (decisionRefPrice[e.id]) return;
+    var m = decisionDatedCache[e.createdDate || ''];
+    var s = m && m[(e.asset || '').toUpperCase()];
+    if (s && s.close != null) decisionRefPrice[e.id] = { px: Number(s.close), src: 'backfill' };
+  });
+}
+
+function decisionDaysOpen(e) {
+  var d = e.createdDate || '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  var then = Date.parse(d + 'T00:00:00+08:00');
+  var now = Date.parse(manilaDateKey() + 'T00:00:00+08:00');
+  if (!isFinite(then) || !isFinite(now)) return null;
+  return Math.max(0, Math.round((now - then) / 86400000));
+}
+
+function decRound(v, dp) {
+  var f = Math.pow(10, dp == null ? 1 : dp);
+  return Math.round(v * f) / f;
+}
+
+// Everything the card needs about a live call. Returns null when the asset is
+// outside the ~30-name radar universe (manual notes, PSE names) so those rows
+// render exactly as they do today rather than showing fake zeros.
+function decisionLive(e) {
+  var sym = (e.asset || '').toUpperCase();
+  var now = (decisionRadarLive || {})[sym];
+  if (!now) return null;
+  var ref = decisionRefPrice[e.id] || null;
+  var px = now.close == null ? null : Number(now.close);
+  var dir = e.direction === 'short' ? -1 : (e.direction === 'long' ? 1 : 0);
+  var o = {
+    symbol: sym, px: px, asOf: decisionRadarAsOf,
+    ref: ref ? ref.px : null, refSrc: ref ? ref.src : null,
+    days: decisionDaysOpen(e), dir: dir,
+    assetMove: null, pnlPct: null, pnlAbs: null, rMultiple: null,
+    statusNow: now.status || '',
+    statusThen: (e.linkedSignal && e.linkedSignal.status) || '',
+    drift: null,
+    scoreNow: now.score == null ? null : now.score,
+    scoreThen: (e.linkedSignal && e.linkedSignal.score != null) ? e.linkedSignal.score : null,
+    scoreDelta: null,
+    stop: now.stop == null ? null : Number(now.stop),
+    stopPct: null, belowStop: false,
+    pctFromHigh52: now.pctFromHigh52 == null ? null : now.pctFromHigh52,
+    beta: now.beta == null ? null : now.beta,
+    nearBreakout: !!now.nearBreakout,
+    catalyst: now.catalyst || '',
+    invalidation: now.invalidation || ''
+  };
+  if (px != null && o.ref) {
+    o.assetMove = decRound((px - o.ref) / o.ref * 100, 1);
+    // Direction-adjusted only when a direction was actually recorded. A
+    // "watched / none" call has no P&L — showing one would be inventing a trade.
+    if (dir !== 0) o.pnlPct = decRound(o.assetMove * dir, 1);
+  }
+  var ep = decisionNum(e.entryPrice), sz = decisionNum(e.size);
+  if (px != null && ep && sz && dir !== 0) o.pnlAbs = decRound((px - ep) * sz * dir, 2);
+  // R-multiple only for longs: the radar's stop is min(priorLow, SMA20), a
+  // long-side level, so it is meaningless as risk for a short.
+  var stopThen = e.linkedSignal && e.linkedSignal.stop;
+  if (dir === 1 && px != null && ep && stopThen != null) {
+    var risk = ep - Number(stopThen);
+    if (risk > 0) o.rMultiple = decRound((px - ep) / risk, 2);
+  }
+  var rNow = DECISION_STATUS_RANK[o.statusNow], rThen = DECISION_STATUS_RANK[o.statusThen];
+  if (rNow != null && rThen != null && rNow !== rThen) {
+    o.drift = rNow < rThen ? 'weakened' : 'strengthened';
+  }
+  if (o.scoreNow != null && o.scoreThen != null) o.scoreDelta = Math.round(o.scoreNow - o.scoreThen);
+  if (px != null && o.stop) {
+    o.stopPct = decRound((px - o.stop) / px * 100, 1);
+    o.belowStop = px < o.stop;
+  }
+  return o;
+}
 var DECISION_MISTAKES = [
   ['none', 'None / not reviewed'],
   ['good-process-good-outcome', 'Good process, good outcome'],
@@ -2721,6 +2897,15 @@ function setDecisionField(id, v) {
 function getDecisionField(id) {
   var el = document.getElementById(id);
   return el ? el.value : '';
+}
+// Parse an optional numeric form field. Blank / garbage / non-positive -> null,
+// so a half-filled entry never poisons the P&L math downstream.
+function decisionNum(v) {
+  if (v == null) return null;
+  var s = String(v).replace(/[$,\s]/g, '');
+  if (!s) return null;
+  var n = Number(s);
+  return isFinite(n) && n > 0 ? n : null;
 }
 function decisionBeatValue(v) {
   if (v === true) return 'true';
@@ -2761,6 +2946,8 @@ function openDecisionForm(entry) {
   setDecisionField('decision-action', entry.action || 'watched');
   setDecisionField('decision-direction', entry.direction || 'none');
   setDecisionField('decision-conviction', entry.conviction || 3);
+  setDecisionField('decision-entry', entry.entryPrice == null ? '' : entry.entryPrice);
+  setDecisionField('decision-size', entry.size == null ? '' : entry.size);
   setDecisionField('decision-status', entry.status || 'open');
   setDecisionField('decision-outcome', entry.outcome || '');
   setDecisionField('decision-beat', decisionBeatValue(entry.beatBenchmark));
@@ -2792,7 +2979,12 @@ function radarDecisionSnapshot(s) {
     status: s.status || '',
     score: s.score == null ? null : s.score,
     takerRank: Math.round(radarTakerRank(s) * 10) / 10,
-    regimeAtDecision: radarRegimeState ? radarRegimeState.txt : ''
+    regimeAtDecision: radarRegimeState ? radarRegimeState.txt : '',
+    // Reference price + level as they stood when the call was made. Without
+    // these an open decision can never say how it has moved. Entries logged
+    // before this existed get backfilled from the dated radar doc instead.
+    close: s.close == null ? null : s.close,
+    stop: s.stop == null ? null : s.stop
   };
 }
 function radarDecisionDraft(s, action) {
@@ -2862,6 +3054,8 @@ async function saveDecisionForm() {
     action: getDecisionField('decision-action') || 'watched',
     direction: getDecisionField('decision-direction') || 'none',
     conviction: Number(getDecisionField('decision-conviction') || 3),
+    entryPrice: decisionNum(getDecisionField('decision-entry')),
+    size: decisionNum(getDecisionField('decision-size')),
     reason: getDecisionField('decision-reason').trim(),
     invalidator: getDecisionField('decision-invalidator').trim(),
     linkedSignal: decisionLinkedSignal,
@@ -2875,6 +3069,9 @@ async function saveDecisionForm() {
     await window.fbSaveDecision(entry);
     closeDecisionForm();
     showToast('Decision saved', 'ok');
+    // Drop resolved reference prices so an edited entry price is picked up.
+    // decisionDatedCache is kept — that is what stops a re-render costing reads.
+    decisionRefPrice = {};
     renderDecisions();
   } catch (e) {
     showToast('Decision save failed: ' + (e && e.message ? e.message : 'check rules'), 'error');
@@ -3031,6 +3228,86 @@ function decisionPatternDeckHtml(stats) {
 function decisionPill(txt, cls) {
   return '<span class="rel-badge ' + (cls || 'rel-none-b') + '">' + esc(txt) + '</span>';
 }
+function decPx(v) {
+  if (v == null) return '—';
+  var a = Math.abs(v);
+  return v.toLocaleString('en-US', {
+    minimumFractionDigits: a >= 1000 ? 0 : 2,
+    maximumFractionDigits: a >= 1000 ? 0 : 2
+  });
+}
+function decMoney(v) {
+  if (v == null) return '<span class="jmut">—</span>';
+  var c = v > 0 ? 'var(--green)' : (v < 0 ? 'var(--red)' : 'var(--txt3)');
+  var s = (v > 0 ? '+' : v < 0 ? '-' : '') + '$' +
+    Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '<span style="color:' + c + '">' + s + '</span>';
+}
+function decChip(txt, cls) {
+  return '<span class="dec-chip' + (cls ? ' ' + cls : '') + '">' + txt + '</span>';
+}
+var DECISION_REF_LABEL = {
+  entry: 'ref: your entry',
+  logged: 'ref: close when logged',
+  backfill: 'ref: radar close that day'
+};
+// The live strip for a still-open call. Shown only when the asset is in the
+// radar universe AND the call is open — closed rows keep their review text.
+function decisionLiveHtml(L) {
+  if (!L) return '';
+  var head = '';
+  if (L.ref != null && L.px != null) {
+    head += '<span class="dec-live-px">' + decPx(L.ref) + ' &rarr; ' + decPx(L.px) + '</span>' +
+      '<span class="dec-live-move">' + jSign(L.pnlPct != null ? L.pnlPct : L.assetMove) + '</span>' +
+      '<span class="dec-live-note">' + (L.pnlPct != null
+        ? (L.dir === -1 ? 'short' : 'long')
+        : 'asset move') + '</span>';
+  } else if (L.px != null) {
+    head += '<span class="dec-live-px">' + decPx(L.px) + '</span>' +
+      '<span class="dec-live-note">no reference price</span>';
+  }
+  if (L.days != null) head += '<span class="dec-live-note">' + L.days + 'd open</span>';
+  if (L.refSrc) head += '<span class="dec-live-note">' + DECISION_REF_LABEL[L.refSrc] + '</span>';
+
+  var chips = [];
+  if (L.drift === 'weakened') chips.push(decChip('setup ' + esc(L.statusThen) + ' &rarr; ' + esc(L.statusNow), 'bad'));
+  else if (L.drift === 'strengthened') chips.push(decChip('setup ' + esc(L.statusThen) + ' &rarr; ' + esc(L.statusNow), 'good'));
+  else if (L.statusNow) chips.push(decChip('still ' + esc(L.statusNow)));
+  if (L.scoreDelta != null) {
+    chips.push(decChip('score ' + L.scoreThen + '&rarr;' + L.scoreNow +
+      ' (' + (L.scoreDelta > 0 ? '+' : '') + L.scoreDelta + ')',
+      L.scoreDelta < 0 ? 'bad' : (L.scoreDelta > 0 ? 'good' : '')));
+  } else if (L.scoreNow != null) {
+    chips.push(decChip('score ' + L.scoreNow));
+  }
+  if (L.stopPct != null) {
+    chips.push(decChip(L.belowStop
+      ? 'below stop ' + decPx(L.stop)
+      : Math.abs(L.stopPct) + '% above stop ' + decPx(L.stop), L.belowStop ? 'bad' : ''));
+  }
+  if (L.nearBreakout) chips.push(decChip('&#9889; pressing 52w high', 'good'));
+  else if (L.pctFromHigh52 != null) chips.push(decChip(Math.abs(L.pctFromHigh52) + '% off 52w high'));
+  if (L.beta != null) chips.push(decChip('&beta; ' + L.beta));
+
+  var econ = [];
+  if (L.pnlAbs != null) econ.push('P&amp;L ' + decMoney(L.pnlAbs));
+  if (L.rMultiple != null) {
+    var rc = L.rMultiple > 0 ? 'var(--green)' : (L.rMultiple < 0 ? 'var(--red)' : 'var(--txt3)');
+    econ.push('<span style="color:' + rc + '">' + (L.rMultiple > 0 ? '+' : '') + L.rMultiple + 'R</span>');
+  }
+
+  var html = '<div class="dec-live"><div class="dec-live-head">' + head + '</div>';
+  if (chips.length) html += '<div class="dec-live-chips">' + chips.join('') + '</div>';
+  if (econ.length) html += '<div class="dec-live-econ">' + econ.join('') + '</div>';
+  // The one thing worth interrupting for: the setup that carried the call has
+  // broken. Quote the radar's own invalidation line rather than inventing advice.
+  if (L.drift === 'weakened' || L.belowStop) {
+    html += '<div class="dec-live-drift"><b>Thesis drift.</b> ' +
+      esc(L.invalidation || 'The setup no longer reads the way it did when you logged this.') + '</div>';
+  }
+  if (L.catalyst) html += '<div class="dec-live-cat"><b>Now:</b> ' + esc(L.catalyst) + '</div>';
+  return html + '</div>';
+}
 function decisionRow(e) {
   var closed = (e.status || 'open') === 'closed';
   var actionCls = e.action === 'took' ? 'rel-high' : (e.action === 'skipped' ? 'rel-low' : 'rel-med');
@@ -3054,6 +3331,7 @@ function decisionRow(e) {
         esc(DECISION_MISTAKE_LABELS[e.mistakeType || 'none'] || e.mistakeType || 'none') +
         (e.outcomeNote ? ' - ' + esc(e.outcomeNote) : '') + '</div>' : '') +
     '</div>' +
+    (closed ? '' : decisionLiveHtml(decisionLive(e))) +
     '<div class="decision-foot"><span class="decision-mini">' + esc(decisionLinkedText(e.linkedSignal)) + '</span>' +
       '<div class="decision-buttons">' +
         (closed ? '' : '<button class="btn-primary" onclick="closeOutDecision(\'' + esc(e.id) + '\')">Close out</button>') +
@@ -3061,6 +3339,56 @@ function decisionRow(e) {
         '<button class="btn-danger" onclick="deleteDecision(\'' + esc(e.id) + '\')">Delete</button>' +
       '</div></div>' +
   '</div>';
+}
+// Roll-up across every still-open call. `untracked` is reported rather than
+// hidden — otherwise a book half full of manual notes would read as if the
+// tiles covered everything.
+function decisionOpenBook(entries) {
+  var b = { tracked: 0, untracked: 0, drifted: 0, belowStop: 0, up: 0, down: 0,
+            moveN: 0, sumMove: 0, avgMove: null, pnl: null, econN: 0 };
+  entries.forEach(function (e) {
+    var L = decisionLive(e);
+    if (!L) { b.untracked++; return; }
+    b.tracked++;
+    if (L.drift === 'weakened') b.drifted++;
+    if (L.belowStop) b.belowStop++;
+    var m = L.pnlPct != null ? L.pnlPct : L.assetMove;
+    if (m != null) {
+      b.moveN++; b.sumMove += m;
+      if (m > 0) b.up++; else if (m < 0) b.down++;
+    }
+    if (L.pnlAbs != null) { b.pnl = (b.pnl || 0) + L.pnlAbs; b.econN++; }
+  });
+  if (b.moveN) b.avgMove = decRound(b.sumMove / b.moveN, 1);
+  if (b.pnl != null) b.pnl = decRound(b.pnl, 2);
+  return b;
+}
+function decisionOpenBookHtml(b) {
+  if (!b.tracked && !b.untracked) return '';
+  var attention = b.drifted + b.belowStop;
+  var html = '<div class="decision-panel' + (attention ? ' warn' : '') + '">' +
+    '<div class="decision-panel-title">Open Book <span>live off the latest radar' +
+      (decisionRadarAsOf ? ' &middot; ' + esc(decisionRadarAsOf) : '') + '</span></div>' +
+    '<div class="archive-summary">' +
+      jTile(b.tracked, 'Tracked open') +
+      jTile(b.avgMove == null ? 'n/a' : (b.avgMove > 0 ? '+' : '') + b.avgMove + '%', 'Avg move since logged') +
+      jTile(b.up + '/' + b.down, 'Up / down') +
+      jTile(b.pnl == null ? 'n/a' : (b.pnl > 0 ? '+' : b.pnl < 0 ? '-' : '') + '$' +
+        Math.abs(b.pnl).toLocaleString('en-US', { maximumFractionDigits: 0 }), 'P&L (' + b.econN + ' sized)') +
+    '</div>';
+  if (attention) {
+    html += '<div class="decision-review-hint"><b>' + attention + ' need a look:</b> ' +
+      (b.drifted ? b.drifted + ' where the setup weakened since you logged it' : '') +
+      (b.drifted && b.belowStop ? ', ' : '') +
+      (b.belowStop ? b.belowStop + ' trading below the radar stop' : '') + '.</div>';
+  }
+  if (b.untracked) {
+    html += '<div class="decision-stat-note" style="margin:.6rem 0 0">' + b.untracked +
+      ' open ' + (b.untracked === 1 ? 'call is' : 'calls are') +
+      ' outside the ~30-name radar universe, so no live stats are computed for ' +
+      (b.untracked === 1 ? 'it' : 'them') + '.</div>';
+  }
+  return html + '</div>';
 }
 function renderDecisionGroup(title, rows) {
   var html = '<div class="journal-section">' + esc(title) + '</div>';
@@ -3082,6 +3410,13 @@ function renderDecisions() {
   out.innerHTML = '<div class="empty-state">LOADING DECISIONS...</div>';
   window.fbLoadDecisions().then(function (entries) {
     decisionEntries = entries || [];
+    // Resolve reference prices + today's radar before rendering. Non-fatal:
+    // if the radar is unreachable the tab renders exactly as it did before.
+    return loadDecisionMarketContext(decisionEntries)
+      .catch(function (err) { console.error('Decision market context failed:', err); })
+      .then(function () { return decisionEntries; });
+  }).then(function (entries) {
+    if (!entries) return;
     var stats = buildDecisionStats(decisionEntries);
     var today = manilaDateKey();
     var todaysCalls = decisionEntries.filter(function (e) { return (e.createdDate || '') === today; });
@@ -3090,9 +3425,11 @@ function renderDecisions() {
     });
     var closed = decisionEntries.filter(function (e) { return (e.status || 'open') === 'closed'; });
     if (sub) sub.textContent = todaysCalls.length + ' today / ' + needsReview.length + ' needs review / ' + stats.closed + ' closed';
+    var openCalls = decisionEntries.filter(function (e) { return (e.status || 'open') !== 'closed'; });
     out.innerHTML = decisionPulseHtml(stats, todaysCalls.length, needsReview.length) +
       '<div class="decision-deck">' +
         '<div>' +
+          decisionOpenBookHtml(decisionOpenBook(openCalls)) +
           renderDecisionPanel("Today's Calls", todaysCalls, 'captured from Radar or manual notes') +
           renderDecisionPanel('Needs Review', needsReview, 'older taken calls still open', 'warn') +
           renderDecisionPanel('Closed / Learned', closed.slice(0, 16), 'latest reviewed decisions', 'learned') +
