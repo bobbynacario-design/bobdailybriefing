@@ -16,6 +16,7 @@ import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
+import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -34,7 +35,12 @@ var __dirname = dirname(fileURLToPath(import.meta.url));
 var PROJECT_ID = 'pokerhq-a67e4';
 var COLL = 'briefings-bob';
 
+var _db = null;
+var STAGE = makeStage('start');
+var RUN_STARTED = Date.now();
+
 function initAdmin() {
+  if (_db) return _db; // initializeApp throws if called twice
   var keyPath = join(__dirname, 'serviceAccountKey.json');
   if (existsSync(keyPath)) {
     initializeApp({ credential: cert(JSON.parse(readFileSync(keyPath, 'utf8'))), projectId: PROJECT_ID });
@@ -43,10 +49,12 @@ function initAdmin() {
     initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID });
     console.log('firebase-admin: using application default credentials');
   }
-  return getFirestore();
+  _db = getFirestore();
+  return _db;
 }
 
 async function main() {
+  STAGE.set('build-snapshot');
   var ph = await buildPhSnapshot(CONFIG);
   var phDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: ph.index.asOf }, ph);
 
@@ -57,14 +65,28 @@ async function main() {
   if (ph.fx && ph.fx.usdphp) console.log('  USD/PHP ' + ph.fx.usdphp.level + ' (1m ' + ph.fx.usdphp.ret1m + '%)');
   console.log('  proxies: ' + ph.proxies.length);
 
+  STAGE.set('write');
   var db = initAdmin();
   var wrote = await writePhSnapshot(db, COLL, phDoc);
   console.log(wrote
     ? '\nWrote briefings-bob/radar-ph (after-close refresh).'
     : '\nSkipped briefings-bob/radar-ph write — stored snapshot is newer.');
+
+  await recordRunHealth(db, 'ph', {
+    status: wrote ? 'ok' : 'skipped',
+    asOf: ph.index.asOf,
+    durationMs: Date.now() - RUN_STARTED,
+    message: wrote ? '' : 'stored snapshot is newer'
+  });
 }
 
-main().then(function () { process.exit(0); }).catch(function (e) {
+main().then(function () { process.exit(0); }).catch(async function (e) {
   console.error('\nrefresh-ph failed:', e.message || e);
+  if (_db) {
+    await recordRunHealth(_db, 'ph', {
+      status: 'failed', stage: STAGE.get(),
+      durationMs: Date.now() - RUN_STARTED, message: e.message || String(e)
+    });
+  }
   process.exit(1);
 });

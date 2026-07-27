@@ -35,6 +35,7 @@ import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
 import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 import { extractUsage, recordUsage } from '../lib/llm-usage.js';
+import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -400,9 +401,15 @@ async function writeDoc(db, dateKey, doc) {
 
 // ── main ──
 
+// Which step the run is on, so a failure reports where it died rather than just
+// that it died. Read by the top-level catch.
+var STAGE = makeStage('start');
+
 async function main() {
+  STAGE.set('network');
   await waitForNetwork();
 
+  STAGE.set('init');
   var dateKey = phtDateKey();
   var db = initAdmin();
 
@@ -414,12 +421,21 @@ async function main() {
   } else {
     var existing = await db.collection(COLL).doc('radar-' + dateKey).get();
     if (existing.exists) {
+      var prev = existing.data() || {};
       console.log('radar-' + dateKey + ' already written at ' +
-        ((existing.data() || {}).generatedAt || '?') + ' — nothing to do (--force to re-run).');
+        (prev.generatedAt || '?') + ' — nothing to do (--force to re-run).');
+      // Still record the run: the app needs to know the 08:30 catch-up fired and
+      // found the feed healthy, not that nothing happened at all.
+      await recordRunHealth(db, 'radar', {
+        status: 'skipped', asOf: prev.asOf || dateKey,
+        durationMs: Date.now() - RUN_STARTED,
+        message: 'already written at ' + (prev.generatedAt || '?')
+      });
       return;
     }
   }
 
+  STAGE.set('fetch-bars');
   var barsByAsset = await fetchAll();
 
   var counts = Object.keys(barsByAsset).map(function (s) {
@@ -427,9 +443,11 @@ async function main() {
   });
   console.log('Bars loaded -> ' + counts.join('  '));
 
+  STAGE.set('score');
   var result = scoreUniverse(barsByAsset, CONFIG);
 
   // V2: tag each signal with a recent catalyst (display-only; score unchanged).
+  STAGE.set('catalysts');
   var catResult = await fetchCatalysts(result.signals);
   var catalysts = catResult.catalysts;
   var tagged = 0;
@@ -461,6 +479,7 @@ async function main() {
   // V3: rebuild the calibration journal from the same bars (pure, deterministic
   // re-scoring). buildJournal returns the full doc body; we only stamp the
   // time/data fields (the I/O concerns) and write it.
+  STAGE.set('journal');
   var journalBody = buildJournal(barsByAsset, CONFIG, CONFIG.journal);
   var journalDoc = Object.assign({
     generatedAt: new Date().toISOString(),
@@ -500,30 +519,55 @@ async function main() {
   });
   console.log('  ' + wc.note);
 
+  STAGE.set('write');
   await writeDoc(db, dateKey, doc);
   await db.collection(COLL).doc('radar-journal').set(journalDoc);
   console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', and radar-journal.');
+
+  // The radar itself is now safely written — record health before the optional
+  // PH leg so a PH failure can never mask a good radar run.
+  await recordRunHealth(db, 'radar', {
+    status: 'ok', asOf: result.asOf, durationMs: Date.now() - RUN_STARTED
+  });
 
   // Record the catalyst call's token usage to the shared LLM cost ledger (no-throw).
   if (catResult.usage) await recordUsage(db, 'radar-catalyst', OPENAI_MODEL, catResult.usage, dateKey, 1);
 
   // PH snapshot (non-fatal — never blocks the radar write).
+  STAGE.set('ph');
   try {
     var ph = await buildPhSnapshot(CONFIG);
     var phDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: ph.index.asOf }, ph);
     var wrote = await writePhSnapshot(db, COLL, phDoc);
     if (wrote) console.log('Wrote radar-ph snapshot (PSEi ' + ph.index.close + ' ' + ph.index.currency +
       ', ' + ph.proxies.length + ' proxies).');
+    await recordRunHealth(db, 'ph', {
+      status: wrote ? 'ok' : 'skipped', asOf: ph.index.asOf,
+      message: wrote ? '' : 'stored snapshot is newer'
+    });
   } catch (e) {
     console.log('PH snapshot skipped: ' + (e.message || e));
+    await recordRunHealth(db, 'ph', {
+      status: 'failed', stage: 'build-snapshot', message: e.message || String(e)
+    });
   }
 }
 
 main().then(function () {
   runFooter('OK');
   process.exit(0);
-}).catch(function (e) {
+}).catch(async function (e) {
   console.error('\nrefresh-radar failed:', e.message || e);
+  // Record the failure and WHERE it died, so the app shows a cause instead of
+  // silent staleness. _db is null when the run never got past waitForNetwork —
+  // nothing to write with, and the app infers "never ran" from a stale
+  // lastRunAt, which is the correct reading anyway.
+  if (_db) {
+    await recordRunHealth(_db, 'radar', {
+      status: 'failed', stage: STAGE.get(),
+      durationMs: Date.now() - RUN_STARTED, message: e.message || String(e)
+    });
+  }
   runFooter('FAILED');
   process.exit(1);
 });

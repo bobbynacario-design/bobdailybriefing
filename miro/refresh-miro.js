@@ -33,6 +33,7 @@ import { aggregatePanel } from './scenario.js';
 import { buildMiroJournal } from './journal-miro.js';
 import { enrichMarketChanges } from './briefing.js';
 import { extractUsage, addUsage, recordUsage } from '../lib/llm-usage.js';
+import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var __radar = join(__dirname, '..', 'radar');
@@ -311,7 +312,12 @@ async function runPanel(markets, config) {
 
 // ── Firestore (Admin SDK — bypasses security rules) ──
 
+var _db = null;
+var STAGE = makeStage('start');
+var RUN_STARTED = Date.now();
+
 function initAdmin() {
+  if (_db) return _db; // initializeApp throws if called twice
   var local = join(__dirname, 'serviceAccountKey.json');
   var shared = join(__radar, 'serviceAccountKey.json');
   var keyPath = existsSync(local) ? local : (existsSync(shared) ? shared : null);
@@ -323,7 +329,8 @@ function initAdmin() {
     initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID });
     console.log('firebase-admin: using application default credentials');
   }
-  return getFirestore();
+  _db = getFirestore();
+  return _db;
 }
 
 async function writeDoc(db, dateKey, doc) {
@@ -359,14 +366,17 @@ async function loadPreviousMiro(db) {
 // ── main ──
 
 async function main() {
+  STAGE.set('fetch-markets');
   console.log('Fetching ' + CONFIG.markets.length + ' curated markets from Polymarket Gamma...');
   var marketsData = await fetchMarkets(CONFIG.markets);
   console.log('Got ' + marketsData.length + ' markets.');
 
   // Lane B: read the executable order book so edge is vs the price you can hit.
+  STAGE.set('fetch-books');
   console.log('Fetching order books from Polymarket CLOB...');
   await fetchBooks(marketsData);
 
+  STAGE.set('init');
   var db = initAdmin();
   var previousDoc = await loadPreviousMiro(db);
   var control = await loadMiroControl(db);
@@ -504,11 +514,24 @@ async function main() {
     '  meanCLV=' + (st.meanClvTowardPanel == null ? '—' : st.meanClvTowardPanel) + ' (n=' + st.nClv + ')');
   journalBody.caveats.forEach(function (c) { console.log('  caveat: ' + c); });
   console.log(DRY_RUN ? '\n(dry-run — nothing written).' : '\nWrote briefings-bob/miro-journal.');
+
+  // A dry run wrote nothing, so recording it as healthy would be a lie.
+  if (!DRY_RUN) {
+    await recordRunHealth(db, 'miro', {
+      status: 'ok', asOf: dateKey, durationMs: Date.now() - RUN_STARTED
+    });
+  }
 }
 
 main().then(function () {
   process.exit(0);
-}).catch(function (e) {
+}).catch(async function (e) {
   console.error('\nrefresh-miro failed:', e.message || e);
+  if (_db && !DRY_RUN) {
+    await recordRunHealth(_db, 'miro', {
+      status: 'failed', stage: STAGE.get(),
+      durationMs: Date.now() - RUN_STARTED, message: e.message || String(e)
+    });
+  }
   process.exit(1);
 });
