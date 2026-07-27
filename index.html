@@ -301,6 +301,10 @@ window.fbSaveDecision = async function(entry) {
       // still derives a % move from the radar close on the decision date.
       entryPrice: entry.entryPrice == null ? null : Number(entry.entryPrice),
       size: entry.size == null ? null : Number(entry.size),
+      exitPrice: entry.exitPrice == null ? null : Number(entry.exitPrice),
+      // The date a call was closed. Without it a result can only ever be graded
+      // as of "now", which is wrong for anything closed more than a day ago.
+      closedDate: entry.closedDate || '',
       status: entry.status || 'open',
       outcome: entry.outcome || null,
       outcomeNote: entry.outcomeNote || '',
@@ -1718,6 +1722,14 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <input id="decision-size" inputmode="decimal" placeholder="units / shares">
       </div>
       <div class="decision-field">
+        <label>Exit price <span class="decision-opt">optional</span></label>
+        <input id="decision-exit" inputmode="decimal" placeholder="blank = close on exit date">
+      </div>
+      <div class="decision-field">
+        <label>Closed on</label>
+        <input id="decision-closed-date" placeholder="YYYY-MM-DD">
+      </div>
+      <div class="decision-field">
         <label>Status</label>
         <select id="decision-status" onchange="syncDecisionOutcomeFields()">
           <option value="open">Open</option>
@@ -2875,6 +2887,7 @@ var decisionLinkedSignal = null;
 // DERIVED from data already stored — no entries, targets or instructions are
 // generated here, consistent with the rest of the tab.
 
+var decisionRadarJournal = null; // radar-journal, for the you-vs-radar panel
 var decisionRadarLive = null;    // {SYMBOL: signal} from the latest radar doc
 var decisionRadarAsOf = null;    // asOf of that doc
 var decisionRefPrice = {};       // decision id -> {px, src}
@@ -2893,7 +2906,13 @@ function decisionSignalMap(radarDoc) {
   // asOf is the last TRADING day; the doc id is the run date. Keeping both lets
   // the sparkline key on asOf so weekend docs (which repeat Friday's close)
   // collapse into one point instead of drawing a fake flat step.
-  return { asOf: (radarDoc && radarDoc.asOf) || null, sig: m };
+  // bm = benchmark closes (SPY/QQQ/BTC) for that run — what turns a raw return
+  // into benchmark-excess. Absent on docs written before 2026-07-27.
+  return {
+    asOf: (radarDoc && radarDoc.asOf) || null,
+    bm: (radarDoc && radarDoc.benchmarks) || null,
+    sig: m
+  };
 }
 
 function decDayMs(d) { return Date.parse(d + 'T12:00:00Z'); } // noon UTC: no DST edges
@@ -2904,10 +2923,12 @@ function decisionSpanDates(entries, universe) {
   var today = manilaDateKey();
   var earliest = null;
   entries.forEach(function (e) {
-    if ((e.status || 'open') === 'closed') return;
     var sym = (e.asset || '').toUpperCase();
+    if (!sym || !universe[sym]) return;
+    // Open calls need the span for their sparkline; closed ones need the
+    // benchmark level on both their decision and exit dates in order to grade.
     var d = e.createdDate || '';
-    if (!sym || !universe[sym] || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
     if (!earliest || d < earliest) earliest = d;
   });
   if (!earliest) return [];
@@ -2991,6 +3012,102 @@ function decisionSeries(e) {
   }
   out.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
   return out;
+}
+
+// ── grading a closed call ─────────────────────────────────────────────────
+// The outcome and beat-benchmark fields were hand-typed dropdowns, so the hit
+// rates on this tab were only as good as what Bob remembered to fill in at
+// review time — and "beat benchmark" defaulted to Unknown. Both are now
+// computed from prices already stored, using the SAME definition the radar's
+// own journal uses: excess over the benchmark that signal is judged against.
+// A manual entry still wins, so an off-radar exit can be recorded by hand.
+
+// Nearest run date at or before `dateKey` that we actually hold, walking back
+// over weekends and failed-refresh gaps. Bounded so a bad date cannot scan far.
+// Returns { rec, date } — `date` is the run actually used, which may be earlier
+// than the one asked for. Callers report that date rather than the requested
+// one, so a price is never attributed to a day it did not come from.
+function decisionNearestRun(dateKey, maxBack) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || '')) return null;
+  var ms = decDayMs(dateKey);
+  if (!isFinite(ms)) return null;
+  for (var i = 0; i <= (maxBack == null ? 7 : maxBack); i++) {
+    var d = new Date(ms - i * 86400000).toISOString().slice(0, 10);
+    if (decisionDatedCache[d]) return { rec: decisionDatedCache[d], date: d };
+  }
+  return null;
+}
+// The benchmark a call is judged against. Stored on the snapshot for calls made
+// after 2026-07-27; for older ones the live signal carries the same mapping,
+// which is per-asset and stable.
+function decisionBenchSymbol(e) {
+  var live = (decisionRadarLive || {})[(e.asset || '').toUpperCase()];
+  return (e.linkedSignal && e.linkedSignal.benchmark) || (live && live.benchmark) || null;
+}
+function decisionCloseOn(dateKey, sym) {
+  var hit = decisionNearestRun(dateKey);
+  var s = hit && hit.rec.sig[sym];
+  return (s && s.close != null) ? { px: Number(s.close), date: hit.date } : null;
+}
+function decisionBenchOn(dateKey, benchSym) {
+  var hit = decisionNearestRun(dateKey);
+  var v = hit && hit.rec.bm && hit.rec.bm[benchSym];
+  return v == null ? null : Number(v);
+}
+
+// Returns null when the call is not gradeable (not closed, off-radar, or no
+// reference price). `excess` is null when benchmark levels are unavailable —
+// the raw return still stands, and the UI says which one it is showing.
+function gradeDecision(e) {
+  if ((e.status || 'open') !== 'closed') return null;
+  var sym = (e.asset || '').toUpperCase();
+  if (!sym || !(decisionRadarLive || {})[sym]) return null;
+
+  var ref = decisionRefPrice[e.id];
+  if (!ref || !ref.px) return null;
+  var exitDate = e.closedDate || '';
+  var exit = decisionNum(e.exitPrice);
+  var exitSrc = exit ? 'typed' : null;
+  if (!exit && exitDate) {
+    var hit = decisionCloseOn(exitDate, sym);
+    if (hit) {
+      exit = hit.px;
+      // Name the date the price actually came from — the exit day itself may
+      // have been a weekend or a failed refresh.
+      exitSrc = 'close on ' + hit.date + (hit.date === exitDate ? '' : ' (nearest to ' + exitDate + ')');
+    }
+  }
+  if (!exit) return null;
+
+  var dir = e.direction === 'short' ? -1 : 1;   // 'none' graded long-side
+  var assetReturn = decRound((exit - ref.px) / ref.px * 100 * dir, 2);
+
+  var benchSym = decisionBenchSymbol(e);
+  var b0 = benchSym ? decisionBenchOn(e.createdDate, benchSym) : null;
+  var b1 = benchSym && exitDate ? decisionBenchOn(exitDate, benchSym) : null;
+  var benchReturn = (b0 && b1) ? decRound((b1 - b0) / b0 * 100 * dir, 2) : null;
+  var excess = benchReturn == null ? null : decRound(assetReturn - benchReturn, 2);
+
+  // A scratch band keeps noise out of the win/loss split; the radar journal
+  // treats sub-0.1% moves as ambiguous for the same reason.
+  var outcome = assetReturn > 0.1 ? 'win' : (assetReturn < -0.1 ? 'loss' : 'scratch');
+  var sz = decisionNum(e.size), ep = decisionNum(e.entryPrice);
+  return {
+    assetReturn: assetReturn, benchReturn: benchReturn, excess: excess,
+    benchSym: benchSym, outcome: outcome,
+    beatBenchmark: excess == null ? null : excess > 0,
+    ref: ref.px, refSrc: ref.src, exit: exit, exitSrc: exitSrc,
+    heldDays: (e.createdDate && exitDate) ? Math.max(0,
+      Math.round((decDayMs(exitDate) - decDayMs(e.createdDate)) / 86400000)) : null,
+    pnlAbs: (ep && sz) ? decRound((exit - ep) * sz * dir, 2) : null
+  };
+}
+// Manual entry wins over the computed grade — Bob may have exited somewhere the
+// radar cannot see. Everything downstream reads through these two.
+function decisionOutcomeOf(e, g) { return e.outcome || (g ? g.outcome : null); }
+function decisionBeatOf(e, g) {
+  if (e.beatBenchmark === true || e.beatBenchmark === false) return e.beatBenchmark;
+  return g ? g.beatBenchmark : null;
 }
 
 // Sparkline since the decision date. Coloured by where it sits versus the
@@ -3178,6 +3295,11 @@ function openDecisionForm(entry) {
   setDecisionField('decision-conviction', entry.conviction || 3);
   setDecisionField('decision-entry', entry.entryPrice == null ? '' : entry.entryPrice);
   setDecisionField('decision-size', entry.size == null ? '' : entry.size);
+  setDecisionField('decision-exit', entry.exitPrice == null ? '' : entry.exitPrice);
+  // Default the exit date to today when closing a call that has none yet, so
+  // the common case needs no typing but a back-dated close is still possible.
+  setDecisionField('decision-closed-date', entry.closedDate ||
+    ((entry.status === 'closed') ? manilaDateKey() : ''));
   setDecisionField('decision-status', entry.status || 'open');
   setDecisionField('decision-outcome', entry.outcome || '');
   setDecisionField('decision-beat', decisionBeatValue(entry.beatBenchmark));
@@ -3210,6 +3332,9 @@ function radarDecisionSnapshot(s) {
     score: s.score == null ? null : s.score,
     takerRank: Math.round(radarTakerRank(s) * 10) / 10,
     regimeAtDecision: radarRegimeState ? radarRegimeState.txt : '',
+    // The benchmark this signal is judged against (SPY/QQQ/BTC) — lets a result
+    // be graded as excess, not just raw return.
+    benchmark: s.benchmark || '',
     // Reference price + level as they stood when the call was made. Without
     // these an open decision can never say how it has moved. Entries logged
     // before this existed get backfilled from the dated radar doc instead.
@@ -3265,10 +3390,14 @@ function closeDecisionForm() {
 }
 function syncDecisionOutcomeFields() {
   var closed = getDecisionField('decision-status') === 'closed';
-  ['decision-outcome', 'decision-beat', 'decision-mistake', 'decision-outcome-note'].forEach(function (id) {
+  ['decision-outcome', 'decision-beat', 'decision-mistake', 'decision-outcome-note',
+   'decision-exit', 'decision-closed-date'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.disabled = !closed;
   });
+  // Flipping the status to closed should not require typing today's date.
+  var cd = document.getElementById('decision-closed-date');
+  if (cd && closed && !cd.value) cd.value = manilaDateKey();
 }
 async function saveDecisionForm() {
   var asset = getDecisionField('decision-asset').trim().toUpperCase();
@@ -3286,6 +3415,10 @@ async function saveDecisionForm() {
     conviction: Number(getDecisionField('decision-conviction') || 3),
     entryPrice: decisionNum(getDecisionField('decision-entry')),
     size: decisionNum(getDecisionField('decision-size')),
+    exitPrice: status === 'closed' ? decisionNum(getDecisionField('decision-exit')) : null,
+    closedDate: status === 'closed'
+      ? ((getDecisionField('decision-closed-date') || '').trim() || manilaDateKey())
+      : '',
     reason: getDecisionField('decision-reason').trim(),
     invalidator: getDecisionField('decision-invalidator').trim(),
     linkedSignal: decisionLinkedSignal,
@@ -3346,6 +3479,10 @@ function buildDecisionStats(entries) {
     beatRate: null,
     beatKnown: 0,
     beatWins: 0,
+    gradedN: 0,        // closed+taken calls the app could grade from prices
+    excessN: 0,        // ...of those, how many had benchmark levels on both dates
+    excessSum: 0,
+    avgExcess: null,
     mistakes: {},
     bySource: {},
     bySignalStatus: {}
@@ -3359,14 +3496,22 @@ function buildDecisionStats(entries) {
     if (!stats.bySource[src]) stats.bySource[src] = { n: 0, taken: 0, wins: 0, losses: 0 };
     stats.bySource[src].n++;
     if (action === 'took') stats.bySource[src].taken++;
+    // Grade computed from stored prices; a manual entry overrides it. Before
+    // this these counters read the hand-typed fields only, so the hit rate was
+    // really a measure of how diligently the review form got filled in.
+    var g = status === 'closed' ? gradeDecision(e) : null;
+    var outcome = decisionOutcomeOf(e, g);
+    var beat = decisionBeatOf(e, g);
     if (status === 'closed' && action === 'took') {
-      if (e.outcome === 'win') { stats.wins++; stats.bySource[src].wins++; }
-      if (e.outcome === 'loss') { stats.losses++; stats.bySource[src].losses++; }
-      if (e.outcome === 'scratch') stats.scratches++;
-      if (e.beatBenchmark === true || e.beatBenchmark === false) {
+      if (outcome === 'win') { stats.wins++; stats.bySource[src].wins++; }
+      if (outcome === 'loss') { stats.losses++; stats.bySource[src].losses++; }
+      if (outcome === 'scratch') stats.scratches++;
+      if (beat === true || beat === false) {
         stats.beatKnown++;
-        if (e.beatBenchmark === true) stats.beatWins++;
+        if (beat === true) stats.beatWins++;
       }
+      if (g && g.excess != null) { stats.excessN++; stats.excessSum += g.excess; }
+      if (g) stats.gradedN++;
     }
     if (status === 'closed') {
       var mt = e.mistakeType || 'none';
@@ -3376,13 +3521,14 @@ function buildDecisionStats(entries) {
       var ss = e.linkedSignal.status;
       if (!stats.bySignalStatus[ss]) stats.bySignalStatus[ss] = { n: 0, wins: 0, losses: 0 };
       stats.bySignalStatus[ss].n++;
-      if (e.outcome === 'win') stats.bySignalStatus[ss].wins++;
-      if (e.outcome === 'loss') stats.bySignalStatus[ss].losses++;
+      if (outcome === 'win') stats.bySignalStatus[ss].wins++;
+      if (outcome === 'loss') stats.bySignalStatus[ss].losses++;
     }
   });
   var resolved = stats.wins + stats.losses;
   stats.hitRate = resolved ? Math.round(stats.wins / resolved * 100) : null;
   stats.beatRate = stats.beatKnown ? Math.round(stats.beatWins / stats.beatKnown * 100) : null;
+  stats.avgExcess = stats.excessN ? decRound(stats.excessSum / stats.excessN, 2) : null;
   return stats;
 }
 function decisionRate(w, l) {
@@ -3429,6 +3575,35 @@ function decisionPulseHtml(stats, todayCount, reviewCount) {
     '<div class="decision-pulse-card"><div class="decision-pulse-value">' + stats.taken + '/' + stats.skipped + '/' + stats.watched + '</div><div class="decision-pulse-label">Took / skip / watch</div></div>' +
     '<div class="decision-pulse-card"><div class="decision-pulse-value">' + (stats.hitRate == null ? 'n/a' : stats.hitRate + '%') + '</div><div class="decision-pulse-label">Taken hit rate</div></div>' +
   '</div>';
+}
+// The question a decision journal exists to answer and this one could not:
+// does acting on the radar beat the radar? Both sides are benchmark-excess over
+// the same definition, so they are comparable — Bob's realised excess on calls
+// he took, against what every confirmed signal did whether he took it or not.
+function decisionVsRadarHtml(stats, journal) {
+  if (!stats.excessN) return '';
+  var conf = journal && journal.byStatus && journal.byStatus.confirmed;
+  var mine = stats.avgExcess;
+  var html = '<div class="decision-panel"><div class="decision-panel-title">You vs the Radar' +
+    '<span>benchmark-excess, same definition</span></div>' +
+    '<div class="archive-summary">' +
+      jTile(jSign(mine), 'Your avg excess (n=' + stats.excessN + ')') +
+      jTile(conf && conf.avgExcessReturn != null ? jSign(conf.avgExcessReturn) : 'n/a',
+        'Every confirmed signal' + (conf ? ' (n=' + conf.n + ')' : '')) +
+    '</div>';
+  if (conf && conf.avgExcessReturn != null && mine != null) {
+    var edge = decRound(mine - conf.avgExcessReturn, 2);
+    html += '<div class="decision-review-hint">Your selection is worth <b>' +
+      (edge > 0 ? '+' : '') + edge + 'pp</b> versus taking every confirmed signal. ' +
+      (edge > 0
+        ? 'On this sample, choosing is beating the screen.'
+        : 'On this sample, the screen would have done at least as well without you.') +
+      '</div>';
+  }
+  html += '<div class="decision-stat-note" style="margin:.6rem 0 0">Small samples move this number a lot, ' +
+    'and the two sides differ in holding period — yours is however long you held, the radar journal uses a fixed ' +
+    'horizon. Treat it as indicative, not a verdict.</div>';
+  return html + '</div>';
 }
 function decisionPatternDeckHtml(stats) {
   var html = '<div class="decision-panel"><div class="decision-panel-title">Patterns <span>process read</span></div>' +
@@ -3544,10 +3719,44 @@ function decisionLiveHtml(L) {
   if (L.catalyst) html += '<div class="dec-live-cat"><b>Now:</b> ' + esc(L.catalyst) + '</div>';
   return html + '</div>';
 }
+// Grade strip on a closed row: what it actually did, versus what its benchmark
+// did over the same window.
+function decisionGradeHtml(e, g) {
+  if (!g) return '';
+  var chips = [];
+  if (g.excess != null) {
+    chips.push(decChip(g.excess > 0 ? 'beat ' + esc(g.benchSym) : 'lagged ' + esc(g.benchSym),
+      g.excess > 0 ? 'good' : 'bad'));
+  }
+  if (g.heldDays != null) chips.push(decChip(g.heldDays + 'd held'));
+  if (e.outcome) chips.push(decChip('manual outcome: ' + esc(e.outcome), 'warn'));
+  if (e.beatBenchmark === true || e.beatBenchmark === false) {
+    chips.push(decChip('manual benchmark call', 'warn'));
+  }
+  var head = '<span class="dec-live-px">' + decPx(g.ref) + ' &rarr; ' + decPx(g.exit) + '</span>' +
+    '<span class="dec-live-move">' + jSign(g.assetReturn) + '</span>';
+  if (g.benchReturn != null) {
+    head += '<span class="dec-live-note">vs ' + esc(g.benchSym) + '</span>' +
+      '<span class="dec-live-px">' + jSign(g.benchReturn) + '</span>' +
+      '<span class="dec-live-move">' + jSign(g.excess) + '</span>' +
+      '<span class="dec-live-note">excess</span>';
+  } else {
+    head += '<span class="dec-live-note">raw return &mdash; no benchmark level for these dates</span>';
+  }
+  var econ = [];
+  if (g.pnlAbs != null) econ.push('P&amp;L ' + decMoney(g.pnlAbs));
+  econ.push('<span class="feed-age">' + esc(DECISION_REF_LABEL[g.refSrc] || 'ref') +
+    ' &middot; exit: ' + esc(g.exitSrc || '?') + '</span>');
+  return '<div class="dec-live"><div class="dec-live-head">' + head + '</div>' +
+    (chips.length ? '<div class="dec-live-chips">' + chips.join('') + '</div>' : '') +
+    '<div class="dec-live-econ">' + econ.join('') + '</div></div>';
+}
 function decisionRow(e) {
   var closed = (e.status || 'open') === 'closed';
+  var grade = closed ? gradeDecision(e) : null;
+  var effOutcome = decisionOutcomeOf(e, grade);
   var actionCls = e.action === 'took' ? 'rel-high' : (e.action === 'skipped' ? 'rel-low' : 'rel-med');
-  var outcomeCls = e.outcome === 'win' ? 'rel-high' : (e.outcome === 'loss' ? 'rel-low' : 'rel-med');
+  var outcomeCls = effOutcome === 'win' ? 'rel-high' : (effOutcome === 'loss' ? 'rel-low' : 'rel-med');
   var linked = e.linkedSignal ? decisionPill(e.linkedSignal.status || 'radar', radarStatusClass(e.linkedSignal.status)) : '';
   var beat = e.beatBenchmark == null ? '' : decisionPill(e.beatBenchmark ? 'beat benchmark' : 'lagged benchmark', e.beatBenchmark ? 'rel-high' : 'rel-low');
   return '<div class="decision-row' + (closed ? ' closed' : '') + '">' +
@@ -3563,11 +3772,11 @@ function decisionRow(e) {
     '<div class="decision-body">' +
       (e.reason ? '<div><b>Reason:</b> ' + esc(e.reason) + '</div>' : '') +
       (e.invalidator ? '<div><b>Change-my-mind:</b> ' + esc(e.invalidator) + '</div>' : '') +
-      (closed ? '<div><b>Review:</b> ' + decisionPill(e.outcome || 'closed', outcomeCls) + ' ' +
+      (closed ? '<div><b>Review:</b> ' + decisionPill(effOutcome || 'closed', outcomeCls) + ' ' +
         esc(DECISION_MISTAKE_LABELS[e.mistakeType || 'none'] || e.mistakeType || 'none') +
         (e.outcomeNote ? ' - ' + esc(e.outcomeNote) : '') + '</div>' : '') +
     '</div>' +
-    (closed ? '' : decisionLiveHtml(decisionLive(e))) +
+    (closed ? decisionGradeHtml(e, grade) : decisionLiveHtml(decisionLive(e))) +
     '<div class="decision-foot"><span class="decision-mini">' + esc(decisionLinkedText(e.linkedSignal)) + '</span>' +
       '<div class="decision-buttons">' +
         (closed ? '' : '<button class="btn-primary" onclick="closeOutDecision(\'' + esc(e.id) + '\')">Close out</button>') +
@@ -3650,7 +3859,11 @@ function renderDecisions() {
     // if the radar is unreachable the tab renders exactly as it did before.
     return loadDecisionMarketContext(decisionEntries)
       .catch(function (err) { console.error('Decision market context failed:', err); })
-      .then(function () { return decisionEntries; });
+      // The radar's own calibration doc, for the you-vs-radar comparison.
+      .then(function () {
+        return window.fbLoadJournal ? window.fbLoadJournal().catch(function () { return null; }) : null;
+      })
+      .then(function (j) { decisionRadarJournal = j; return decisionEntries; });
   }).then(function (entries) {
     if (!entries) return;
     var stats = buildDecisionStats(decisionEntries);
@@ -3670,7 +3883,8 @@ function renderDecisions() {
           renderDecisionPanel('Needs Review', needsReview, 'older taken calls still open', 'warn') +
           renderDecisionPanel('Closed / Learned', closed.slice(0, 16), 'latest reviewed decisions', 'learned') +
         '</div>' +
-        '<div>' + decisionPatternDeckHtml(stats) + '</div>' +
+        '<div>' + decisionVsRadarHtml(stats, decisionRadarJournal) +
+          decisionPatternDeckHtml(stats) + '</div>' +
       '</div>';
   });
 }
