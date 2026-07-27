@@ -389,6 +389,21 @@ window.fbLoadRadar = async function() {
   }
 };
 
+// Load this user's decision-drift digest, written by the 06:00 radar refresh
+// (briefings-bob/radar-drift-<uid>). Carries a uid, so the rules only ever
+// return the caller's own. Null when it has never run.
+window.fbLoadDecisionDrift = async function() {
+  var uid = getUid();
+  if (!uid) return null;
+  try {
+    var snap = await getDoc(doc(db, COLL, 'radar-drift-' + uid));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    console.error('Decision drift load failed:', e);
+    return null;
+  }
+};
+
 // Load the shared feed-health doc written by the local refresh scripts
 // (lib/feed-health.js). One small doc, no uid. Null on any failure — the strip
 // then falls back to reporting what it can and says so.
@@ -1314,6 +1329,20 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .jwc-neg .jwc-verdict{color:var(--red)}
 @media(max-width:768px){.jwc-row{grid-template-columns:1fr 1fr;row-gap:.3rem}}
 
+/* ── DRIFT DIGEST (Today page) ── */
+.drift-panel{background:rgba(240,168,50,.06);border:1px solid rgba(240,168,50,.32);border-radius:12px;
+  padding:1rem 1.1rem;margin-bottom:1.25rem}
+.drift-head{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;flex-wrap:wrap;
+  margin-bottom:.7rem}
+.drift-title{font-family:var(--mono);font-size:12px;color:#F0A832;letter-spacing:.06em;text-transform:uppercase}
+.drift-meta{font-family:var(--mono);font-size:9.5px;color:var(--txt3);letter-spacing:.04em}
+.drift-item{padding:.6rem 0;border-top:1px solid var(--rim)}
+.drift-item-top{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+.drift-asset{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt)}
+.drift-reason{font-size:12.5px;line-height:1.55;color:var(--txt2)}
+.drift-inval{margin-top:.4rem;font-size:11.5px;line-height:1.55;color:var(--txt3)}
+.drift-open{margin-top:.8rem}
+
 /* ── FEED HEALTH STRIP ── */
 .feed-health{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.45rem 1.25rem;
   background:var(--bg2);border-bottom:1px solid var(--rim);font-family:var(--mono);font-size:10px}
@@ -1402,6 +1431,9 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div class="hero-timestamp" id="hero-timestamp"></div>
     <div class="hero-divider"></div>
   </div>
+
+  <!-- Open calls whose setup changed overnight — computed by the 06:00 refresh -->
+  <div id="today-drift" hidden></div>
 
   <div class="ticker">
     <div class="tick"><div class="tick-label">PSEi</div><div class="tick-val" id="t-psei">—</div><div class="tick-move tick-flat" id="t-psei-m">—</div><div class="tick-bar" style="background:#3498DB"></div></div>
@@ -2020,6 +2052,7 @@ function onSignedIn() {
       if (window.loadFeedHealth) window.loadFeedHealth();
     });
   }
+  if (window.loadTodayDrift) window.loadTodayDrift();
   if (!window._feedHealthTimer && window.loadFeedHealth) {
     window._feedHealthTimer = setInterval(window.loadFeedHealth, 15 * 60 * 1000);
   }
@@ -2906,6 +2939,59 @@ function jWeightCalibHtml(wc) {
 
 // ── PH MARKET HEALTH (read-only; not scored) ──
 function phRet(v) { return v == null ? '<span class="jmut">—</span>' : jSign(v); }
+// ── DRIFT DIGEST ON THE TODAY PAGE ────────────────────────────────────────
+// The Decisions tab already flags a broken thesis, but only once Bob goes
+// looking. The 06:00 refresh computes the same set (lib/decision-drift.js, same
+// trigger rules) so it can be put on the page he opens every morning. Signal
+// pushed into a surface already being read — no notifications, no new tab.
+// Silent when nothing drifted, so it never becomes furniture.
+
+function driftItemHtml(it) {
+  var bits = [];
+  if (it.scoreThen != null && it.scoreNow != null) {
+    bits.push(decChip('score ' + it.scoreThen + '&rarr;' + it.scoreNow +
+      ' (' + (it.scoreNow - it.scoreThen > 0 ? '+' : '') + (it.scoreNow - it.scoreThen) + ')',
+      it.scoreNow < it.scoreThen ? 'bad' : ''));
+  }
+  if (it.belowStop && it.stop != null) bits.push(decChip('below stop ' + decPx(it.stop), 'bad'));
+  if (it.movePct != null) {
+    bits.push(decChip((it.movePct > 0 ? '+' : '') + it.movePct + '% since logged',
+      it.movePct < 0 ? 'bad' : 'good'));
+  }
+  if (it.createdDate) bits.push(decChip('logged ' + esc(it.createdDate)));
+  return '<div class="drift-item">' +
+    '<div class="drift-item-top"><span class="drift-asset">' + esc(it.asset) + '</span>' +
+      '<span class="drift-reason">' + esc(it.reasons.join(' · ')) + '</span></div>' +
+    (bits.length ? '<div class="dec-live-chips">' + bits.join('') + '</div>' : '') +
+    (it.invalidation ? '<div class="drift-inval">' + esc(it.invalidation) + '</div>' : '') +
+  '</div>';
+}
+function renderTodayDrift(d) {
+  var el = document.getElementById('today-drift');
+  if (!el) return;
+  var items = (d && d.items) || [];
+  if (!d || !items.length) { el.hidden = true; el.innerHTML = ''; return; }
+  var stale = d.dateKey && d.dateKey !== manilaDateKey();
+  el.innerHTML = '<div class="drift-panel">' +
+    '<div class="drift-head"><span class="drift-title">&#9888; ' + items.length +
+      ' open call' + (items.length === 1 ? '' : 's') + ' need' + (items.length === 1 ? 's' : '') +
+      ' a look</span>' +
+      '<span class="drift-meta">of ' + (d.openTracked || items.length) + ' tracked &middot; radar ' +
+        esc(d.asOf || '—') + (stale ? ' &middot; from ' + esc(d.dateKey) : '') + '</span>' +
+    '</div>' +
+    items.map(driftItemHtml).join('') +
+    '<button class="btn-sec drift-open" onclick="switchPage(\'decisions\',null)">Open Decisions</button>' +
+  '</div>';
+  el.hidden = false;
+}
+window.loadTodayDrift = async function () {
+  try {
+    renderTodayDrift(window.fbLoadDecisionDrift ? await window.fbLoadDecisionDrift() : null);
+  } catch (e) {
+    console.error('Drift digest render failed:', e);
+  }
+};
+
 // ── FEED HEALTH ───────────────────────────────────────────────────────────
 // Which data feeds are current, and when one is not, why. This exists because
 // the radar quietly missed ~1 day in 4 for a month and the only way to find out

@@ -36,6 +36,7 @@ import { buildJournal } from './journal.js';
 import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 import { extractUsage, recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
+import { computeDrift, groupByUid } from '../lib/decision-drift.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -399,6 +400,50 @@ async function writeDoc(db, dateKey, doc) {
   await db.collection(COLL).doc('radar-latest').set({ value: dateKey });
 }
 
+// ── decision drift digest ──
+// Reads Bob's open calls and writes, per owner, the ones whose setup no longer
+// reads the way it did. The Admin SDK bypasses rules so it can see the
+// uid-scoped journal — which means the OUTPUT must carry the owner's uid, or
+// the briefings-bob read rule (`!('uid' in resource.data)`) would expose one
+// user's positions to every signed-in account.
+async function writeDecisionDrift(db, result, dateKey) {
+  var snap = await db.collection('journal-bob').get();
+  var decisions = [];
+  snap.forEach(function (d) {
+    var v = d.data() || {};
+    v.id = d.id;
+    decisions.push(v);
+  });
+
+  var signalsBySymbol = {};
+  (result.signals || []).forEach(function (s) {
+    if (s && s.symbol) signalsBySymbol[String(s.symbol).toUpperCase()] = s;
+  });
+
+  var byUid = groupByUid(decisions);
+  var uids = Object.keys(byUid);
+  var totalFlagged = 0;
+  for (var i = 0; i < uids.length; i++) {
+    var uid = uids[i];
+    var items = computeDrift(byUid[uid], signalsBySymbol);
+    totalFlagged += items.length;
+    // Written even when empty, so the app can tell "checked, all clear" apart
+    // from "never ran" — the same distinction feed-health draws.
+    await db.collection(COLL).doc('radar-drift-' + uid).set({
+      uid: uid,
+      generatedAt: new Date().toISOString(),
+      asOf: result.asOf,
+      dateKey: dateKey,
+      openTracked: byUid[uid].filter(function (d) {
+        return (d.status || 'open') !== 'closed' && (d.action || 'watched') !== 'skipped';
+      }).length,
+      items: items
+    });
+  }
+  console.log('decision drift: ' + totalFlagged + ' flagged across ' + uids.length +
+    ' owner' + (uids.length === 1 ? '' : 's') + ' (' + decisions.length + ' journal entries scanned).');
+}
+
 // ── main ──
 
 // Which step the run is on, so a failure reports where it died rather than just
@@ -536,6 +581,14 @@ async function main() {
 
   // Record the catalyst call's token usage to the shared LLM cost ledger (no-throw).
   if (catResult.usage) await recordUsage(db, 'radar-catalyst', OPENAI_MODEL, catResult.usage, dateKey, 1);
+
+  // Decision drift digest (non-fatal — never blocks or invalidates the radar).
+  STAGE.set('drift');
+  try {
+    await writeDecisionDrift(db, result, dateKey);
+  } catch (e) {
+    console.log('decision drift skipped: ' + (e.message || e));
+  }
 
   // PH snapshot (non-fatal — never blocks the radar write).
   STAGE.set('ph');
