@@ -470,6 +470,10 @@ async function main() {
     generatedAt: new Date().toISOString(),
     asOf: result.asOf,
     regime: result.regime,
+    // Benchmark closes (SPY/QQQ/BTC). The index symbols are not scored, so
+    // without this the app can only express a decision's result as a raw
+    // return, never as excess over the benchmark that signal was judged against.
+    benchmarks: result.benchmarks,
     signals: result.signals
   };
 

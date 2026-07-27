@@ -404,7 +404,20 @@ function scoreUniverse(barsByAsset, config) {
 
   signals.sort(function (a, b) { return b.score - a.score; });
 
-  return { asOf: asOf, regime: regime, signals: signals };
+  // Closing level of every symbol used as a benchmark. The index symbols (SPY,
+  // QQQ) are deliberately not scored, so their closes would otherwise never
+  // reach the stored doc — and without them nothing downstream can express a
+  // result as benchmark-EXCESS rather than raw return. BTC is already a scored
+  // signal but is included here too so consumers have one place to look.
+  var benchmarks = {};
+  (config.watchlist || []).forEach(function (item) {
+    var b = item.benchmark;
+    if (!b || benchmarks[b] != null) return;
+    var bb = barsByAsset[b];
+    if (bb && bb.length) benchmarks[b] = round(bb[bb.length - 1].close, 2);
+  });
+
+  return { asOf: asOf, regime: regime, benchmarks: benchmarks, signals: signals };
 }
 
 export { scoreUniverse, interp, trendScore, sma, ret20 };
