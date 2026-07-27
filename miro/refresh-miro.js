@@ -409,7 +409,10 @@ async function main() {
     llmPaused: controlPaused,
     llmPausedSource: controlPaused ? 'briefings-bob/miro-control' : '',
     priceSource: 'polymarket-clob-book (mid); gamma outcomePrices fallback',
-    priceBlindSourcePolicy: 'panel price-blind; web_search instructed to exclude prediction-market/odds sources',
+    panelWebSearch: !!CONFIG.panel.webSearch,
+    priceBlindSourcePolicy: CONFIG.panel.webSearch
+      ? 'panel price-blind; web_search instructed to exclude prediction-market/odds sources'
+      : 'panel price-blind; web_search OFF — personas run on training knowledge and base rates, so reads are weaker on fast-moving events',
     costAssumption: 'spread paid implicitly + slippage ' + CONFIG.fees.slippage,
     gates: CONFIG.edgeGate,
     warnings: [

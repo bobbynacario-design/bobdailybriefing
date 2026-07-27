@@ -119,6 +119,14 @@ function buildMiroJournal(prior, todaySnapshots, todayPrices, resolutions, confi
       impliedAtFirst: round(s.impliedYes, 4),
       priceAtFirst: round(first, 4),
       predictedProb: round(s.haircutProb, 4),
+      // WHO made this prediction. A prediction is locked once and scored months
+      // later, so a journal spanning a config change would otherwise blend two
+      // different forecasters into one Brier score and report it as if it were
+      // one. Stamped at lock time; nothing here changes the maths.
+      forecaster: {
+        model: (config && config.panel && config.panel.model) || null,
+        webSearch: !!(config && config.panel && config.panel.webSearch)
+      },
       priceTrail: [{ asOf: s.asOf, mid: round(first, 4) }],
       clvTowardPanel: 0
     };

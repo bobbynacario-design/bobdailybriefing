@@ -1080,6 +1080,9 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .ph-cat-macro{color:var(--blue);background:var(--blue-dim)}
 .ph-cat-spec{color:var(--purple);background:var(--purple-dim)}
 .ph-subj{font-family:var(--mono);font-size:10px;color:var(--gold);background:var(--gold-dim);padding:2px 6px;border-radius:4px;flex-shrink:0}
+.miro-grounding{margin:0 0 1rem;padding:.6rem .75rem;border-radius:9px;font-size:12.5px;line-height:1.6;
+  background:rgba(240,168,50,.08);border:1px solid rgba(240,168,50,.3);color:var(--txt2)}
+.miro-grounding b{color:#F0A832}
 .miro-controls{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:-.45rem 0 1rem}
 .miro-llm-btn{display:inline-flex;align-items:center;gap:.45rem;border:1px solid var(--rim2);border-radius:8px;background:var(--bg2);color:var(--txt2);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:.55rem .8rem;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
 .miro-llm-btn:hover{border-color:var(--gold);color:var(--txt)}
@@ -4761,6 +4764,23 @@ function miroHealthHtml(j, d) {
   if (d.meta && d.meta.llmPaused) detail += ' The LLM panel is paused.';
   return '<div class="miro-health"><strong>Model calibration: ' + esc(state) + '.</strong> ' + esc(detail) + '</div>';
 }
+// How the panel's reads were produced. The LLM control says the panel is
+// "running", which is true but not the whole story: with web_search off the
+// personas answer from training knowledge and base rates, so a read on a
+// fast-moving story is weaker than the same read a month ago. Cost is the reason
+// (search was ~98% of the input tokens), and that trade belongs on the tab
+// rather than buried in the stored doc's meta.
+function miroGroundingHtml(d) {
+  var m = d && d.meta;
+  if (!m || m.panelWebSearch !== false || m.llmPaused) return '';
+  return '<div class="miro-grounding">' +
+    '<b>Panel is running without web grounding.</b> Personas answer from training knowledge and base rates, ' +
+    'not current reporting — reads on fast-moving stories are weaker than slow macro ones. Turned off on cost: ' +
+    'search was the overwhelming majority of the spend, not the model. Each prediction is stamped with how it ' +
+    'was produced, so the forecast journal can tell the two apart rather than blending them.' +
+  '</div>';
+}
+
 function miroRenderData(d, j) {
   var out = document.getElementById('miro-out');
   var sub = document.getElementById('miro-sub');
@@ -4772,7 +4792,8 @@ function miroRenderData(d, j) {
   if (settings) settings.open = _miroSettingsOpen;
   if (options) options.innerHTML = miroThemeSettingsHtml(d);
   if (sub) sub.textContent = d.markets.length + ' active signals / refreshed ' + (d.asOf || 'today') + ' / ' + followed.length + ' themes followed';
-  var html = '<div class="miro-brief-grid"><div><section class="miro-section"><div class="miro-section-head"><h3>Priority Signals</h3><span class="miro-section-meta">probability / last refresh</span></div>' +
+  var html = miroGroundingHtml(d) +
+    '<div class="miro-brief-grid"><div><section class="miro-section"><div class="miro-section-head"><h3>Priority Signals</h3><span class="miro-section-meta">probability / last refresh</span></div>' +
     (signals.length ? '<div class="miro-signal-list">' + signals.slice(0, 6).map(miroSignalHtml).join('') + '</div>' : '<div class="miro-empty">No themes followed. Open Manage followed themes above to choose what belongs in your brief.</div>') +
     '</section></div><div><section class="miro-section"><div class="miro-section-head"><h3>What Changed</h3><span class="miro-section-meta">moves of 0.5+ pts</span></div>' + miroChangesHtml(d, followed) +
     '</section><section class="miro-section"><div class="miro-section-head"><h3>Evidence Check</h3><span class="miro-section-meta">forecast journal</span></div>' + miroHealthHtml(j, d) + '</section></div></div>';

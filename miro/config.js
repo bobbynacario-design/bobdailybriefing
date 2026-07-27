@@ -82,7 +82,19 @@ var EDGE_GATE = {
 // calibrated blender. Each persona = one OpenAI call/run, so this is the cost lever.
 var PANEL = {
   model: 'gpt-5.5',  // overridable via OPENAI_MODEL; reuses the radar's OpenAI integration
-  webSearch: true,   // ground each persona in recent news (web_search, low context)
+  // web_search OFF (2026-07-28). The panel was paused on 2026-06-30 purely on
+  // cost, and the ledger shows the cost was the SEARCH, not the model: 26 calls
+  // averaged ~43.8k input tokens each for a prompt that is only a persona brief
+  // plus ~8 market slugs. The rest is search results injected back as input, at
+  // input rates, every call. Turning it off returns the tab to service for a
+  // fraction of the spend without touching the model.
+  //
+  // The trade is real: personas fall back on training knowledge plus base rates,
+  // which is weaker on fast-moving events. These markets are slow-resolving
+  // macro/geopolitical questions where base rates carry most of the weight, so
+  // it is the right trade HERE — and the Brier/CLV journal is what decides
+  // whether it was, rather than an assumption either way.
+  webSearch: false,
   personas: [
     { id: 'base-rate',  brief: 'A historian who anchors hard on base rates and how often this CLASS of event actually happens. Skeptical of recency and narrative.' },
     { id: 'insider',    brief: 'A domain specialist who weighs the latest concrete signals, official statements, and on-the-ground specifics for THIS event.' },
