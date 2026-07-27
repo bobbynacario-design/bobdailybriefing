@@ -974,6 +974,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .dec-live-px{font-family:var(--mono);font-size:12.5px;color:var(--txt)}
 .dec-live-move{font-family:var(--mono);font-size:15px;font-weight:700}
 .dec-live-note{font-family:var(--mono);font-size:9.5px;color:var(--txt3);letter-spacing:.04em;text-transform:uppercase}
+.dec-spark-wrap{display:flex;align-items:center;gap:.6rem;margin-top:.5rem;flex-wrap:wrap}
+.dec-spark{width:190px;height:34px;flex:0 0 auto;overflow:visible}
 .dec-live-chips{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.5rem}
 .dec-chip{font-family:var(--mono);font-size:9.5px;letter-spacing:.03em;padding:.24rem .45rem;border-radius:5px;border:1px solid var(--rim2);color:var(--txt2);white-space:nowrap}
 .dec-chip.good{color:var(--green);border-color:rgba(45,184,122,.3);background:var(--green-dim)}
@@ -2738,28 +2740,61 @@ var decisionLinkedSignal = null;
 var decisionRadarLive = null;    // {SYMBOL: signal} from the latest radar doc
 var decisionRadarAsOf = null;    // asOf of that doc
 var decisionRefPrice = {};       // decision id -> {px, src}
-var decisionDatedCache = {};     // 'YYYY-MM-DD' -> {SYMBOL: signal} | null
+var decisionDatedCache = {};     // run date 'YYYY-MM-DD' -> {asOf, sig} | null
 var DECISION_STATUS_RANK = { invalidated: 0, forming: 1, confirmed: 2 };
+// Cap how far back a sparkline reaches. Each calendar day in the span is one
+// Firestore read (cached for the session), so this also bounds the read cost
+// as radar history accumulates.
+var DECISION_SPARK_MAX_DAYS = 60;
 
 function decisionSignalMap(radarDoc) {
   var m = {};
   ((radarDoc && radarDoc.signals) || []).forEach(function (s) {
     if (s && s.symbol) m[String(s.symbol).toUpperCase()] = s;
   });
-  return m;
+  // asOf is the last TRADING day; the doc id is the run date. Keeping both lets
+  // the sparkline key on asOf so weekend docs (which repeat Friday's close)
+  // collapse into one point instead of drawing a fake flat step.
+  return { asOf: (radarDoc && radarDoc.asOf) || null, sig: m };
+}
+
+function decDayMs(d) { return Date.parse(d + 'T12:00:00Z'); } // noon UTC: no DST edges
+
+// Every calendar date a sparkline could need: from the oldest open radar-tracked
+// call up to today, clamped to DECISION_SPARK_MAX_DAYS.
+function decisionSpanDates(entries, universe) {
+  var today = manilaDateKey();
+  var earliest = null;
+  entries.forEach(function (e) {
+    if ((e.status || 'open') === 'closed') return;
+    var sym = (e.asset || '').toUpperCase();
+    var d = e.createdDate || '';
+    if (!sym || !universe[sym] || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    if (!earliest || d < earliest) earliest = d;
+  });
+  if (!earliest) return [];
+  var t = decDayMs(today), s = decDayMs(earliest);
+  if (!isFinite(t) || !isFinite(s)) return [];
+  var floor = t - DECISION_SPARK_MAX_DAYS * 86400000;
+  if (s < floor) s = floor;
+  var out = [];
+  for (var ms = s; ms <= t; ms += 86400000) out.push(new Date(ms).toISOString().slice(0, 10));
+  return out;
 }
 
 // Resolve one reference price per entry, best source first: an explicit entry
 // price Bob typed, then the close captured in the signal snapshot, then the
 // close from the dated radar doc for the day the call was logged (this is what
-// backfills calls made before the snapshot carried a price). Dated docs are
-// fetched once per distinct date and cached, so re-rendering costs no reads.
+// backfills calls made before the snapshot carried a price). The same dated
+// docs feed the sparklines, so both needs are fetched in one pass and cached —
+// re-rendering the tab costs no reads.
 async function loadDecisionMarketContext(entries) {
   if (!decisionRadarLive && window.fbLoadRadar) {
     var live = await window.fbLoadRadar().catch(function () { return null; });
     if (live) {
-      decisionRadarLive = decisionSignalMap(live);
-      decisionRadarAsOf = live.asOf || null;
+      var lm = decisionSignalMap(live);
+      decisionRadarLive = lm.sig;
+      decisionRadarAsOf = lm.asOf;
     }
   }
   var universe = decisionRadarLive || {};
@@ -2773,9 +2808,10 @@ async function loadDecisionMarketContext(entries) {
     var sym = (e.asset || '').toUpperCase();
     var d = e.createdDate || '';
     // Only worth a read if the radar actually tracks this asset.
-    if (sym && universe[sym] && /^\d{4}-\d{2}-\d{2}$/.test(d) && !(d in decisionDatedCache)) need[d] = 1;
+    if (sym && universe[sym] && /^\d{4}-\d{2}-\d{2}$/.test(d)) need[d] = 1;
   });
-  var dates = Object.keys(need);
+  decisionSpanDates(entries, universe).forEach(function (d) { need[d] = 1; });
+  var dates = Object.keys(need).filter(function (d) { return !(d in decisionDatedCache); });
   if (dates.length && window.fbLoadRadarByDate) {
     var docs = await Promise.all(dates.map(function (d) {
       return window.fbLoadRadarByDate(d).catch(function () { return null; });
@@ -2786,10 +2822,65 @@ async function loadDecisionMarketContext(entries) {
   }
   entries.forEach(function (e) {
     if (decisionRefPrice[e.id]) return;
-    var m = decisionDatedCache[e.createdDate || ''];
-    var s = m && m[(e.asset || '').toUpperCase()];
+    var rec = decisionDatedCache[e.createdDate || ''];
+    var s = rec && rec.sig[(e.asset || '').toUpperCase()];
     if (s && s.close != null) decisionRefPrice[e.id] = { px: Number(s.close), src: 'backfill' };
   });
+}
+
+// Close series for one call, decision date -> today, from the cached dated
+// docs. Keyed on each doc's asOf so weekend runs (which carry Friday's close)
+// dedupe. Today's live close is appended when it is newer than any cached doc.
+function decisionSeries(e) {
+  var sym = (e.asset || '').toUpperCase();
+  var d0 = e.createdDate || '';
+  if (!sym || !/^\d{4}-\d{2}-\d{2}$/.test(d0)) return [];
+  var seen = {}, out = [];
+  Object.keys(decisionDatedCache).sort().forEach(function (runDate) {
+    var rec = decisionDatedCache[runDate];
+    if (!rec) return;
+    var s = rec.sig[sym];
+    if (!s || s.close == null) return;
+    var key = rec.asOf || runDate;
+    if (key < d0 || seen[key]) return;
+    seen[key] = 1;
+    out.push({ d: key, c: Number(s.close) });
+  });
+  var live = (decisionRadarLive || {})[sym];
+  if (live && live.close != null) {
+    var k = decisionRadarAsOf || manilaDateKey();
+    if (k >= d0 && !seen[k]) out.push({ d: k, c: Number(live.close) });
+  }
+  out.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+  return out;
+}
+
+// Sparkline since the decision date. Coloured by where it sits versus the
+// reference price (direction-aware), with the reference drawn as a dashed
+// baseline — the question is "how has this done since I called it", not
+// "what shape is the chart".
+function decisionSpark(series, ref, dir) {
+  if (!series || series.length < 2) return '';
+  var w = 190, h = 34, pad = 3;
+  var vals = series.map(function (p) { return p.c; });
+  var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  if (ref != null) { lo = Math.min(lo, ref); hi = Math.max(hi, ref); }
+  var rng = (hi - lo) || 1;
+  var y = function (v) { return h - pad - (v - lo) / rng * (h - 2 * pad); };
+  var pts = series.map(function (p, i) {
+    return (pad + i * (w - 2 * pad) / (series.length - 1)).toFixed(1) + ',' + y(p.c).toFixed(1);
+  }).join(' ');
+  var last = vals[vals.length - 1];
+  var base = ref != null ? ref : vals[0];
+  var adv = (last - base) * (dir === -1 ? -1 : 1);
+  var col = adv > 0 ? 'var(--green)' : (adv < 0 ? 'var(--red)' : 'var(--txt3)');
+  var refLine = ref == null ? '' :
+    '<line x1="0" y1="' + y(ref).toFixed(1) + '" x2="' + w + '" y2="' + y(ref).toFixed(1) +
+    '" stroke="var(--txt3)" stroke-width="1" stroke-dasharray="3 3" opacity=".55"/>';
+  return '<svg class="dec-spark" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" ' +
+    'role="img" aria-label="price since ' + esc(series[0].d) + '">' + refLine +
+    '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" ' +
+    'stroke-linejoin="round" points="' + pts + '"/></svg>';
 }
 
 function decisionDaysOpen(e) {
@@ -2859,6 +2950,7 @@ function decisionLive(e) {
     o.stopPct = decRound((px - o.stop) / px * 100, 1);
     o.belowStop = px < o.stop;
   }
+  o.series = decisionSeries(e);
   return o;
 }
 var DECISION_MISTAKES = [
@@ -3296,7 +3388,13 @@ function decisionLiveHtml(L) {
     econ.push('<span style="color:' + rc + '">' + (L.rMultiple > 0 ? '+' : '') + L.rMultiple + 'R</span>');
   }
 
+  var spark = decisionSpark(L.series, L.ref, L.dir);
   var html = '<div class="dec-live"><div class="dec-live-head">' + head + '</div>';
+  if (spark) {
+    html += '<div class="dec-spark-wrap">' + spark +
+      '<span class="dec-live-note">' + esc(L.series[0].d) + ' &rarr; now' +
+      (L.ref != null ? ' &middot; dashed = ref' : '') + '</span></div>';
+  }
   if (chips.length) html += '<div class="dec-live-chips">' + chips.join('') + '</div>';
   if (econ.length) html += '<div class="dec-live-econ">' + econ.join('') + '</div>';
   // The one thing worth interrupting for: the setup that carried the call has
