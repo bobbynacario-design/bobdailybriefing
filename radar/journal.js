@@ -151,6 +151,251 @@ function emptyGroup() {
   return { n: 0, winRate: null, avgForwardReturn: null, excessWinRate: null, avgExcessReturn: null, ambiguousN: 0 };
 }
 
+// ── information coefficient (does the score RANK correctly?) ──────────────
+//
+// byScoreBucket answers "what did the 80-100 band earn", which pools every
+// signal in the window and is dominated by whichever weeks happened to be in
+// it. The IC asks a different and much harder question, once per DAY: on this
+// day's ~30 names, did a higher score go with higher forward excess?
+//
+// That gives one number per date instead of one number per window, so the
+// finding can be examined for persistence — a score that is inverted every day
+// is broken, a score that is inverted in five bad weeks and fine otherwise is
+// regime-dependent, and the bucket table cannot tell those apart.
+//
+// Spearman (rank) rather than Pearson: the score is an ordinal ranking device,
+// and excess returns are fat-tailed enough that one 30% outlier would otherwise
+// set the correlation on its own.
+
+// Average ranks, so tied scores cannot manufacture an ordering that isn't there.
+function ranks(values) {
+  var idx = values.map(function (v, i) { return { v: v, i: i }; });
+  idx.sort(function (a, b) { return a.v - b.v; });
+  var out = new Array(values.length);
+  var i = 0;
+  while (i < idx.length) {
+    var j = i;
+    while (j + 1 < idx.length && idx[j + 1].v === idx[i].v) j++;
+    var avg = (i + j) / 2 + 1;                 // 1-based average rank of the tie block
+    for (var k = i; k <= j; k++) out[idx[k].i] = avg;
+    i = j + 1;
+  }
+  return out;
+}
+
+// Spearman correlation. Returns null when either side has no spread at all —
+// a day where every score is identical carries no ranking information, and
+// reporting 0 for it would dilute the mean with a non-observation.
+function spearman(xs, ys) {
+  var n = xs.length;
+  if (n < 3 || ys.length !== n) return null;
+  var rx = ranks(xs), ry = ranks(ys);
+  var mx = mean(rx), my = mean(ry);
+  var num = 0, dx = 0, dy = 0;
+  for (var i = 0; i < n; i++) {
+    var a = rx[i] - mx, b = ry[i] - my;
+    num += a * b; dx += a * a; dy += b * b;
+  }
+  if (dx <= 0 || dy <= 0) return null;
+  return num / Math.sqrt(dx * dy);
+}
+
+function stdev(arr) {
+  if (arr.length < 2) return null;
+  var m = mean(arr), s = 0;
+  for (var i = 0; i < arr.length; i++) s += (arr[i] - m) * (arr[i] - m);
+  return Math.sqrt(s / (arr.length - 1));      // sample sd
+}
+
+// A date needs enough names for a rank correlation to mean anything. The live
+// universe is ~30, so this only bites on a thin slice (one regime with few days,
+// or an early run before the watchlist filled out).
+var MIN_IC_NAMES = 8;
+
+// One IC per date, plus the regime that date was scored in.
+function icByDate(entries) {
+  var groups = groupBy(entries, function (e) { return e.date; });
+  var out = {};
+  Object.keys(groups).forEach(function (d) {
+    var list = groups[d].filter(function (e) { return e.excessReturn != null && e.score != null; });
+    if (list.length < MIN_IC_NAMES) return;
+    var ic = spearman(
+      list.map(function (e) { return e.score; }),
+      list.map(function (e) { return e.excessReturn; })
+    );
+    if (ic == null) return;
+    out[d] = {
+      ic: round(ic, 3),
+      n: list.length,
+      regime: regimeLabel(groups[d][0].marketRegime)
+    };
+  });
+  return out;
+}
+
+// Summarise a set of daily ICs. `horizon` is needed for the overlap penalty:
+// consecutive dates share almost all of their forward window, so the naive
+// t-stat over ~60 dates is measuring roughly 60/horizon independent windows.
+// Both are reported — the naive one because it is what a reader would compute,
+// the adjusted one because it is the one that is not lying.
+function icStats(series, horizon) {
+  var vals = series.map(function (s) { return s.ic; });
+  if (!vals.length) {
+    return { nDates: 0, meanIC: null, medianIC: null, stdIC: null, positiveDayRate: null,
+             tStat: null, effectiveNDates: null, tStatOverlapAdj: null };
+  }
+  var sorted = vals.slice().sort(function (a, b) { return a - b; });
+  var mid = Math.floor(sorted.length / 2);
+  var median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  var m = mean(vals), sd = stdev(vals);
+  var pos = vals.filter(function (v) { return v > 0; }).length;
+
+  var t = null, tAdj = null, effN = null;
+  if (sd != null && sd > 0) {
+    t = m / (sd / Math.sqrt(vals.length));
+    effN = vals.length / Math.max(1, horizon);
+    if (effN >= 2) tAdj = m / (sd / Math.sqrt(effN));
+  }
+  return {
+    nDates: vals.length,
+    meanIC: round(m, 3),
+    medianIC: round(median, 3),
+    stdIC: round(sd, 3),
+    positiveDayRate: round((pos / vals.length) * 100, 1),
+    tStat: round(t, 2),
+    effectiveNDates: round(effN, 1),
+    tStatOverlapAdj: round(tAdj, 2)
+  };
+}
+
+// Plain verdict. Deliberately blunt about direction — an inverted score is a
+// finding, not a rounding error — while refusing to call anything significant,
+// because with overlapping windows nothing here can be.
+function icVerdict(st) {
+  if (!st.nDates) return 'not enough scored days to measure ranking skill yet';
+  if (st.meanIC == null) return 'no ranking measurement available';
+  if (st.meanIC <= -0.03) return 'the score ranks INVERSELY — lower-scored names ran ahead of higher-scored ones';
+  if (st.meanIC >= 0.03) return 'the score ranks in the right direction';
+  return 'the score carries no usable ranking information — it is close to noise';
+}
+
+function informationCoefficient(entries, horizon) {
+  var byDate = icByDate(entries);
+  var series = Object.keys(byDate).sort().map(function (d) {
+    return { date: d, ic: byDate[d].ic, n: byDate[d].n, regime: byDate[d].regime };
+  });
+  var st = icStats(series, horizon);
+  return {
+    method: 'Spearman rank correlation of score vs forward benchmark-excess, computed across the universe on each scored date (min ' +
+      MIN_IC_NAMES + ' names); summarised across dates. IC +1 = perfect ranking, 0 = none, -1 = perfectly inverted.',
+    overlapNote: 'Daily ICs are NOT independent: a ' + horizon + '-bar forward window means consecutive dates share almost all of their outcome. ' +
+      'tStatOverlapAdj deflates the sample to ~nDates/horizon independent windows; treat even that as indicative, never as significance.',
+    nDates: st.nDates,
+    meanIC: st.meanIC,
+    medianIC: st.medianIC,
+    stdIC: st.stdIC,
+    positiveDayRate: st.positiveDayRate,
+    tStat: st.tStat,
+    effectiveNDates: st.effectiveNDates,
+    tStatOverlapAdj: st.tStatOverlapAdj,
+    verdict: icVerdict(st),
+    series: series
+  };
+}
+
+// ── regime conditioning ───────────────────────────────────────────────────
+//
+// computeRegime() in scoring.js is already discrete — SPY and QQQ both above
+// their SMA20, one, or neither — so the split needs no arbitrary banding. The
+// journal re-scores every past date anyway, so the regime it was scored in is
+// free; it was simply being discarded.
+//
+// The question this answers: is the score's measured inversion a property of
+// the score, or of the one tape the sample happens to cover?
+
+var REGIME_LABELS = { 100: 'risk-on', 60: 'mixed', 25: 'risk-off' };
+var REGIME_ORDER = ['risk-on', 'mixed', 'risk-off'];
+var REGIME_BASIS = {
+  'risk-on': 'SPY and QQQ both above SMA20',
+  'mixed': 'one of SPY / QQQ above SMA20',
+  'risk-off': 'neither SPY nor QQQ above SMA20'
+};
+
+function regimeLabel(score) {
+  return REGIME_LABELS[score] || 'unknown';
+}
+
+// The headline per regime: what the top score band earned minus what the bottom
+// band earned. Positive = the score sorted the universe correctly in that tape.
+// This is the same comparison the Radar's calibration banner makes, but computed
+// inside one regime instead of across all of them at once.
+function bandSpread(list) {
+  var top = list.filter(function (e) { return scoreBucket(e.score) === '80-100'; });
+  var bottom = list.filter(function (e) { return scoreBucket(e.score) === '0-39'; });
+  var tx = top.map(function (e) { return e.excessReturn; }).filter(function (v) { return v != null; });
+  var bx = bottom.map(function (e) { return e.excessReturn; }).filter(function (v) { return v != null; });
+  var tm = tx.length ? mean(tx) : null;
+  var bm = bx.length ? mean(bx) : null;
+  return {
+    topBandN: top.length,
+    topBandExcess: round(tm, 2),
+    bottomBandN: bottom.length,
+    bottomBandExcess: round(bm, 2),
+    spread: (tm != null && bm != null) ? round(tm - bm, 2) : null
+  };
+}
+
+function byRegimeStats(entries, horizon) {
+  var groups = groupBy(entries, function (e) { return regimeLabel(e.marketRegime); });
+  var allIc = icByDate(entries);
+  var out = {};
+  REGIME_ORDER.forEach(function (label) {
+    var list = groups[label] || [];
+    var dates = Object.keys(allIc).filter(function (d) { return allIc[d].regime === label; }).sort();
+    var series = dates.map(function (d) { return { date: d, ic: allIc[d].ic, n: allIc[d].n, regime: label }; });
+    var st = icStats(series, horizon);
+    var bs = bandSpread(list);
+    out[label] = Object.assign({
+      basis: REGIME_BASIS[label],
+      n: list.length,
+      dates: dates.length,
+      firstDate: dates[0] || null,
+      lastDate: dates[dates.length - 1] || null,
+      avgExcessReturn: excessStats(list).avgExcessReturn,
+      excessWinRate: excessStats(list).excessWinRate,
+      meanIC: st.meanIC,
+      positiveDayRate: st.positiveDayRate
+    }, bs);
+  });
+  return out;
+}
+
+// Does the sample actually contain more than one regime? If it does not, the
+// per-regime table is describing one tape and must say so — that is the whole
+// reason the split exists.
+function regimeCoverage(byRegime) {
+  // Coverage is about whether the SAMPLE spans more than one backdrop, so it
+  // counts entries — not IC-eligible dates. A regime can hold plenty of signals
+  // while no single day clears MIN_IC_NAMES, and calling that "no tape" would
+  // wrongly imply the window never saw the regime at all.
+  var seen = REGIME_ORDER.filter(function (r) { return byRegime[r] && byRegime[r].n > 0; });
+  var measurable = REGIME_ORDER.filter(function (r) { return byRegime[r] && byRegime[r].spread != null; });
+  var signs = measurable.map(function (r) { return byRegime[r].spread >= 0; });
+  var allSame = signs.length > 1 && signs.every(function (s) { return s === signs[0]; });
+  var note;
+  if (seen.length <= 1) {
+    note = 'The window covers only ' + (seen[0] || 'no') + ' tape, so nothing here can separate a broken score from a regime-dependent one. ' +
+      'The split sharpens as the sample spans a different backdrop.';
+  } else if (measurable.length <= 1) {
+    note = 'Only ' + (measurable[0] || 'one') + ' has both score bands populated, so the bands cannot yet be compared across regimes.';
+  } else if (allSame) {
+    note = 'The band spread keeps the same sign in every regime measured, so the finding is not explained by the backdrop — it looks like a property of the score.';
+  } else {
+    note = 'The band spread FLIPS sign between regimes: the score sorts the universe in some tape and not in others. Regime-dependent, not uniformly broken.';
+  }
+  return { regimesSeen: seen, regimesComparable: measurable, sameSignAcrossRegimes: allSame, note: note };
+}
+
 // ── weight calibration (diagnostic only — never auto-applied to scoring) ──
 // For one component, the spread = avg forward-excess of the top value-tercile
 // minus the bottom value-tercile. Positive => higher component value tends to
@@ -262,12 +507,18 @@ function buildJournal(barsByAsset, config, opts) {
     });
 
     var uniqueDates = Object.keys(dateGroups).length;
+    var ic = informationCoefficient(entries, horizon);
+    var byRegime = byRegimeStats(entries, horizon);
+    var coverage = regimeCoverage(byRegime);
+
     var caveats = [
       'Universe still tilts toward correlated AI / risk-on names; non-overlapping counts overstate independence. Treat headline stats as indicative, not statistically significant.'
     ];
     if (entries.some(function (e) { return e.resolution === 'close-only'; })) {
       caveats.push('Crypto outcomes resolved on close only (no intrabar high/low).');
     }
+    caveats.push(ic.overlapNote);
+    caveats.push(coverage.note);
 
     var recentOutcomes = entries.slice().sort(function (a, b) {
       return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0);
@@ -297,6 +548,9 @@ function buildJournal(barsByAsset, config, opts) {
       byTheme: byTheme,
       byAsset: byAsset,
       byDate: byDate,
+      informationCoefficient: ic,
+      byRegime: byRegime,
+      regimeCoverage: coverage,
       weightCalibration: weightCalibration(entries, config.weights || {}),
       recentOutcomes: recentOutcomes
     };
@@ -318,6 +572,10 @@ function buildJournal(barsByAsset, config, opts) {
       sliced[sym] = barsByAsset[sym].filter(function (b) { return b.date <= D; });
     });
     var res = scoreUniverse(sliced, config);
+    // The market backdrop this date was scored in. scoreUniverse already
+    // computes it; the journal used to throw it away, which is why nothing
+    // downstream could ask whether a finding was regime-dependent.
+    var marketRegime = (res.regime && res.regime.score != null) ? res.regime.score : null;
 
     res.signals.forEach(function (s) {
       var sym = s.symbol;
@@ -352,6 +610,11 @@ function buildJournal(barsByAsset, config, opts) {
       entries.push({
         date: D, symbol: sym, theme: s.theme, status: s.status, score: s.score, idx: idxD,
         subScores: s.subScores,
+        // marketRegime = global SPY/QQQ backdrop (100/60/25) for this date;
+        // themeRegime = the signal's own theme breadth, which drove its status
+        // gate. Both are captured at score time, so neither can look ahead.
+        marketRegime: marketRegime,
+        themeRegime: s.regimeScore == null ? null : s.regimeScore,
         entryBasis: entryBasis, publishedEntry: s.entry, fill: round(fill, 2),
         exit: oc.exit != null ? round(oc.exit, 2) : null, exitReason: oc.exitReason,
         ambiguous: oc.ambiguous, resolution: oc.resolution,
@@ -364,4 +627,8 @@ function buildJournal(barsByAsset, config, opts) {
   return bodyFrom(entries, pendingCount);
 }
 
-export { buildJournal, resolveOutcome, scoreBucket, weightCalibration };
+export {
+  buildJournal, resolveOutcome, scoreBucket, weightCalibration,
+  // exported for offline tests
+  ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage, regimeLabel, bandSpread
+};

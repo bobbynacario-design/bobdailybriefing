@@ -1329,6 +1329,36 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .jwc-neg .jwc-verdict{color:var(--red)}
 @media(max-width:768px){.jwc-row{grid-template-columns:1fr 1fr;row-gap:.3rem}}
 
+/* ── ranking skill (IC) + regime conditioning on the journal ── */
+.jic-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem .9rem;margin-top:.5rem;
+  padding:.7rem .85rem;border-radius:10px;background:var(--bg3);border:1px solid var(--rim)}
+.jic-val{font-family:var(--mono);font-size:26px;line-height:1;letter-spacing:-.02em}
+.jic-val.good{color:var(--green)}.jic-val.bad{color:var(--red)}.jic-val.flat{color:var(--txt3)}
+.jic-verdict{font-size:12.5px;line-height:1.5;color:var(--txt2);flex:1 1 220px;min-width:0}
+.jic-stats{display:flex;flex-wrap:wrap;gap:.4rem .9rem;font-family:var(--mono);font-size:9.5px;
+  letter-spacing:.03em;color:var(--txt3);margin-top:.45rem}
+/* Daily IC strip: one bar per scored date, above/below a zero line. Reads as a
+   time series so a persistent tilt is visually distinct from a bad fortnight. */
+.jic-strip{display:flex;align-items:center;gap:1px;height:52px;margin-top:.6rem;padding:0 .1rem;
+  overflow-x:auto;border-bottom:1px dashed var(--rim)}
+.jic-bar{flex:1 0 3px;min-width:3px;height:100%;display:flex;flex-direction:column;justify-content:center}
+.jic-bar i{display:block;width:100%;border-radius:1px}
+.jic-bar .up{background:var(--green);align-self:flex-end;margin-top:auto}
+.jic-bar .dn{background:var(--red);margin-bottom:auto}
+.jic-axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;
+  color:var(--txt3);margin-top:.3rem}
+.jreg-list{display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem}
+.jreg-row{display:grid;grid-template-columns:minmax(96px,1fr) minmax(150px,1.5fr) minmax(120px,1.1fr) auto;
+  gap:.6rem;align-items:center;font-family:var(--mono);font-size:10px;padding:.55rem .65rem;
+  border-radius:8px;background:var(--bg3);border:1px solid var(--rim)}
+.jreg-name{color:var(--txt);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.jreg-basis,.jreg-meta{color:var(--txt3)}
+.jreg-spread{font-size:11px;letter-spacing:.02em}
+.jreg-row.pos{border-color:rgba(45,184,122,.3)}.jreg-row.pos .jreg-spread{color:var(--green)}
+.jreg-row.neg{border-color:rgba(232,92,92,.3)}.jreg-row.neg .jreg-spread{color:var(--red)}
+.jreg-row.mut{opacity:.55}.jreg-row.mut .jreg-spread{color:var(--txt3)}
+@media(max-width:768px){.jreg-row{grid-template-columns:1fr 1fr;row-gap:.3rem}.jic-val{font-size:22px}}
+
 /* ── DRIFT DIGEST (Today page) ── */
 .drift-panel{background:rgba(240,168,50,.06);border:1px solid rgba(240,168,50,.32);border-radius:12px;
   padding:1rem 1.1rem;margin-bottom:1.25rem}
@@ -2875,6 +2905,8 @@ function renderJournal() {
       });
     }
 
+    html += jIcHtml(j.informationCoefficient);
+    html += jRegimeHtml(j.byRegime, j.regimeCoverage);
     html += jWeightCalibHtml(j.weightCalibration);
 
     html += '<div class="journal-section">Recent outcomes</div>';
@@ -2935,6 +2967,97 @@ function jWeightCalibHtml(wc) {
       ' — a component that flips sign has no demonstrated edge. Diagnostic only: weights in config stay static.</div>' +
     '<div class="jwc-list">' + rows + '</div>' +
     (wc.note ? '<div class="journal-note">' + esc(wc.note) + '</div>' : '');
+}
+
+// ── DOES THE SCORE RANK CORRECTLY, AND DOES IT DEPEND ON THE TAPE? ────────
+// byScoreBucket pools every signal in the window, so it is dominated by whatever
+// weeks happen to be in it and cannot distinguish a broken score from one that
+// only works in certain conditions. The IC asks the question once per DAY, and
+// the regime split asks it separately per backdrop. Nothing here is auto-applied
+// — scoring weights stay static in config.js, same as the weight diagnostic.
+
+// Zero is the honest neutral: a mean IC of 0.01 is noise, not a weak positive.
+function jIcClass(v) {
+  if (v == null) return 'flat';
+  if (v >= 0.03) return 'good';
+  if (v <= -0.03) return 'bad';
+  return 'flat';
+}
+// One bar per scored date, drawn from a shared zero line so a run of negative
+// days is visible as a block rather than averaged away.
+function jIcStrip(series) {
+  if (!series || series.length < 2) return '';
+  var peak = 0;
+  series.forEach(function (s) { if (s.ic != null && Math.abs(s.ic) > peak) peak = Math.abs(s.ic); });
+  if (peak <= 0) return '';
+  var bars = series.map(function (s) {
+    if (s.ic == null) return '<div class="jic-bar"></div>';
+    var h = Math.max(2, Math.round(Math.abs(s.ic) / peak * 24));
+    var side = s.ic >= 0 ? 'up' : 'dn';
+    var title = s.date + ' · IC ' + s.ic + ' · ' + s.n + ' names · ' + s.regime;
+    return '<div class="jic-bar" title="' + esc(title) + '">' +
+      (s.ic >= 0 ? '<i class="up" style="height:' + h + 'px"></i>' : '') +
+      (s.ic < 0 ? '<i class="dn" style="height:' + h + 'px"></i>' : '') +
+    '</div>';
+  }).join('');
+  return '<div class="jic-strip">' + bars + '</div>' +
+    '<div class="jic-axis"><span>' + esc(series[0].date) + '</span>' +
+      '<span>peak |IC| ' + Math.round(peak * 100) / 100 + '</span>' +
+      '<span>' + esc(series[series.length - 1].date) + '</span></div>';
+}
+function jIcHtml(ic) {
+  if (!ic || !ic.nDates) return '';
+  var cls = jIcClass(ic.meanIC);
+  var html = '<div class="journal-section">Does the score rank correctly?</div>' +
+    '<div class="journal-note">Each scored day, the <b>information coefficient</b> is the rank correlation ' +
+      'between a name’s score and the excess it went on to earn. +1 = ranked the universe perfectly, ' +
+      '0 = no information, −1 = perfectly inverted. One number per day rather than one per window, ' +
+      'so a persistent tilt can be told apart from a bad stretch.</div>' +
+    '<div class="jic-head">' +
+      '<span class="jic-val ' + cls + '">' + (ic.meanIC == null ? '—' : (ic.meanIC > 0 ? '+' : '') + ic.meanIC) + '</span>' +
+      '<span class="jic-verdict">' + esc(ic.verdict) + '</span>' +
+    '</div>' +
+    '<div class="jic-stats">' +
+      '<span>median ' + (ic.medianIC == null ? '—' : ic.medianIC) + '</span>' +
+      '<span>sd ' + (ic.stdIC == null ? '—' : ic.stdIC) + '</span>' +
+      '<span>days positive ' + (ic.positiveDayRate == null ? '—' : ic.positiveDayRate + '%') + '</span>' +
+      '<span>' + ic.nDates + ' scored days</span>' +
+      '<span>t ' + (ic.tStat == null ? '—' : ic.tStat) + '</span>' +
+      '<span>overlap-adj t ' + (ic.tStatOverlapAdj == null ? '—' : ic.tStatOverlapAdj) +
+        ' (~' + (ic.effectiveNDates == null ? '—' : ic.effectiveNDates) + ' independent windows)</span>' +
+    '</div>' +
+    jIcStrip(ic.series);
+  return html;
+}
+
+var JREG_LABEL = { 'risk-on': 'Risk-on', 'mixed': 'Mixed', 'risk-off': 'Risk-off' };
+function jRegimeHtml(byRegime, coverage) {
+  if (!byRegime) return '';
+  var rows = ['risk-on', 'mixed', 'risk-off'].map(function (r) {
+    var g = byRegime[r];
+    if (!g) return '';
+    // A regime the window never saw, or one with only half the score bands
+    // populated, is shown muted rather than hidden — an absent backdrop is part
+    // of the finding, and hiding it would imply the sample covered more than it did.
+    var cls = g.spread == null ? 'mut' : (g.spread > 0 ? 'pos' : 'neg');
+    var spread = g.spread == null ? 'not comparable'
+      : (g.spread > 0 ? '+' : '') + g.spread + 'pp';
+    return '<div class="jreg-row ' + cls + '">' +
+      '<span class="jreg-name">' + esc(JREG_LABEL[r] || r) + '</span>' +
+      '<span class="jreg-basis">' + esc(g.basis || '') + '</span>' +
+      '<span class="jreg-meta">n=' + (g.n || 0) + ' · ' + (g.dates || 0) + 'd · excess ' +
+        (g.avgExcessReturn == null ? '—' : (g.avgExcessReturn > 0 ? '+' : '') + g.avgExcessReturn + '%') +
+        ' · IC ' + (g.meanIC == null ? '—' : g.meanIC) + '</span>' +
+      '<span class="jreg-spread">' + esc(spread) + '</span>' +
+    '</div>';
+  }).join('');
+  return '<div class="journal-section">Is it the score, or the tape?</div>' +
+    '<div class="journal-note">The same comparison the Radar banner makes — what the <b>80-100</b> band earned ' +
+      'minus what <b>0-39</b> earned — computed separately in each market backdrop. A positive spread means the ' +
+      'score sorted the universe correctly in that tape. If the sign holds everywhere the finding belongs to the ' +
+      'score; if it flips, the score is regime-dependent rather than broken.</div>' +
+    '<div class="jreg-list">' + rows + '</div>' +
+    (coverage && coverage.note ? '<div class="journal-note">' + esc(coverage.note) + '</div>' : '');
 }
 
 // ── PH MARKET HEALTH (read-only; not scored) ──

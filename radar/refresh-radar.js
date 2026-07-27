@@ -556,6 +556,33 @@ async function main() {
     ' uniqueDates=' + journalBody.counts.uniqueDates + ' pending=' + journalBody.counts.pending);
   journalBody.caveats.forEach(function (c) { console.log('  caveat: ' + c); });
 
+  // Does the score RANK correctly day to day, and does the answer depend on the
+  // tape? The bucket table above pools the whole window and cannot separate the
+  // two; this is the diagnostic that can.
+  var ic = journalBody.informationCoefficient;
+  console.log('\n  --- ranking skill (information coefficient) ---');
+  console.log('    meanIC=' + (ic.meanIC == null ? '—' : ic.meanIC) +
+    '  median=' + (ic.medianIC == null ? '—' : ic.medianIC) +
+    '  sd=' + (ic.stdIC == null ? '—' : ic.stdIC) +
+    '  days+=' + (ic.positiveDayRate == null ? '—' : ic.positiveDayRate + '%') +
+    '  nDates=' + ic.nDates);
+  console.log('    t=' + (ic.tStat == null ? '—' : ic.tStat) +
+    '  overlap-adj t=' + (ic.tStatOverlapAdj == null ? '—' : ic.tStatOverlapAdj) +
+    '  (effective windows ' + (ic.effectiveNDates == null ? '—' : ic.effectiveNDates) + ')');
+  console.log('    verdict: ' + ic.verdict);
+
+  console.log('\n  --- by market regime ---');
+  ['risk-on', 'mixed', 'risk-off'].forEach(function (r) {
+    var g = journalBody.byRegime[r] || {};
+    console.log('    ' + r.padEnd(9) +
+      ' n=' + String(g.n == null ? 0 : g.n).padStart(4) +
+      '  dates=' + String(g.dates == null ? 0 : g.dates).padStart(3) +
+      '  avgExcess=' + (g.avgExcessReturn == null ? '—' : g.avgExcessReturn + '%') +
+      '  meanIC=' + (g.meanIC == null ? '—' : g.meanIC) +
+      '  band 80-100 vs 0-39 = ' + (g.spread == null ? '—' : (g.spread > 0 ? '+' : '') + g.spread + 'pp'));
+  });
+  console.log('  ' + journalBody.regimeCoverage.note);
+
   var wc = journalBody.weightCalibration;
   console.log('\n  --- weight calibration (holdout from ' + wc.holdoutFrom + ') ---');
   ['trend', 'volume', 'relStrength', 'riskQuality', 'regime'].forEach(function (c) {

@@ -54,7 +54,7 @@ the Admin SDK bypasses rules on write):
 |---|---|
 | `radar-<YYYY-MM-DD>` | regime + ranked `signals[]` for that day (PHT date) |
 | `radar-latest` | `{ value: "<YYYY-MM-DD>" }` pointer to the newest day |
-| `radar-journal` | benchmark-excess calibration: `byStatus` / `byScoreBucket` (raw + excess), `byTheme` / `byAsset` / `byDate`, `counts` (raw / non-overlapping / unique-dates / pending), `caveats[]`, `weightCalibration`, and recent outcomes |
+| `radar-journal` | benchmark-excess calibration: `byStatus` / `byScoreBucket` (raw + excess), `byTheme` / `byAsset` / `byDate`, `counts` (raw / non-overlapping / unique-dates / pending), `caveats[]`, `informationCoefficient`, `byRegime` + `regimeCoverage`, `weightCalibration`, and recent outcomes |
 
 ---
 
@@ -171,8 +171,47 @@ live `WEIGHTS` are the round priors, not these fitted numbers. Fitting weights o
 the priors* until multi-regime, non-overlapping history accumulates. (This was
 briefly applied as a shrunk fit and reverted; tuning stays manual by design.)
 
+#### Ranking skill (`informationCoefficient`) and regime conditioning (`byRegime`)
+
+`byScoreBucket` pools every signal in the window, so it is dominated by whichever
+weeks happen to fall inside it and cannot tell a broken score from one that only
+works in certain conditions. Two additions answer that:
+
+- **Information coefficient** — on each scored date, the Spearman rank
+  correlation between a name's score and the excess it went on to earn. One
+  number per **day** (~30 names) instead of one per window, so a persistent tilt
+  is distinguishable from a bad stretch. Reports `meanIC` / `medianIC` / `stdIC`
+  / `positiveDayRate` plus the full daily `series`. Spearman rather than Pearson
+  because the score is an ordinal ranking device and excess returns are fat-tailed
+  enough that one outlier would otherwise set the correlation by itself. A date
+  needs ≥ 8 names, and a day with no spread on either side yields `null` (not 0),
+  so a non-observation cannot dilute the mean.
+- **Overlap penalty** — consecutive dates share almost all of a 20-bar forward
+  window, so the naive `tStat` is badly inflated. `tStatOverlapAdj` deflates the
+  sample to `effectiveNDates ≈ nDates / horizon`. Both are reported: the naive one
+  because it is what a reader would compute, the adjusted one because it is the
+  one that is not lying.
+- **`byRegime`** — `scoreUniverse`'s market backdrop is already discrete (SPY and
+  QQQ both above SMA20 → `risk-on`, one → `mixed`, neither → `risk-off`), so the
+  split needs no arbitrary banding. The journal re-scores every past date anyway,
+  so the regime is free — it was simply being discarded. Each regime reports its
+  own IC and its **band spread**: what the 80-100 band earned minus what 0-39
+  earned. `regimeCoverage` then states whether the sign holds across regimes
+  (a property of the score) or flips (regime-dependent), and refuses to conclude
+  anything when the window covers only one tape.
+
+**First live measurement (2026-07-27, 60 dates / 1800 signals):** `meanIC`
+**−0.134**, median −0.155, positive on only **30%** of days — the inversion is
+persistent, not a bad fortnight. Naive `t` −4.69 collapses to **−1.05** on ~3
+independent windows, so it is directional evidence and nothing stronger. The band
+spread is negative in **all three** regimes (risk-on −0.34pp, mixed −1.42pp,
+risk-off −1.71pp), so the inversion is **not** explained by the backdrop. Like
+`weightCalibration`, this is a diagnostic: `WEIGHTS` in `config.js` stay static
+and nothing is auto-applied.
+
 A 📓 **Journal** tab renders excess bars by status/score/theme, stat tiles
-(raw / non-overlapping / unique dates / horizon), and a list of recent outcomes.
+(raw / non-overlapping / unique dates / horizon), the IC headline with a daily
+bar strip, the per-regime band-spread table, and a list of recent outcomes.
 
 ### Quick filters (front-end only)
 
