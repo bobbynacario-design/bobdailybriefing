@@ -493,6 +493,7 @@ function buildJournal(barsByAsset, config, opts) {
   var entryMode = opts.entryMode || jc.entryMode || 'next-session';
   var ambiguousResolution = opts.ambiguousResolution || jc.ambiguousResolution || 'conservative';
   var recentCap = opts.recentCap || jc.recentCap || 120;
+  var minBars = opts.minBarsToScore || jc.minBarsToScore || 60;
   var cryptoIds = config.coingeckoIds || {};
 
   var journalConfig = {
@@ -502,8 +503,9 @@ function buildJournal(barsByAsset, config, opts) {
     scoringModelMeasured: jc.scoringModelMeasured || 'v1-with-riskReward'
   };
 
-  function bodyFrom(entries, pendingCount, unfillable) {
+  function bodyFrom(entries, pendingCount, unfillable, thinCount) {
     unfillable = unfillable || { total: 0, belowStop: 0, aboveTarget: 0, byStatus: {} };
+    thinCount = thinCount || 0;
     var byStatus = {};
     ['confirmed', 'forming', 'invalidated'].forEach(function (st) {
       var list = entries.filter(function (e) { return e.status === st; });
@@ -529,13 +531,51 @@ function buildJournal(barsByAsset, config, opts) {
     });
 
     var uniqueDates = Object.keys(dateGroups).length;
+
+    // How wide the measured universe actually was, date by date. It is NOT
+    // constant: crypto stops at CoinGecko's 365-day free cap while equities run
+    // years, so older dates are equities-only. An IC computed across 27 names is
+    // a different measurement from one across 30, and a reader comparing dates
+    // needs to see that rather than assume it away.
+    var sortedDates = Object.keys(universeByDate).sort();
+    var sizes = sortedDates.map(function (d) { return universeByDate[d]; }).sort(function (a, b) { return a - b; });
+    var med = sizes.length ? (sizes.length % 2 ? sizes[(sizes.length - 1) / 2]
+      : (sizes[sizes.length / 2 - 1] + sizes[sizes.length / 2]) / 2) : null;
+    var coverage = {
+      firstDate: sortedDates[0] || null,
+      lastDate: sortedDates[sortedDates.length - 1] || null,
+      // Dates actually scored, vs dates that produced a measurable outcome —
+      // they differ once pending/unfillable exclusions bite, and conflating them
+      // would overstate the sample.
+      emitDates: sortedDates.length,
+      datesWithOutcomes: uniqueDates,
+      minBarsToScore: minBars,
+      thinAssetDatesSkipped: thinCount,
+      universePerDate: { min: sizes[0] == null ? null : sizes[0], median: med,
+                         max: sizes.length ? sizes[sizes.length - 1] : null },
+      // The honest denominator for anything claimed about significance.
+      effectiveWindows: round(uniqueDates / Math.max(1, horizon), 1)
+    };
+
     var ic = informationCoefficient(entries, horizon);
     var byRegime = byRegimeStats(entries, horizon);
-    var coverage = regimeCoverage(byRegime);
+    var regimeCov = regimeCoverage(byRegime);
 
     var caveats = [
       'Universe still tilts toward correlated AI / risk-on names; non-overlapping counts overstate independence. Treat headline stats as indicative, not statistically significant.'
     ];
+    // Survivorship / selection bias scales with the length of the window, so it
+    // has to be stated loudest exactly when the sample looks most impressive.
+    // The watchlist was chosen in the present; re-running it through years of
+    // past bars asks how names we already know worked out would have scored,
+    // which is not the question the score has to answer live.
+    if (coverage.emitDates > 300) {
+      caveats.push('SELECTION BIAS, and it grows with this window: the watchlist is the CURRENT set of ~30 names, ' +
+        'chosen knowing how they turned out, then re-scored back to ' + coverage.firstDate + '. Names that were ' +
+        'dropped or never added cannot appear, so a positive result here partly measures the watchlist rather than ' +
+        'the score. This matters more over ' + coverage.emitDates + ' dates than it did over 60 — treat the ' +
+        'DIRECTION and the monotonicity across bands as the signal, not the magnitude.');
+    }
     if (entries.some(function (e) { return e.resolution === 'close-only'; })) {
       caveats.push('Crypto outcomes resolved on close only (no intrabar high/low).');
     }
@@ -545,8 +585,15 @@ function buildJournal(barsByAsset, config, opts) {
         'Counted, never scored: resolving these at the stop booked a gain on a position nobody could have held, which is what previously made the ' +
         'invalidated bucket and the 0-39 score band look like the strongest performers.');
     }
+    if (coverage.universePerDate.min != null &&
+        coverage.universePerDate.min !== coverage.universePerDate.max) {
+      caveats.push('The measured universe is not constant across dates (' + coverage.universePerDate.min +
+        '-' + coverage.universePerDate.max + ' names, median ' + coverage.universePerDate.median +
+        '). Crypto history stops at CoinGecko\'s free 365-day cap while equities run years, so the oldest ' +
+        'dates are equities-only' + (thinCount ? ' (' + thinCount + ' asset-dates skipped for insufficient warm-up)' : '') + '.');
+    }
     caveats.push(ic.overlapNote);
-    caveats.push(coverage.note);
+    caveats.push(regimeCov.note);
 
     var recentOutcomes = entries.slice().sort(function (a, b) {
       return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0);
@@ -582,7 +629,8 @@ function buildJournal(barsByAsset, config, opts) {
       byDate: byDate,
       informationCoefficient: ic,
       byRegime: byRegime,
-      regimeCoverage: coverage,
+      regimeCoverage: regimeCov,
+      coverage: coverage,
       weightCalibration: weightCalibration(entries, config.weights || {}),
       recentOutcomes: recentOutcomes
     };
@@ -592,11 +640,16 @@ function buildJournal(barsByAsset, config, opts) {
   if (!calendar.length) return bodyFrom([], 0);
 
   // Emit dates: the lookback window, excluding the most recent day (no t+1 fill).
-  var start = Math.max(0, calendar.length - 1 - lookback);
+  // The floor at `minBars` skips the warm-up stretch outright — scoring a date
+  // on a dozen bars produces a quietly degraded score, and measuring that as if
+  // it were the shipped model is worse than not measuring it.
+  var start = Math.max(minBars, calendar.length - 1 - lookback);
   var emitDates = calendar.slice(start, calendar.length - 1);
 
   var entries = [];
   var pendingCount = 0;
+  var thinCount = 0;             // asset-dates skipped for insufficient warm-up
+  var universeByDate = {};       // date -> assets with enough history to score
   var unfillable = { total: 0, belowStop: 0, aboveTarget: 0, byStatus: {} };
 
   emitDates.forEach(function (D) {
@@ -615,6 +668,15 @@ function buildJournal(barsByAsset, config, opts) {
       var bars = barsByAsset[sym] || [];
       var idxD = idxOfDate(bars, D);
       if (idxD < 0) return;
+      // Per-asset warm-up. An asset with a shorter history than the calendar —
+      // crypto, capped at CoinGecko's free 365 days while equities run years —
+      // simply is not scored on dates before it has enough bars, rather than
+      // being scored badly. idxD + 1 = bars available up to and including D.
+      if (idxD + 1 < minBars) { thinCount++; return; }
+      // Universe = what the screen could actually score that day. Counted here,
+      // BEFORE the pending/unfillable exclusions, so it measures history
+      // availability rather than how many signals happened to be measurable.
+      universeByDate[D] = (universeByDate[D] || 0) + 1;
       var isCrypto = !!cryptoIds[sym];
 
       // Next-session fill: a brief reader cannot transact at the scored close.
@@ -669,7 +731,7 @@ function buildJournal(barsByAsset, config, opts) {
     });
   });
 
-  return bodyFrom(entries, pendingCount, unfillable);
+  return bodyFrom(entries, pendingCount, unfillable, thinCount);
 }
 
 export {

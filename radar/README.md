@@ -200,20 +200,56 @@ works in certain conditions. Two additions answer that:
   (a property of the score) or flips (regime-dependent), and refuses to conclude
   anything when the window covers only one tape.
 
-**Live measurement (2026-07-27, 60 dates):** `meanIC` **−0.015**, median +0.026,
-positive on **53.3%** of days; naive `t` −0.41, overlap-adjusted **−0.09**. The
-verdict is *no usable ranking information* — close to noise. The band spread
-**flips sign** between regimes (risk-on **+0.73pp**, mixed −0.45pp, risk-off
-−0.42pp), so what edge there is, is regime-dependent rather than absent
-everywhere. Like `weightCalibration`, this is a diagnostic: `WEIGHTS` in
-`config.js` stay static and nothing is auto-applied.
+**Live measurement (2026-07-27, 693 dates over 2023-10-17..2026-07-24):** `meanIC`
+**+0.032**, median +0.051, positive on **58.6%** of days; naive `t` 2.72,
+overlap-adjusted **0.61** on ~34.5 independent windows. The verdict is *the score
+ranks in the right direction*. Both the score bands and the statuses come out
+**monotonic** — 80-100 +1.94% > 60-79 +0.46% > 40-59 +0.05% > 0-39 −0.05%, and
+confirmed +1.82% > forming +0.59% > invalidated −0.01% — and the band spread is
+positive in **all three** regimes (risk-on +2.32pp, mixed +1.98pp, risk-off
++1.08pp). Like `weightCalibration`, this is a diagnostic: `WEIGHTS` in `config.js`
+stay static and nothing is auto-applied.
 
-> **The first measurement of this was wrong, and the correction matters.** Before
-> the unfillable guard below, the same code reported `meanIC` −0.134 with only 30%
-> positive days and a negative band spread in *all three* regimes — read as "the
-> score ranks inversely, and it is a property of the score, not the tape". That
-> was an artifact of impossible fills, not a finding. Both conclusions reversed
-> once the fills were fixed.
+The consistency across independent cuts is the real evidence here, not the t-stat
+— **0.61 does not clear any significance bar**, and the effect size is modest.
+
+> **This measurement has now reversed twice, which is the point of keeping it.**
+> First reading: `meanIC` −0.134, 30% positive days, negative band spread in all
+> three regimes — "the score ranks inversely, and it is a property of the score".
+> That was an artifact of impossible fills (see the unfillable guard below).
+> Second reading, after the fix but still on 60 dates: −0.015, "close to noise",
+> band spread flipping sign between regimes. Third reading, on 693 dates: +0.032
+> and positive everywhere. **The 60-day window was simply too short to say
+> anything** — three independent windows cannot support a conclusion, which is
+> why the sample depth below matters more than any refinement to the statistic.
+
+#### Sample depth (`coverage`)
+
+Every statistic here is bounded by how much history is measured, and that was the
+binding constraint: 60 dates at a 20-bar horizon is ~3 independent windows.
+
+- **`barsLookbackDays`** (config) sets the fetch window — raised 400 → **1100**
+  (~3 years). Alpaca daily bars are free and the fetch already pages through
+  `next_page_token`, so this costs only run time.
+- **`cryptoLookbackDays`** stays at **365** — CoinGecko's free-tier maximum, not a
+  choice. Crypto therefore drops out of dates older than that.
+- **`minBarsToScore`** (default 60) is a warm-up floor. Nothing previously stopped
+  a date being scored on a dozen bars; it just produced a quietly degraded score
+  that the journal then measured as if it were the shipped model.
+- **`coverage`** reports the span, `emitDates` vs `datesWithOutcomes` (they differ
+  once pending/unfillable bite), `effectiveWindows`, and the per-date universe —
+  which is **not constant** (26-30 names, median 27) precisely because of the
+  crypto cap. A caveat fires whenever it varies.
+
+Result: **60 → 693 dates**, ~3 → **34.7** effective windows, 1265 → 15210 signals.
+Run time went 131s → ~310s, which is fine for an 06:00 job.
+
+**Selection bias is the cost of the longer window, and it scales with it.** The
+watchlist is the *current* ~30 names, chosen knowing how they turned out, then
+re-scored back to 2023. Names that were dropped or never added cannot appear, so a
+positive result partly measures the watchlist rather than the score. The journal
+raises this as an explicit caveat past 300 dates. Read the **direction and the
+monotonicity** as the signal; do not read the magnitude.
 
 #### The unfillable guard (`counts.unfillable`)
 

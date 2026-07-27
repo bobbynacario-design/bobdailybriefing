@@ -189,9 +189,11 @@ async function fetchEquityBars(symbols) {
     'APCA-API-KEY-ID': ALPACA_KEY,
     'APCA-API-SECRET-KEY': ALPACA_SECRET
   };
-  // ~400 calendar days back comfortably covers a full 252-trading-day year
-  // (needed for an honest 52-week high/low) plus the 160 SMA/return bars.
-  var start = daysAgoIso(400);
+  // Bounded by config.barsLookbackDays — this is what caps how much history the
+  // journal can ever measure, so it lives with the other knobs rather than here.
+  // The page loop below already follows next_page_token, so a multi-year window
+  // is fetched in full rather than truncated at one page.
+  var start = daysAgoIso(CONFIG.barsLookbackDays || 400);
   var pageToken = null;
   do {
     var url = 'https://data.alpaca.markets/v2/stocks/bars'
@@ -231,7 +233,8 @@ async function fetchCryptoBars(symbolToId) {
     var sym = syms[i];
     var id = symbolToId[sym];
     var url = 'https://api.coingecko.com/api/v3/coins/' + id
-      + '/market_chart?vs_currency=usd&days=365&interval=daily';
+      + '/market_chart?vs_currency=usd&days=' + (CONFIG.cryptoLookbackDays || 365)
+      + '&interval=daily';
     try {
       var res = await fetchRetry(url, { headers: { 'accept': 'application/json' } }, 'CoinGecko ' + sym);
       if (!res.ok) {
@@ -557,6 +560,13 @@ async function main() {
     ' unfillable=' + journalBody.counts.unfillable +
     ' (belowStop ' + journalBody.counts.unfillableBelowStop +
     ', aboveTarget ' + journalBody.counts.unfillableAboveTarget + ')');
+  var cov = journalBody.coverage;
+  console.log('  coverage: ' + cov.firstDate + '..' + cov.lastDate +
+    '  emitDates=' + cov.emitDates + ' (with outcomes ' + cov.datesWithOutcomes + ')' +
+    '  effectiveWindows=' + cov.effectiveWindows +
+    '  universe/date ' + cov.universePerDate.min + '-' + cov.universePerDate.max +
+    ' (median ' + cov.universePerDate.median + ')' +
+    '  warmup=' + cov.minBarsToScore + 'b, thin skipped=' + cov.thinAssetDatesSkipped);
   if (journalBody.counts.unfillable) {
     console.log('    unfillable by status: ' + Object.keys(journalBody.counts.unfillableByStatus)
       .map(function (k) { return k + '=' + journalBody.counts.unfillableByStatus[k]; }).join(' '));

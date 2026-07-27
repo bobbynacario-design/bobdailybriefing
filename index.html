@@ -1341,7 +1341,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
    time series so a persistent tilt is visually distinct from a bad fortnight. */
 .jic-strip{display:flex;align-items:center;gap:1px;height:52px;margin-top:.6rem;padding:0 .1rem;
   overflow-x:auto;border-bottom:1px dashed var(--rim)}
-.jic-bar{flex:1 0 3px;min-width:3px;height:100%;display:flex;flex-direction:column;justify-content:center}
+.jic-bar{flex:1 1 2px;min-width:2px;height:100%;display:flex;flex-direction:column;justify-content:center}
 .jic-bar i{display:block;width:100%;border-radius:1px}
 .jic-bar .up{background:var(--green);align-self:flex-end;margin-top:auto}
 .jic-bar .dn{background:var(--red);margin-bottom:auto}
@@ -2893,6 +2893,7 @@ function renderJournal() {
 
     html += '<div class="journal-note">Headline is return <b>vs each signal’s own benchmark</b> (QQQ / SPY / BTC). Raw return is shown for contrast — strong raw with ~zero excess means the move was mostly market / sector beta, not edge.</div>';
 
+    html += jCoverageHtml(j.coverage);
     html += jUnfillableHtml(c);
 
     html += '<div class="journal-section">Excess return by status</div>';
@@ -2980,6 +2981,28 @@ function jWeightCalibHtml(wc) {
     (wc.note ? '<div class="journal-note">' + esc(wc.note) + '</div>' : '');
 }
 
+// ── HOW MUCH HISTORY IS ACTUALLY BEHIND THESE NUMBERS ─────────────────────
+// Every statistic on this tab is bounded by the sample, and the sample used to
+// be ~3 independent windows — too few for anything here to mean much. That was
+// invisible: the tab reported 60 dates and left the reader to work out what
+// that was worth. The span, the effective windows and the per-date universe
+// (not constant — crypto stops at CoinGecko's 365-day free cap while equities
+// run years) now sit above the results rather than under them.
+function jCoverageHtml(cov) {
+  if (!cov || !cov.emitDates) return '';
+  var u = cov.universePerDate || {};
+  var uTxt = (u.min == null) ? '—'
+    : (u.min === u.max ? u.min + ' names' : u.min + '-' + u.max + ' names (median ' + u.median + ')');
+  return '<div class="jic-stats" style="margin:.5rem 0 0">' +
+    '<span>' + esc(cov.firstDate || '—') + ' &rarr; ' + esc(cov.lastDate || '—') + '</span>' +
+    '<span>' + cov.emitDates + ' dates scored</span>' +
+    '<span>' + cov.datesWithOutcomes + ' with outcomes</span>' +
+    '<span><b>' + cov.effectiveWindows + '</b> independent windows</span>' +
+    '<span>universe ' + esc(uTxt) + '</span>' +
+    '<span>' + cov.minBarsToScore + '-bar warm-up</span>' +
+  '</div>';
+}
+
 // ── SIGNALS THAT WERE NEVER TAKEABLE ──────────────────────────────────────
 // A signal is `invalidated` because its close broke the stop, so its next
 // session usually opens below that stop too. The journal used to "exit" those
@@ -3021,8 +3044,15 @@ function jIcClass(v) {
 }
 // One bar per scored date, drawn from a shared zero line so a run of negative
 // days is visible as a block rather than averaged away.
-function jIcStrip(series) {
-  if (!series || series.length < 2) return '';
+//
+// Capped at the most recent JIC_STRIP_MAX dates. Once the journal reached ~700
+// dates the full series needed a 2700px scroll region that opened on 2023 and
+// had to be dragged to reach this month — the least useful default possible.
+// The whole series stays in the stored doc; this is the readable window onto it.
+var JIC_STRIP_MAX = 180;
+function jIcStrip(full) {
+  if (!full || full.length < 2) return '';
+  var series = full.length > JIC_STRIP_MAX ? full.slice(-JIC_STRIP_MAX) : full;
   var peak = 0;
   series.forEach(function (s) { if (s.ic != null && Math.abs(s.ic) > peak) peak = Math.abs(s.ic); });
   if (peak <= 0) return '';
@@ -3037,7 +3067,8 @@ function jIcStrip(series) {
     '</div>';
   }).join('');
   return '<div class="jic-strip">' + bars + '</div>' +
-    '<div class="jic-axis"><span>' + esc(series[0].date) + '</span>' +
+    '<div class="jic-axis"><span>' + esc(series[0].date) +
+        (series.length < full.length ? ' (last ' + series.length + ' of ' + full.length + ')' : '') + '</span>' +
       '<span>peak |IC| ' + Math.round(peak * 100) / 100 + '</span>' +
       '<span>' + esc(series[series.length - 1].date) + '</span></div>';
 }

@@ -114,11 +114,33 @@ var THEME_REGIME = {
 // How many trailing daily bars to request so SMA50 + 20d returns are well-defined.
 var LOOKBACK_BARS = 160;
 
+// How far back to FETCH daily bars. This bounds how much history the journal can
+// ever measure, so it is the real limit on every statistic the journal reports.
+//
+// At 400 days the journal had ~275 trading days to work with and used 60 of them,
+// which is ~3 independent windows at a 20-bar horizon — too few for any finding
+// to mean anything. ~3 years of daily bars costs nothing (Alpaca daily bars are
+// free and the fetch already pages through `next_page_token`) and takes the
+// sample to a few dozen independent windows.
+//
+// CRYPTO IS CAPPED SEPARATELY at 365 days — that is CoinGecko's free-tier limit,
+// not a choice — so on dates older than that the universe is equities only. The
+// journal reports the per-date universe size rather than assuming it is constant.
+var BARS_LOOKBACK_DAYS = 1100;
+var CRYPTO_LOOKBACK_DAYS = 365;   // CoinGecko free tier maximum
+
 // V3 journal: re-score the last `lookbackDays` trading days point-in-time and
 // calibrate each signal's outcome over the next `horizonBars` bars. Measurement
 // only — these keys never touch scoring.
 var JOURNAL = {
-  lookbackDays: 60,
+  // Deliberately larger than the fetch can supply: the available bars are the
+  // real bound, and this should not silently become the tighter one again.
+  lookbackDays: 900,
+  // A date is only scored once an asset has this many bars behind it. Scoring
+  // needs 50 for SMA50, and nothing previously stopped a date being scored on a
+  // dozen bars — it just produced a quietly worse score that the journal then
+  // measured as if it were the real model.
+  minBarsToScore: 60,
   horizonBars: 20,                      // forward window for outcome resolution
   entryMode: 'next-session',            // fill at next open (equity) / next close (crypto)
   ambiguousResolution: 'conservative',  // same-bar stop+target -> count the stop
@@ -148,6 +170,8 @@ var CONFIG = {
   weights: WEIGHTS,
   themeRegime: THEME_REGIME,
   lookbackBars: LOOKBACK_BARS,
+  barsLookbackDays: BARS_LOOKBACK_DAYS,
+  cryptoLookbackDays: CRYPTO_LOOKBACK_DAYS,
   journal: JOURNAL,
   ph: PH
 };

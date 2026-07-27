@@ -4,7 +4,7 @@
 import assert from 'assert';
 import {
   ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage,
-  regimeLabel, bandSpread, resolveOutcome
+  regimeLabel, bandSpread, resolveOutcome, buildJournal
 } from './journal.js';
 
 var n = 0;
@@ -292,6 +292,95 @@ t('omitting fill preserves the old signature for any other caller', function () 
 t('a null stop cannot make a signal unfillable', function () {
   var oc = resolveOutcome(null, 110, [bar({ high: 112, low: 50, close: 111 })], false, true, 100);
   assert.equal(oc.exitReason, 'target-hit');
+});
+
+// ── warm-up guard + coverage (end-to-end through buildJournal) ────────────
+// Synthetic bars only — buildJournal is pure, so this needs no network.
+function series(len, seed) {
+  var out = [], px = 100, d = new Date(Date.UTC(2024, 0, 2));
+  for (var i = 0; i < len; i++) {
+    px = px * (1 + Math.sin((i + seed) / 7) * 0.01 + 0.0006);
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+    out.push({ date: d.toISOString().slice(0, 10), open: px * 0.999, high: px * 1.01,
+               low: px * 0.99, close: px, volume: 1e6 + (i % 11) * 1e5 });
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
+// A universe long enough to leave emit dates after warm-up, with one asset given
+// a deliberately short history to stand in for the crypto 365-day cap.
+function universe(longLen, shortLen) {
+  var bars = { SPY: series(longLen, 1), QQQ: series(longLen, 2) };
+  ['AAA', 'BBB', 'CCC', 'DDD'].forEach(function (s, i) { bars[s] = series(longLen, i + 3); });
+  if (shortLen) bars.SHORTY = series(longLen, 9).slice(-shortLen);
+  return bars;
+}
+var CFG = {
+  watchlist: [
+    { symbol: 'AAA', theme: 'T1', benchmark: 'SPY' }, { symbol: 'BBB', theme: 'T1', benchmark: 'SPY' },
+    { symbol: 'CCC', theme: 'T2', benchmark: 'QQQ' }, { symbol: 'DDD', theme: 'T2', benchmark: 'QQQ' },
+    { symbol: 'SHORTY', theme: 'T2', benchmark: 'QQQ' }
+  ],
+  indexSymbols: ['SPY', 'QQQ'], coingeckoIds: {}, weights: {},
+  themeRegime: { T1: ['SPY'], T2: ['QQQ'] },
+  journal: { lookbackDays: 900, horizonBars: 20, recentCap: 10, minBarsToScore: 60 }
+};
+
+t('warm-up dates are not emitted at all', function () {
+  var j = buildJournal(universe(200), CFG, {});
+  // 200 bars, 60 warm-up, minus the last (no t+1 fill) -> 139 emit dates max.
+  assert.ok(j.coverage.firstDate, 'some dates were emitted');
+  assert.ok(j.coverage.emitDates <= 200 - 60, 'never scores inside the warm-up stretch');
+  assert.equal(j.coverage.minBarsToScore, 60);
+});
+
+t('a longer fetch really does yield more measured dates', function () {
+  // The whole point of the lane: history depth is the binding constraint.
+  var shortRun = buildJournal(universe(150), CFG, {});
+  var longRun = buildJournal(universe(400), CFG, {});
+  assert.ok(longRun.coverage.emitDates > shortRun.coverage.emitDates * 2,
+    'trebling the bars must actually widen the measured window, not just the fetch');
+  assert.ok(longRun.coverage.effectiveWindows > shortRun.coverage.effectiveWindows);
+});
+
+t('lookbackDays still caps the window when it is the tighter bound', function () {
+  var capped = buildJournal(universe(400), Object.assign({}, CFG, {
+    journal: Object.assign({}, CFG.journal, { lookbackDays: 40 })
+  }), {});
+  assert.ok(capped.coverage.emitDates <= 40, 'an explicit lookback must still win when it is smaller');
+});
+
+t('an asset with a short history is skipped early, not scored on thin bars', function () {
+  // SHORTY stands in for crypto hitting CoinGecko's 365-day cap while equities
+  // run years. It must drop out of older dates rather than be scored badly.
+  var j = buildJournal(universe(300, 90), CFG, {});
+  assert.ok(j.coverage.thinAssetDatesSkipped > 0, 'the short asset was held out somewhere');
+  assert.ok(j.coverage.universePerDate.min < j.coverage.universePerDate.max,
+    'the universe genuinely narrows on older dates');
+  assert.ok(/universe is not constant/.test(j.caveats.join(' ')), 'and the doc says so');
+});
+
+t('a constant universe raises no thinning caveat', function () {
+  var j = buildJournal(universe(300), CFG, {});
+  assert.equal(j.coverage.universePerDate.min, j.coverage.universePerDate.max);
+  assert.ok(!/universe is not constant/.test(j.caveats.join(' ')));
+});
+
+t('effectiveWindows counts dates that produced outcomes, not dates merely scored', function () {
+  var j = buildJournal(universe(300), CFG, {});
+  // Scoring a date is not the same as measuring one: pending and unfillable
+  // exclusions bite afterwards. Keying the denominator off emitDates would
+  // flatter the sample by exactly the signals that could not be measured.
+  assert.ok(j.coverage.emitDates > j.coverage.datesWithOutcomes, 'exclusions do reduce the sample');
+  assert.ok(close(j.coverage.effectiveWindows, j.coverage.datesWithOutcomes / 20, 0.06),
+    'the honest denominator, not the flattering one');
+});
+
+t('too little history yields no dates rather than a garbage sample', function () {
+  var j = buildJournal(universe(40), CFG, {});
+  assert.equal(j.coverage.emitDates, 0);
+  assert.equal(j.counts.raw, 0);
+  assert.equal(j.informationCoefficient.nDates, 0);
 });
 
 console.log('\n' + n + ' checks passed.');
