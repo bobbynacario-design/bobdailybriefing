@@ -553,7 +553,14 @@ async function main() {
       '  excessWin=' + (g.excessWinRate == null ? '—' : g.excessWinRate + '%'));
   });
   console.log('  counts: raw=' + journalBody.counts.raw + ' nonOverlapping=' + journalBody.counts.nonOverlapping +
-    ' uniqueDates=' + journalBody.counts.uniqueDates + ' pending=' + journalBody.counts.pending);
+    ' uniqueDates=' + journalBody.counts.uniqueDates + ' pending=' + journalBody.counts.pending +
+    ' unfillable=' + journalBody.counts.unfillable +
+    ' (belowStop ' + journalBody.counts.unfillableBelowStop +
+    ', aboveTarget ' + journalBody.counts.unfillableAboveTarget + ')');
+  if (journalBody.counts.unfillable) {
+    console.log('    unfillable by status: ' + Object.keys(journalBody.counts.unfillableByStatus)
+      .map(function (k) { return k + '=' + journalBody.counts.unfillableByStatus[k]; }).join(' '));
+  }
   journalBody.caveats.forEach(function (c) { console.log('  caveat: ' + c); });
 
   // Does the score RANK correctly day to day, and does the answer depend on the

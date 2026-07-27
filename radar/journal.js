@@ -59,8 +59,29 @@ function closeOnOrBefore(bars, date) {
 // Resolve one signal's outcome over its forward window (bars from the fill bar
 // onward, already capped to the horizon). Equity uses intrabar high/low with a
 // conservative same-bar tie-break; crypto resolves on close only.
-function resolveOutcome(stop, target, windowBars, isCrypto, fullWindow) {
+//
+// `fill` guards against resolving a trade that could never have been entered.
+// A signal is `invalidated` precisely BECAUSE its close broke the stop, so its
+// next-session fill is usually still below that stop — and the loop below would
+// then match `low <= stop` on the very first bar and "exit" at the stop, ABOVE
+// the fill, booking a guaranteed gain on a position nobody could have held. That
+// artifact is what made the invalidated bucket and the 0-39 score band look like
+// the best performers in the journal. The mirror case (a fill already at or
+// beyond the target) is rarer and books a small fake LOSS rather than a gain,
+// but it is the same defect: the published levels no longer bracket the entry.
+// Both are reported as unfillable and excluded upstream — never scored.
+function resolveOutcome(stop, target, windowBars, isCrypto, fullWindow, fill) {
   var resolution = isCrypto ? 'close-only' : 'ohlc';
+  if (fill != null) {
+    if (stop != null && fill <= stop) {
+      return { exitReason: 'unfillable', unfillable: 'below-stop', exit: null, exitDate: null,
+               ambiguous: false, resolution: resolution };
+    }
+    if (target != null && fill >= target) {
+      return { exitReason: 'unfillable', unfillable: 'above-target', exit: null, exitDate: null,
+               ambiguous: false, resolution: resolution };
+    }
+  }
   for (var i = 0; i < windowBars.length; i++) {
     var b = windowBars[i];
     if (isCrypto) {
@@ -481,7 +502,8 @@ function buildJournal(barsByAsset, config, opts) {
     scoringModelMeasured: jc.scoringModelMeasured || 'v1-with-riskReward'
   };
 
-  function bodyFrom(entries, pendingCount) {
+  function bodyFrom(entries, pendingCount, unfillable) {
+    unfillable = unfillable || { total: 0, belowStop: 0, aboveTarget: 0, byStatus: {} };
     var byStatus = {};
     ['confirmed', 'forming', 'invalidated'].forEach(function (st) {
       var list = entries.filter(function (e) { return e.status === st; });
@@ -517,6 +539,12 @@ function buildJournal(barsByAsset, config, opts) {
     if (entries.some(function (e) { return e.resolution === 'close-only'; })) {
       caveats.push('Crypto outcomes resolved on close only (no intrabar high/low).');
     }
+    if (unfillable.total) {
+      caveats.push(unfillable.total + ' signal(s) were dropped as unfillable — their published stop/target no longer bracketed the next-session fill, ' +
+        'so no entry was possible (' + unfillable.belowStop + ' already through the stop, ' + unfillable.aboveTarget + ' already past the target). ' +
+        'Counted, never scored: resolving these at the stop booked a gain on a position nobody could have held, which is what previously made the ' +
+        'invalidated bucket and the 0-39 score band look like the strongest performers.');
+    }
     caveats.push(ic.overlapNote);
     caveats.push(coverage.note);
 
@@ -539,6 +567,10 @@ function buildJournal(barsByAsset, config, opts) {
         nonOverlapping: nonOverlappingCount(entries, horizon),
         uniqueDates: uniqueDates,
         pending: pendingCount,
+        unfillable: unfillable.total,
+        unfillableBelowStop: unfillable.belowStop,
+        unfillableAboveTarget: unfillable.aboveTarget,
+        unfillableByStatus: unfillable.byStatus,
         byTheme: themeCounts,
         byAsset: assetCounts
       },
@@ -565,6 +597,7 @@ function buildJournal(barsByAsset, config, opts) {
 
   var entries = [];
   var pendingCount = 0;
+  var unfillable = { total: 0, belowStop: 0, aboveTarget: 0, byStatus: {} };
 
   emitDates.forEach(function (D) {
     var sliced = {};
@@ -596,7 +629,19 @@ function buildJournal(barsByAsset, config, opts) {
       // stop/target (the levels the card showed) — not recomputed off the fill.
       var windowBars = bars.slice(idxFill, idxFill + horizon);
       var fullWindow = (idxFill + horizon) <= bars.length;
-      var oc = resolveOutcome(s.stop, s.target, windowBars, isCrypto, fullWindow);
+      var oc = resolveOutcome(s.stop, s.target, windowBars, isCrypto, fullWindow, fill);
+
+      // A setup whose published levels no longer bracket the fill was never
+      // takeable. Excluded from every statistic — but COUNTED, because "the
+      // screen produced N ideas that were already broken at the open" is itself
+      // a finding about the radar. Same treatment as `pending`.
+      if (oc.exitReason === 'unfillable') {
+        unfillable.total++;
+        unfillable[oc.unfillable === 'above-target' ? 'aboveTarget' : 'belowStop']++;
+        unfillable.byStatus[s.status] = (unfillable.byStatus[s.status] || 0) + 1;
+        return;
+      }
+
       var forwardReturn = oc.exit != null ? round((oc.exit / fill - 1) * 100, 2) : null;
 
       // Benchmark-excess over the same window (fill date -> exit/window-end date).
@@ -624,7 +669,7 @@ function buildJournal(barsByAsset, config, opts) {
     });
   });
 
-  return bodyFrom(entries, pendingCount);
+  return bodyFrom(entries, pendingCount, unfillable);
 }
 
 export {

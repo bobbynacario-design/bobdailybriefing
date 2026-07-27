@@ -2464,6 +2464,13 @@ function radarBandHtml(s) {
 }
 // Fires only when the top band is actually being out-earned by a lower one.
 // Silent when the score is behaving, so it never becomes wallpaper.
+//
+// The margin matters as much as the direction. Before the unfillable guard the
+// gap was ~0.93pp (0-39 at +1.03% against 80-100 at +0.10%) and worth shouting
+// about; once impossible fills stopped crediting the low bands it fell to 0.03pp,
+// which is noise. Reuse the same +/-0.25pp dead band the card record uses, so a
+// rounding difference cannot raise an alarm the data does not support.
+var RADAR_CALIB_MIN_MARGIN = 0.25;
 function radarCalibrationWarning() {
   var buckets = radarJournal && radarJournal.byScoreBucket;
   if (!buckets) return '';
@@ -2472,7 +2479,8 @@ function radarCalibrationWarning() {
   var beating = ['60-79', '40-59', '0-39'].map(function (k) {
     return { k: k, g: buckets[k] };
   }).filter(function (r) {
-    return r.g && r.g.n && r.g.avgExcessReturn != null && r.g.avgExcessReturn > top.avgExcessReturn;
+    return r.g && r.g.n && r.g.avgExcessReturn != null &&
+      (r.g.avgExcessReturn - top.avgExcessReturn) > RADAR_CALIB_MIN_MARGIN;
   }).sort(function (a, b) { return b.g.avgExcessReturn - a.g.avgExcessReturn; });
   if (!beating.length) return '';
   var best = beating[0];
@@ -2873,7 +2881,8 @@ function renderJournal() {
     }
     var cfg = j.journalConfig || {};
     var c = j.counts;
-    if (sub) sub.textContent = c.raw + ' signals · ' + c.nonOverlapping + ' non-overlapping · ' + c.uniqueDates + ' dates';
+    if (sub) sub.textContent = c.raw + ' signals · ' + c.nonOverlapping + ' non-overlapping · ' + c.uniqueDates + ' dates' +
+      (c.unfillable ? ' · ' + c.unfillable + ' unfillable' : '');
 
     var html = '<div class="archive-summary">' +
       jTile(c.raw, 'Signals') +
@@ -2883,6 +2892,8 @@ function renderJournal() {
     '</div>';
 
     html += '<div class="journal-note">Headline is return <b>vs each signal’s own benchmark</b> (QQQ / SPY / BTC). Raw return is shown for contrast — strong raw with ~zero excess means the move was mostly market / sector beta, not edge.</div>';
+
+    html += jUnfillableHtml(c);
 
     html += '<div class="journal-section">Excess return by status</div>';
     html += jExcessBar('Confirmed', j.byStatus.confirmed, 'var(--gold)');
@@ -2967,6 +2978,31 @@ function jWeightCalibHtml(wc) {
       ' — a component that flips sign has no demonstrated edge. Diagnostic only: weights in config stay static.</div>' +
     '<div class="jwc-list">' + rows + '</div>' +
     (wc.note ? '<div class="journal-note">' + esc(wc.note) + '</div>' : '');
+}
+
+// ── SIGNALS THAT WERE NEVER TAKEABLE ──────────────────────────────────────
+// A signal is `invalidated` because its close broke the stop, so its next
+// session usually opens below that stop too. The journal used to "exit" those
+// at the stop — above the fill — booking a guaranteed gain on a position nobody
+// could have held, which is what made the invalidated bucket and the 0-39 band
+// look like the strongest performers. They are now dropped from every statistic
+// but still counted here: how many ideas the screen produced that were already
+// broken by the open is a finding about the radar, not a footnote.
+function jUnfillableHtml(c) {
+  if (!c || !c.unfillable) return '';
+  var byStatus = c.unfillableByStatus || {};
+  var parts = ['confirmed', 'forming', 'invalidated'].filter(function (s) { return byStatus[s]; })
+    .map(function (s) { return byStatus[s] + ' ' + s; });
+  var pct = c.raw ? Math.round(c.unfillable / (c.raw + c.unfillable) * 1000) / 10 : null;
+  return '<div class="radar-calib-warn">' +
+    '<b>' + c.unfillable + ' signal' + (c.unfillable === 1 ? '' : 's') + ' dropped as unfillable</b>' +
+    (pct != null ? ' (' + pct + '% of everything scored)' : '') + ' — the published stop/target no longer ' +
+    'bracketed the next-session fill, so no entry was possible: ' +
+    (c.unfillableBelowStop || 0) + ' already through the stop, ' +
+    (c.unfillableAboveTarget || 0) + ' already past the target' +
+    (parts.length ? '. Mostly ' + esc(parts.join(', ')) : '') + '. ' +
+    'Counted, never scored — resolving them at the stop credited a gain on a trade that could not be entered.' +
+  '</div>';
 }
 
 // ── DOES THE SCORE RANK CORRECTLY, AND DOES IT DEPEND ON THE TAPE? ────────

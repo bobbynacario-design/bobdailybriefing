@@ -4,7 +4,7 @@
 import assert from 'assert';
 import {
   ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage,
-  regimeLabel, bandSpread
+  regimeLabel, bandSpread, resolveOutcome
 } from './journal.js';
 
 var n = 0;
@@ -225,6 +225,73 @@ t('malformed input does not throw', function () {
     byRegimeStats([{}], 20);
     regimeCoverage(byRegimeStats([], 20));
   });
+});
+
+// ── unfillable guard ─────────────────────────────────────────────────────
+// A stop-hit that MAKES money is impossible for a long. These fire when the
+// next-session fill is already through the published stop, which is the normal
+// case for an `invalidated` signal — it is invalidated BECAUSE the close broke
+// the stop. Resolving it at the stop booked a guaranteed gain on a position
+// nobody could have held.
+function bar(o) { return Object.assign({ date: '2026-07-01', open: 100, high: 101, low: 99, close: 100 }, o); }
+
+t('a fill already through the stop is unfillable, not a winning stop-hit', function () {
+  // The real XLY row: filled 109.06 with a stop at 113.82 -> the old code
+  // "exited" at 113.82 for +4.36%.
+  var oc = resolveOutcome(113.82, 130, [bar({ low: 108, high: 112, close: 110 })], false, true, 109.06);
+  assert.equal(oc.exitReason, 'unfillable');
+  assert.equal(oc.unfillable, 'below-stop');
+  assert.equal(oc.exit, null, 'no exit price means no return can be computed from it');
+});
+
+t('a fill exactly at the stop is still unfillable', function () {
+  // A resting stop at the fill triggers immediately; it is not a real entry.
+  var oc = resolveOutcome(100, 130, [bar({})], false, true, 100);
+  assert.equal(oc.exitReason, 'unfillable');
+});
+
+t('a fill already past the target is unfillable too', function () {
+  // The mirror defect. It booked a small fake LOSS rather than a gain, so it
+  // was never as visible, but the published levels are just as stale.
+  var oc = resolveOutcome(90, 105, [bar({ high: 120, low: 104, close: 110 })], false, true, 106);
+  assert.equal(oc.exitReason, 'unfillable');
+  assert.equal(oc.unfillable, 'above-target');
+});
+
+t('a normal fill inside its levels still resolves exactly as before', function () {
+  var win = resolveOutcome(90, 110, [bar({ high: 112, low: 99, close: 111 })], false, true, 100);
+  assert.equal(win.exitReason, 'target-hit');
+  assert.equal(win.exit, 110);
+  var loss = resolveOutcome(95, 130, [bar({ high: 101, low: 94, close: 96 })], false, true, 100);
+  assert.equal(loss.exitReason, 'stop-hit');
+  assert.equal(loss.exit, 95);
+});
+
+t('a genuine stop-hit can never produce a positive return', function () {
+  // The invariant the whole guard exists to protect.
+  var fills = [100, 250, 1016.75];
+  fills.forEach(function (f) {
+    var oc = resolveOutcome(f * 0.95, f * 1.2, [bar({ high: f, low: f * 0.9, close: f * 0.92 })], false, true, f);
+    if (oc.exitReason === 'stop-hit') {
+      assert.ok(oc.exit <= f, 'a long stopped out at ' + oc.exit + ' cannot beat its fill of ' + f);
+    }
+  });
+});
+
+t('crypto close-only resolution honours the same guard', function () {
+  var oc = resolveOutcome(78.06, 95, [bar({ close: 76 })], true, true, 75.76);  // the real SOL row
+  assert.equal(oc.exitReason, 'unfillable');
+  assert.equal(oc.resolution, 'close-only');
+});
+
+t('omitting fill preserves the old signature for any other caller', function () {
+  var oc = resolveOutcome(95, 110, [bar({ high: 112, low: 99, close: 111 })], false, true);
+  assert.equal(oc.exitReason, 'target-hit');
+});
+
+t('a null stop cannot make a signal unfillable', function () {
+  var oc = resolveOutcome(null, 110, [bar({ high: 112, low: 50, close: 111 })], false, true, 100);
+  assert.equal(oc.exitReason, 'target-hit');
 });
 
 console.log('\n' + n + ' checks passed.');

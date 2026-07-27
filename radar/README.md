@@ -200,14 +200,54 @@ works in certain conditions. Two additions answer that:
   (a property of the score) or flips (regime-dependent), and refuses to conclude
   anything when the window covers only one tape.
 
-**First live measurement (2026-07-27, 60 dates / 1800 signals):** `meanIC`
-**−0.134**, median −0.155, positive on only **30%** of days — the inversion is
-persistent, not a bad fortnight. Naive `t` −4.69 collapses to **−1.05** on ~3
-independent windows, so it is directional evidence and nothing stronger. The band
-spread is negative in **all three** regimes (risk-on −0.34pp, mixed −1.42pp,
-risk-off −1.71pp), so the inversion is **not** explained by the backdrop. Like
-`weightCalibration`, this is a diagnostic: `WEIGHTS` in `config.js` stay static
-and nothing is auto-applied.
+**Live measurement (2026-07-27, 60 dates):** `meanIC` **−0.015**, median +0.026,
+positive on **53.3%** of days; naive `t` −0.41, overlap-adjusted **−0.09**. The
+verdict is *no usable ranking information* — close to noise. The band spread
+**flips sign** between regimes (risk-on **+0.73pp**, mixed −0.45pp, risk-off
+−0.42pp), so what edge there is, is regime-dependent rather than absent
+everywhere. Like `weightCalibration`, this is a diagnostic: `WEIGHTS` in
+`config.js` stay static and nothing is auto-applied.
+
+> **The first measurement of this was wrong, and the correction matters.** Before
+> the unfillable guard below, the same code reported `meanIC` −0.134 with only 30%
+> positive days and a negative band spread in *all three* regimes — read as "the
+> score ranks inversely, and it is a property of the score, not the tape". That
+> was an artifact of impossible fills, not a finding. Both conclusions reversed
+> once the fills were fixed.
+
+#### The unfillable guard (`counts.unfillable`)
+
+A stop-hit that **makes money** is impossible for a long position, and the stored
+outcomes contained 14 of them in a 120-row sample — 13 of the 14 `invalidated`.
+
+The cause is structural. `classify()` marks a signal `invalidated` *precisely
+because* `close < stop`, so its next-session fill is usually still below that
+stop. `resolveOutcome` then matched `low <= stop` on the very first window bar and
+"exited" at the stop — **above** the fill — booking a guaranteed gain on a
+position nobody could have held. Real example: XLY filled 109.06 against a stop of
+113.82 and was credited **+4.36%**.
+
+`resolveOutcome` now takes the `fill` and returns `unfillable` when the published
+levels no longer bracket it: `below-stop` (the proven defect) or `above-target`
+(the mirror case — rarer, and it booked a small fake *loss*, so it deflated rather
+than inflated). These are **excluded from every statistic but counted**, the same
+treatment `pending` gets, because "the screen produced N ideas already broken by
+the open" is a finding about the radar rather than a footnote.
+
+**Impact of the fix (same bars, same dates):**
+
+| | before | after |
+|---|---|---|
+| `meanIC` | −0.134 | **−0.015** |
+| positive days | 30% | **53.3%** |
+| `invalidated` avg excess | +0.95% | **−0.10%** |
+| `0-39` band avg excess | +1.03% | **−0.01%** |
+| band spread across regimes | negative in all three | **flips sign** |
+
+**535 of 1800** signals (29.7%) were unfillable — 453 already through the stop,
+82 already past the target; 450 of them `invalidated`. The invalidated bucket fell
+from n=956 to n=505 and its average excess went from +0.95% to −0.10%. Re-checked
+after the fix: **zero** impossible stop-hits remain.
 
 A 📓 **Journal** tab renders excess bars by status/score/theme, stat tiles
 (raw / non-overlapping / unique dates / horizon), the IC headline with a daily
