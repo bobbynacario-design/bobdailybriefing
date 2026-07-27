@@ -391,6 +391,114 @@ function byRegimeStats(entries, horizon) {
   return out;
 }
 
+// ── selection control ─────────────────────────────────────────────────────
+//
+// The journal's positive result has one serious rival explanation: the watchlist
+// was chosen in 2026 knowing how these names turned out, and a momentum score
+// applied to names picked BECAUSE they trended will rank them correctly whether
+// or not the score works. Nothing measured so far can separate those.
+//
+// The split does. Hand-picked single companies carry maximum survivorship
+// exposure; sector and commodity ETFs carry far less, because their holdings
+// rebalance by rule and they are not delisted for underperforming. If the score
+// ranks the ETF half as well as the single-name half, it is doing real work. If
+// the result lives entirely in the singles, it was measuring the picks.
+//
+// This is a PARTIAL control and is labelled as one: choosing which ETFs to track
+// was still a present-day call about themes, so theme-level bias survives even
+// where stock-level bias does not. A complete control needs point-in-time index
+// constituents, which no free feed supplies.
+
+var SELECTION_ORDER = ['single', 'etf', 'crypto'];
+var SELECTION_LABEL = {
+  single: 'hand-picked single names',
+  etf: 'sector / commodity ETFs',
+  crypto: 'crypto'
+};
+
+function bySelectionStats(entries, horizon) {
+  var groups = groupBy(entries, function (e) { return e.kind || 'unclassified'; });
+  var out = {};
+  Object.keys(groups).concat(SELECTION_ORDER).forEach(function (k) {
+    if (out[k]) return;
+    var list = groups[k] || [];
+    // IC is recomputed WITHIN the group: the question is whether the score sorts
+    // that subset, not how the subset ranked inside the full universe.
+    var ic = icByDate(list);
+    var st = icStats(Object.keys(ic).sort().map(function (d) {
+      return { date: d, ic: ic[d].ic, n: ic[d].n, regime: ic[d].regime };
+    }), horizon);
+    var ex = excessStats(list);
+    out[k] = Object.assign({
+      label: SELECTION_LABEL[k] || k,
+      n: list.length,
+      symbols: Object.keys(groupBy(list, function (e) { return e.symbol; })).sort(),
+      avgExcessReturn: ex.avgExcessReturn,
+      excessWinRate: ex.excessWinRate,
+      meanIC: st.meanIC,
+      positiveDayRate: st.positiveDayRate,
+      icDates: st.nDates
+    }, bandSpread(list));
+  });
+  return out;
+}
+
+// The verdict. Blunt about which way it came out, and explicit that a pass here
+// is a pass on ONE bias, not a clean bill of health.
+function selectionControl(bySelection) {
+  var single = bySelection.single || {};
+  var etf = bySelection.etf || {};
+  var haveBoth = single.n > 0 && etf.n > 0;
+  var res = {
+    method: 'The score is re-measured separately on hand-picked single companies (maximum survivorship exposure) ' +
+      'and on sector / commodity ETFs (rule-rebalanced, not delisted for underperforming). A result that survives ' +
+      'on the ETF side is not explained by having chosen winners after the fact.',
+    partial: true,
+    partialNote: 'PARTIAL control: which ETFs to track was still a present-day call about themes, so theme-level ' +
+      'selection bias survives even where stock-level bias does not. A complete control needs point-in-time index ' +
+      'constituents, which no free feed supplies.',
+    singleMeanIC: single.meanIC == null ? null : single.meanIC,
+    etfMeanIC: etf.meanIC == null ? null : etf.meanIC,
+    singleSpread: single.spread == null ? null : single.spread,
+    etfSpread: etf.spread == null ? null : etf.spread,
+    icGap: null,
+    verdict: ''
+  };
+  if (!haveBoth || res.singleMeanIC == null || res.etfMeanIC == null) {
+    res.verdict = 'Not enough history on both sides to run the control yet.';
+    return res;
+  }
+  res.icGap = round(res.singleMeanIC - res.etfMeanIC, 3);
+
+  var etfWorks = res.etfMeanIC >= 0.02 && (res.etfSpread == null || res.etfSpread > 0);
+  var singleWorks = res.singleMeanIC >= 0.02 && (res.singleSpread == null || res.singleSpread > 0);
+
+  if (etfWorks && singleWorks) {
+    res.verdict = 'SURVIVES the control — the score ranks the rule-rebalanced ETFs (IC ' + res.etfMeanIC +
+      ') about as well as the hand-picked names (IC ' + res.singleMeanIC + '), so the result is not merely ' +
+      'an artifact of having chosen winners. Theme selection is still not ruled out.';
+  } else if (singleWorks && !etfWorks) {
+    res.verdict = 'FAILS the control — the ranking holds on hand-picked names (IC ' + res.singleMeanIC +
+      ') but not on the ETFs (IC ' + res.etfMeanIC + '). That is the signature of survivorship: treat the ' +
+      'headline result as measuring the watchlist rather than the score.';
+  } else if (etfWorks && !singleWorks) {
+    // This still PASSES: the control asks whether the result holds on the side
+    // that was not hand-picked, and it does. That the hand-picked side ranks
+    // WORSE is the opposite of a survivorship story — survivorship would inflate
+    // the singles, not the ETFs — so it is reported as extra information rather
+    // than as a failure.
+    res.verdict = 'SURVIVES the control, and inverts the worry: the ranking holds on the rule-rebalanced ETFs ' +
+      '(IC ' + res.etfMeanIC + ') but NOT on the hand-picked names (IC ' + res.singleMeanIC + '). Survivorship ' +
+      'would have inflated the picks, not the funds, so it is not what is driving the headline. The likeliest ' +
+      'reading is that single-name noise — earnings, company news — swamps the ranking that diversified baskets ' +
+      'still show. Theme selection is still not ruled out.';
+  } else {
+    res.verdict = 'Neither side shows a usable ranking (single IC ' + res.singleMeanIC + ', ETF IC ' +
+      res.etfMeanIC + '). The headline result does not survive being split.';
+  }
+  return res;
+}
+
 // Does the sample actually contain more than one regime? If it does not, the
 // per-regime table is describing one tape and must say so — that is the whole
 // reason the split exists.
@@ -495,6 +603,10 @@ function buildJournal(barsByAsset, config, opts) {
   var recentCap = opts.recentCap || jc.recentCap || 120;
   var minBars = opts.minBarsToScore || jc.minBarsToScore || 60;
   var cryptoIds = config.coingeckoIds || {};
+  // Selection-exposure lookup, read here rather than in scoring.js so `kind`
+  // can never reach the score. Measurement must not become an input.
+  var kindOf = {};
+  (config.watchlist || []).forEach(function (w) { if (w && w.symbol) kindOf[w.symbol] = w.kind || 'unclassified'; });
 
   var journalConfig = {
     horizonBars: horizon,
@@ -558,6 +670,8 @@ function buildJournal(barsByAsset, config, opts) {
     };
 
     var ic = informationCoefficient(entries, horizon);
+    var bySelection = bySelectionStats(entries, horizon);
+    var selControl = selectionControl(bySelection);
     var byRegime = byRegimeStats(entries, horizon);
     var regimeCov = regimeCoverage(byRegime);
 
@@ -574,7 +688,8 @@ function buildJournal(barsByAsset, config, opts) {
         'chosen knowing how they turned out, then re-scored back to ' + coverage.firstDate + '. Names that were ' +
         'dropped or never added cannot appear, so a positive result here partly measures the watchlist rather than ' +
         'the score. This matters more over ' + coverage.emitDates + ' dates than it did over 60 — treat the ' +
-        'DIRECTION and the monotonicity across bands as the signal, not the magnitude.');
+        'DIRECTION and the monotonicity across bands as the signal, not the magnitude. ' +
+        'The selection control below tests exactly this: ' + selControl.verdict);
     }
     if (entries.some(function (e) { return e.resolution === 'close-only'; })) {
       caveats.push('Crypto outcomes resolved on close only (no intrabar high/low).');
@@ -628,6 +743,8 @@ function buildJournal(barsByAsset, config, opts) {
       byAsset: byAsset,
       byDate: byDate,
       informationCoefficient: ic,
+      bySelection: bySelection,
+      selectionControl: selControl,
       byRegime: byRegime,
       regimeCoverage: regimeCov,
       coverage: coverage,
@@ -722,6 +839,8 @@ function buildJournal(barsByAsset, config, opts) {
         // gate. Both are captured at score time, so neither can look ahead.
         marketRegime: marketRegime,
         themeRegime: s.regimeScore == null ? null : s.regimeScore,
+        // Selection exposure — for the control split only, never scored.
+        kind: kindOf[sym] || 'unclassified',
         entryBasis: entryBasis, publishedEntry: s.entry, fill: round(fill, 2),
         exit: oc.exit != null ? round(oc.exit, 2) : null, exitReason: oc.exitReason,
         ambiguous: oc.ambiguous, resolution: oc.resolution,
@@ -737,5 +856,6 @@ function buildJournal(barsByAsset, config, opts) {
 export {
   buildJournal, resolveOutcome, scoreBucket, weightCalibration,
   // exported for offline tests
-  ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage, regimeLabel, bandSpread
+  ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage, regimeLabel, bandSpread,
+  bySelectionStats, selectionControl
 };

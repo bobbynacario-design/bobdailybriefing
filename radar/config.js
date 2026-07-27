@@ -9,50 +9,69 @@
 // (SPY, QQQ, IWM) are fetched for regime + as benchmarks but are NOT scored as
 // ideas (scoring.js skips anything listed in indexSymbols).
 
+// `kind` is a SELECTION-EXPOSURE tag, not an asset class — it exists so the
+// journal can run a control on itself, and it changes no scoring.
+//
+// The journal's positive result is undermined by one thing: this watchlist was
+// chosen in 2026 knowing how these names turned out. A momentum score applied to
+// names picked because they trended will rank them correctly whether or not the
+// score is any good.
+//
+//   single — a hand-picked company. Maximum survivorship exposure: NVDA / GEV /
+//            VRT are exactly the names you would choose after the fact.
+//   etf    — a sector or commodity fund. Far less exposed: holdings rebalance by
+//            rule, it is not delisted for underperforming, and it cannot 10x or
+//            go to zero the way one company can.
+//   crypto — reported separately; three names is too few to control anything.
+//
+// If the score ranks the `etf` half as well as the `single` half, the result is
+// doing real work. If it only ranks the singles, it was measuring the picks.
+// PARTIAL control: choosing ITA and GDX was still a 2026 call about defense and
+// gold miners, so theme-level bias survives even where stock-level bias does not.
 var WATCHLIST = [
   // AI semis — benchmark QQQ
-  { symbol: 'NVDA', theme: 'AI semis', benchmark: 'QQQ' },
-  { symbol: 'AVGO', theme: 'AI semis', benchmark: 'QQQ' },
-  { symbol: 'AMD',  theme: 'AI semis', benchmark: 'QQQ' },
-  { symbol: 'SMH',  theme: 'AI semis', benchmark: 'QQQ' },
-  { symbol: 'SOXX', theme: 'AI semis', benchmark: 'QQQ' },
+  { symbol: 'NVDA', theme: 'AI semis', benchmark: 'QQQ', kind: 'single' },
+  { symbol: 'AVGO', theme: 'AI semis', benchmark: 'QQQ', kind: 'single' },
+  { symbol: 'AMD',  theme: 'AI semis', benchmark: 'QQQ', kind: 'single' },
+  { symbol: 'SMH',  theme: 'AI semis', benchmark: 'QQQ', kind: 'etf' },
+  { symbol: 'SOXX', theme: 'AI semis', benchmark: 'QQQ', kind: 'etf' },
 
   // AI infra / power — benchmark QQQ
-  { symbol: 'VRT', theme: 'AI infra', benchmark: 'QQQ' },
-  { symbol: 'GEV', theme: 'AI infra', benchmark: 'QQQ' },
-  { symbol: 'PWR', theme: 'AI infra', benchmark: 'QQQ' },
-  { symbol: 'ETN', theme: 'AI infra', benchmark: 'QQQ' },
-  { symbol: 'CEG', theme: 'AI infra', benchmark: 'QQQ' },
+  { symbol: 'VRT', theme: 'AI infra', benchmark: 'QQQ', kind: 'single' },
+  { symbol: 'GEV', theme: 'AI infra', benchmark: 'QQQ', kind: 'single' },
+  { symbol: 'PWR', theme: 'AI infra', benchmark: 'QQQ', kind: 'single' },
+  { symbol: 'ETN', theme: 'AI infra', benchmark: 'QQQ', kind: 'single' },
+  { symbol: 'CEG', theme: 'AI infra', benchmark: 'QQQ', kind: 'single' },
 
   // Crypto — benchmark BTC (BTC vs itself resolves to a neutral 0-spread)
-  { symbol: 'BTC', theme: 'Crypto', benchmark: 'BTC' },
-  { symbol: 'ETH', theme: 'Crypto', benchmark: 'BTC' },
-  { symbol: 'SOL', theme: 'Crypto', benchmark: 'BTC' },
+  { symbol: 'BTC', theme: 'Crypto', benchmark: 'BTC', kind: 'crypto' },
+  { symbol: 'ETH', theme: 'Crypto', benchmark: 'BTC', kind: 'crypto' },
+  { symbol: 'SOL', theme: 'Crypto', benchmark: 'BTC', kind: 'crypto' },
 
   // Crypto equities — benchmark QQQ
-  { symbol: 'COIN', theme: 'Crypto eq', benchmark: 'QQQ' },
-  { symbol: 'MSTR', theme: 'Crypto eq', benchmark: 'QQQ' },
+  { symbol: 'COIN', theme: 'Crypto eq', benchmark: 'QQQ', kind: 'single' },
+  { symbol: 'MSTR', theme: 'Crypto eq', benchmark: 'QQQ', kind: 'single' },
 
   // Energy / geo — benchmark SPY
-  { symbol: 'USO', theme: 'Energy/geo', benchmark: 'SPY' },
-  { symbol: 'XLE', theme: 'Energy/geo', benchmark: 'SPY' },
-  { symbol: 'XOM', theme: 'Energy/geo', benchmark: 'SPY' },
-  { symbol: 'CVX', theme: 'Energy/geo', benchmark: 'SPY' },
-  { symbol: 'GLD', theme: 'Energy/geo', benchmark: 'SPY' },
+  { symbol: 'USO', theme: 'Energy/geo', benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'XLE', theme: 'Energy/geo', benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'XOM', theme: 'Energy/geo', benchmark: 'SPY', kind: 'single' },
+  { symbol: 'CVX', theme: 'Energy/geo', benchmark: 'SPY', kind: 'single' },
+  { symbol: 'GLD', theme: 'Energy/geo', benchmark: 'SPY', kind: 'etf' },
 
   // Diversifiers — uncorrelated to the AI trade, so the score has something to
   // discriminate against (the journal flagged the universe as AI-concentrated).
   // All benchmark SPY.
-  { symbol: 'XLF', theme: 'Financials',     benchmark: 'SPY' },
-  { symbol: 'XLV', theme: 'Healthcare',     benchmark: 'SPY' },
-  { symbol: 'XLI', theme: 'Industrials',    benchmark: 'SPY' },
-  { symbol: 'XLY', theme: 'Consumer',       benchmark: 'SPY' },
-  { symbol: 'ITA', theme: 'Defense',        benchmark: 'SPY' },
-  { symbol: 'LMT', theme: 'Defense',        benchmark: 'SPY' },
-  { symbol: 'RTX', theme: 'Defense',        benchmark: 'SPY' },
-  { symbol: 'GDX', theme: 'Metals/commod',  benchmark: 'SPY' },
-  { symbol: 'SLV', theme: 'Metals/commod',  benchmark: 'SPY' },
-  { symbol: 'DBC', theme: 'Metals/commod',  benchmark: 'SPY' },
+  { symbol: 'XLF', theme: 'Financials',     benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'XLV', theme: 'Healthcare',     benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'XLI', theme: 'Industrials',    benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'XLY', theme: 'Consumer',       benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'ITA', theme: 'Defense',        benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'LMT', theme: 'Defense',        benchmark: 'SPY', kind: 'single' },
+  { symbol: 'RTX', theme: 'Defense',        benchmark: 'SPY', kind: 'single' },
+  { symbol: 'GDX', theme: 'Metals/commod',  benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'SLV', theme: 'Metals/commod',  benchmark: 'SPY', kind: 'etf' },
+  { symbol: 'DBC', theme: 'Metals/commod',  benchmark: 'SPY', kind: 'etf' },
 
   // Index / regime — fetched for regime + benchmarks, never scored as ideas
   { symbol: 'SPY', theme: 'Index/regime', benchmark: 'SPY' },

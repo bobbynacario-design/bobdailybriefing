@@ -248,8 +248,46 @@ Run time went 131s → ~310s, which is fine for an 06:00 job.
 watchlist is the *current* ~30 names, chosen knowing how they turned out, then
 re-scored back to 2023. Names that were dropped or never added cannot appear, so a
 positive result partly measures the watchlist rather than the score. The journal
-raises this as an explicit caveat past 300 dates. Read the **direction and the
-monotonicity** as the signal; do not read the magnitude.
+raises this as an explicit caveat past 300 dates — and the control below tests it.
+
+#### The selection control (`bySelection` / `selectionControl`)
+
+A momentum score applied to names picked *because* they trended will rank them
+correctly whether or not the score works. Nothing above can separate that, so the
+watchlist carries a `kind` tag — a **selection-exposure** label, not an asset
+class, read only by `journal.js` and never by `scoring.js`, so it can never reach
+a score:
+
+- **`single`** (14) — hand-picked companies. Maximum survivorship exposure: NVDA,
+  GEV, VRT are exactly the names you would choose after the fact.
+- **`etf`** (13) — sector and commodity funds. Far less exposed: holdings
+  rebalance by rule, and a fund is not delisted for underperforming.
+- **`crypto`** (3) — reported, never used as the control side; three names cannot
+  control anything and the IC declines to compute below 8.
+
+The IC is recomputed **within** each side, so it measures whether the score sorts
+that subset rather than how the subset placed inside the full universe.
+
+**Result (2026-07-27):**
+
+| side | n | symbols | avg excess | mean IC | days + | band spread |
+|---|---|---|---|---|---|---|
+| hand-picked | 7,701 | 14 | **+0.83%** | +0.007 | 51.2% | +2.21pp |
+| ETFs | 7,182 | 13 | +0.32% | **+0.037** | 53.3% | +1.86pp |
+
+**It survives, and it inverts the worry.** The ranking holds on the
+rule-rebalanced ETFs and essentially vanishes on the hand-picked names — the
+opposite of a survivorship story, which would have inflated the picks, not the
+funds. The two effects turn out to be separable: selection shows up in the
+**return level** (singles earned +0.83% against the ETFs' +0.32%) while the
+score's **ranking ability** lives on the ETF side. The likeliest reading is that
+single-name noise — earnings, company news — swamps an ordering that diversified
+baskets still show.
+
+**Still a PARTIAL control.** Choosing to track ITA and GDX was a present-day call
+about defense and gold miners, so theme-level bias survives even where stock-level
+bias does not. A complete control needs point-in-time index constituents, which no
+free feed supplies.
 
 #### The unfillable guard (`counts.unfillable`)
 

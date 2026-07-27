@@ -1357,6 +1357,12 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .jreg-row.pos{border-color:rgba(45,184,122,.3)}.jreg-row.pos .jreg-spread{color:var(--green)}
 .jreg-row.neg{border-color:rgba(232,92,92,.3)}.jreg-row.neg .jreg-spread{color:var(--red)}
 .jreg-row.mut{opacity:.55}.jreg-row.mut .jreg-spread{color:var(--txt3)}
+/* Control outcome: green only when it genuinely passed, muted when inconclusive.
+   Amber (the default .radar-calib-warn) is reserved for an actual failure. */
+.radar-calib-warn.jsel-pass{background:rgba(45,184,122,.08);border-color:rgba(45,184,122,.3)}
+.radar-calib-warn.jsel-pass b{color:var(--green)}
+.radar-calib-warn.jsel-mut{background:var(--bg3);border-color:var(--rim)}
+.radar-calib-warn.jsel-mut b{color:var(--txt3)}
 @media(max-width:768px){.jreg-row{grid-template-columns:1fr 1fr;row-gap:.3rem}.jic-val{font-size:22px}}
 
 /* ── DRIFT DIGEST (Today page) ── */
@@ -2918,6 +2924,7 @@ function renderJournal() {
     }
 
     html += jIcHtml(j.informationCoefficient);
+    html += jSelectionHtml(j.bySelection, j.selectionControl);
     html += jRegimeHtml(j.byRegime, j.regimeCoverage);
     html += jWeightCalibHtml(j.weightCalibration);
 
@@ -3095,6 +3102,48 @@ function jIcHtml(ic) {
     '</div>' +
     jIcStrip(ic.series);
   return html;
+}
+
+// ── THE SELECTION CONTROL ─────────────────────────────────────────────────
+// Every positive result on this tab has one rival explanation: the watchlist was
+// chosen knowing how these names turned out, and a momentum score applied to
+// names picked BECAUSE they trended will rank them correctly whether or not the
+// score works. The split tests it — hand-picked companies carry maximum
+// survivorship exposure, sector/commodity ETFs carry far less. This panel sits
+// directly under the IC, because the IC means little without it.
+var JSEL_LABEL = { single: 'Hand-picked names', etf: 'Sector / commodity ETFs', crypto: 'Crypto' };
+function jSelectionHtml(bySel, ctl) {
+  if (!bySel || !ctl) return '';
+  var rows = ['single', 'etf', 'crypto'].map(function (k) {
+    var g = bySel[k];
+    if (!g || !g.n) return '';
+    // Crypto is muted: three coins can never control anything, and colouring it
+    // like evidence would invite reading it as such.
+    var cls = k === 'crypto' ? 'mut'
+      : (g.meanIC == null ? 'mut' : (g.meanIC >= 0.02 ? 'pos' : (g.meanIC <= -0.02 ? 'neg' : 'mut')));
+    return '<div class="jreg-row ' + cls + '">' +
+      '<span class="jreg-name">' + esc(JSEL_LABEL[k] || k) + '</span>' +
+      '<span class="jreg-basis">' + (g.symbols || []).length + ' names &middot; ' +
+        esc((g.symbols || []).slice(0, 6).join(' ')) + ((g.symbols || []).length > 6 ? ' …' : '') + '</span>' +
+      '<span class="jreg-meta">n=' + g.n + ' &middot; excess ' +
+        (g.avgExcessReturn == null ? '—' : (g.avgExcessReturn > 0 ? '+' : '') + g.avgExcessReturn + '%') +
+        ' &middot; days+ ' + (g.positiveDayRate == null ? '—' : g.positiveDayRate + '%') +
+        ' &middot; band ' + (g.spread == null ? '—' : (g.spread > 0 ? '+' : '') + g.spread + 'pp') + '</span>' +
+      '<span class="jreg-spread">IC ' + (g.meanIC == null ? '—' : (g.meanIC > 0 ? '+' : '') + g.meanIC) + '</span>' +
+    '</div>';
+  }).join('');
+  var pass = /SURVIVES the control/.test(ctl.verdict || '');
+  var fail = /FAILS the control/.test(ctl.verdict || '');
+  return '<div class="journal-section">Is it the score, or the names you picked?</div>' +
+    '<div class="journal-note">The watchlist was chosen knowing how these names turned out, so a momentum score ' +
+      'will rank them correctly whether or not it works. Re-measured separately on <b>hand-picked companies</b> ' +
+      '(maximum survivorship exposure) and on <b>sector / commodity ETFs</b> — which rebalance by rule and are not ' +
+      'delisted for underperforming. A result that holds on the ETF side is not just a record of good hindsight.</div>' +
+    '<div class="jreg-list">' + rows + '</div>' +
+    '<div class="radar-calib-warn' + (pass ? ' jsel-pass' : (fail ? '' : ' jsel-mut')) + '">' +
+      '<b>' + (pass ? '&#10003; Survives' : (fail ? '&#9888; Fails' : 'Inconclusive')) + '.</b> ' +
+      esc(ctl.verdict || '') + '</div>' +
+    '<div class="journal-note">' + esc(ctl.partialNote || '') + '</div>';
 }
 
 var JREG_LABEL = { 'risk-on': 'Risk-on', 'mixed': 'Mixed', 'risk-off': 'Risk-off' };

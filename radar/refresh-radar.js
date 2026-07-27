@@ -588,6 +588,20 @@ async function main() {
     '  (effective windows ' + (ic.effectiveNDates == null ? '—' : ic.effectiveNDates) + ')');
   console.log('    verdict: ' + ic.verdict);
 
+  console.log('\n  --- selection control (does the result survive names nobody hand-picked?) ---');
+  ['single', 'etf', 'crypto'].forEach(function (k) {
+    var g = journalBody.bySelection[k] || {};
+    console.log('    ' + k.padEnd(7) +
+      ' n=' + String(g.n == null ? 0 : g.n).padStart(5) +
+      '  syms=' + String((g.symbols || []).length).padStart(2) +
+      '  avgExcess=' + (g.avgExcessReturn == null ? '—' : g.avgExcessReturn + '%') +
+      '  meanIC=' + (g.meanIC == null ? '—' : g.meanIC) +
+      '  days+=' + (g.positiveDayRate == null ? '—' : g.positiveDayRate + '%') +
+      '  band spread=' + (g.spread == null ? '—' : (g.spread > 0 ? '+' : '') + g.spread + 'pp'));
+  });
+  console.log('  ' + journalBody.selectionControl.verdict);
+  console.log('  ' + journalBody.selectionControl.partialNote);
+
   console.log('\n  --- by market regime ---');
   ['risk-on', 'mixed', 'risk-off'].forEach(function (r) {
     var g = journalBody.byRegime[r] || {};

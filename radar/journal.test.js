@@ -4,7 +4,7 @@
 import assert from 'assert';
 import {
   ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage,
-  regimeLabel, bandSpread, resolveOutcome, buildJournal
+  regimeLabel, bandSpread, resolveOutcome, buildJournal, bySelectionStats, selectionControl
 } from './journal.js';
 
 var n = 0;
@@ -381,6 +381,93 @@ t('too little history yields no dates rather than a garbage sample', function ()
   assert.equal(j.coverage.emitDates, 0);
   assert.equal(j.counts.raw, 0);
   assert.equal(j.informationCoefficient.nDates, 0);
+});
+
+// ── selection control ────────────────────────────────────────────────────
+// The control exists to be capable of FAILING. These fix both outcomes so a
+// future change cannot quietly turn it into something that always passes.
+function kdays(kind, dates, k, sign, startSym) {
+  var out = [];
+  dates.forEach(function (date) {
+    for (var i = 0; i < k; i++) {
+      out.push(e({ date: date, symbol: (startSym || kind) + i, kind: kind,
+        score: 10 + i * 5, excessReturn: sign * (10 + i * 5) / 10 }));
+    }
+  });
+  return out;
+}
+var D3 = ['2026-07-01', '2026-07-02', '2026-07-03'];
+
+t('a result present on both sides SURVIVES the control', function () {
+  var c = selectionControl(bySelectionStats(
+    kdays('single', D3, 10, 1).concat(kdays('etf', D3, 10, 1)), 20));
+  assert.ok(close(c.etfMeanIC, 1, 1e-6));
+  assert.ok(/SURVIVES the control/.test(c.verdict));
+  // A pass on one bias is never reported as a clean bill of health.
+  assert.equal(c.partial, true);
+  assert.ok(/Theme selection is still not ruled out/.test(c.verdict));
+});
+
+t('a result living only in the hand-picked names FAILS the control', function () {
+  // The survivorship signature: singles rank, ETFs do not.
+  var c = selectionControl(bySelectionStats(
+    kdays('single', D3, 10, 1).concat(kdays('etf', D3, 10, -1)), 20));
+  assert.ok(/FAILS the control/.test(c.verdict));
+  assert.ok(/signature of survivorship/.test(c.verdict));
+  assert.ok(c.icGap > 1, 'the gap between the two sides is reported');
+});
+
+t('neither side ranking is reported as not surviving the split', function () {
+  var flat = kdays('single', D3, 10, 1).concat(kdays('etf', D3, 10, 1));
+  flat.forEach(function (x) { x.excessReturn = 0; });   // no spread -> no IC
+  var c = selectionControl(bySelectionStats(flat, 20));
+  assert.ok(/Not enough history|does not survive/.test(c.verdict));
+});
+
+t('ranking on the ETFs but not the picks still PASSES, and says why', function () {
+  // The control's question is whether the result holds on the side that was NOT
+  // hand-picked. It does, so this passes — survivorship would have inflated the
+  // picks, not the funds. The weaker single-name side is extra information.
+  var c = selectionControl(bySelectionStats(
+    kdays('single', D3, 10, -1).concat(kdays('etf', D3, 10, 1)), 20));
+  assert.ok(/SURVIVES the control/.test(c.verdict), 'a pass on the control question');
+  assert.ok(/but NOT on the hand-picked names/.test(c.verdict), 'without hiding the asymmetry');
+  assert.ok(/not what is driving the headline/.test(c.verdict));
+});
+
+t('the control refuses to run on one side alone', function () {
+  var c = selectionControl(bySelectionStats(kdays('single', D3, 10, 1), 20));
+  assert.ok(/Not enough history on both sides/.test(c.verdict));
+  assert.equal(c.icGap, null);
+});
+
+t('IC is recomputed WITHIN each side, not inherited from the full universe', function () {
+  // Singles rank perfectly among themselves and ETFs invert among themselves.
+  // Pooled these would partly cancel; split they must read +1 and -1.
+  var by = bySelectionStats(kdays('single', D3, 10, 1).concat(kdays('etf', D3, 10, -1)), 20);
+  assert.ok(close(by.single.meanIC, 1, 1e-6));
+  assert.ok(close(by.etf.meanIC, -1, 1e-6));
+});
+
+t('each side reports which symbols it actually covered', function () {
+  var by = bySelectionStats(kdays('single', D3, 9, 1).concat(kdays('etf', D3, 9, 1)), 20);
+  assert.equal(by.single.symbols.length, 9, 'auditable rather than a bare count');
+  assert.ok(by.single.symbols.indexOf('single0') !== -1);
+});
+
+t('an untagged symbol lands in unclassified, not silently in a side', function () {
+  var by = bySelectionStats(kdays('single', D3, 9, 1).concat(
+    kdays(undefined, D3, 9, 1, 'ZZ').map(function (x) { delete x.kind; return x; })), 20);
+  assert.ok(by.unclassified && by.unclassified.n === 27);
+  assert.equal(by.single.n, 27);
+});
+
+t('crypto is reported but never used as the control side', function () {
+  var by = bySelectionStats(kdays('single', D3, 10, 1).concat(kdays('crypto', D3, 10, -1)), 20);
+  assert.ok(by.crypto.n > 0, 'still reported');
+  var c = selectionControl(by);
+  assert.ok(/Not enough history on both sides/.test(c.verdict),
+    'three coins cannot control anything, so the control declines rather than using them');
 });
 
 console.log('\n' + n + ' checks passed.');
