@@ -1292,6 +1292,28 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 }
 @media(min-width:769px){.mobile-nav{display:none}}
 
+/* ── score-band calibration on radar cards + weight diagnostic on journal ── */
+.radar-band{margin-top:.5rem;font-family:var(--mono);font-size:9.5px;letter-spacing:.03em;
+  color:var(--txt3);border-top:1px dashed var(--rim);padding-top:.45rem}
+.radar-band.good{color:var(--green)}
+.radar-band.bad{color:var(--red)}
+.radar-calib-warn{margin-top:.6rem;padding:.6rem .75rem;border-radius:9px;font-size:12.5px;line-height:1.6;
+  background:rgba(240,168,50,.08);border:1px solid rgba(240,168,50,.3);color:var(--txt2)}
+.radar-calib-warn b{color:#F0A832}
+.jwc-list{display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem}
+.jwc-row{display:grid;grid-template-columns:minmax(90px,1.1fr) minmax(150px,1.6fr) minmax(120px,1.2fr) auto;
+  gap:.6rem;align-items:center;font-family:var(--mono);font-size:10px;padding:.5rem .6rem;
+  border-radius:8px;background:var(--bg3);border:1px solid var(--rim)}
+.jwc-name{color:var(--txt);font-size:11px}
+.jwc-spread,.jwc-w{color:var(--txt3)}
+.jwc-verdict{letter-spacing:.03em;text-transform:uppercase;font-size:9px}
+.jwc-noise .jwc-verdict{color:var(--txt3)}
+.jwc-pos{border-color:rgba(45,184,122,.3)}
+.jwc-pos .jwc-verdict{color:var(--green)}
+.jwc-neg{border-color:rgba(232,92,92,.3)}
+.jwc-neg .jwc-verdict{color:var(--red)}
+@media(max-width:768px){.jwc-row{grid-template-columns:1fr 1fr;row-gap:.3rem}}
+
 /* ── FEED HEALTH STRIP ── */
 .feed-health{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.45rem 1.25rem;
   background:var(--bg2);border-bottom:1px solid var(--rim);font-family:var(--mono);font-size:10px}
@@ -2326,6 +2348,7 @@ function radarCard(s) {
     '<div class="src radar-plan">' + esc(plan) + '</div>' +
     radar52(s) +
     radarContext(s) +
+    radarBandHtml(s) +
     '<div class="card-footer"><span class="rel-text radar-invalidation">' + esc(s.invalidation) + '</span>' +
       '<div class="radar-decision-actions">' +
         '<button class="radar-decision-btn watch" onclick="quickLogDecisionFromRadar(\'' + esc(s.symbol) + '\',\'watched\')">Watched</button>' +
@@ -2343,6 +2366,61 @@ function radarCard(s) {
 var RADAR_COMMODITY_SYMS = { USO:1, GLD:1, SLV:1, DBC:1, GDX:1 };
 var RADAR_TYPE_ORDER = ['Stocks', 'Crypto', 'Commodities'];
 var RADAR_STATUS_ORDER = ['confirmed', 'forming', 'invalidated'];
+// ── score-band calibration on the cards ───────────────────────────────────
+// The Radar ranks cards by score. The Journal tab separately reports that, on
+// the history so far, the LOW score band has earned more benchmark-excess than
+// the high one. Two tabs, opposite implications, and only one of them is where
+// a decision gets made. These helpers put each band's realised record on the
+// card itself so the screen is honest at the point of use.
+var radarJournal = null;          // radar-journal doc (cached with the signals)
+
+function radarScoreBand(score) {
+  if (score >= 80) return '80-100';
+  if (score >= 60) return '60-79';
+  if (score >= 40) return '40-59';
+  return '0-39';
+}
+function radarBandStats(score) {
+  var buckets = radarJournal && radarJournal.byScoreBucket;
+  if (!buckets) return null;
+  var band = radarScoreBand(score);
+  var g = buckets[band];
+  if (!g || !g.n || g.avgExcessReturn == null) return null;
+  return { band: band, n: g.n, avgExcess: g.avgExcessReturn, winRate: g.excessWinRate };
+}
+function radarBandHtml(s) {
+  var st = radarBandStats(s.score);
+  if (!st) return '';
+  // Anything inside +/-0.25pp is noise, not a result. Colouring the 80-100
+  // band's +0.1% green would read as a win directly under a banner saying the
+  // score is not paying — dead-heat gets the muted default instead.
+  var cls = st.avgExcess > 0.25 ? ' good' : (st.avgExcess < -0.25 ? ' bad' : '');
+  return '<div class="radar-band' + cls + '">Band ' + st.band + ' record: ' +
+    (st.avgExcess > 0 ? '+' : '') + st.avgExcess + '% avg excess over ' + st.n + ' past signals' +
+    (st.winRate == null ? '' : ' · ' + st.winRate + '% beat benchmark') + '</div>';
+}
+// Fires only when the top band is actually being out-earned by a lower one.
+// Silent when the score is behaving, so it never becomes wallpaper.
+function radarCalibrationWarning() {
+  var buckets = radarJournal && radarJournal.byScoreBucket;
+  if (!buckets) return '';
+  var top = buckets['80-100'];
+  if (!top || !top.n || top.avgExcessReturn == null) return '';
+  var beating = ['60-79', '40-59', '0-39'].map(function (k) {
+    return { k: k, g: buckets[k] };
+  }).filter(function (r) {
+    return r.g && r.g.n && r.g.avgExcessReturn != null && r.g.avgExcessReturn > top.avgExcessReturn;
+  }).sort(function (a, b) { return b.g.avgExcessReturn - a.g.avgExcessReturn; });
+  if (!beating.length) return '';
+  var best = beating[0];
+  return '<div class="radar-calib-warn"><b>Calibration check.</b> On the history so far the <b>' +
+    best.k + '</b> band has averaged <b>' + (best.g.avgExcessReturn > 0 ? '+' : '') +
+    best.g.avgExcessReturn + '%</b> excess (n=' + best.g.n + ') against <b>' +
+    (top.avgExcessReturn > 0 ? '+' : '') + top.avgExcessReturn + '%</b> for 80-100 (n=' + top.n +
+    '). Ranking by score is not paying yet — treat this as a shortlist to think about, ' +
+    'not an ordering to trust.</div>';
+}
+
 var radarSignals = null;          // cached signals from the last load
 var radarFilter = 'All';          // active asset-type filter
 var radarStatusFilter = 'All';    // active status sub-filter
@@ -2637,7 +2715,15 @@ function renderRadar() {
   if (!out) return;
   if (!window.fbLoadRadar) { out.innerHTML = '<div class="empty-state">RADAR UNAVAILABLE</div>'; return; }
   out.innerHTML = '<div class="empty-state">LOADING RADAR…</div>';
-  window.fbLoadRadar().then(function(data) {
+  // Pull the calibration journal alongside the signals so each card can carry
+  // its own score band's realised record. Non-fatal: without it the cards
+  // render exactly as they did before.
+  var jp = window.fbLoadJournal
+    ? window.fbLoadJournal().catch(function () { return null; })
+    : Promise.resolve(null);
+  Promise.all([window.fbLoadRadar(), jp]).then(function (both) {
+    var data = both[0];
+    radarJournal = both[1];
     if (!data || !data.signals || !data.signals.length) {
       radarSignals = null;
       if (regimeEl) regimeEl.innerHTML = '';
@@ -2655,7 +2741,8 @@ function renderRadar() {
     if (regimeEl) {
       regimeEl.innerHTML = '<div class="radar-regime-line">Regime: ' +
         '<span class="rel-badge ' + rg.cls + '">' + rg.txt + '</span>' +
-        '<span class="radar-asof">as of ' + esc(data.asOf || '—') + '</span></div>';
+        '<span class="radar-asof">as of ' + esc(data.asOf || '—') + '</span></div>' +
+        radarCalibrationWarning();
     }
     if (sub) sub.textContent = data.signals.length + ' opportunities ranked by score';
     radarSignals = data.signals;
@@ -2755,6 +2842,8 @@ function renderJournal() {
       });
     }
 
+    html += jWeightCalibHtml(j.weightCalibration);
+
     html += '<div class="journal-section">Recent outcomes</div>';
     if (j.recentOutcomes && j.recentOutcomes.length) {
       html += '<div class="jlist">' + j.recentOutcomes.slice(0, 40).map(jOutcomeRow).join('') + '</div>';
@@ -2772,6 +2861,47 @@ function renderJournal() {
 
     out.innerHTML = html;
   });
+}
+
+// Which score components actually survive out-of-sample. This was computed on
+// every refresh but only ever reached the stored doc and the console, so the
+// finding that most components carry no edge — and that the one that survives
+// does so NEGATIVELY — was invisible in the app. It is a diagnostic: weights in
+// config.js stay static, nothing here is auto-applied.
+var JCOMP_LABEL = {
+  trend: 'Trend', volume: 'Volume', relStrength: 'Rel. strength',
+  riskQuality: 'Risk quality', regime: 'Regime'
+};
+function jWeightCalibHtml(wc) {
+  if (!wc || !wc.components || !Object.keys(wc.components).length) return '';
+  var rows = ['trend', 'volume', 'relStrength', 'riskQuality', 'regime'].map(function (c) {
+    var g = wc.components[c];
+    if (!g) return '';
+    // Robust = same sign in the fit and holdout windows. A robust NEGATIVE
+    // spread is the interesting case: the component reliably points the wrong
+    // way, which is worth more than a component that is merely noise.
+    var neg = g.spreadHoldout != null && g.spreadHoldout < 0;
+    var cls = !g.robust ? 'jwc-noise' : (neg ? 'jwc-neg' : 'jwc-pos');
+    var verdict = !g.robust ? 'no edge out-of-sample'
+      : (neg ? 'robust but NEGATIVE' : 'robust positive');
+    var cur = wc.currentWeights ? wc.currentWeights[c] : null;
+    var sug = wc.suggestedWeights ? wc.suggestedWeights[c] : null;
+    return '<div class="jwc-row ' + cls + '">' +
+      '<span class="jwc-name">' + esc(JCOMP_LABEL[c] || c) + '</span>' +
+      '<span class="jwc-spread">fit ' + (g.spreadFit == null ? '—' : g.spreadFit + 'pp') +
+        ' · holdout ' + (g.spreadHoldout == null ? '—' : g.spreadHoldout + 'pp') + '</span>' +
+      '<span class="jwc-verdict">' + verdict + '</span>' +
+      '<span class="jwc-w">' + (cur == null ? '—' : cur) +
+        (sug != null && sug !== cur ? ' &rarr; ' + sug : '') + '</span>' +
+    '</div>';
+  }).join('');
+  return '<div class="journal-section">Do the score components actually work?</div>' +
+    '<div class="journal-note">Spread = avg forward-excess of the top third of a component minus the bottom ' +
+      'third. Positive means a higher value preceded higher excess. <b>Robust</b> means the sign held in both ' +
+      'the fit window and the holdout' + (wc.holdoutFrom ? ' (from ' + esc(wc.holdoutFrom) + ')' : '') +
+      ' — a component that flips sign has no demonstrated edge. Diagnostic only: weights in config stay static.</div>' +
+    '<div class="jwc-list">' + rows + '</div>' +
+    (wc.note ? '<div class="journal-note">' + esc(wc.note) + '</div>' : '');
 }
 
 // ── PH MARKET HEALTH (read-only; not scored) ──
