@@ -385,6 +385,19 @@ window.fbLoadRadar = async function() {
   }
 };
 
+// Load the shared feed-health doc written by the local refresh scripts
+// (lib/feed-health.js). One small doc, no uid. Null on any failure — the strip
+// then falls back to reporting what it can and says so.
+window.fbLoadFeedHealth = async function() {
+  try {
+    var snap = await getDoc(doc(db, COLL, 'feed-health'));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    console.error('Feed health load failed:', e);
+    return null;
+  }
+};
+
 // Load a specific dated radar doc (briefings-bob/radar-YYYY-MM-DD). Used by the
 // Decisions tab to backfill a reference price for calls logged before the
 // snapshot carried one — the close on the decision date is already stored.
@@ -1275,6 +1288,23 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 }
 @media(min-width:769px){.mobile-nav{display:none}}
 
+/* ── FEED HEALTH STRIP ── */
+.feed-health{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.45rem 1.25rem;
+  background:var(--bg2);border-bottom:1px solid var(--rim);font-family:var(--mono);font-size:10px}
+.feed-health-lab{color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-right:.15rem}
+.feed-pill{display:inline-flex;align-items:center;gap:.32rem;padding:.2rem .45rem;border-radius:5px;
+  border:1px solid var(--rim2);color:var(--txt2);cursor:default;white-space:nowrap}
+.feed-pill.bad{color:var(--red);border-color:rgba(232,92,92,.35);background:var(--red-dim)}
+.feed-pill.warn{color:#F0A832;border-color:rgba(240,168,50,.35);background:rgba(240,168,50,.08)}
+.feed-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex:0 0 auto}
+.feed-pill.warn .feed-dot{background:#F0A832}
+.feed-pill.bad .feed-dot{background:var(--red)}
+.feed-pill.mut .feed-dot{background:var(--txt3)}
+.feed-age{color:var(--txt3)}
+.feed-health-why{flex-basis:100%;color:var(--txt2);line-height:1.6;padding-top:.15rem}
+.feed-health-why b{color:#F0A832}
+@media(max-width:768px){.feed-health{padding:.4rem .85rem;font-size:9.5px}}
+
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:var(--bg)}
@@ -1327,6 +1357,9 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="nav-btn" onclick="exportPDF()">⬇ PDF</button>
   </div>
 </nav>
+
+<!-- FEED HEALTH — which data feeds are current, and why one is not -->
+<div class="feed-health" id="feed-health" hidden></div>
 
 <div class="update-banner" id="update-banner">
   <span>New briefing app version available</span>
@@ -1946,7 +1979,16 @@ function onSignedIn() {
     lockBtn.textContent = '🔓';
     lockBtn.title = 'Sign out';
   }
-  if (window.fbLoadHistory) window.fbLoadHistory();
+  // Feed health needs history in memory for the Briefing pill, so chain it.
+  // Re-read every 15 min: one small doc, and the units are hours.
+  if (window.fbLoadHistory) {
+    Promise.resolve(window.fbLoadHistory()).then(function () {
+      if (window.loadFeedHealth) window.loadFeedHealth();
+    });
+  }
+  if (!window._feedHealthTimer && window.loadFeedHealth) {
+    window._feedHealthTimer = setInterval(window.loadFeedHealth, 15 * 60 * 1000);
+  }
   navFromHash();  // open the deep-linked tab (e.g. a shared #sports link)
 }
 
@@ -2722,6 +2764,102 @@ function renderJournal() {
 
 // ── PH MARKET HEALTH (read-only; not scored) ──
 function phRet(v) { return v == null ? '<span class="jmut">—</span>' : jSign(v); }
+// ── FEED HEALTH ───────────────────────────────────────────────────────────
+// Which data feeds are current, and when one is not, why. This exists because
+// the radar quietly missed ~1 day in 4 for a month and the only way to find out
+// was to read a 990 KB log next to the Windows power-event log. Staleness has
+// to be visible from inside the app.
+//
+// Freshness is measured from lastOkAt (the last run that finished cleanly), so
+// a feed whose newest run failed still reads green if yesterday's data is fine —
+// the failure surfaces as a separate warning line rather than a false alarm
+// about missing data.
+
+var FEED_SPEC = [
+  { key: 'briefing', label: 'Briefing', maxAgeH: 30,   cadence: 'daily, generated server-side' },
+  { key: 'radar',    label: 'Radar',    maxAgeH: 30,   cadence: '06:00 + 08:30 catch-up' },
+  { key: 'miro',     label: 'Markets',  maxAgeH: 30,   cadence: '06:15' },
+  { key: 'ph',       label: 'PSE',      maxAgeH: 30,   cadence: '06:00 + 16:30 after close' },
+  { key: 'sports',   label: 'Sports',   maxAgeH: null, cadence: 'no scheduled refresh' }
+];
+
+function feedAge(t) {
+  if (t == null) return null;
+  var ms = typeof t === 'number' ? t : Date.parse(t);
+  if (!isFinite(ms)) return null;
+  return Math.max(0, Date.now() - ms);
+}
+function feedAgeText(ms) {
+  if (ms == null) return '—';
+  var m = ms / 60000;
+  if (m < 90) return Math.round(m) + 'm';
+  var h = m / 60;
+  if (h < 36) return Math.round(h) + 'h';
+  return Math.round(h / 24) + 'd';
+}
+// The briefing is uid-scoped, so it cannot live in the shared health doc. Its
+// freshness comes from history already in memory — no extra read.
+function briefingHealthRec() {
+  var h = (window._briefingHistory || [])[0];  // ordered saved desc
+  if (!h) return null;
+  return { lastRunAt: h.saved, lastOkAt: h.saved, status: 'ok', asOf: h.key };
+}
+function feedStatus(spec, rec) {
+  if (!rec) {
+    return { cls: 'mut', age: null, asOf: null,
+      why: spec.maxAgeH == null ? '' : spec.label + ' has no run recorded yet.' };
+  }
+  var age = feedAge(rec.lastOkAt);
+  if (age == null) age = feedAge(rec.lastRunAt);
+  var cls = '', why = '';
+  if (spec.maxAgeH == null) {
+    cls = 'mut';
+  } else {
+    var hours = age == null ? Infinity : age / 3600000;
+    if (hours > spec.maxAgeH * 2) cls = 'bad';
+    else if (hours > spec.maxAgeH) cls = 'warn';
+  }
+  if (rec.status === 'failed') {
+    if (cls !== 'bad') cls = 'warn';
+    // Report the staleness too — "last run failed" alone does not tell you
+    // whether you are looking at yesterday's data or last week's.
+    why = spec.label + ' last run failed' + (rec.stage ? ' at ' + rec.stage : '') +
+      (rec.message ? ' (' + rec.message + ')' : '') +
+      '; last good data ' + feedAgeText(age) + ' old.';
+  } else if (cls === 'bad' || cls === 'warn') {
+    why = spec.label + ' has not refreshed in ' + feedAgeText(age) + '; expects ' + spec.cadence + '.';
+  }
+  return { cls: cls, age: age, asOf: rec.asOf || null, why: why };
+}
+function renderFeedHealth(health) {
+  var el = document.getElementById('feed-health');
+  if (!el) return;
+  var feeds = (health && health.feeds) || {};
+  var pills = [], whys = [];
+  FEED_SPEC.forEach(function (spec) {
+    var rec = spec.key === 'briefing' ? briefingHealthRec() : (feeds[spec.key] || null);
+    var st = feedStatus(spec, rec);
+    var age = st.age != null ? feedAgeText(st.age) : (spec.maxAgeH == null ? 'none' : '—');
+    var title = spec.label + ' · ' + spec.cadence +
+      (st.asOf ? ' · data ' + st.asOf : '') +
+      (rec && rec.status ? ' · last run ' + rec.status : ' · never recorded');
+    pills.push('<span class="feed-pill ' + st.cls + '" title="' + esc(title) + '">' +
+      '<span class="feed-dot"></span>' + esc(spec.label) +
+      ' <span class="feed-age">' + esc(age) + '</span></span>');
+    if (st.why) whys.push(st.why);
+  });
+  el.innerHTML = '<span class="feed-health-lab">Feeds</span>' + pills.join('') +
+    (whys.length ? '<div class="feed-health-why"><b>&#9888;</b> ' + esc(whys.join(' ')) + '</div>' : '');
+  el.hidden = false;
+}
+window.loadFeedHealth = async function () {
+  try {
+    renderFeedHealth(window.fbLoadFeedHealth ? await window.fbLoadFeedHealth() : null);
+  } catch (e) {
+    console.error('Feed health render failed:', e);
+  }
+};
+
 // DECISIONS - Bob's process journal. Captures calls and post-mortems without
 // turning Radar into an execution surface.
 var decisionEntries = [];
