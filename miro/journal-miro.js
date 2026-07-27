@@ -125,6 +125,7 @@ function buildMiroJournal(prior, todaySnapshots, todayPrices, resolutions, confi
       // one. Stamped at lock time; nothing here changes the maths.
       forecaster: {
         model: (config && config.panel && config.panel.model) || null,
+        provider: (config && config.panel && config.panel.provider) || null,
         webSearch: !!(config && config.panel && config.panel.webSearch)
       },
       priceTrail: [{ asOf: s.asOf, mid: round(first, 4) }],

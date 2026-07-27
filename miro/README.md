@@ -111,7 +111,55 @@ Secrets are reused from the radar — there is **no new setup**. The script load
 `miro/.env` then `../radar/.env` (needs `OPENAI_API_KEY`; without it the run still
 completes and writes implied-only markets), and authenticates Firestore with
 `miro/serviceAccountKey.json` or `../radar/serviceAccountKey.json` (same project,
-`pokerhq-a67e4`). A run makes 5 OpenAI `gpt-5.5` calls (web-search grounded).
+`pokerhq-a67e4`). A run makes 5 panel calls.
+
+### Panel provider
+
+`web_search` is **off** (2026-07-28) — the ledger showed search, not the model,
+was the cost: ~43.8k input tokens per call for a prompt that is a persona brief
+plus ~8 slugs. Turning it off took the panel from ~$1.46/day to a measured
+**$0.24/day**. Output is now ~94% of the spend, so further saving means a cheaper
+model, which is what the provider adapter is for.
+
+| `MIRO_PANEL_PROVIDER` | endpoint | hosted web_search |
+|---|---|---|
+| `openai` (default) | `/v1/responses` | yes |
+| `compatible` | `/v1/chat/completions` | no |
+
+`compatible` covers local **Ollama**, DeepSeek, Qwen/DashScope, GLM/Zhipu, Kimi
+and OpenRouter. Env: `MIRO_PANEL_PROVIDER`, `MIRO_PANEL_BASE_URL`,
+`MIRO_PANEL_MODEL`, `MIRO_PANEL_API_KEY`, `MIRO_PANEL_TEMPERATURE`.
+
+```powershell
+# Local Ollama — no key, no API cost, nothing leaves the machine
+$env:MIRO_PANEL_PROVIDER="compatible"; $env:MIRO_PANEL_MODEL="qwen2.5:14b"
+node refresh-miro.js --dry-run
+
+# A hosted compatible provider needs its OWN key
+$env:MIRO_PANEL_PROVIDER="compatible"
+$env:MIRO_PANEL_BASE_URL="https://api.deepseek.com/v1"
+$env:MIRO_PANEL_MODEL="deepseek-chat"; $env:MIRO_PANEL_API_KEY="sk-..."
+node refresh-miro.js --dry-run
+```
+
+Four things worth knowing:
+
+- **No temperature is sent unless you set one.** A live test against `gpt-5.5`
+  returned HTTP 400 — *"'temperature' does not support 0.2 with this model"* — and
+  DeepSeek-R1 and its distills behave the same way. Those are exactly the free
+  models this adapter enables, so a hardcoded value would have broken the main use
+  case. Omitting it is accepted everywhere.
+- **`OPENAI_API_KEY` is never reused for a compatible provider.** It would send an
+  OpenAI credential to whatever host `MIRO_PANEL_BASE_URL` points at. Remote
+  compatible providers must be given their own key; a `localhost` endpoint needs
+  none and the key check is skipped for it.
+- **Reads from a local endpoint are logged as `local/<model>`**, and the Help tab
+  prices that prefix at a true **$0** rather than showing it *unpriced* — which
+  would wrongly imply the rate is merely unknown. Electricity is not modelled.
+- **Every locked journal prediction is stamped** with `{model, provider,
+  webSearch}` as it actually ran, not as config declares. Predictions lock once
+  and are scored months later, so without this a provider change would blend two
+  forecasters into one Brier score and report it as one number.
 
 **Auto-refresh (same as the radar):** a Windows Task Scheduler job
 `BobDailyBriefing-MiroRefresh` runs `node refresh-miro.js` daily at 06:15 PHT

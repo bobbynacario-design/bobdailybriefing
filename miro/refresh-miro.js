@@ -68,6 +68,35 @@ var CLOB = 'https://clob.polymarket.com';
 var OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 var OPENAI_MODEL = process.env.OPENAI_MODEL || CONFIG.panel.model || 'gpt-5.5';
 
+// ── panel provider ────────────────────────────────────────────────────────
+// 'openai' speaks /v1/responses; 'compatible' speaks /v1/chat/completions, which
+// is what every free and cheap alternative offers (local Ollama, DeepSeek, Qwen,
+// GLM, Kimi, OpenRouter). Only 'openai' has a hosted web_search tool, and that
+// costs nothing to give up because webSearch is already off on cost grounds.
+var PANEL_PROVIDER = (process.env.MIRO_PANEL_PROVIDER || CONFIG.panel.provider || 'openai').toLowerCase();
+var IS_COMPATIBLE = PANEL_PROVIDER !== 'openai';
+var PANEL_MODEL = process.env.MIRO_PANEL_MODEL || OPENAI_MODEL;
+var PANEL_BASE_URL = (process.env.MIRO_PANEL_BASE_URL || CONFIG.panel.baseUrl ||
+  (IS_COMPATIBLE ? (CONFIG.panel.compatibleDefaultBaseUrl || 'http://localhost:11434/v1')
+                 : 'https://api.openai.com/v1')).replace(/\/+$/, '');
+// A local endpoint needs no key, so requiring one would block the zero-cost case.
+// Deliberately NO fallback from a compatible provider to OPENAI_API_KEY: that
+// would send an OpenAI credential to whatever third-party host MIRO_PANEL_BASE_URL
+// points at. A remote compatible provider must be given its own key explicitly.
+var PANEL_KEY = process.env.MIRO_PANEL_API_KEY || (IS_COMPATIBLE ? '' : OPENAI_KEY);
+function isLocalEndpoint(u) { return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(u); }
+// Opt-in only — see panelRequest for why a default value is unsafe.
+var PANEL_TEMPERATURE = process.env.MIRO_PANEL_TEMPERATURE != null && process.env.MIRO_PANEL_TEMPERATURE !== ''
+  ? Number(process.env.MIRO_PANEL_TEMPERATURE) : null;
+var PANEL_KEY_REQUIRED = !IS_COMPATIBLE || !isLocalEndpoint(PANEL_BASE_URL);
+
+// What the cost ledger and the journal record. A hosted model is keyed by its own
+// name; anything local is prefixed so the Help tab can price it at a true $0
+// rather than showing it "unpriced", which would imply the rate is merely unknown.
+var PANEL_MODEL_LABEL = (IS_COMPATIBLE && isLocalEndpoint(PANEL_BASE_URL))
+  ? 'local/' + PANEL_MODEL
+  : (IS_COMPATIBLE ? PANEL_PROVIDER + '/' + PANEL_MODEL : PANEL_MODEL);
+
 // Provenance stamped onto every written doc (Lane C).
 var SCENARIO_VERSION = '1.1.0';
 var JOURNAL_VERSION = '1.1.0';
@@ -226,6 +255,56 @@ function extractText(json) {
   return chunks.join('\n');
 }
 
+// Text out of an OpenAI-COMPATIBLE /v1/chat/completions payload. Falls back to
+// reasoning_content because reasoning models (DeepSeek-R1 and its distills, which
+// are the obvious free choices here) sometimes leave `content` empty and put the
+// answer there instead — without this the parse would fail on exactly the models
+// this adapter exists to enable.
+function extractChatText(json) {
+  var c = (json && json.choices || [])[0];
+  var m = c && c.message;
+  if (!m) return '';
+  if (typeof m.content === 'string' && m.content.trim()) return m.content;
+  if (typeof m.reasoning_content === 'string') return m.reasoning_content;
+  return '';
+}
+function panelText(json) { return IS_COMPATIBLE ? extractChatText(json) : extractText(json); }
+
+// Build the request for whichever shape the provider speaks.
+function panelRequest(systemMsg, userPrompt, wantSearch) {
+  if (IS_COMPATIBLE) {
+    return {
+      url: PANEL_BASE_URL + '/chat/completions',
+      // NO temperature unless explicitly asked for. Reasoning models reject a
+      // custom value outright — a live test against gpt-5.5 returned HTTP 400
+      // "does not support 0.2 with this model", and DeepSeek-R1 and its distills
+      // behave the same way. Those are exactly the free models this adapter
+      // exists to enable, so a hardcoded temperature would have broken the main
+      // use case. Omitting it is accepted everywhere; set MIRO_PANEL_TEMPERATURE
+      // only for a model known to allow it.
+      body: Object.assign({
+        model: PANEL_MODEL,
+        messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userPrompt }],
+        stream: false
+      }, PANEL_TEMPERATURE == null ? {} : { temperature: PANEL_TEMPERATURE })
+    };
+  }
+  var body = {
+    model: PANEL_MODEL,
+    input: [{ role: 'system', content: systemMsg }, { role: 'user', content: userPrompt }]
+  };
+  if (wantSearch) {
+    body.tools = [{ type: 'web_search', search_context_size: 'low' }];
+    body.tool_choice = 'auto';
+  }
+  return { url: PANEL_BASE_URL + '/responses', body: body };
+}
+function panelHeaders() {
+  var h = { 'Content-Type': 'application/json' };
+  if (PANEL_KEY) h['Authorization'] = 'Bearer ' + PANEL_KEY;
+  return h;
+}
+
 // Strip ```json fences and parse the first JSON object found.
 function parseLooseJson(raw) {
   var s = String(raw).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -246,9 +325,17 @@ async function runPanel(markets, config) {
   var usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
   var calls = 0;
 
-  if (!OPENAI_KEY) {
-    console.log('OPENAI_API_KEY not set — skipping scenario panel (markets written implied-only).');
+  // A local endpoint needs no key, so the guard asks whether THIS provider needs
+  // one rather than always demanding OPENAI_API_KEY.
+  if (PANEL_KEY_REQUIRED && !PANEL_KEY) {
+    console.log((IS_COMPATIBLE ? 'MIRO_PANEL_API_KEY' : 'OPENAI_API_KEY') +
+      ' not set — skipping scenario panel (markets written implied-only).');
     return { reads: readsBySlug, usage: usage, calls: calls };
+  }
+  // Hosted web_search exists only on OpenAI's /v1/responses. Say so rather than
+  // silently producing ungrounded reads while config still claims grounding.
+  if (IS_COMPATIBLE && config.panel.webSearch) {
+    console.log('NOTE: provider "' + PANEL_PROVIDER + '" has no hosted web_search — running ungrounded.');
   }
 
   var list = markets.map(function (m) {
@@ -257,7 +344,8 @@ async function runPanel(markets, config) {
   }).join('\n');
 
   var personas = config.panel.personas;
-  console.log('Running scenario panel: ' + personas.length + ' personas x ' + markets.length + ' markets via ' + OPENAI_MODEL + '...');
+  console.log('Running scenario panel: ' + personas.length + ' personas x ' + markets.length +
+    ' markets via ' + PANEL_MODEL_LABEL + ' @ ' + PANEL_BASE_URL + '...');
 
   for (var i = 0; i < personas.length; i++) {
     var p = personas[i];
@@ -273,28 +361,25 @@ async function runPanel(markets, config) {
       'Return STRICT JSON only — an object keyed by the exact slug string, each value a single number ' +
       'between 0 and 1 (your probability the market resolves YES). No prose, no code fences, no extra keys.';
 
-    var body = {
-      model: OPENAI_MODEL,
-      input: [
-        { role: 'system', content: 'You are a calibrated probabilistic forecaster. Avoid overconfidence. Return strict JSON only. Never give financial advice.' },
-        { role: 'user', content: prompt }
-      ]
-    };
-    if (config.panel.webSearch) {
-      body.tools = [{ type: 'web_search', search_context_size: 'low' }];
-      body.tool_choice = 'auto';
-    }
+    // web_search only ever applies on the 'openai' provider; panelRequest ignores
+    // the flag otherwise, so a stale `webSearch: true` cannot produce a body a
+    // compatible endpoint would reject.
+    var req = panelRequest(
+      'You are a calibrated probabilistic forecaster. Avoid overconfidence. Return strict JSON only. Never give financial advice.',
+      prompt,
+      !IS_COMPATIBLE && config.panel.webSearch
+    );
 
     try {
-      var res = await fetchRetry('https://api.openai.com/v1/responses', {
+      var res = await fetchRetry(req.url, {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + OPENAI_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }, 'OpenAI(' + p.id + ')');
+        headers: panelHeaders(),
+        body: JSON.stringify(req.body)
+      }, PANEL_PROVIDER + '(' + p.id + ')');
       var text = await res.text();
       if (!res.ok) { console.log('  persona ' + p.id + ' HTTP ' + res.status + ' — skipped: ' + text.slice(0, 160)); continue; }
       var pj = JSON.parse(text);
-      var map = parseLooseJson(extractText(pj));
+      var map = parseLooseJson(panelText(pj));
       usage = addUsage(usage, extractUsage(pj));   // count tokens even if parse below is partial
       calls += 1;
       var got = 0;
@@ -405,7 +490,8 @@ async function main() {
   var meta = {
     scenarioVersion: SCENARIO_VERSION,
     journalVersion: JOURNAL_VERSION,
-    model: (OPENAI_KEY && !NO_OPENAI && !controlPaused) ? OPENAI_MODEL : 'none',
+    model: ((!PANEL_KEY_REQUIRED || PANEL_KEY) && !NO_OPENAI && !controlPaused) ? PANEL_MODEL_LABEL : 'none',
+    panelProvider: PANEL_PROVIDER,
     llmPaused: controlPaused,
     llmPausedSource: controlPaused ? 'briefings-bob/miro-control' : '',
     priceSource: 'polymarket-clob-book (mid); gamma outcomePrices fallback',
@@ -451,7 +537,7 @@ async function main() {
     await writeDoc(db, dateKey, doc);
     console.log('\nWrote briefings-bob/miro-' + dateKey + ' and miro-latest = ' + dateKey + '.');
     // Record the panel's token usage to the shared LLM cost ledger (no-throw).
-    if (panel.calls > 0) await recordUsage(db, 'miro-panel', OPENAI_MODEL, panel.usage, dateKey, panel.calls);
+    if (panel.calls > 0) await recordUsage(db, 'miro-panel', PANEL_MODEL_LABEL, panel.usage, dateKey, panel.calls);
   }
 
   // ── Lane 3: resolution journal (Brier ours vs market price) ──
@@ -499,7 +585,18 @@ async function main() {
         mid: m.mid, haircutProb: m.haircutProb, endDate: m.endDate, asOf: dateKey };
     });
 
-  var journalBody = buildMiroJournal(priorJournal, todaySnapshots, todayPrices, resolutions, CONFIG);
+  // The forecaster stamp must record what ACTUALLY ran, not what config says:
+  // provider, model and base URL are all env-overridable, so a stamp read
+  // straight from CONFIG would mislabel every run that overrode them — and a
+  // prediction is scored months later, when nobody can reconstruct which it was.
+  var effectiveConfig = Object.assign({}, CONFIG, {
+    panel: Object.assign({}, CONFIG.panel, {
+      model: PANEL_MODEL_LABEL,
+      provider: PANEL_PROVIDER,
+      webSearch: !IS_COMPATIBLE && CONFIG.panel.webSearch
+    })
+  });
+  var journalBody = buildMiroJournal(priorJournal, todaySnapshots, todayPrices, resolutions, effectiveConfig);
   var journalDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: dateKey, meta: meta }, journalBody);
   if (DRY_RUN) {
     console.log('--dry-run: NOT writing miro-journal.');

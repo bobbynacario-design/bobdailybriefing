@@ -82,6 +82,25 @@ var EDGE_GATE = {
 // calibrated blender. Each persona = one OpenAI call/run, so this is the cost lever.
 var PANEL = {
   model: 'gpt-5.5',  // overridable via OPENAI_MODEL; reuses the radar's OpenAI integration
+
+  // Which API shape to speak. Everything here is overridable by env so a model
+  // can be swapped for one run without editing config.
+  //
+  //   'openai'     — api.openai.com /v1/responses. The only provider offering a
+  //                  HOSTED web_search tool, which is why it is still the default.
+  //   'compatible' — any OpenAI-compatible /v1/chat/completions endpoint. Covers
+  //                  local Ollama, DeepSeek, Qwen/DashScope, GLM/Zhipu, Kimi and
+  //                  OpenRouter. No hosted search on any of them — which costs
+  //                  nothing now that webSearch is already off.
+  //
+  // Env: MIRO_PANEL_PROVIDER / MIRO_PANEL_BASE_URL / MIRO_PANEL_MODEL /
+  //      MIRO_PANEL_API_KEY. Local Ollama needs no key.
+  //   Ollama    MIRO_PANEL_PROVIDER=compatible MIRO_PANEL_MODEL=qwen2.5:14b
+  //   DeepSeek  MIRO_PANEL_PROVIDER=compatible MIRO_PANEL_BASE_URL=https://api.deepseek.com/v1
+  //             MIRO_PANEL_MODEL=deepseek-chat MIRO_PANEL_API_KEY=sk-...
+  provider: 'openai',
+  baseUrl: '',                              // blank = the provider's default
+  compatibleDefaultBaseUrl: 'http://localhost:11434/v1',   // Ollama on this box
   // web_search OFF (2026-07-28). The panel was paused on 2026-06-30 purely on
   // cost, and the ledger shows the cost was the SEARCH, not the model: 26 calls
   // averaged ~43.8k input tokens each for a prompt that is only a persona brief

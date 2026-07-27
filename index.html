@@ -5613,7 +5613,14 @@ var LLM_PRICING_USD_PER_1K = {
 var LLM_RATES_AS_OF = '2026-06-23';
 // OpenAI counts cached tokens as a subset of input tokens (billed cheaper), so
 // charge (input - cached) at the input rate + cached at the cache-read rate.
+// A model served from this machine has no API cost, so it is priced at a true
+// zero rather than left "unpriced" — which would wrongly imply the rate is merely
+// unknown and drop it from the total. The refresh scripts prefix any local
+// endpoint's model with "local/", so the prefix IS the evidence. (Electricity is
+// real but outside what this ledger models, and is noted on the Help tab.)
+var LLM_LOCAL_PREFIX = 'local/';
 function llmPriceUsd(model, e) {
+  if (String(model || '').indexOf(LLM_LOCAL_PREFIX) === 0) return 0;
   var r = LLM_PRICING_USD_PER_1K[model];
   if (!r) return null; // unknown or intentionally-unpriced
   var cached = e.cachedTokens || 0;
@@ -5682,6 +5689,8 @@ function renderLlmUsage() {
       (since ? 'Since ' + esc(String(since).slice(0, 10)) + ' · ' : '') +
       'rates as of ' + LLM_RATES_AS_OF + ' (gpt-5.5 $5/$30 per 1M in/out, $0.50 cached)' +
       (anyUnpriced ? ' · deep-research shown unpriced (rates unconfirmed — never guessed)' : '') +
+      (rows.some(function (r) { return String(r.model || '').indexOf(LLM_LOCAL_PREFIX) === 0; })
+        ? ' · local/* models run on your own machine and cost $0 in API terms (electricity is not modelled here)' : '') +
       ' · raw API cost, no markup.</div>';
     out.innerHTML = html;
   });
