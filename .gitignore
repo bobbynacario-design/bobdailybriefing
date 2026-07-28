@@ -23,3 +23,6 @@ sports/.env
 sports/refresh.log
 sports/refresh-*.log
 sports/run-history.json
+
+# local re-tagger backup of original briefing JSON (never commit user content)
+radar/retag-backup.json
