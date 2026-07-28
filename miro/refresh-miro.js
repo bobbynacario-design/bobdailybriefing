@@ -88,6 +88,18 @@ function isLocalEndpoint(u) { return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\
 // Opt-in only — see panelRequest for why a default value is unsafe.
 var PANEL_TEMPERATURE = process.env.MIRO_PANEL_TEMPERATURE != null && process.env.MIRO_PANEL_TEMPERATURE !== ''
   ? Number(process.env.MIRO_PANEL_TEMPERATURE) : null;
+
+// Constrained JSON output. Small local models are the reason: qwen2.5:7b returned
+// 41/45 reads and silently dropped whole slugs, including the highest-edge market.
+// json_object mode forces syntactically valid JSON, which removes the fenced and
+// truncated-output failure modes. It canNOT fix a model that simply omits keys, so
+// this is a partial mitigation and the read counts still have to be watched.
+//
+// ON by default for compatible providers, but NOT trusted: `panelJsonMode` is
+// switched off for the rest of the run if a provider rejects it (see runPanel).
+// Set MIRO_PANEL_JSON_MODE=0 to disable outright.
+var PANEL_JSON_MODE = process.env.MIRO_PANEL_JSON_MODE === '0' ? false : true;
+var panelJsonMode = PANEL_JSON_MODE;   // mutable: cleared on a provider rejection
 var PANEL_KEY_REQUIRED = !IS_COMPATIBLE || !isLocalEndpoint(PANEL_BASE_URL);
 
 // What the cost ledger and the journal record. A hosted model is keyed by its own
@@ -286,7 +298,11 @@ function panelRequest(systemMsg, userPrompt, wantSearch) {
         model: PANEL_MODEL,
         messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userPrompt }],
         stream: false
-      }, PANEL_TEMPERATURE == null ? {} : { temperature: PANEL_TEMPERATURE })
+      },
+      PANEL_TEMPERATURE == null ? {} : { temperature: PANEL_TEMPERATURE },
+      // Both prompts already contain the word "JSON", which OpenAI's json_object
+      // mode requires; without it the request is rejected.
+      panelJsonMode ? { response_format: { type: 'json_object' } } : {})
     };
   }
   var body = {
@@ -377,6 +393,31 @@ async function runPanel(markets, config) {
         body: JSON.stringify(req.body)
       }, PANEL_PROVIDER + '(' + p.id + ')');
       var text = await res.text();
+
+      // Not every compatible provider accepts response_format. Rather than lose
+      // the persona, drop the constraint for the REST of the run and retry once.
+      // Learned the hard way from temperature: an unsupported optional parameter
+      // must degrade, not fail the call.
+      // Scoped to IS_COMPATIBLE because response_format is only ever sent there;
+      // without that guard a 400 on the OpenAI path whose message merely contains
+      // "format" would trigger a pointless retry.
+      if (!res.ok && IS_COMPATIBLE && panelJsonMode && res.status === 400 &&
+          /response_format|json_object/i.test(text)) {
+        console.log('  provider rejected response_format — disabling JSON mode for this run.');
+        panelJsonMode = false;
+        req = panelRequest(
+          'You are a calibrated probabilistic forecaster. Avoid overconfidence. Return strict JSON only. Never give financial advice.',
+          prompt,
+          !IS_COMPATIBLE && config.panel.webSearch
+        );
+        res = await fetchRetry(req.url, {
+          method: 'POST',
+          headers: panelHeaders(),
+          body: JSON.stringify(req.body)
+        }, PANEL_PROVIDER + '(' + p.id + ' retry)');
+        text = await res.text();
+      }
+
       if (!res.ok) { console.log('  persona ' + p.id + ' HTTP ' + res.status + ' — skipped: ' + text.slice(0, 160)); continue; }
       var pj = JSON.parse(text);
       var map = parseLooseJson(panelText(pj));

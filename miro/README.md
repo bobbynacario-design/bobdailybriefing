@@ -144,6 +144,16 @@ node refresh-miro.js --dry-run
 
 Four things worth knowing:
 
+- **JSON mode is on by default for `compatible`, and it is only a partial fix.**
+  `response_format: {type:'json_object'}` guarantees syntactically valid output,
+  which removes fenced and truncated responses. Measured on `qwen2.5:7b`: total
+  reads were **unchanged at 41/45**, but no market fell to *zero* reads any more
+  — without it, "No Fed rate hikes in 2026" (the highest-edge market) was dropped
+  by all five personas and rendered `panel n/a`. It costs ~46% more wall time
+  (255s → 372s) and does **not** reduce dispersion, because omitting a key and
+  guessing badly are different failures. Disable with `MIRO_PANEL_JSON_MODE=0`.
+  If a provider rejects the parameter the run drops it and retries once, rather
+  than losing the persona.
 - **No temperature is sent unless you set one.** A live test against `gpt-5.5`
   returned HTTP 400 — *"'temperature' does not support 0.2 with this model"* — and
   DeepSeek-R1 and its distills behave the same way. Those are exactly the free
