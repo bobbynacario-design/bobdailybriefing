@@ -47,6 +47,7 @@ var PROJECT_ID = 'pokerhq-a67e4';
 var COLL = 'briefings-bob';
 var FOOTBALL_DATA = 'https://api.football-data.org/v4';
 var ESPN_NBA = 'https://site.api.espn.com/apis';
+var ESPN_TENNIS = 'https://site.api.espn.com/apis/site/v2/sports/tennis';
 var PVL_SITE = 'https://www.pvl.ph';
 var FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
 var FOLLOW_TEAMS = (process.env.SPORTS_FOLLOW_TEAMS || '')
@@ -1574,8 +1575,9 @@ function activeSportsList() {
   var out = [];
   if (wantsModule('nba')) out.push('nba');
   if (wantsModule('pvl')) out.push('pvl');
+  if (wantsModule('tennis')) out.push('tennis');
   if (wantsModule('worldcup')) out.push('worldcup');
-  if (!out.length || wantsModule('all')) out = ['nba', 'pvl', 'worldcup'];
+  if (!out.length || wantsModule('all')) out = ['nba', 'pvl', 'tennis', 'worldcup'];
   return out;
 }
 
@@ -1830,13 +1832,301 @@ async function fetchPvlModule() {
   };
 }
 
+// ── Tennis: Grand Slams + Masters 1000 (ATP + WTA), ESPN public feed ──────────
+// A Slam is ONE ESPN event carrying every draw (Men's/Women's Singles + doubles);
+// each match has round.{id,displayName}, competitor.winner/seed, and per-set
+// linescores. The draw reconstructs into a bracket straight from the feed — no
+// hardcoded map, same principle as the FIFA knockout bracket. Singles only.
+var TENNIS_SLAMS = [
+  { token: 'australian open', surface: 'Hard' },
+  { token: 'roland garros', surface: 'Clay' },
+  { token: 'french open', surface: 'Clay' },
+  { token: 'wimbledon', surface: 'Grass' },
+  { token: 'us open', surface: 'Hard' }
+];
+// ESPN names carry sponsors/cities, so match on distinctive tokens. Slams are
+// checked first so Roland Garros never falls through to a "paris" Masters token.
+var TENNIS_MASTERS = [
+  { token: 'indian wells', surface: 'Hard' },
+  { token: 'miami open', surface: 'Hard' },
+  { token: 'monte-carlo', surface: 'Clay' },
+  { token: 'monte carlo', surface: 'Clay' },
+  { token: 'madrid', surface: 'Clay' },
+  { token: 'internazionali bnl', surface: 'Clay' },
+  { token: 'italian open', surface: 'Clay' },
+  { token: 'rome', surface: 'Clay' },
+  { token: 'canadian open', surface: 'Hard' },
+  { token: 'national bank open', surface: 'Hard' },
+  { token: 'rogers cup', surface: 'Hard' },
+  { token: 'cincinnati', surface: 'Hard' },
+  { token: 'western & southern', surface: 'Hard' },
+  { token: 'shanghai', surface: 'Hard' },
+  { token: 'paris masters', surface: 'Hard (indoor)' },
+  { token: 'rolex paris', surface: 'Hard (indoor)' }
+];
+
+function classifyTennis(name) {
+  var n = String(name || '').toLowerCase();
+  for (var i = 0; i < TENNIS_SLAMS.length; i++) {
+    if (n.indexOf(TENNIS_SLAMS[i].token) !== -1) return { tier: 'slam', surface: TENNIS_SLAMS[i].surface };
+  }
+  for (var j = 0; j < TENNIS_MASTERS.length; j++) {
+    if (n.indexOf(TENNIS_MASTERS[j].token) !== -1) return { tier: 'masters1000', surface: TENNIS_MASTERS[j].surface };
+  }
+  return { tier: 'other', surface: '' };
+}
+
+async function espnTennis(tour, dates) {
+  var url = ESPN_TENNIS + '/' + tour + '/scoreboard?dates=' + dates + '&limit=1000';
+  var res = await fetchRetry(url, {
+    headers: { 'accept': 'application/json', 'user-agent': 'BobDailyBriefing/1.0' }
+  }, 'ESPN tennis ' + tour);
+  if (!res.ok) throw new Error('ESPN tennis ' + tour + ' ' + res.status + ': ' + (await res.text()).slice(0, 200));
+  return res.json();
+}
+
+function tennisMatchStatus(comp) {
+  var t = (comp && comp.status && comp.status.type) || {};
+  if (t.completed === true || t.state === 'post') return 'FINISHED';
+  if (t.state === 'in') return 'LIVE';
+  return 'SCHEDULED';
+}
+
+function tennisPlayer(competitor) {
+  var ath = (competitor && competitor.athlete) || {};
+  var name = ath.displayName || ath.shortName || '';
+  if (!name) return null; // doubles teams / empty slots carry no athlete — skip
+  var sets = (competitor.linescores || []).map(function (ls) {
+    return { g: ls.value == null ? null : Math.round(ls.value), tb: ls.tiebreak == null ? null : ls.tiebreak };
+  });
+  return {
+    name: name,
+    seed: competitor.seed == null ? null : competitor.seed,
+    winner: competitor.winner === true,
+    sets: sets
+  };
+}
+
+function normTennisMatch(comp) {
+  var players = (comp.competitors || []).map(tennisPlayer);
+  if (players.length !== 2 || !players[0] || !players[1]) return null; // singles only
+  var round = comp.round || {};
+  return {
+    id: comp.id,
+    roundId: Number(round.id) || 0,
+    round: round.displayName || '',
+    status: tennisMatchStatus(comp),
+    date: comp.date || comp.startDate || '',
+    players: players
+  };
+}
+
+// Group a singles grouping's matches into rounds, keep the latter stages (bounds
+// the Firestore payload — a full 128-draw is ~127 matches per draw), and read the
+// champion off the Final.
+function buildTennisDraw(comps) {
+  // Qualifying rounds live in the same grouping but carry HIGHER round ids than
+  // the main Final (e.g. 11/12/14 vs Final=7), so they must be dropped before the
+  // bracket/champion is read — otherwise "Qualifying Final" is mistaken for the
+  // title match.
+  var matches = (comps || []).map(normTennisMatch).filter(Boolean)
+    .filter(function (m) { return !/qualif/i.test(m.round); });
+  var byRound = {};
+  matches.forEach(function (m) {
+    if (!byRound[m.roundId]) byRound[m.roundId] = { id: m.roundId, name: m.round, matches: [] };
+    byRound[m.roundId].matches.push(m);
+  });
+  var rounds = Object.keys(byRound).map(function (k) { return byRound[k]; })
+    .sort(function (a, b) { return a.id - b.id; });
+  var champion = null, runnerUp = null, finalStatus = '';
+  var finalRound = rounds.filter(function (r) { return /^final$/i.test(r.name); })[0] || rounds[rounds.length - 1];
+  if (finalRound && /final/i.test(finalRound.name) && finalRound.matches.length) {
+    var fm = finalRound.matches[0];
+    finalStatus = fm.status;
+    if (fm.status === 'FINISHED') {
+      var w = fm.players.filter(function (p) { return p.winner; })[0];
+      var l = fm.players.filter(function (p) { return !p.winner; })[0];
+      champion = w ? w.name : null;
+      runnerUp = l ? l.name : null;
+    }
+  }
+  return {
+    rounds: rounds.slice(-5), // R16 → Final for a slam
+    roundsTotal: rounds.length,
+    champion: champion,
+    runnerUp: runnerUp,
+    finalStatus: finalStatus
+  };
+}
+
+function normTennisEvent(event) {
+  var cls = classifyTennis(event && event.name);
+  if (cls.tier === 'other') return null; // ignore 250/500-level events
+  var groupings = event.groupings || [];
+  function drawFor(label) {
+    var g = groupings.filter(function (gr) {
+      return String((gr.grouping || {}).displayName || '').toLowerCase() === label;
+    })[0];
+    return g && (g.competitions || []).length ? buildTennisDraw(g.competitions) : null;
+  }
+  var men = drawFor("men's singles");
+  var women = drawFor("women's singles");
+  var tour = (men && women) ? 'combined' : (men ? 'ATP' : (women ? 'WTA' : 'combined'));
+  return {
+    id: event.id,
+    name: event.name,
+    tier: cls.tier,
+    surface: cls.surface,
+    tour: tour,
+    startDate: event.date || '',
+    draws: { men: men, women: women }
+  };
+}
+
+// Collect classified tournaments across both tours, keyed by event id so a
+// combined Slam (both draws in one event) isn't duplicated; merge a WTA-feed
+// women's draw into an already-seen event when the id matches.
+function collectTennis(atpEvents, wtaEvents) {
+  var byId = {}, order = [];
+  function add(event) {
+    var t = normTennisEvent(event);
+    if (!t) return;
+    if (byId[t.id]) {
+      var ex = byId[t.id];
+      if (!ex.draws.men && t.draws.men) ex.draws.men = t.draws.men;
+      if (!ex.draws.women && t.draws.women) ex.draws.women = t.draws.women;
+      ex.tour = (ex.draws.men && ex.draws.women) ? 'combined' : (ex.draws.men ? 'ATP' : 'WTA');
+    } else {
+      byId[t.id] = t;
+      order.push(t.id);
+    }
+  }
+  (atpEvents || []).forEach(add);
+  (wtaEvents || []).forEach(add);
+  return order.map(function (id) { return byId[id]; });
+}
+
+function tennisTournamentTiming(t) {
+  var draws = [t.draws.men, t.draws.women].filter(Boolean);
+  var anyLive = false, anyFinal = false, anyScheduled = false, lastDate = '', firstDate = '';
+  draws.forEach(function (d) {
+    (d.rounds || []).forEach(function (r) {
+      r.matches.forEach(function (m) {
+        if (m.status === 'LIVE') anyLive = true;
+        if (m.status === 'FINISHED') anyFinal = true;
+        if (m.status === 'SCHEDULED') anyScheduled = true;
+        if (m.date && (!lastDate || m.date > lastDate)) lastDate = m.date;
+        if (m.date && (!firstDate || m.date < firstDate)) firstDate = m.date;
+      });
+    });
+  });
+  var completed = draws.length > 0 && draws.every(function (d) { return d.finalStatus === 'FINISHED'; });
+  var status;
+  if (anyLive) status = 'live';                        // a match is in progress
+  else if (completed) status = 'completed';            // every draw's final is done
+  else if (anyFinal && anyScheduled) status = 'live';  // mid-tournament (some played, some to come)
+  else if (anyScheduled && !anyFinal) status = 'upcoming'; // draw posted, nothing played yet
+  else if (anyFinal && !anyScheduled) status = 'completed';
+  else status = 'upcoming';
+  return { status: status, firstDate: firstDate, lastDate: lastDate, completed: completed };
+}
+
+function pickTennisTier(tournaments, tier, nowMs) {
+  var list = tournaments.filter(function (t) { return t.tier === tier; });
+  list.forEach(function (t) {
+    var tm = tennisTournamentTiming(t);
+    t.lastDate = tm.lastDate || t.startDate;
+    t.firstDate = tm.firstDate || t.startDate;
+    // No draw posted yet → decide by start date.
+    if (!tm.firstDate && t.startDate) {
+      t.status = new Date(t.startDate).getTime() > nowMs ? 'upcoming' : tm.status;
+    } else {
+      t.status = tm.status;
+    }
+    if (t.status === 'upcoming' && t.startDate) {
+      t.countdownDays = Math.max(0, Math.round((new Date(t.startDate).getTime() - nowMs) / 86400000));
+    }
+  });
+  var live = list.filter(function (t) { return t.status === 'live'; });
+  var upcoming = list.filter(function (t) { return t.status === 'upcoming'; })
+    .sort(function (a, b) { return new Date(a.startDate) - new Date(b.startDate); });
+  var completed = list.filter(function (t) { return t.status === 'completed'; })
+    .sort(function (a, b) { return new Date(b.lastDate || b.startDate) - new Date(a.lastDate || a.startDate); });
+  return {
+    current: live[0] || upcoming[0] || null,
+    next: upcoming[0] || null,
+    recent: completed.slice(0, 2)
+  };
+}
+
+async function fetchTennisModule() {
+  var now = new Date();
+  var dates = dateKeyUtc(shiftedDate(now, -150)) + '-' + dateKeyUtc(shiftedDate(now, 90));
+  var results = await Promise.all([
+    espnTennis('atp', dates).catch(function (e) { console.warn('ATP fetch failed:', e.message || e); return null; }),
+    espnTennis('wta', dates).catch(function (e) { console.warn('WTA fetch failed:', e.message || e); return null; })
+  ]);
+  var atp = (results[0] && results[0].events) || [];
+  var wta = (results[1] && results[1].events) || [];
+  if (!atp.length && !wta.length) throw new Error('ESPN tennis returned no events for ' + dates + '.');
+  var tournaments = collectTennis(atp, wta);
+  var nowMs = now.getTime();
+  var slam = pickTennisTier(tournaments, 'slam', nowMs);
+  var masters = pickTennisTier(tournaments, 'masters1000', nowMs);
+  var phase = (slam.current && slam.current.status === 'live') ? 'grand slam live'
+    : (masters.current && masters.current.status === 'live') ? 'masters 1000 live'
+    : 'between events';
+  var generatedAt = new Date().toISOString();
+  return {
+    enabled: true,
+    kind: 'tennis',
+    title: 'Tennis — Majors & Masters',
+    phase: phase,
+    provider: 'ESPN tennis feed',
+    providerNote: 'ATP and WTA singles draws for the Grand Slams and Masters 1000 events, from ESPN\'s public tennis feed. Brackets, seeds and scores are reconstructed round-by-round. Results and research only.',
+    asOf: phtDateKey(),
+    generatedAt: generatedAt,
+    refreshAttemptedAt: generatedAt,
+    lastSuccessfulAt: generatedAt,
+    refreshStatus: 'ok',
+    fallback: false,
+    staleAfterHours: (phase === 'between events') ? 168 : 12,
+    tiers: { slam: slam, masters: masters }
+  };
+}
+
+function buildTennisModule() {
+  var m = emptyModule(
+    'tennis',
+    'Tennis — Majors & Masters',
+    'feed unavailable',
+    'ESPN tennis feed',
+    'Tennis data is temporarily unavailable. The refresh job will keep the last good snapshot when one exists.'
+  );
+  m.tiers = {
+    slam: { current: null, next: null, recent: [] },
+    masters: { current: null, next: null, recent: [] }
+  };
+  return m;
+}
+
+function tennisModuleHasData(mod) {
+  if (!mod || !mod.tiers) return false;
+  return ['slam', 'masters'].some(function (k) {
+    var tier = mod.tiers[k] || {};
+    return tier.current || (tier.recent && tier.recent.length);
+  });
+}
+
 function buildForwardModules(reason) {
   var modules = {};
   if (wantsModule('nba')) modules.nba = buildNbaModule();
   if (wantsModule('pvl')) modules.pvl = buildPvlModule();
+  if (wantsModule('tennis')) modules.tennis = buildTennisModule();
   if (wantsModule('all')) {
     if (!modules.nba) modules.nba = buildNbaModule();
     if (!modules.pvl) modules.pvl = buildPvlModule();
+    if (!modules.tennis) modules.tennis = buildTennisModule();
   }
   Object.keys(modules).forEach(function (k) {
     modules[k].setupNote = reason || '';
@@ -1986,7 +2276,7 @@ async function main() {
   };
   // Module-specific refreshes share one Firestore/public document. Preserve the
   // other forward lane so a scheduled PVL run cannot erase NBA (and vice versa).
-  ['nba', 'pvl'].forEach(function (key) {
+  ['nba', 'pvl', 'tennis'].forEach(function (key) {
     if (!wantsModule(key) && prevDocData && prevDocData.modules && prevDocData.modules[key]) {
       doc.modules[key] = prevDocData.modules[key];
     }
@@ -2038,6 +2328,31 @@ async function main() {
       } else {
         doc.modules.pvl = buildPvlModule();
         doc.modules.pvl.setupNote = 'PVL fetch failed: ' + (e.message || e);
+      }
+    }
+  }
+  if (wantsModule('tennis')) {
+    try {
+      doc.modules.tennis = await fetchTennisModule();
+      var ts = doc.modules.tennis.tiers;
+      console.log('Tennis: slam current=' + ((ts.slam.current && ts.slam.current.name) || 'none') +
+        ', masters current=' + ((ts.masters.current && ts.masters.current.name) || 'none') +
+        ', recent slams=' + ts.slam.recent.length + ', recent masters=' + ts.masters.recent.length + '.');
+    } catch (e) {
+      console.warn('Tennis fetch failed:', e.message || e);
+      var priorTennis = prevDocData && prevDocData.modules && prevDocData.modules.tennis;
+      if (tennisModuleHasData(priorTennis)) {
+        doc.modules.tennis = priorTennis;
+        doc.modules.tennis.lastSuccessfulAt = priorTennis.lastSuccessfulAt || priorTennis.generatedAt || '';
+        doc.modules.tennis.refreshAttemptedAt = new Date().toISOString();
+        doc.modules.tennis.refreshStatus = 'fallback';
+        doc.modules.tennis.fallback = true;
+        doc.modules.tennis.staleAfterHours = priorTennis.staleAfterHours || 168;
+        doc.modules.tennis.providerNote = 'Showing the last good tennis snapshot because the current refresh failed: ' + (e.message || e);
+        console.warn('Tennis: retained the last good module snapshot.');
+      } else {
+        doc.modules.tennis = buildTennisModule();
+        doc.modules.tennis.setupNote = 'Tennis fetch failed: ' + (e.message || e);
       }
     }
   }
