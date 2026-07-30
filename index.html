@@ -839,11 +839,20 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-tourn-chip span{font-size:8px;text-transform:uppercase;letter-spacing:.05em;padding:.1rem .3rem;border-radius:4px;background:var(--bg2);color:var(--txt3)}
 .sports-tourn-chip.live span{color:var(--green)}
 .sports-tourn-chip.upcoming span{color:var(--gold)}
-.sports-bm-flag{font-family:var(--mono);font-size:8.5px;letter-spacing:.04em;text-transform:uppercase;margin-top:.4rem;padding-top:.35rem;border-top:1px solid var(--rim);color:var(--txt3)}
+.sports-bm-flag{font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;margin-top:.4rem;padding-top:.35rem;border-top:1px solid var(--rim);color:var(--txt3)}
 .sports-bm-flag.upset{color:var(--gold);font-weight:700}
 .sports-bm-flag.thriller{color:var(--green)}
 .sports-bm.notable:before{background:var(--gold)}
-.jlist .jrow .sports-bm-flag{margin:0;padding:0;border:0;flex:0 0 auto}
+.t-notes{display:flex;flex-direction:column;margin:.35rem 0 .3rem}
+.t-note{display:grid;grid-template-columns:136px 1fr auto;align-items:center;gap:.85rem;padding:.6rem .2rem;border-bottom:1px solid var(--rim)}
+.t-note:last-child{border-bottom:0}
+.t-note-flag{font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;font-weight:700;color:var(--txt3)}
+.t-note-flag.upset{color:var(--gold)}
+.t-note-flag.thriller{color:var(--green)}
+.t-note-txt{font-size:14px;color:var(--txt2);line-height:1.45;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-note-txt b{color:var(--txt);font-weight:700}
+.t-note-rd{font-family:var(--mono);font-size:10.5px;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+@media(max-width:560px){.t-note{grid-template-columns:1fr auto;gap:.35rem .7rem}.t-note-flag{grid-column:1/-1}.t-note-txt{white-space:normal}}
 .sports-kpi{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.85rem 1rem}
 .sports-kpi-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
 .sports-kpi-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
@@ -5404,11 +5413,11 @@ function tennisNotableStrip(draw, bestOf) {
   if (!items.length) return '';
   items.sort(function (a, b) { return (a.n.kind === 'upset' ? 0 : 1) - (b.n.kind === 'upset' ? 0 : 1); });
   var rows = items.slice(0, 6).map(function (it) {
-    return '<div class="jrow"><span class="sports-bm-flag ' + it.n.kind + '">' + esc(it.n.txt) + '</span>' +
-      '<span class="jrow-sym">' + esc(it.w) + '</span><span class="decision-mini">beat ' + esc(it.l) + '</span>' +
-      '<span class="jrow-date">' + esc(it.round) + '</span></div>';
+    return '<div class="t-note"><span class="t-note-flag ' + it.n.kind + '">' + esc(it.n.txt) + '</span>' +
+      '<span class="t-note-txt"><b>' + esc(it.w) + '</b> beat ' + esc(it.l) + '</span>' +
+      '<span class="t-note-rd">' + esc(it.round) + '</span></div>';
   }).join('');
-  return '<div class="journal-section">Notable results — what to notice</div><div class="jlist">' + rows + '</div>';
+  return '<div class="journal-section">Notable results — what to notice</div><div class="t-notes">' + rows + '</div>';
 }
 function tennisChampRow(t) {
   var m = (t.draws && t.draws.men && t.draws.men.champion) || '';
