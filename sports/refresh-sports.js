@@ -2467,5 +2467,10 @@ export {
   buildTeamProfiles,
   buildModuleChanges,
   scheduleReadiness,
-  buildPvlMomentum
+  buildPvlMomentum,
+  classifyTennis,
+  buildTennisDraw,
+  normTennisEvent,
+  tennisTournamentTiming,
+  pickTennisTier
 };

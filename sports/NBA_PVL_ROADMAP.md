@@ -339,3 +339,37 @@ Complete the three-distinct-day reliability trial for PVL, then install its
 guarded schedule. Keep NBA weekly/manual during the offseason. The next product
 work after operations stabilize is PVL stage/bracket support and configurable NBA
 star/rookie watchlists.
+
+## Module 3: Tennis — Majors & Masters (shipped 2026-07-30)
+
+A third module, `--module tennis`, added alongside NBA/PVL. Unlike the team
+leagues it is tournament/draw-shaped, so it does NOT use the generic
+standings/momentum renderer — it has a bespoke UI on both `index.html` and the
+public `sports.html`.
+
+- **Source:** ESPN public tennis feed (ATP league id 851, WTA id 900), free and
+  key-less — same provider family as NBA. `fetchTennisModule()` fetches both
+  tours over a −150…+90 day window.
+- **Data shape:** `modules.tennis.tiers.{slam,masters}`, each with
+  `current`/`next`/`recent[]` tournaments. A tournament carries per-tour singles
+  draws (`draws.men`/`draws.women`) as rounds→matches (seeds + per-set scores),
+  the champion read off the Final, plus status/countdown.
+- **Tier classification** is a curated name-token map (4 Slams + 9 Masters
+  1000), Slams checked first. Keep it current if event names change; the
+  `internazionali` token is intentionally `internazionali bnl` so the WTA-125
+  "Internazionali Femminili di Brescia" is not mis-tagged as a Masters.
+- **Gotchas found + guarded (unit-tested):** ESPN packs qualifying rounds into
+  the same grouping with HIGHER round ids than the main Final, so they are
+  dropped before the champion is read; a draw with only scheduled matches is
+  classified `upcoming`, not `live`; ESPN does not populate seeds on this feed,
+  so the "notable result" signal falls back from seed-upset to "went the
+  distance" (5th set best-of-5 / 3rd set best-of-3). Backend stores only the
+  last 5 rounds per draw (payload bound) — early-round upsets are not captured;
+  widening that is a future lane.
+- **UI:** a 🎾 Tennis tab with Grand Slams / Masters 1000 sub-tabs, an ATP/WTA
+  toggle, a tournament selector (drill into any completed bracket), and a
+  "Notable results" edge strip. Reuses the `.sports-bracket-*` / `.sports-bm-*`
+  chrome.
+- **Refresh:** manual for now (`node refresh-sports.js --module tennis`), same as
+  NBA/PVL. Best cadence once trialled: daily off-season, more often during a live
+  Slam/Masters.

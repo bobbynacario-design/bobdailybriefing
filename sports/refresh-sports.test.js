@@ -21,8 +21,32 @@ import {
   buildTeamProfiles,
   buildModuleChanges,
   scheduleReadiness,
-  buildPvlMomentum
+  buildPvlMomentum,
+  classifyTennis,
+  buildTennisDraw,
+  normTennisEvent,
+  tennisTournamentTiming
 } from './refresh-sports.js';
+
+function tComp(roundId, roundName, state, players) {
+  return {
+    id: roundName + '-' + roundId,
+    date: '2026-07-10T12:00:00Z',
+    round: { id: String(roundId), displayName: roundName },
+    status: { type: { state: state, completed: state === 'post' } },
+    competitors: players.map(function (p) {
+      return {
+        athlete: { displayName: p.name },
+        winner: !!p.winner,
+        seed: p.seed == null ? null : p.seed,
+        linescores: (p.sets || []).map(function (s) { return { value: s[0], tiebreak: s[1] == null ? null : s[1] }; })
+      };
+    })
+  };
+}
+function tEvent(name, comps) {
+  return { id: name, name: name, date: '2026-07-01T00:00:00Z', groupings: [{ grouping: { displayName: "Men's Singles" }, competitions: comps }] };
+}
 
 var fixtureDir = join(dirname(fileURLToPath(import.meta.url)), 'test-fixtures');
 function fixture(name) { return readFileSync(join(fixtureDir, name), 'utf8'); }
@@ -220,6 +244,57 @@ test('builds a concise refresh delta from results, fixtures and standings moveme
   });
   assert.equal(repeated.items.length, 4);
   assert.equal(repeated.since, '2026-07-20T00:00:00Z');
+});
+
+test('classifies tennis events into slam / masters1000 / other', function () {
+  assert.equal(classifyTennis('Wimbledon').tier, 'slam');
+  assert.equal(classifyTennis('Wimbledon').surface, 'Grass');
+  assert.equal(classifyTennis('US Open').tier, 'slam');
+  assert.equal(classifyTennis("Internazionali BNL d'Italia").tier, 'masters1000');
+  assert.equal(classifyTennis("Internazionali BNL d'Italia").surface, 'Clay');
+  // WTA-125 whose name shares the "internazionali" word must NOT be a Masters
+  assert.equal(classifyTennis('Internazionali Femminili di Brescia').tier, 'other');
+  assert.equal(classifyTennis('Mifel Tennis Open by Telcel Oppo').tier, 'other');
+});
+
+test('tennis draw reads the main-draw Final champion and drops qualifying rounds', function () {
+  var comps = [
+    tComp(7, 'Final', 'post', [
+      { name: 'Jannik Sinner', winner: true, sets: [[6], [6], [6]] },
+      { name: 'Alexander Zverev', winner: false, sets: [[3], [4], [4]] }
+    ]),
+    tComp(6, 'Semifinal', 'post', [
+      { name: 'Jannik Sinner', winner: true, sets: [[6], [6]] },
+      { name: 'Novak Djokovic', winner: false, sets: [[4], [4]] }
+    ]),
+    // qualifying carries a HIGHER round id than the Final — must not be read as the title
+    tComp(14, 'Qualifying Final', 'post', [
+      { name: 'Some Qualifier', winner: true, sets: [[6], [6]] },
+      { name: 'Other Qualifier', winner: false, sets: [[3], [3]] }
+    ])
+  ];
+  var draw = buildTennisDraw(comps);
+  assert.equal(draw.champion, 'Jannik Sinner');
+  assert.equal(draw.runnerUp, 'Alexander Zverev');
+  assert.equal(draw.finalStatus, 'FINISHED');
+  var names = draw.rounds.map(function (r) { return r.name; });
+  assert.ok(names.indexOf('Qualifying Final') < 0, 'qualifying round dropped');
+  assert.ok(names.indexOf('Final') >= 0);
+});
+
+test('tennis timing: only-scheduled is upcoming, a finished final is completed', function () {
+  var upcoming = normTennisEvent(tEvent('US Open', [
+    tComp(7, 'Final', 'pre', [{ name: 'A' }, { name: 'B' }]),
+    tComp(6, 'Semifinal', 'pre', [{ name: 'C' }, { name: 'D' }])
+  ]));
+  assert.equal(tennisTournamentTiming(upcoming).status, 'upcoming');
+  var done = normTennisEvent(tEvent('Wimbledon', [
+    tComp(7, 'Final', 'post', [
+      { name: 'A', winner: true, sets: [[6], [6]] },
+      { name: 'B', winner: false, sets: [[4], [4]] }
+    ])
+  ]));
+  assert.equal(tennisTournamentTiming(done).status, 'completed');
 });
 
 test('scheduler readiness requires successful refreshes on three distinct PHT days', function () {
