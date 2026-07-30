@@ -2095,17 +2095,94 @@ function pickTennisTier(tournaments, tier, nowMs) {
   };
 }
 
+// ── Projection: per-player win probability from ATP/WTA ranking points ────────
+// The tennis analog of the FIFA Elo→logistic model. ESPN publishes current
+// rankings with points; we map name→{rank,points} and turn a scheduled match
+// into a win probability via a logistic on the LOG-points gap (ranking points
+// are roughly log-distributed in skill terms). Capped 15–85% — even lopsided
+// tennis matches rarely price beyond that over a single best-of-3/5. A model
+// for framing, never advice; only attached to not-yet-finished matches so it is
+// never applied with hindsight to a known result.
+async function espnTennisRankings(tour) {
+  var url = ESPN_TENNIS + '/' + tour + '/rankings';
+  var res = await fetchRetry(url, {
+    headers: { 'accept': 'application/json', 'user-agent': 'BobDailyBriefing/1.0' }
+  }, 'ESPN tennis rankings ' + tour);
+  if (!res.ok) throw new Error('ESPN tennis rankings ' + tour + ' ' + res.status);
+  return res.json();
+}
+
+function tennisRatingMap(json) {
+  var map = {};
+  var lists = (json && json.rankings) || [];
+  // Singles only — skip doubles / race-to-finals lists so their points don't leak in.
+  lists.filter(function (l) { return !/doubles|race/i.test(l.name || ''); }).forEach(function (lst) {
+    (lst.ranks || []).forEach(function (e) {
+      var ath = e.athlete;
+      var name = (typeof ath === 'string') ? ath : (ath && ath.displayName);
+      if (!name || e.points == null) return;
+      if (!map[name] || e.current < map[name].rank) map[name] = { rank: e.current, points: e.points };
+    });
+  });
+  return map;
+}
+
+function tennisWinProb(ptsA, ptsB) {
+  if (!ptsA || !ptsB) return null;
+  var p = 1 / (1 + Math.exp(-0.5 * (Math.log(ptsA) - Math.log(ptsB))));
+  return Math.max(0.15, Math.min(0.85, p));
+}
+
+function tennisProjTag(edge) {
+  var e = Math.abs(edge); // |p − 0.5|
+  if (e < 0.06) return 'Toss-up';
+  if (e < 0.14) return 'Lean';
+  if (e < 0.24) return 'Moderate';
+  return 'Strong';
+}
+
+function enrichTennisDraw(draw, map) {
+  if (!draw || !map) return;
+  (draw.rounds || []).forEach(function (r) {
+    r.matches.forEach(function (m) {
+      (m.players || []).forEach(function (p) {
+        var info = map[p.name];
+        if (info) { p.rank = info.rank; p.points = info.points; }
+      });
+      if (m.status === 'FINISHED') return; // never project a known result
+      var a = (m.players || [])[0], b = (m.players || [])[1];
+      if (!a || !b || !a.points || !b.points) return;
+      var pa = tennisWinProb(a.points, b.points);
+      if (pa == null) return;
+      m.proj = {
+        a: Math.round(pa * 1000) / 1000,
+        favorite: (pa >= 0.5 ? a.name : b.name),
+        favPct: Math.round(Math.max(pa, 1 - pa) * 100),
+        tag: tennisProjTag(pa - 0.5)
+      };
+    });
+  });
+}
+
 async function fetchTennisModule() {
   var now = new Date();
   var dates = dateKeyUtc(shiftedDate(now, -150)) + '-' + dateKeyUtc(shiftedDate(now, 90));
   var results = await Promise.all([
     espnTennis('atp', dates).catch(function (e) { console.warn('ATP fetch failed:', e.message || e); return null; }),
-    espnTennis('wta', dates).catch(function (e) { console.warn('WTA fetch failed:', e.message || e); return null; })
+    espnTennis('wta', dates).catch(function (e) { console.warn('WTA fetch failed:', e.message || e); return null; }),
+    espnTennisRankings('atp').catch(function (e) { console.warn('ATP rankings failed:', e.message || e); return null; }),
+    espnTennisRankings('wta').catch(function (e) { console.warn('WTA rankings failed:', e.message || e); return null; })
   ]);
   var atp = (results[0] && results[0].events) || [];
   var wta = (results[1] && results[1].events) || [];
   if (!atp.length && !wta.length) throw new Error('ESPN tennis returned no events for ' + dates + '.');
   var tournaments = collectTennis(atp, wta);
+  var atpMap = tennisRatingMap(results[2]);
+  var wtaMap = tennisRatingMap(results[3]);
+  tournaments.forEach(function (t) {
+    enrichTennisDraw(t.draws.men, atpMap);
+    enrichTennisDraw(t.draws.women, wtaMap);
+  });
   var nowMs = now.getTime();
   var slam = pickTennisTier(tournaments, 'slam', nowMs);
   var masters = pickTennisTier(tournaments, 'masters1000', nowMs);
@@ -2121,7 +2198,7 @@ async function fetchTennisModule() {
     title: 'Tennis — Majors & Masters',
     phase: phase,
     provider: 'ESPN tennis feed',
-    providerNote: 'ATP and WTA singles draws for the Grand Slams and Masters 1000 events, from ESPN\'s public tennis feed. Brackets, seeds and scores are reconstructed round-by-round. Results and research only.',
+    providerNote: 'ATP and WTA singles draws for the Grand Slams, Masters 1000 and 500 events, from ESPN\'s public tennis feed. Brackets and scores are reconstructed round-by-round. Scheduled matches carry a win-probability projection derived from current ATP/WTA ranking points (a logistic model capped 15–85%) — framing, not advice.',
     asOf: phtDateKey(),
     generatedAt: generatedAt,
     refreshAttemptedAt: generatedAt,
@@ -2513,5 +2590,9 @@ export {
   buildTennisDraw,
   normTennisEvent,
   tennisTournamentTiming,
-  pickTennisTier
+  pickTennisTier,
+  tennisRatingMap,
+  tennisWinProb,
+  tennisProjTag,
+  enrichTennisDraw
 };

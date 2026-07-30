@@ -831,6 +831,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-bm-team.win .t-sets{color:var(--gold)}
 .sports-bm-team .t-set sup{font-size:8px;color:var(--txt3)}
 .sports-bm-team .t-seed{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:.3rem;font-weight:400}
+.sports-bm-team .t-rank{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:.3rem;font-weight:400}
+.t-proj{margin-top:.45rem;padding-top:.4rem;border-top:1px solid var(--rim)}
+.t-proj-txt{font-family:var(--mono);font-size:10px;letter-spacing:.02em;color:var(--green);margin-bottom:.3rem;overflow-wrap:anywhere;line-height:1.4}
+.t-proj.low .t-proj-txt{color:var(--txt3)}
+.t-proj-bar{display:flex;height:5px;border-radius:4px;overflow:hidden;background:var(--bg2)}
+.t-proj-bar .pa{background:var(--green)}
+.t-proj-bar .pb{background:var(--rim3)}
 .t-champ-tour{font-family:var(--mono);font-size:9px;color:var(--gold);letter-spacing:.05em;margin-right:.15rem}
 .sports-tourn-chips{display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 .85rem}
 .sports-tourn-chip{font-family:var(--mono);font-size:10px;letter-spacing:.03em;padding:.4rem .55rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;display:flex;align-items:center;gap:.4rem;transition:all .15s}
@@ -5346,7 +5353,8 @@ function tennisSetCell(s) {
 function tennisPlayerRow(p, played) {
   if (!p) return '<div class="sports-bm-team tbd"><span class="nm">TBD</span><span class="t-sets"></span></div>';
   var win = played && p.winner, lose = played && !p.winner;
-  var seed = p.seed != null ? '<span class="t-seed">[' + esc(String(p.seed)) + ']</span>' : '';
+  var seed = p.seed != null ? '<span class="t-seed">[' + esc(String(p.seed)) + ']</span>'
+    : (p.rank != null ? '<span class="t-rank">#' + esc(String(p.rank)) + '</span>' : '');
   var sets = (p.sets || []).map(function (s) { return '<span class="t-set">' + tennisSetCell(s) + '</span>'; }).join('');
   return '<div class="sports-bm-team ' + (win ? 'win' : (lose ? 'lose' : '')) + '">' +
     '<span class="nm">' + esc(p.name) + seed + (win ? ' ✓' : '') + '</span>' +
@@ -5372,6 +5380,17 @@ function tennisNotable(m, bestOf) {
   if (bestOf === 3 && sets >= 3) return { kind: 'thriller', txt: 'Final-set decider' };
   return null;
 }
+function tennisProjHtml(m) {
+  var p = m.proj;
+  if (!p || m.status === 'FINISHED') return '';
+  var pa = Math.round(p.a * 100), pb = 100 - pa;
+  var decisive = p.tag === 'Strong' || p.tag === 'Moderate';
+  var label = p.tag === 'Toss-up' ? ('Toss-up ' + Math.max(pa, pb) + '%')
+    : ((decisive ? 'Proj ' : 'Lean ') + esc(p.favorite) + ' ' + p.favPct + '%');
+  return '<div class="t-proj' + (decisive ? '' : ' low') + '"><div class="t-proj-txt">' + label + '</div>' +
+    '<div class="t-proj-bar" title="' + esc((m.players[0] || {}).name || '') + ' ' + pa + '% / ' + esc((m.players[1] || {}).name || '') + ' ' + pb + '%">' +
+    '<span class="pa" style="width:' + pa + '%"></span><span class="pb" style="width:' + pb + '%"></span></div></div>';
+}
 function tennisMatchCard(m, bestOf) {
   var played = m.status === 'FINISHED';
   var label = played ? 'Result' : (m.status === 'LIVE' ? 'Live' : 'Scheduled');
@@ -5380,7 +5399,7 @@ function tennisMatchCard(m, bestOf) {
   var flag = n ? '<div class="sports-bm-flag ' + n.kind + '">' + esc(n.txt) + '</div>' : '';
   return '<div class="sports-bm' + (m.status === 'LIVE' ? ' live' : '') + (n ? ' notable' : '') + '">' +
     '<div class="sports-bm-meta"><span>' + esc(sportsDate(m.date)) + '</span><span>' + esc(label) + '</span></div>' +
-    tennisPlayerRow(players[0], played) + tennisPlayerRow(players[1], played) + flag +
+    tennisPlayerRow(players[0], played) + tennisPlayerRow(players[1], played) + flag + tennisProjHtml(m) +
   '</div>';
 }
 function tennisBracket(draw, bestOf) {

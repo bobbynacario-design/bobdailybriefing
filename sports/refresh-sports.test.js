@@ -25,7 +25,10 @@ import {
   classifyTennis,
   buildTennisDraw,
   normTennisEvent,
-  tennisTournamentTiming
+  tennisTournamentTiming,
+  tennisWinProb,
+  tennisProjTag,
+  enrichTennisDraw
 } from './refresh-sports.js';
 
 function tComp(roundId, roundName, state, players) {
@@ -297,6 +300,30 @@ test('tennis timing: only-scheduled is upcoming, a finished final is completed',
     ])
   ]));
   assert.equal(tennisTournamentTiming(done).status, 'completed');
+});
+
+test('tennis win-probability model favours ranking points, is symmetric, and is capped', function () {
+  assert.equal(tennisWinProb(3000, 3000), 0.5);
+  var fav = tennisWinProb(8000, 2000);
+  assert.ok(fav > 0.5 && fav <= 0.85);
+  assert.ok(Math.abs(tennisWinProb(8000, 2000) + tennisWinProb(2000, 8000) - 1) < 1e-9);
+  assert.equal(tennisWinProb(15000, 200), 0.85); // extreme gap capped, never 99%
+  assert.equal(tennisWinProb(0, 500), null);      // unranked → no projection
+  assert.equal(tennisProjTag(0), 'Toss-up');
+  assert.equal(tennisProjTag(0.30), 'Strong');
+});
+
+test('enrichTennisDraw sets ranks and projects only unfinished matches', function () {
+  var map = { 'Jannik Sinner': { rank: 1, points: 13000 }, 'Novak Djokovic': { rank: 5, points: 3800 } };
+  var draw = { rounds: [{ id: 6, name: 'Semifinal', matches: [
+    { id: 'sf1', status: 'SCHEDULED', players: [{ name: 'Jannik Sinner' }, { name: 'Novak Djokovic' }] },
+    { id: 'sf2', status: 'FINISHED', players: [{ name: 'Jannik Sinner', winner: true }, { name: 'Novak Djokovic', winner: false }] }
+  ] }] };
+  enrichTennisDraw(draw, map);
+  var sched = draw.rounds[0].matches[0], fin = draw.rounds[0].matches[1];
+  assert.equal(sched.players[0].rank, 1);
+  assert.ok(sched.proj && sched.proj.favorite === 'Jannik Sinner' && sched.proj.favPct > 50);
+  assert.equal(fin.proj, undefined); // a finished result is never projected
 });
 
 test('scheduler readiness requires successful refreshes on three distinct PHT days', function () {
