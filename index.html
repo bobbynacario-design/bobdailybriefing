@@ -818,6 +818,20 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-module-tab{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:.45rem .8rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}
 .sports-module-tab:hover{color:var(--txt);border-color:var(--rim2)}
 .sports-module-tab.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.35)}
+.sports-subtabs{display:flex;gap:.45rem;flex-wrap:wrap;margin:.2rem 0 1rem}
+.sports-tour-switch{display:flex;gap:.4rem;margin:0 0 .85rem}
+.sports-seg{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:.35rem .7rem;border-radius:7px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}
+.sports-seg:hover{color:var(--txt);border-color:var(--rim2)}
+.sports-seg.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.35)}
+.sports-tennis-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;margin:0 0 .85rem;padding:.7rem .85rem;border:1px solid var(--rim);border-radius:10px;background:var(--bg2)}
+.sports-tennis-name{font-family:var(--serif);font-size:19px;font-weight:700;color:var(--txt);line-height:1.2}
+.sports-tennis-meta{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3);margin-top:.25rem}
+.sports-tennis-when{font-family:var(--mono);font-size:11px;color:var(--gold);text-align:right;white-space:nowrap}
+.sports-bm-team .t-sets{font-family:var(--mono);font-size:12px;color:var(--txt3);flex:0 0 auto;display:flex;gap:.32rem}
+.sports-bm-team.win .t-sets{color:var(--gold)}
+.sports-bm-team .t-set sup{font-size:8px;color:var(--txt3)}
+.sports-bm-team .t-seed{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:.3rem;font-weight:400}
+.t-champ-tour{font-family:var(--mono);font-size:9px;color:var(--gold);letter-spacing:.05em;margin-right:.15rem}
 .sports-kpi{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.85rem 1rem}
 .sports-kpi-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
 .sports-kpi-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
@@ -5295,6 +5309,113 @@ function sportsKnockoutBracket(wc) {
   return tracker + '<div class="sports-bracket-scroll"><div class="sports-bracket">' + cols + '</div></div>' +
     '<div class="sports-empty" style="margin-top:.55rem">Matchups fill in as ties finish and the winner is advanced by football-data.org; unresolved slots show TBD. “Pick/Lean” is the same Elo+form projection used elsewhere — a model lean, not advice. Knockout scores are full-time; ties decided on penalties show the full-time line.</div>';
 }
+// ── Tennis renderer: Grand Slams + Masters 1000, ATP + WTA. Bespoke because the
+// generic league renderer is standings/momentum-shaped and a tournament is a draw,
+// not a table. Reuses the .sports-bracket-* / .sports-bm-* chrome. ───────────────
+var tennisTier = null; // null = not chosen yet → default to a live tier, else Slams
+var tennisTour = 'men';
+function sportsShowTennisTier(tier) { tennisTier = tier; sportsRenderActive(); }
+function sportsShowTennisTour(tour) { tennisTour = tour; sportsRenderActive(); }
+function tennisSetCell(s) {
+  if (!s || s.g == null) return '';
+  return esc(String(s.g)) + (s.tb != null ? '<sup>' + esc(String(s.tb)) + '</sup>' : '');
+}
+function tennisPlayerRow(p, played) {
+  if (!p) return '<div class="sports-bm-team tbd"><span class="nm">TBD</span><span class="t-sets"></span></div>';
+  var win = played && p.winner, lose = played && !p.winner;
+  var seed = p.seed != null ? '<span class="t-seed">[' + esc(String(p.seed)) + ']</span>' : '';
+  var sets = (p.sets || []).map(function (s) { return '<span class="t-set">' + tennisSetCell(s) + '</span>'; }).join('');
+  return '<div class="sports-bm-team ' + (win ? 'win' : (lose ? 'lose' : '')) + '">' +
+    '<span class="nm">' + esc(p.name) + seed + (win ? ' ✓' : '') + '</span>' +
+    '<span class="t-sets">' + sets + '</span></div>';
+}
+function tennisMatchCard(m) {
+  var played = m.status === 'FINISHED';
+  var label = played ? 'Result' : (m.status === 'LIVE' ? 'Live' : 'Scheduled');
+  var players = m.players || [];
+  return '<div class="sports-bm' + (m.status === 'LIVE' ? ' live' : '') + '">' +
+    '<div class="sports-bm-meta"><span>' + esc(sportsDate(m.date)) + '</span><span>' + esc(label) + '</span></div>' +
+    tennisPlayerRow(players[0], played) + tennisPlayerRow(players[1], played) +
+  '</div>';
+}
+function tennisBracket(draw) {
+  if (!draw || !(draw.rounds || []).length) {
+    return '<div class="sports-empty">The draw appears here once ESPN posts the bracket for this event.</div>';
+  }
+  var cols = draw.rounds.map(function (r) {
+    var done = r.matches.filter(function (m) { return m.status === 'FINISHED'; }).length;
+    return '<div class="sports-bracket-col">' +
+      '<div class="sports-bracket-head">' + esc(r.name) + '<span>' + done + '/' + r.matches.length + '</span></div>' +
+      r.matches.map(tennisMatchCard).join('') +
+    '</div>';
+  }).join('');
+  return '<div class="sports-bracket-scroll"><div class="sports-bracket">' + cols + '</div></div>';
+}
+function tennisChampRow(t) {
+  var m = (t.draws && t.draws.men && t.draws.men.champion) || '';
+  var w = (t.draws && t.draws.women && t.draws.women.champion) || '';
+  var bits = [];
+  if (m) bits.push('<span class="t-champ-tour">ATP</span>' + esc(m));
+  if (w) bits.push('<span class="t-champ-tour">WTA</span>' + esc(w));
+  return '<div class="jrow"><span class="jrow-sym">' + esc(t.name) + '</span>' +
+    '<span class="decision-mini">' + esc(t.surface || '') + '</span>' +
+    '<span class="jrow-date">' + (bits.join(' · ') || 'result pending') + '</span></div>';
+}
+function tennisTourAvail(t) {
+  var out = [];
+  if (t && t.draws && t.draws.men) out.push('men');
+  if (t && t.draws && t.draws.women) out.push('women');
+  return out;
+}
+function tennisTierView(tier) {
+  tier = tier || {};
+  var t = tier.current || tier.next;
+  var html = '';
+  if (!t) {
+    html += '<div class="sports-empty">No current or upcoming event in the provider window.</div>';
+  } else {
+    var when = t.status === 'upcoming'
+      ? ('Starts ' + esc(sportsDate(t.startDate)) + (t.countdownDays != null ? ' · in ' + t.countdownDays + ' day' + (t.countdownDays === 1 ? '' : 's') : ''))
+      : (t.status === 'live' ? 'In progress' : 'Completed');
+    html += '<div class="sports-tennis-head"><div>' +
+        '<div class="sports-tennis-name">' + esc(t.name) + '</div>' +
+        '<div class="sports-tennis-meta">' + esc([t.surface, t.tour === 'combined' ? 'ATP + WTA' : t.tour].filter(Boolean).join(' · ')) + '</div>' +
+      '</div><div class="sports-tennis-when">' + when + '</div></div>';
+    var avail = tennisTourAvail(t);
+    var tour = avail.indexOf(tennisTour) >= 0 ? tennisTour : (avail[0] || 'men');
+    if (avail.length > 1) {
+      html += '<div class="sports-tour-switch">' +
+        '<button class="sports-seg' + (tour === 'men' ? ' active' : '') + '" onclick="sportsShowTennisTour(\'men\')">ATP · Men</button>' +
+        '<button class="sports-seg' + (tour === 'women' ? ' active' : '') + '" onclick="sportsShowTennisTour(\'women\')">WTA · Women</button>' +
+      '</div>';
+    } else if (avail.length === 1) {
+      html += '<div class="sports-tour-switch"><button class="sports-seg active">' + (avail[0] === 'men' ? 'ATP · Men' : 'WTA · Women') + '</button></div>';
+    }
+    html += tennisBracket(t.draws && t.draws[tour]);
+  }
+  if (tier.recent && tier.recent.length) {
+    html += '<div class="journal-section">Recent champions</div><div class="jlist">' + tier.recent.map(tennisChampRow).join('') + '</div>';
+  }
+  return html;
+}
+function sportsTennisHtml(mod) {
+  mod = mod || {};
+  var tiers = mod.tiers || { slam: {}, masters: {} };
+  var html = '<div class="sports-brief-head"><div><div class="sports-brief-kicker">Personal briefing</div>' +
+    '<h2>' + esc(mod.title || 'Tennis — Majors & Masters') + '</h2></div>' +
+    '<div class="sports-brief-phase">' + esc(mod.phase || 'setup') + '<br>' + esc(mod.asOf || '') + '</div></div>';
+  html += sportsFreshnessHtml(mod);
+  var liveTier = (tiers.slam && tiers.slam.current && tiers.slam.current.status === 'live') ? 'slam'
+    : (tiers.masters && tiers.masters.current && tiers.masters.current.status === 'live') ? 'masters' : null;
+  var tier = (tennisTier === 'slam' || tennisTier === 'masters') ? tennisTier : (liveTier || 'slam');
+  html += '<div class="sports-subtabs">' +
+    '<button class="sports-module-tab' + (tier === 'slam' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'slam\')">Grand Slams</button>' +
+    '<button class="sports-module-tab' + (tier === 'masters' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'masters\')">Masters 1000</button>' +
+  '</div>';
+  html += tennisTierView(tier === 'masters' ? tiers.masters : tiers.slam);
+  if (mod.providerNote) html += '<div class="sports-empty" style="margin-top:.6rem">' + esc(mod.providerNote) + '</div>';
+  return html;
+}
 function sportsWorldCupHtml(d, miro) {
   var wc = d.worldCup || {};
   var matches = wc.matches || [];
@@ -5375,6 +5496,7 @@ function sportsWorldCupHtml(d, miro) {
 function sportsModuleTitle(key, mod) {
   if (key === 'nba') return 'NBA';
   if (key === 'pvl') return 'PH Local';
+  if (key === 'tennis') return 'Tennis';
   if (key === 'worldcup') return 'FIFA Archive';
   return (mod && (mod.title || mod.name)) || key;
 }
@@ -5383,6 +5505,7 @@ function sportsAvailableModules(d) {
   var mods = d && d.modules || {};
   if (mods.nba && mods.nba.enabled !== false) out.push({ key:'nba', label:'NBA', module:mods.nba });
   if (mods.pvl && mods.pvl.enabled !== false) out.push({ key:'pvl', label:'PH Local', module:mods.pvl });
+  if (mods.tennis && mods.tennis.enabled !== false) out.push({ key:'tennis', label:'Tennis', module:mods.tennis });
   if (d && d.worldCup) out.push({ key:'worldcup', label:'FIFA Archive', module:d.worldCup });
   return out;
 }
@@ -5565,6 +5688,10 @@ function sportsRenderActive() {
   var tabs = sportsModuleTabs(d);
   if (sportsActiveModule === 'worldcup') {
     out.innerHTML = tabs + sportsWorldCupHtml(d, miro);
+    return;
+  }
+  if (sportsActiveModule === 'tennis') {
+    out.innerHTML = tabs + sportsTennisHtml(d.modules && d.modules.tennis);
     return;
   }
   var mod = d.modules && d.modules[sportsActiveModule];
