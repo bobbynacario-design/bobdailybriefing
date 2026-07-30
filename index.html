@@ -832,6 +832,18 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .sports-bm-team .t-set sup{font-size:8px;color:var(--txt3)}
 .sports-bm-team .t-seed{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:.3rem;font-weight:400}
 .t-champ-tour{font-family:var(--mono);font-size:9px;color:var(--gold);letter-spacing:.05em;margin-right:.15rem}
+.sports-tourn-chips{display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 .85rem}
+.sports-tourn-chip{font-family:var(--mono);font-size:10px;letter-spacing:.03em;padding:.4rem .55rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;display:flex;align-items:center;gap:.4rem;transition:all .15s}
+.sports-tourn-chip:hover{color:var(--txt);border-color:var(--rim2)}
+.sports-tourn-chip.active{color:var(--txt);border-color:var(--rim3);background:var(--bg3)}
+.sports-tourn-chip span{font-size:8px;text-transform:uppercase;letter-spacing:.05em;padding:.1rem .3rem;border-radius:4px;background:var(--bg2);color:var(--txt3)}
+.sports-tourn-chip.live span{color:var(--green)}
+.sports-tourn-chip.upcoming span{color:var(--gold)}
+.sports-bm-flag{font-family:var(--mono);font-size:8.5px;letter-spacing:.04em;text-transform:uppercase;margin-top:.4rem;padding-top:.35rem;border-top:1px solid var(--rim);color:var(--txt3)}
+.sports-bm-flag.upset{color:var(--gold);font-weight:700}
+.sports-bm-flag.thriller{color:var(--green)}
+.sports-bm.notable:before{background:var(--gold)}
+.jlist .jrow .sports-bm-flag{margin:0;padding:0;border:0;flex:0 0 auto}
 .sports-kpi{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.85rem 1rem}
 .sports-kpi-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);margin-bottom:.25rem}
 .sports-kpi-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
@@ -5314,8 +5326,10 @@ function sportsKnockoutBracket(wc) {
 // not a table. Reuses the .sports-bracket-* / .sports-bm-* chrome. ───────────────
 var tennisTier = null; // null = not chosen yet → default to a live tier, else Slams
 var tennisTour = 'men';
-function sportsShowTennisTier(tier) { tennisTier = tier; sportsRenderActive(); }
+var tennisEvent = null; // selected tournament id within the tier (null = auto)
+function sportsShowTennisTier(tier) { tennisTier = tier; tennisEvent = null; sportsRenderActive(); }
 function sportsShowTennisTour(tour) { tennisTour = tour; sportsRenderActive(); }
+function sportsShowTennisEvent(id) { tennisEvent = id; sportsRenderActive(); }
 function tennisSetCell(s) {
   if (!s || s.g == null) return '';
   return esc(String(s.g)) + (s.tb != null ? '<sup>' + esc(String(s.tb)) + '</sup>' : '');
@@ -5329,16 +5343,38 @@ function tennisPlayerRow(p, played) {
     '<span class="nm">' + esc(p.name) + seed + (win ? ' ✓' : '') + '</span>' +
     '<span class="t-sets">' + sets + '</span></div>';
 }
-function tennisMatchCard(m) {
+// Notable-result signal. Prefers a seed upset when ESPN populates seeds (usually
+// null on this feed), and otherwise flags a match that went the distance — the
+// non-obvious, high-drama result: a 5th set in best-of-5 men's Slam play, a 3rd
+// set in best-of-3 (women's Slams and every Masters). Serves the edge steer:
+// surface what's worth noticing, don't hedge it.
+function tennisNotable(m, bestOf) {
+  if (m.status !== 'FINISHED') return null;
+  var ps = m.players || [];
+  var w = ps.filter(function (p) { return p.winner; })[0];
+  var l = ps.filter(function (p) { return !p.winner; })[0];
+  if (!w || !l) return null;
+  if (w.seed != null && l.seed != null && w.seed > l.seed) return { kind: 'upset', txt: 'Upset · [' + w.seed + '] beat [' + l.seed + ']' };
+  if (w.seed == null && l.seed != null) return { kind: 'upset', txt: 'Upset · unseeded beat [' + l.seed + ']' };
+  var sets = Math.max.apply(null, ps.map(function (p) {
+    return (p.sets || []).filter(function (s) { return s.g != null; }).length;
+  }).concat([0]));
+  if (bestOf === 5 && sets >= 5) return { kind: 'thriller', txt: '5-set epic' };
+  if (bestOf === 3 && sets >= 3) return { kind: 'thriller', txt: 'Final-set decider' };
+  return null;
+}
+function tennisMatchCard(m, bestOf) {
   var played = m.status === 'FINISHED';
   var label = played ? 'Result' : (m.status === 'LIVE' ? 'Live' : 'Scheduled');
   var players = m.players || [];
-  return '<div class="sports-bm' + (m.status === 'LIVE' ? ' live' : '') + '">' +
+  var n = tennisNotable(m, bestOf);
+  var flag = n ? '<div class="sports-bm-flag ' + n.kind + '">' + esc(n.txt) + '</div>' : '';
+  return '<div class="sports-bm' + (m.status === 'LIVE' ? ' live' : '') + (n ? ' notable' : '') + '">' +
     '<div class="sports-bm-meta"><span>' + esc(sportsDate(m.date)) + '</span><span>' + esc(label) + '</span></div>' +
-    tennisPlayerRow(players[0], played) + tennisPlayerRow(players[1], played) +
+    tennisPlayerRow(players[0], played) + tennisPlayerRow(players[1], played) + flag +
   '</div>';
 }
-function tennisBracket(draw) {
+function tennisBracket(draw, bestOf) {
   if (!draw || !(draw.rounds || []).length) {
     return '<div class="sports-empty">The draw appears here once ESPN posts the bracket for this event.</div>';
   }
@@ -5346,10 +5382,33 @@ function tennisBracket(draw) {
     var done = r.matches.filter(function (m) { return m.status === 'FINISHED'; }).length;
     return '<div class="sports-bracket-col">' +
       '<div class="sports-bracket-head">' + esc(r.name) + '<span>' + done + '/' + r.matches.length + '</span></div>' +
-      r.matches.map(tennisMatchCard).join('') +
+      r.matches.map(function (m) { return tennisMatchCard(m, bestOf); }).join('') +
     '</div>';
   }).join('');
   return '<div class="sports-bracket-scroll"><div class="sports-bracket">' + cols + '</div></div>';
+}
+// Edge strip: the notable results across the selected tournament's draw, upsets
+// first, so the non-consensus story leads rather than the seeded chalk.
+function tennisNotableStrip(draw, bestOf) {
+  if (!draw) return '';
+  var items = [];
+  (draw.rounds || []).forEach(function (r) {
+    r.matches.forEach(function (m) {
+      var n = tennisNotable(m, bestOf);
+      if (!n) return;
+      var w = (m.players || []).filter(function (p) { return p.winner; })[0];
+      var l = (m.players || []).filter(function (p) { return !p.winner; })[0];
+      if (w && l) items.push({ n: n, round: r.name, w: w.name, l: l.name });
+    });
+  });
+  if (!items.length) return '';
+  items.sort(function (a, b) { return (a.n.kind === 'upset' ? 0 : 1) - (b.n.kind === 'upset' ? 0 : 1); });
+  var rows = items.slice(0, 6).map(function (it) {
+    return '<div class="jrow"><span class="sports-bm-flag ' + it.n.kind + '">' + esc(it.n.txt) + '</span>' +
+      '<span class="jrow-sym">' + esc(it.w) + '</span><span class="decision-mini">beat ' + esc(it.l) + '</span>' +
+      '<span class="jrow-date">' + esc(it.round) + '</span></div>';
+  }).join('');
+  return '<div class="journal-section">Notable results — what to notice</div><div class="jlist">' + rows + '</div>';
 }
 function tennisChampRow(t) {
   var m = (t.draws && t.draws.men && t.draws.men.champion) || '';
@@ -5367,35 +5426,47 @@ function tennisTourAvail(t) {
   if (t && t.draws && t.draws.women) out.push('women');
   return out;
 }
-function tennisTierView(tier) {
+function tennisTierView(tier, isSlam) {
   tier = tier || {};
-  var t = tier.current || tier.next;
-  var html = '';
-  if (!t) {
-    html += '<div class="sports-empty">No current or upcoming event in the provider window.</div>';
-  } else {
-    var when = t.status === 'upcoming'
-      ? ('Starts ' + esc(sportsDate(t.startDate)) + (t.countdownDays != null ? ' · in ' + t.countdownDays + ' day' + (t.countdownDays === 1 ? '' : 's') : ''))
-      : (t.status === 'live' ? 'In progress' : 'Completed');
-    html += '<div class="sports-tennis-head"><div>' +
-        '<div class="sports-tennis-name">' + esc(t.name) + '</div>' +
-        '<div class="sports-tennis-meta">' + esc([t.surface, t.tour === 'combined' ? 'ATP + WTA' : t.tour].filter(Boolean).join(' · ')) + '</div>' +
-      '</div><div class="sports-tennis-when">' + when + '</div></div>';
-    var avail = tennisTourAvail(t);
-    var tour = avail.indexOf(tennisTour) >= 0 ? tennisTour : (avail[0] || 'men');
-    if (avail.length > 1) {
-      html += '<div class="sports-tour-switch">' +
-        '<button class="sports-seg' + (tour === 'men' ? ' active' : '') + '" onclick="sportsShowTennisTour(\'men\')">ATP · Men</button>' +
-        '<button class="sports-seg' + (tour === 'women' ? ' active' : '') + '" onclick="sportsShowTennisTour(\'women\')">WTA · Women</button>' +
-      '</div>';
-    } else if (avail.length === 1) {
-      html += '<div class="sports-tour-switch"><button class="sports-seg active">' + (avail[0] === 'men' ? 'ATP · Men' : 'WTA · Women') + '</button></div>';
-    }
-    html += tennisBracket(t.draws && t.draws[tour]);
+  // Viewable events: current/next first, then recent completed ones (deduped by id).
+  var events = [];
+  var cur = tier.current || tier.next;
+  if (cur) events.push(cur);
+  (tier.recent || []).forEach(function (r) { if (!cur || r.id !== cur.id) events.push(r); });
+  if (!events.length) return '<div class="sports-empty">No current, upcoming or recent event in the provider window.</div>';
+  // Selected tournament: sticky by id, else a live event, else the most recent
+  // completed one (so between Slams the last champion's full bracket leads).
+  var t = events.filter(function (e) { return e.id === tennisEvent; })[0]
+    || events.filter(function (e) { return e.status === 'live'; })[0]
+    || events.filter(function (e) { return e.status === 'completed'; })[0]
+    || events[0];
+  var chips = events.map(function (e) {
+    var badge = e.status === 'live' ? 'live' : (e.status === 'upcoming' ? ('in ' + (e.countdownDays != null ? e.countdownDays + 'd' : '—')) : 'done');
+    return '<button class="sports-tourn-chip ' + e.status + (e === t ? ' active' : '') + '" onclick="sportsShowTennisEvent(\'' + esc(e.id) + '\')">' +
+      esc(e.name) + '<span>' + esc(badge) + '</span></button>';
+  }).join('');
+  var html = '<div class="sports-tourn-chips">' + chips + '</div>';
+  var when = t.status === 'upcoming'
+    ? ('Starts ' + esc(sportsDate(t.startDate)) + (t.countdownDays != null ? ' · in ' + t.countdownDays + ' day' + (t.countdownDays === 1 ? '' : 's') : ''))
+    : (t.status === 'live' ? 'In progress' : 'Completed');
+  html += '<div class="sports-tennis-head"><div>' +
+      '<div class="sports-tennis-name">' + esc(t.name) + '</div>' +
+      '<div class="sports-tennis-meta">' + esc([t.surface, t.tour === 'combined' ? 'ATP + WTA' : t.tour].filter(Boolean).join(' · ')) + '</div>' +
+    '</div><div class="sports-tennis-when">' + when + '</div></div>';
+  var avail = tennisTourAvail(t);
+  var tour = avail.indexOf(tennisTour) >= 0 ? tennisTour : (avail[0] || 'men');
+  if (avail.length > 1) {
+    html += '<div class="sports-tour-switch">' +
+      '<button class="sports-seg' + (tour === 'men' ? ' active' : '') + '" onclick="sportsShowTennisTour(\'men\')">ATP · Men</button>' +
+      '<button class="sports-seg' + (tour === 'women' ? ' active' : '') + '" onclick="sportsShowTennisTour(\'women\')">WTA · Women</button>' +
+    '</div>';
+  } else if (avail.length === 1) {
+    html += '<div class="sports-tour-switch"><button class="sports-seg active">' + (avail[0] === 'men' ? 'ATP · Men' : 'WTA · Women') + '</button></div>';
   }
-  if (tier.recent && tier.recent.length) {
-    html += '<div class="journal-section">Recent champions</div><div class="jlist">' + tier.recent.map(tennisChampRow).join('') + '</div>';
-  }
+  var bestOf = (isSlam && tour === 'men') ? 5 : 3;
+  var draw = t.draws && t.draws[tour];
+  html += tennisNotableStrip(draw, bestOf);
+  html += tennisBracket(draw, bestOf);
   return html;
 }
 function sportsTennisHtml(mod) {
@@ -5412,7 +5483,7 @@ function sportsTennisHtml(mod) {
     '<button class="sports-module-tab' + (tier === 'slam' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'slam\')">Grand Slams</button>' +
     '<button class="sports-module-tab' + (tier === 'masters' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'masters\')">Masters 1000</button>' +
   '</div>';
-  html += tennisTierView(tier === 'masters' ? tiers.masters : tiers.slam);
+  html += tennisTierView(tier === 'masters' ? tiers.masters : tiers.slam, tier === 'slam');
   if (mod.providerNote) html += '<div class="sports-empty" style="margin-top:.6rem">' + esc(mod.providerNote) + '</div>';
   return html;
 }
