@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('nba', 'pvl')]
+  [ValidateSet('nba', 'pvl', 'tennis')]
   [string]$Module,
   [switch]$Force
 )
@@ -36,6 +36,13 @@ if ($Module -eq 'pvl') {
     (New-ScheduledTaskTrigger -Daily -At '21:30')
   )
   $description = 'Official PVL schedule, result, standings and player-leader refresh at 08:00 and 21:30 PHT.'
+} elseif ($Module -eq 'tennis') {
+  $taskName = 'BobDailyBriefing-TennisRefresh'
+  $triggers = @(
+    (New-ScheduledTaskTrigger -Daily -At '08:00'),
+    (New-ScheduledTaskTrigger -Daily -At '20:00')
+  )
+  $description = 'ATP/WTA tennis (Grand Slams, Masters 1000, 500s) refresh at 08:00 and 20:00 PHT. Locks and scores per-match projections so the accuracy journal accrues. ESPN feed only, no OpenAI cost.'
 } else {
   $taskName = 'BobDailyBriefing-NbaRefresh'
   $triggers = @((New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At '09:00'))

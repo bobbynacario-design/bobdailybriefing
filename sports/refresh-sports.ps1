@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'nba', 'pvl')]
+  [ValidateSet('all', 'nba', 'pvl', 'tennis')]
   [string]$Module = 'all',
   [switch]$NoPublish
 )
