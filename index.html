@@ -5497,6 +5497,35 @@ function tennisTierView(tier, isSlam) {
   html += tennisBracket(draw, bestOf);
   return html;
 }
+function tennisJournalHtml(j) {
+  if (!j) return '';
+  var head = '<div class="journal-section">Projection accuracy — grading the model</div>';
+  if (!j.resolved) {
+    return head + '<div class="sports-empty">Accrues as scheduled matches resolve. Each projection is locked when first shown and scored when the match finishes — nothing is graded with hindsight.</div>';
+  }
+  var skill = j.brierSkill == null ? '—' : ((j.brierSkill > 0 ? '+' : '') + j.brierSkill);
+  var html = head + '<div class="archive-summary">' +
+    jTile(j.resolved + (j.pending ? ' · ' + j.pending + ' open' : ''), 'Picks scored') +
+    jTile(j.decisiveAccuracy == null ? 'n/a' : j.decisiveAccuracy + '%', 'Decisive hit rate') +
+    jTile(j.accuracy == null ? 'n/a' : j.accuracy + '%', 'All-pick hit rate') +
+    jTile(j.brier == null ? 'n/a' : j.brier, 'Brier (vs 0.25)') +
+  '</div>';
+  html += '<div class="decision-stat-note">Forward journal: a projection is locked when first shown and scored when the match resolves. Brier is measured against a 50/50 baseline (0.25); skill ' + skill + ' (higher is better). Model framing, not advice.</div>';
+  if (j.byTag && j.byTag.length) {
+    html += '<div class="journal-section">By confidence</div><div class="jlist">' + j.byTag.map(function (r) {
+      return '<div class="jrow"><span class="jrow-sym">' + esc(r.tag) + '</span><span class="decision-mini">n=' + r.n + '</span><span class="jrow-date">' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</span></div>';
+    }).join('') + '</div>';
+  }
+  if (j.recent && j.recent.length) {
+    html += '<div class="journal-section">Recent calls</div><div class="jlist">' + j.recent.map(function (r) {
+      return '<div class="jrow"><span class="rel-badge ' + (r.correct ? 'rel-high' : 'rel-low') + '">' + (r.correct ? 'HIT' : 'MISS') + '</span>' +
+        '<span class="jrow-sym">' + esc(r.favorite) + ' ' + r.favPct + '%</span>' +
+        '<span class="decision-mini">' + esc(r.tournament) + ' · ' + esc(r.round) + '</span>' +
+        '<span class="jrow-date">' + esc(r.winner) + ' won</span></div>';
+    }).join('') + '</div>';
+  }
+  return html;
+}
 function sportsTennisHtml(mod) {
   mod = mod || {};
   var tiers = mod.tiers || { slam: {}, masters: {}, tour500: {} };
@@ -5515,6 +5544,7 @@ function sportsTennisHtml(mod) {
   '</div>';
   var tierData = tier === 'masters' ? tiers.masters : (tier === 'tour500' ? tiers.tour500 : tiers.slam);
   html += tennisTierView(tierData, tier === 'slam');
+  html += tennisJournalHtml(mod.projectionJournal);
   if (mod.providerNote) html += '<div class="sports-empty" style="margin-top:.6rem">' + esc(mod.providerNote) + '</div>';
   return html;
 }

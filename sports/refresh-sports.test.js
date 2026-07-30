@@ -28,7 +28,8 @@ import {
   tennisTournamentTiming,
   tennisWinProb,
   tennisProjTag,
-  enrichTennisDraw
+  enrichTennisDraw,
+  buildTennisJournal
 } from './refresh-sports.js';
 
 function tComp(roundId, roundName, state, players) {
@@ -324,6 +325,27 @@ test('enrichTennisDraw sets ranks and projects only unfinished matches', functio
   assert.equal(sched.players[0].rank, 1);
   assert.ok(sched.proj && sched.proj.favorite === 'Jannik Sinner' && sched.proj.favPct > 50);
   assert.equal(fin.proj, undefined); // a finished result is never projected
+});
+
+test('tennis projection journal locks a scheduled pick and scores it when finished', function () {
+  var sched = [{ id: 'x1', tournament: 'DC Open', tier: 'tour500', tour: 'women', round: 'Round 2', status: 'SCHEDULED',
+    players: [{ name: 'Jessica Pegula' }, { name: 'Diana Shnaider' }],
+    proj: { a: 0.70, favorite: 'Jessica Pegula', favPct: 70, tag: 'Moderate' } }];
+  var j1 = buildTennisJournal(null, sched, '2026-07-30T00:00:00Z');
+  assert.equal(j1.stats.resolved, 0);
+  assert.equal(j1.stats.pending, 1);
+  assert.equal(j1.preds['x1'].resolved, false);
+
+  var finished = [{ id: 'x1', tournament: 'DC Open', tier: 'tour500', tour: 'women', round: 'Round 2', status: 'FINISHED',
+    players: [{ name: 'Jessica Pegula', winner: true }, { name: 'Diana Shnaider', winner: false }] }];
+  var j2 = buildTennisJournal(j1, finished, '2026-07-31T00:00:00Z');
+  assert.equal(j2.stats.resolved, 1);
+  assert.equal(j2.stats.accuracy, 100);
+  assert.ok(Math.abs(j2.preds['x1'].brier - 0.09) < 1e-9); // (0.70 − 1)^2
+
+  // a finished match that was never locked while scheduled is ignored — no hindsight
+  var j3 = buildTennisJournal(null, finished, '2026-07-31T00:00:00Z');
+  assert.equal(j3.stats.resolved, 0);
 });
 
 test('scheduler readiness requires successful refreshes on three distinct PHT days', function () {

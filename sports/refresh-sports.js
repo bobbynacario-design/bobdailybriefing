@@ -2234,6 +2234,126 @@ function tennisModuleHasData(mod) {
   });
 }
 
+// ── Projection journal — forward-accumulating Brier/accuracy scoreboard ───────
+// The tennis analog of the miro journal. The projection uses TODAY's rankings,
+// so past predictions can't be reconstructed point-in-time without hindsight;
+// instead each scheduled-match projection is LOCKED the first time it is seen
+// and SCORED once the match finishes. State persists across daily runs in
+// briefings-bob/sports-tennis-journal; only compact stats ride in the daily doc.
+function collectTennisMatches(mod) {
+  var out = {}, order = [];
+  var tiers = (mod && mod.tiers) || {};
+  ['slam', 'masters', 'tour500'].forEach(function (tk) {
+    var tier = tiers[tk] || {};
+    var events = [];
+    if (tier.current) events.push(tier.current);
+    if (tier.next && (!tier.current || tier.next.id !== tier.current.id)) events.push(tier.next);
+    (tier.recent || []).forEach(function (e) { events.push(e); });
+    events.forEach(function (t) {
+      ['men', 'women'].forEach(function (tour) {
+        var draw = t.draws && t.draws[tour];
+        if (!draw) return;
+        (draw.rounds || []).forEach(function (r) {
+          r.matches.forEach(function (m) {
+            if (!m.id || out[m.id]) return;
+            out[m.id] = { id: m.id, tournament: t.name, tier: tk, tour: tour, round: m.round, status: m.status, players: m.players || [], proj: m.proj || null };
+            order.push(m.id);
+          });
+        });
+      });
+    });
+  });
+  return order.map(function (id) { return out[id]; });
+}
+
+function tennisMatchWinner(players) {
+  var w = (players || []).filter(function (p) { return p.winner; })[0];
+  return w ? w.name : null;
+}
+
+function buildTennisJournal(prior, matches, nowIso) {
+  var preds = {};
+  var priorPreds = (prior && prior.preds) || {};
+  Object.keys(priorPreds).forEach(function (k) { preds[k] = priorPreds[k]; });
+  (matches || []).forEach(function (m) {
+    var finished = m.status === 'FINISHED';
+    if (!preds[m.id] && !finished && m.proj) {
+      preds[m.id] = {
+        id: m.id, tournament: m.tournament, tier: m.tier, tour: m.tour, round: m.round,
+        playerA: (m.players[0] || {}).name, playerB: (m.players[1] || {}).name,
+        pA: m.proj.a, favorite: m.proj.favorite, favPct: m.proj.favPct, tag: m.proj.tag,
+        firstSeen: nowIso, resolved: false
+      };
+    }
+    if (finished && preds[m.id] && !preds[m.id].resolved) {
+      var winner = tennisMatchWinner(m.players);
+      if (winner) {
+        var pr = preds[m.id];
+        var outcomeA = (winner === pr.playerA) ? 1 : 0;
+        var pA = Math.max(0.01, Math.min(0.99, pr.pA));
+        pr.resolved = true;
+        pr.winner = winner;
+        pr.correct = (pr.favorite === winner);
+        pr.brier = Math.round(Math.pow(pA - outcomeA, 2) * 1e4) / 1e4;
+        pr.logLoss = Math.round((-(outcomeA * Math.log(pA) + (1 - outcomeA) * Math.log(1 - pA))) * 1e4) / 1e4;
+        pr.resolvedAt = nowIso;
+      }
+    }
+  });
+  var all = Object.keys(preds).map(function (k) { return preds[k]; });
+  var resolved = all.filter(function (p) { return p.resolved; });
+  var decisive = resolved.filter(function (p) { return p.tag === 'Moderate' || p.tag === 'Strong'; });
+  function acc(list) { return list.length ? Math.round(list.filter(function (p) { return p.correct; }).length / list.length * 100) : null; }
+  function mean(list, f) { return list.length ? list.reduce(function (a, p) { return a + f(p); }, 0) / list.length : null; }
+  var brier = mean(resolved, function (p) { return p.brier; });
+  var logLoss = mean(resolved, function (p) { return p.logLoss; });
+  var byTag = ['Toss-up', 'Lean', 'Moderate', 'Strong'].map(function (tag) {
+    var l = resolved.filter(function (p) { return p.tag === tag; });
+    return { tag: tag, n: l.length, accuracy: acc(l) };
+  }).filter(function (r) { return r.n > 0; });
+  var recent = resolved.slice().sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 8)
+    .map(function (p) { return { tournament: p.tournament, round: p.round, favorite: p.favorite, favPct: p.favPct, tag: p.tag, winner: p.winner, correct: p.correct }; });
+  var stats = {
+    resolved: resolved.length,
+    pending: all.length - resolved.length,
+    accuracy: acc(resolved),
+    decisive: decisive.length,
+    decisiveAccuracy: acc(decisive),
+    brier: brier == null ? null : Math.round(brier * 1e4) / 1e4,
+    baselineBrier: 0.25,
+    brierSkill: brier == null ? null : Math.round((0.25 - brier) * 1e4) / 1e4,
+    logLoss: logLoss == null ? null : Math.round(logLoss * 1e4) / 1e4,
+    byTag: byTag,
+    recent: recent
+  };
+  // Bound the persisted doc: keep every unresolved lock + the 500 newest resolved.
+  var keep = {};
+  all.forEach(function (p) { if (!p.resolved) keep[p.id] = p; });
+  resolved.sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 500).forEach(function (p) { keep[p.id] = p; });
+  return { preds: keep, stats: stats, updatedAt: nowIso };
+}
+
+async function updateTennisJournal(db, module, dryRun) {
+  var nowIso = new Date().toISOString();
+  var matches = collectTennisMatches(module);
+  var prior = null;
+  if (db) {
+    try {
+      var snap = await db.collection(COLL).doc('sports-tennis-journal').get();
+      if (snap.exists) prior = snap.data() || null;
+    } catch (e) { console.warn('tennis journal read failed:', e.message || e); }
+  }
+  var journal = buildTennisJournal(prior, matches, nowIso);
+  if (db && !dryRun) {
+    try { await db.collection(COLL).doc('sports-tennis-journal').set(journal); }
+    catch (e) { console.warn('tennis journal write failed:', e.message || e); }
+  }
+  module.projectionJournal = journal.stats; // compact stats only in the daily doc
+  console.log('Tennis journal: ' + journal.stats.resolved + ' scored, ' + journal.stats.pending + ' pending' +
+    (journal.stats.accuracy != null ? ', ' + journal.stats.accuracy + '% overall / ' + (journal.stats.decisiveAccuracy == null ? '—' : journal.stats.decisiveAccuracy + '%') + ' decisive' : '') + '.');
+  return journal.stats;
+}
+
 function buildForwardModules(reason) {
   var modules = {};
   if (wantsModule('nba')) modules.nba = buildNbaModule();
@@ -2456,6 +2576,7 @@ async function main() {
         ', 500 current=' + ((ts.tour500.current && ts.tour500.current.name) || 'none') +
         ', recent slams=' + ts.slam.recent.length + ', recent masters=' + ts.masters.recent.length +
         ', recent 500s=' + ts.tour500.recent.length + '.');
+      await updateTennisJournal(db, doc.modules.tennis, DRY_RUN);
     } catch (e) {
       console.warn('Tennis fetch failed:', e.message || e);
       var priorTennis = prevDocData && prevDocData.modules && prevDocData.modules.tennis;
@@ -2594,5 +2715,7 @@ export {
   tennisRatingMap,
   tennisWinProb,
   tennisProjTag,
-  enrichTennisDraw
+  enrichTennisDraw,
+  collectTennisMatches,
+  buildTennisJournal
 };
