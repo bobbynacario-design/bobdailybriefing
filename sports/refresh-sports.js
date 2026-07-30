@@ -1864,6 +1864,39 @@ var TENNIS_MASTERS = [
   { token: 'paris masters', surface: 'Hard (indoor)' },
   { token: 'rolex paris', surface: 'Hard (indoor)' }
 ];
+// ATP/WTA 500s — the tier below Masters 1000. ESPN gives no level field, so this
+// is a curated, deliberately CONSERVATIVE token list: only events that are
+// unambiguously 500 across both tours are listed. Names that collide with a
+// different level on the other tour (e.g. "China Open" = ATP 500 but WTA 1000;
+// bare "Stuttgart" = ATP 250 but WTA 500) are matched by a tour-safe token or
+// left out rather than risk a mis-tag. Missing a 500 is safer than promoting a
+// 250/1000 into this tier. Extend as needed each season.
+var TENNIS_500 = [
+  { token: 'rotterdam', surface: 'Hard (indoor)' },
+  { token: 'rio open', surface: 'Clay' },
+  { token: 'acapulco', surface: 'Hard' },
+  { token: 'barcelona', surface: 'Clay' },
+  { token: 'bmw open', surface: 'Clay' },
+  { token: 'queen', surface: 'Grass' },
+  { token: 'halle', surface: 'Grass' },
+  { token: 'terra wortmann', surface: 'Grass' },
+  { token: 'hamburg', surface: 'Clay' },
+  { token: 'dc open', surface: 'Hard' },
+  { token: 'japan open', surface: 'Hard' },
+  { token: 'erste bank', surface: 'Hard (indoor)' },
+  { token: 'swiss indoors', surface: 'Hard (indoor)' },
+  { token: 'brisbane', surface: 'Hard' },
+  { token: 'adelaide', surface: 'Hard' },
+  { token: 'porsche', surface: 'Clay (indoor)' },
+  { token: 'charleston', surface: 'Clay' },
+  { token: 'berlin', surface: 'Grass' },
+  { token: 'eastbourne', surface: 'Grass' },
+  { token: 'san diego', surface: 'Hard' },
+  { token: 'pan pacific', surface: 'Hard' },
+  { token: 'toray', surface: 'Hard' },
+  { token: 'ningbo', surface: 'Hard' },
+  { token: 'abu dhabi', surface: 'Hard' }
+];
 
 function classifyTennis(name) {
   var n = String(name || '').toLowerCase();
@@ -1872,6 +1905,9 @@ function classifyTennis(name) {
   }
   for (var j = 0; j < TENNIS_MASTERS.length; j++) {
     if (n.indexOf(TENNIS_MASTERS[j].token) !== -1) return { tier: 'masters1000', surface: TENNIS_MASTERS[j].surface };
+  }
+  for (var k = 0; k < TENNIS_500.length; k++) {
+    if (n.indexOf(TENNIS_500[k].token) !== -1) return { tier: 'tour500', surface: TENNIS_500[k].surface };
   }
   return { tier: 'other', surface: '' };
 }
@@ -2073,8 +2109,10 @@ async function fetchTennisModule() {
   var nowMs = now.getTime();
   var slam = pickTennisTier(tournaments, 'slam', nowMs);
   var masters = pickTennisTier(tournaments, 'masters1000', nowMs);
+  var tour500 = pickTennisTier(tournaments, 'tour500', nowMs);
   var phase = (slam.current && slam.current.status === 'live') ? 'grand slam live'
     : (masters.current && masters.current.status === 'live') ? 'masters 1000 live'
+    : (tour500.current && tour500.current.status === 'live') ? 'atp/wta 500 live'
     : 'between events';
   var generatedAt = new Date().toISOString();
   return {
@@ -2091,7 +2129,7 @@ async function fetchTennisModule() {
     refreshStatus: 'ok',
     fallback: false,
     staleAfterHours: (phase === 'between events') ? 168 : 12,
-    tiers: { slam: slam, masters: masters }
+    tiers: { slam: slam, masters: masters, tour500: tour500 }
   };
 }
 
@@ -2105,14 +2143,15 @@ function buildTennisModule() {
   );
   m.tiers = {
     slam: { current: null, next: null, recent: [] },
-    masters: { current: null, next: null, recent: [] }
+    masters: { current: null, next: null, recent: [] },
+    tour500: { current: null, next: null, recent: [] }
   };
   return m;
 }
 
 function tennisModuleHasData(mod) {
   if (!mod || !mod.tiers) return false;
-  return ['slam', 'masters'].some(function (k) {
+  return ['slam', 'masters', 'tour500'].some(function (k) {
     var tier = mod.tiers[k] || {};
     return tier.current || (tier.recent && tier.recent.length);
   });
@@ -2337,7 +2376,9 @@ async function main() {
       var ts = doc.modules.tennis.tiers;
       console.log('Tennis: slam current=' + ((ts.slam.current && ts.slam.current.name) || 'none') +
         ', masters current=' + ((ts.masters.current && ts.masters.current.name) || 'none') +
-        ', recent slams=' + ts.slam.recent.length + ', recent masters=' + ts.masters.recent.length + '.');
+        ', 500 current=' + ((ts.tour500.current && ts.tour500.current.name) || 'none') +
+        ', recent slams=' + ts.slam.recent.length + ', recent masters=' + ts.masters.recent.length +
+        ', recent 500s=' + ts.tour500.recent.length + '.');
     } catch (e) {
       console.warn('Tennis fetch failed:', e.message || e);
       var priorTennis = prevDocData && prevDocData.modules && prevDocData.modules.tennis;

@@ -254,6 +254,8 @@ test('classifies tennis events into slam / masters1000 / other', function () {
   assert.equal(classifyTennis("Internazionali BNL d'Italia").surface, 'Clay');
   // WTA-125 whose name shares the "internazionali" word must NOT be a Masters
   assert.equal(classifyTennis('Internazionali Femminili di Brescia').tier, 'other');
+  // 500-level events land in the tour500 tier; a 250 stays 'other'
+  assert.equal(classifyTennis('Mubadala DC Open').tier, 'tour500');
   assert.equal(classifyTennis('Mifel Tennis Open by Telcel Oppo').tier, 'other');
 });
 

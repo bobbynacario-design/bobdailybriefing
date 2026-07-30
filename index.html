@@ -5471,19 +5471,22 @@ function tennisTierView(tier, isSlam) {
 }
 function sportsTennisHtml(mod) {
   mod = mod || {};
-  var tiers = mod.tiers || { slam: {}, masters: {} };
+  var tiers = mod.tiers || { slam: {}, masters: {}, tour500: {} };
   var html = '<div class="sports-brief-head"><div><div class="sports-brief-kicker">Personal briefing</div>' +
     '<h2>' + esc(mod.title || 'Tennis — Majors & Masters') + '</h2></div>' +
     '<div class="sports-brief-phase">' + esc(mod.phase || 'setup') + '<br>' + esc(mod.asOf || '') + '</div></div>';
   html += sportsFreshnessHtml(mod);
-  var liveTier = (tiers.slam && tiers.slam.current && tiers.slam.current.status === 'live') ? 'slam'
-    : (tiers.masters && tiers.masters.current && tiers.masters.current.status === 'live') ? 'masters' : null;
-  var tier = (tennisTier === 'slam' || tennisTier === 'masters') ? tennisTier : (liveTier || 'slam');
+  function tennisTierLive(k) { return tiers[k] && tiers[k].current && tiers[k].current.status === 'live'; }
+  var liveTier = tennisTierLive('slam') ? 'slam' : (tennisTierLive('masters') ? 'masters' : (tennisTierLive('tour500') ? 'tour500' : null));
+  var validTier = { slam: 1, masters: 1, tour500: 1 };
+  var tier = validTier[tennisTier] ? tennisTier : (liveTier || 'slam');
   html += '<div class="sports-subtabs">' +
     '<button class="sports-module-tab' + (tier === 'slam' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'slam\')">Grand Slams</button>' +
     '<button class="sports-module-tab' + (tier === 'masters' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'masters\')">Masters 1000</button>' +
+    '<button class="sports-module-tab' + (tier === 'tour500' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'tour500\')">ATP / WTA 500</button>' +
   '</div>';
-  html += tennisTierView(tier === 'masters' ? tiers.masters : tiers.slam, tier === 'slam');
+  var tierData = tier === 'masters' ? tiers.masters : (tier === 'tour500' ? tiers.tour500 : tiers.slam);
+  html += tennisTierView(tierData, tier === 'slam');
   if (mod.providerNote) html += '<div class="sports-empty" style="margin-top:.6rem">' + esc(mod.providerNote) + '</div>';
   return html;
 }
