@@ -812,7 +812,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 @media(max-width:900px){.radar-nuggets{grid-template-columns:1fr}}
 
 /* ── SPORTS ── */
-#sports-out{max-width:1420px;margin:0 auto}
+/* Full-bleed like every other tab's content (was capped at 1420px + centred,
+   which made the Sports module feel narrower than the hero and other tabs). */
 .sports-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}
 .sports-module-tabs{display:flex;gap:.45rem;flex-wrap:wrap;margin:0 0 1rem}
 .sports-module-tab{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:.45rem .8rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}
