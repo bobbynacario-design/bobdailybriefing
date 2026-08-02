@@ -49,9 +49,15 @@ if ($Module -eq 'pvl') {
   )
   $description = 'ATP/WTA tennis (Grand Slams, Masters 1000, 500s) refresh at 08:00 and 20:00 PHT. Locks and scores per-match projections so the accuracy journal accrues. ESPN feed only, no OpenAI cost.'
 } else {
+  # In-season cadence. PHT = ET + 13, so a US evening slate (7:30-10:30pm ET)
+  # runs roughly 08:30-14:00 PHT the next morning: 09:00 refreshes the morning
+  # briefing mid-slate, 15:00 picks up the completed results.
   $taskName = 'BobDailyBriefing-NbaRefresh'
-  $triggers = @((New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At '09:00'))
-  $description = 'NBA offseason refresh each Sunday at 09:00 PHT. Replace with in-season cadence when the schedule resumes.'
+  $triggers = @(
+    (New-ScheduledTaskTrigger -Daily -At '09:00'),
+    (New-ScheduledTaskTrigger -Daily -At '15:00')
+  )
+  $description = 'NBA schedule, standings, momentum and availability refresh at 09:00 and 15:00 PHT. 15:00 lands after the US slate completes (PHT = ET + 13).'
 }
 
 # Match the hand-fixed settings on the radar/miro/ph tasks. The cmdlet defaults
