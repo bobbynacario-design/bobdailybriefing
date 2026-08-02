@@ -2354,6 +2354,68 @@ async function updateTennisJournal(db, module, dryRun) {
   return journal.stats;
 }
 
+// ── Lane preservation guards ─────────────────────────────────────────────────
+// All lanes share ONE Firestore doc, but a module-scoped run (--module tennis)
+// only builds its own lane — every other lane has to be carried forward from the
+// previous doc. On 2026-08-01 the scheduled 08:00 tennis run fired before the
+// machine's network was up: the prev-doc read threw (DNS), nothing was carried
+// forward, and the write went ahead with a tennis-only doc. That silently erased
+// NBA, PVL and the FIFA archive, and every later run inherited the loss.
+var LANE_KEYS = ['nba', 'pvl', 'tennis', 'worldcup'];
+var LANE_LOOKBACK_DAYS = 21;
+
+function laneValue(docData, key) {
+  if (!docData) return null;
+  return key === 'worldcup' ? (docData.worldCup || null) : ((docData.modules || {})[key] || null);
+}
+
+function setLane(docData, key, value) {
+  if (key === 'worldcup') { docData.worldCup = value; return; }
+  docData.modules = docData.modules || {};
+  docData.modules[key] = value;
+}
+
+function moduleHasData(key, mod) {
+  if (!mod) return false;
+  if (key === 'tennis') return tennisModuleHasData(mod);
+  if (key === 'worldcup') return (mod.matches || []).length > 0;
+  return (mod.matches || []).length > 0 || (mod.standings || []).length > 0 || (mod.upcoming || []).length > 0;
+}
+
+// Lanes this run neither refreshed nor carried forward — i.e. lanes that would
+// vanish from the tab if we wrote the doc as it stands.
+function lanesMissing(doc, isRequested) {
+  return LANE_KEYS.filter(function (key) {
+    return !isRequested(key) && !moduleHasData(key, laneValue(doc, key));
+  });
+}
+
+function shiftDateKey(dateKey, days) {
+  var d = new Date(dateKey + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Walk back day by day for any lane the previous doc could not supply, so one
+// bad write self-heals on the next run instead of persisting forever.
+async function recoverLanes(db, doc, dateKey, lanes, maxDays) {
+  var pending = lanes.slice();
+  for (var back = 1; back <= maxDays && pending.length; back++) {
+    var key = shiftDateKey(dateKey, -back);
+    var snap = await db.collection(COLL).doc('sports-' + key).get();
+    if (!snap.exists) continue;
+    var data = snap.data() || {};
+    pending = pending.filter(function (lane) {
+      var value = laneValue(data, lane);
+      if (!moduleHasData(lane, value)) return true;
+      setLane(doc, lane, value);
+      console.log('Lane recovery: restored ' + lane + ' from sports-' + key + '.');
+      return false;
+    });
+  }
+  return pending;
+}
+
 function buildForwardModules(reason) {
   var modules = {};
   if (wantsModule('nba')) modules.nba = buildNbaModule();
@@ -2489,6 +2551,7 @@ async function main() {
   }
   var prevFinished = {};
   var prevDocData = null;
+  var prevReadFailed = false;
   if (db) {
     try {
       var latSnap0 = await db.collection(COLL).doc('sports-latest').get();
@@ -2500,7 +2563,10 @@ async function main() {
         prevFinished = extractFinished(prevMatches0);
         console.log('No-regress baseline: ' + Object.keys(prevFinished).length + ' finished match(es) from sports-' + prevKey0 + '.');
       }
-    } catch (e) { console.warn('prev-doc read for no-regress failed:', e.message || e); }
+    } catch (e) {
+      prevReadFailed = true;
+      console.warn('prev-doc read for no-regress failed:', e.message || e);
+    }
   }
 
   var doc = {
@@ -2625,6 +2691,18 @@ async function main() {
     }
   }
 
+  // Any lane this run neither refreshed nor inherited from the previous doc gets
+  // pulled forward from the most recent day that still has it.
+  var missingLanes = lanesMissing(doc, wantsModule);
+  if (missingLanes.length && db) {
+    console.warn('Lanes absent after carry-forward: ' + missingLanes.join(', ') + ' — searching earlier docs.');
+    try {
+      missingLanes = await recoverLanes(db, doc, dateKey, missingLanes, LANE_LOOKBACK_DAYS);
+    } catch (e) { console.warn('lane recovery failed:', e.message || e); }
+  }
+  doc.sports = LANE_KEYS.filter(function (key) { return moduleHasData(key, laneValue(doc, key)); });
+  if (!doc.sports.length) doc.sports = activeSportsList();
+
   console.log('\n===== briefings-bob/sports-' + dateKey + ' =====');
   console.log(JSON.stringify(doc, null, 2));
 
@@ -2650,6 +2728,16 @@ async function main() {
         }
       }
     } catch (e) { console.warn('last-good check failed (writing fallback anyway):', e.message || e); }
+  }
+  // Lane no-clobber guard: if the prior doc could not be read we cannot know what
+  // this write would drop, so a run that is short a lane must not write at all.
+  // Without this, a scheduled run that fires before the network is up erases
+  // every lane it did not build itself.
+  if (prevReadFailed && missingLanes.length) {
+    console.error('\nPrevious doc unreadable and ' + missingLanes.join(', ') +
+      ' could not be recovered — NOT writing, because the write would erase those lanes. Re-run once the network is back.');
+    process.exitCode = 1;
+    return;
   }
   await writeDoc(db, dateKey, doc);
   console.log('\nWrote briefings-bob/sports-' + dateKey + ' and sports-latest = ' + dateKey + '.');
@@ -2717,5 +2805,10 @@ export {
   tennisProjTag,
   enrichTennisDraw,
   collectTennisMatches,
-  buildTennisJournal
+  buildTennisJournal,
+  moduleHasData,
+  lanesMissing,
+  laneValue,
+  setLane,
+  shiftDateKey
 };

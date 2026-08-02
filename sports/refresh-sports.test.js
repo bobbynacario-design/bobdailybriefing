@@ -29,7 +29,12 @@ import {
   tennisWinProb,
   tennisProjTag,
   enrichTennisDraw,
-  buildTennisJournal
+  buildTennisJournal,
+  moduleHasData,
+  lanesMissing,
+  laneValue,
+  setLane,
+  shiftDateKey
 } from './refresh-sports.js';
 
 function tComp(roundId, roundName, state, players) {
@@ -362,4 +367,53 @@ test('scheduler readiness requires successful refreshes on three distinct PHT da
     { completedAt:'2026-07-21T00:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } }
   ]), 'pvl', 3);
   assert.equal(ready.ready, true);
+});
+
+// ── Lane preservation (the 2026-08-01 tennis-only clobber) ───────────────────
+function laneDoc() {
+  return {
+    worldCup: { matches: [{ id: 1, status: 'FINISHED' }] },
+    modules: {
+      nba: { matches: [{ id: 'a' }], standings: [{ team: 'BOS' }] },
+      pvl: { standings: [{ team: 'Creamline' }], upcoming: [] },
+      tennis: { tiers: { slam: { current: { name: 'US Open' } }, masters: {}, tour500: {} } }
+    }
+  };
+}
+
+test('moduleHasData recognises real lane data and rejects empty scaffolding', function () {
+  var d = laneDoc();
+  ['nba', 'pvl', 'tennis', 'worldcup'].forEach(function (k) {
+    assert.equal(moduleHasData(k, laneValue(d, k)), true, k + ' should count as populated');
+  });
+  assert.equal(moduleHasData('nba', { matches: [], standings: [], upcoming: [] }), false);
+  assert.equal(moduleHasData('worldcup', { matches: [] }), false);
+  assert.equal(moduleHasData('tennis', { tiers: { slam: {}, masters: {}, tour500: {} } }), false);
+  assert.equal(moduleHasData('nba', null), false);
+});
+
+test('lanesMissing flags every lane a module-scoped run would erase', function () {
+  var onlyTennis = { modules: { tennis: laneDoc().modules.tennis } };
+  var wantsTennis = function (k) { return k === 'tennis'; };
+  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'pvl', 'worldcup']);
+  // Lanes carried forward from the previous doc are not missing.
+  assert.deepEqual(lanesMissing(laneDoc(), wantsTennis), []);
+  // A lane this run is responsible for is never reported (its own fallback owns it).
+  assert.deepEqual(lanesMissing({ modules: {} }, function () { return true; }), []);
+});
+
+test('setLane restores into the right slot for modules and the legacy worldCup key', function () {
+  var target = { modules: {} };
+  var source = laneDoc();
+  setLane(target, 'nba', laneValue(source, 'nba'));
+  setLane(target, 'worldcup', laneValue(source, 'worldcup'));
+  assert.equal(target.modules.nba.matches.length, 1);
+  assert.equal(target.worldCup.matches.length, 1);
+  assert.deepEqual(lanesMissing(target, function (k) { return k === 'pvl' || k === 'tennis'; }), []);
+});
+
+test('shiftDateKey walks back across month boundaries', function () {
+  assert.equal(shiftDateKey('2026-08-01', -1), '2026-07-31');
+  assert.equal(shiftDateKey('2026-08-03', -21), '2026-07-13');
+  assert.equal(shiftDateKey('2026-03-01', -1), '2026-02-28');
 });
