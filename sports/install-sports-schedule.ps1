@@ -29,13 +29,18 @@ $refreshScript = Join-Path $here 'refresh-sports.ps1'
 $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Module {1}' -f $refreshScript, $Module
 $action = New-ScheduledTaskAction -Execute $powershell -Argument $arguments -WorkingDirectory $here
 
+# Stagger the trigger times. Every module writes the SAME sports-<date> doc as a
+# read-modify-write (each run carries the other lanes forward from the previous
+# doc), so two tasks firing in the same minute means the loser's refresh is
+# silently reverted to yesterday's snapshot. PVL therefore runs at 08:20, clear
+# of the 08:00 tennis job.
 if ($Module -eq 'pvl') {
   $taskName = 'BobDailyBriefing-PvlRefresh'
   $triggers = @(
-    (New-ScheduledTaskTrigger -Daily -At '08:00'),
+    (New-ScheduledTaskTrigger -Daily -At '08:20'),
     (New-ScheduledTaskTrigger -Daily -At '21:30')
   )
-  $description = 'Official PVL schedule, result, standings and player-leader refresh at 08:00 and 21:30 PHT.'
+  $description = 'Official PVL schedule, result, standings and player-leader refresh at 08:20 and 21:30 PHT. 08:20 (not 08:00) keeps it clear of the tennis job writing the same doc.'
 } elseif ($Module -eq 'tennis') {
   $taskName = 'BobDailyBriefing-TennisRefresh'
   $triggers = @(
