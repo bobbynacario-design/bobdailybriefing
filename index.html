@@ -5034,6 +5034,37 @@ function sportsProjectionHtml(m) {
     '</div>' + bar +
   '</div>';
 }
+// Two-outcome sibling of sportsProjectionHtml, for sports with no draw (PBA).
+// Same CSS classes, same "computed by refresh-sports.js, FE only renders"
+// contract — just a home/away split instead of home/draw/away, so there's no
+// meaningless "draw 0%" phrase or bar segment for a sport that can't draw.
+function sportsWinProbHtml(m) {
+  var p = m && m.projection;
+  if (!p || !p.probs) return '';
+  var h = sportsProb(p.probs.home), a = sportsProb(p.probs.away);
+  var decisive = p.tag === 'Strong edge' || p.tag === 'Moderate edge';
+  var cls = !p.favorite ? 'close' : (decisive ? '' : 'watch');
+  var favPct = p.favorite === m.home ? h : (p.favorite === m.away ? a : Math.max(h, a));
+  var splitText = (m.home || '') + ' ' + h + '% · ' + (m.away || '') + ' ' + a + '%';
+  var split = '<span class="sports-projection-split">' + esc(m.home) + ' ' + h + '% · ' + esc(m.away) + ' ' + a + '%</span>';
+  var main;
+  if (!p.favorite) {
+    main = '<b>Too close to call</b>' + split;
+  } else if (decisive) {
+    main = '<b>Projected: ' + esc(p.favorite) + ' ' + favPct + '%</b>' + split;
+  } else {
+    main = '<b>Lean ' + esc(p.favorite) + ' ' + favPct + '%</b> <span class="sports-lowconf">low confidence</span>' + split;
+  }
+  var bar = '<div class="sports-prob-bar" title="' + esc(splitText) + '">' +
+    '<span class="seg home" style="width:' + h + '%"></span>' +
+    '<span class="seg away" style="width:' + a + '%"></span></div>';
+  return '<div class="sports-projection' + (decisive ? '' : ' low') + '">' +
+    '<div class="sports-projection-row">' +
+      '<div class="sports-projection-main">' + main + '</div>' +
+      '<div class="sports-projection-tag ' + cls + '">' + esc(p.tag) + '</div>' +
+    '</div>' + bar +
+  '</div>';
+}
 // Lead the Next Fixtures panel with the decisive (Moderate/Strong edge) calls.
 function sportsConfidentCalls(upcoming) {
   var calls = (upcoming || []).filter(function (m) {
@@ -5541,6 +5572,38 @@ function tennisJournalHtml(j) {
   }
   return html;
 }
+// Same design/wording as tennisJournalHtml above — mirrors what Bob approved
+// for tennis — with "tournament · round" swapped for the matchup itself, since
+// PBA games have no tournament/round concept.
+function pbaJournalHtml(j) {
+  if (!j) return '';
+  var head = '<div class="journal-section">Projection accuracy — grading the model</div>';
+  if (!j.resolved) {
+    return head + '<div class="sports-empty">Accrues as scheduled matches resolve. Each projection is locked when first shown and scored when the match finishes — nothing is graded with hindsight.</div>';
+  }
+  var skill = j.brierSkill == null ? '—' : ((j.brierSkill > 0 ? '+' : '') + j.brierSkill);
+  var html = head + '<div class="archive-summary">' +
+    jTile(j.resolved + (j.pending ? ' · ' + j.pending + ' open' : ''), 'Picks scored') +
+    jTile(j.decisiveAccuracy == null ? 'n/a' : j.decisiveAccuracy + '%', 'Decisive hit rate') +
+    jTile(j.accuracy == null ? 'n/a' : j.accuracy + '%', 'All-pick hit rate') +
+    jTile(j.brier == null ? 'n/a' : j.brier, 'Brier (vs 0.25)') +
+  '</div>';
+  html += '<div class="decision-stat-note">Forward journal: a projection is locked when first shown and scored when the match resolves. Brier is measured against a 50/50 baseline (0.25); skill ' + skill + ' (higher is better). Model framing, not advice.</div>';
+  if (j.byTag && j.byTag.length) {
+    html += '<div class="journal-section">By confidence</div><div class="jlist">' + j.byTag.map(function (r) {
+      return '<div class="jrow"><span class="jrow-sym">' + esc(r.tag) + '</span><span class="decision-mini">n=' + r.n + '</span><span class="jrow-date">' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</span></div>';
+    }).join('') + '</div>';
+  }
+  if (j.recent && j.recent.length) {
+    html += '<div class="journal-section">Recent calls</div><div class="jlist">' + j.recent.map(function (r) {
+      return '<div class="jrow"><span class="rel-badge ' + (r.correct ? 'rel-high' : 'rel-low') + '">' + (r.correct ? 'HIT' : 'MISS') + '</span>' +
+        '<span class="jrow-sym">' + esc(r.favorite) + ' ' + r.favPct + '%</span>' +
+        '<span class="decision-mini">' + esc(r.home) + ' vs ' + esc(r.away) + '</span>' +
+        '<span class="jrow-date">' + esc(r.winner) + ' won</span></div>';
+    }).join('') + '</div>';
+  }
+  return html;
+}
 function sportsTennisHtml(mod) {
   mod = mod || {};
   var tiers = mod.tiers || { slam: {}, masters: {}, tour500: {} };
@@ -5729,7 +5792,7 @@ function sportsNextUpHtml(mod, key) {
   if (!matches.length) return '<div class="sports-empty">No upcoming fixtures are published in the current window.</div>';
   return '<div class="sports-next-list">' + matches.map(function (match) {
     var pinned = sportsIsFollowedMatch(match, followed);
-    return '<div class="sports-next-item"><div class="sports-next-time">' + esc(sportsMatchWhen(match)) + '</div><div><div class="sports-next-match">' + esc((match.home || 'TBD') + ' vs ' + (match.away || 'TBD')) + '</div><div class="sports-next-meta">' + esc((match.stage || 'Match') + (match.venue ? ' / ' + match.venue : '')) + '</div></div><div class="sports-next-flag">' + (pinned ? 'Followed' : 'League') + '</div></div>';
+    return '<div class="sports-next-item"><div class="sports-next-time">' + esc(sportsMatchWhen(match)) + '</div><div><div class="sports-next-match">' + esc((match.home || 'TBD') + ' vs ' + (match.away || 'TBD')) + '</div><div class="sports-next-meta">' + esc((match.stage || 'Match') + (match.venue ? ' / ' + match.venue : '')) + '</div>' + sportsWinProbHtml(match) + '</div><div class="sports-next-flag">' + (pinned ? 'Followed' : 'League') + '</div></div>';
   }).join('') + '</div>';
 }
 function sportsChangesHtml(mod, key) {
@@ -5837,10 +5900,13 @@ function sportsGenericModuleHtml(mod, key) {
   html += sportsPhaseNote(mod, key);
   html += sportsFreshnessHtml(mod);
   html += sportsFollowSettingsHtml(mod, key);
-  html += '<div class="sports-brief-grid"><div><section class="sports-brief-section"><div class="sports-brief-title"><h3>Next Up</h3><span class="sports-brief-count">' + (mod.upcoming || []).length + ' scheduled</span></div>' + sportsNextUpHtml(mod, key) + '</section><section class="sports-brief-section"><div class="sports-brief-title"><h3>Since Last Update</h3><span class="sports-brief-count">' + esc((mod.changes && mod.changes.since) ? sportsDate(mod.changes.since) : 'baseline') + '</span></div>' + sportsChangesHtml(mod, key) + '</section></div>';
+  html += '<div class="sports-brief-grid"><div><section class="sports-brief-section"><div class="sports-brief-title"><h3>Next Up</h3><span class="sports-brief-count">' + (mod.upcoming || []).length + ' scheduled</span></div>' + sportsConfidentCalls(mod.upcoming) + sportsNextUpHtml(mod, key) + '</section><section class="sports-brief-section"><div class="sports-brief-title"><h3>Since Last Update</h3><span class="sports-brief-count">' + esc((mod.changes && mod.changes.since) ? sportsDate(mod.changes.since) : 'baseline') + '</span></div>' + sportsChangesHtml(mod, key) + '</section></div>';
   html += '<div><section class="sports-brief-section"><div class="sports-brief-title"><h3>My Teams</h3><span class="sports-brief-count">followed</span></div>' + sportsMyTeamsHtml(mod, key) + '</section><section class="sports-brief-section"><div class="sports-brief-title"><h3>My Players</h3><span class="sports-brief-count">followed</span></div>' + sportsMyPlayersHtml(mod, key) + '</section></div></div>';
   html += '<section class="sports-context"><div class="sports-brief-title"><h3>Competition Context</h3><span class="sports-brief-count">current table</span></div>' + sportsContextHtml(mod, key) + '</section>';
   html += sportsLeagueDetailsHtml(mod, key);
+  if (mod.projectionJournal) {
+    html += '<div class="sports-panel"><div class="sports-panel-title">Projection Accuracy</div>' + pbaJournalHtml(mod.projectionJournal) + '</div>';
+  }
   return html;
 }
 var sportsActiveModule = null;

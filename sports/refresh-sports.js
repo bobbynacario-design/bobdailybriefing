@@ -804,6 +804,61 @@ function buildPbaMomentum(matches, standings) {
   }).sort(function (a, b) { return b.score - a.score || b.averagePointDiff - a.averagePointDiff; });
 }
 
+// ── PBA win-probability projections — the FIFA fixture-projection analog ─────
+// Two-outcome version of projectionFromMomentum/projectionProbabilities: no
+// draw, and no separate Elo blend, because buildPbaMomentum's 0-100 score
+// already IS the team-strength signal (recent form + standing pct + point-
+// margin band). Reuses FIFA's exact tag vocabulary/thresholds (Toss-up / Watch
+// only / Moderate edge / Strong edge) so the front end's existing FIFA
+// projection renderer/CSS/confident-calls logic works on PBA matches unchanged
+// — same shape probs object, just without a draw segment.
+function pbaWinProb(hp, ap) {
+  var diff = hp - ap;
+  // k tuned so the biggest gap the 0-100 momentum scale can produce approaches
+  // (but stays under) an 85% ceiling, matching the single-game-variance cap
+  // tennis/FIFA both use — a lopsided momentum score this early in a conference
+  // (n~5 recent games) is not a guaranteed blowout. The min/max clamp below is
+  // a defensive ceiling for any future out-of-domain gap, not something a
+  // same-scale 0-100 matchup can actually reach.
+  var p = 1 / (1 + Math.exp(-0.017 * diff));
+  return Math.max(0.15, Math.min(0.85, p));
+}
+function pbaProjTag(absGap) {
+  if (absGap < 4) return 'Toss-up';
+  if (absGap < 12) return 'Watch only';
+  if (absGap < 22) return 'Moderate edge';
+  return 'Strong edge';
+}
+// Attaches m.projection to every NOT-YET-PLAYED match only — projecting a known
+// result would be lookahead, same rule tennis/FIFA both enforce.
+function buildPbaProjections(matches, momentum) {
+  var byTeam = {};
+  (momentum || []).forEach(function (m) { byTeam[m.team] = m.score; });
+  (matches || []).forEach(function (m) {
+    if (!m || m.status === 'FINISHED') return;
+    var hp = byTeam[m.home], ap = byTeam[m.away];
+    if (hp == null && ap == null) return;
+    if (hp == null) hp = 50;
+    if (ap == null) ap = 50;
+    var gap = hp - ap;
+    var abs = Math.abs(gap);
+    var pHome = pbaWinProb(hp, ap);
+    var favorite = abs < 4 ? null : (gap > 0 ? m.home : m.away);
+    m.projection = {
+      favorite: favorite,
+      tag: pbaProjTag(abs),
+      gap: Math.round(gap * 10) / 10,
+      homePower: hp,
+      awayPower: ap,
+      probs: {
+        home: Math.round(pHome * 1000) / 1000,
+        draw: 0,
+        away: Math.round((1 - pHome) * 1000) / 1000
+      }
+    };
+  });
+}
+
 function pbaPostseasonRound(stage) {
   var value = cleanPbaText(stage);
   if (/quarter/i.test(value)) return { key: 'quarterfinals', label: 'Quarterfinals', order: 10 };
@@ -1867,6 +1922,108 @@ function pbaWatchlist(standings, momentum) {
   });
 }
 
+// ── PBA projection journal — forward-accumulating Brier/accuracy, the tennis
+// journal's exact design. Tennis can't backtest point-in-time because its model
+// needs TODAY's rankings; PBA's model IS entirely re-derivable from prior
+// results (no external rating), so a point-in-time historical rebuild is
+// possible in principle, but it would need per-day standings snapshots this
+// scraper has never stored. Lock-on-first-sight / score-at-resolution is the
+// same tradeoff already shipped and approved for tennis, applied here instead
+// of building a heavier backtest for a marginal accuracy gain.
+function pbaMatchWinner(match) {
+  var s = match && match.score;
+  if (!match || match.status !== 'FINISHED' || !s || s.home == null || s.away == null) return null;
+  if (s.home === s.away) return null; // basketball has no draws; a tie means bad data
+  return s.home > s.away ? match.home : match.away;
+}
+function collectPbaMatches(mod) {
+  return ((mod && mod.matches) || []).filter(function (m) { return m && m.id; });
+}
+function buildPbaJournal(prior, matches, nowIso) {
+  var preds = {};
+  var priorPreds = (prior && prior.preds) || {};
+  Object.keys(priorPreds).forEach(function (k) { preds[k] = priorPreds[k]; });
+  (matches || []).forEach(function (m) {
+    var finished = m.status === 'FINISHED';
+    // Toss-ups (favorite:null) are never locked — grading "no pick" as a miss
+    // would silently deflate accuracy for exactly the games the model is
+    // honestly unsure about.
+    if (!preds[m.id] && !finished && m.projection && m.projection.favorite) {
+      preds[m.id] = {
+        id: m.id, home: m.home, away: m.away,
+        pHome: m.projection.probs.home, favorite: m.projection.favorite,
+        favPct: Math.round(Math.max(m.projection.probs.home, m.projection.probs.away) * 100),
+        tag: m.projection.tag, firstSeen: nowIso, resolved: false
+      };
+    }
+    if (finished && preds[m.id] && !preds[m.id].resolved) {
+      var winner = pbaMatchWinner(m);
+      if (winner) {
+        var pr = preds[m.id];
+        var outcomeHome = (winner === pr.home) ? 1 : 0;
+        var pHome = Math.max(0.01, Math.min(0.99, pr.pHome));
+        pr.resolved = true;
+        pr.winner = winner;
+        pr.correct = (pr.favorite === winner);
+        pr.brier = Math.round(Math.pow(pHome - outcomeHome, 2) * 1e4) / 1e4;
+        pr.logLoss = Math.round((-(outcomeHome * Math.log(pHome) + (1 - outcomeHome) * Math.log(1 - pHome))) * 1e4) / 1e4;
+        pr.resolvedAt = nowIso;
+      }
+    }
+  });
+  var all = Object.keys(preds).map(function (k) { return preds[k]; });
+  var resolved = all.filter(function (p) { return p.resolved; });
+  var decisive = resolved.filter(function (p) { return p.tag === 'Moderate edge' || p.tag === 'Strong edge'; });
+  function acc(list) { return list.length ? Math.round(list.filter(function (p) { return p.correct; }).length / list.length * 100) : null; }
+  function mean(list, f) { return list.length ? list.reduce(function (a, p) { return a + f(p); }, 0) / list.length : null; }
+  var brier = mean(resolved, function (p) { return p.brier; });
+  var logLoss = mean(resolved, function (p) { return p.logLoss; });
+  var byTag = ['Toss-up', 'Watch only', 'Moderate edge', 'Strong edge'].map(function (tag) {
+    var l = resolved.filter(function (p) { return p.tag === tag; });
+    return { tag: tag, n: l.length, accuracy: acc(l) };
+  }).filter(function (r) { return r.n > 0; });
+  var recent = resolved.slice().sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 8)
+    .map(function (p) { return { home: p.home, away: p.away, favorite: p.favorite, favPct: p.favPct, tag: p.tag, winner: p.winner, correct: p.correct }; });
+  var stats = {
+    resolved: resolved.length,
+    pending: all.length - resolved.length,
+    accuracy: acc(resolved),
+    decisive: decisive.length,
+    decisiveAccuracy: acc(decisive),
+    brier: brier == null ? null : Math.round(brier * 1e4) / 1e4,
+    baselineBrier: 0.25,
+    brierSkill: brier == null ? null : Math.round((0.25 - brier) * 1e4) / 1e4,
+    logLoss: logLoss == null ? null : Math.round(logLoss * 1e4) / 1e4,
+    byTag: byTag,
+    recent: recent
+  };
+  // Bound the persisted doc: keep every unresolved lock + the 500 newest resolved.
+  var keep = {};
+  all.forEach(function (p) { if (!p.resolved) keep[p.id] = p; });
+  resolved.sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 500).forEach(function (p) { keep[p.id] = p; });
+  return { preds: keep, stats: stats, updatedAt: nowIso };
+}
+async function updatePbaJournal(db, module, dryRun) {
+  var nowIso = new Date().toISOString();
+  var matches = collectPbaMatches(module);
+  var prior = null;
+  if (db) {
+    try {
+      var snap = await db.collection(COLL).doc('sports-pba-journal').get();
+      if (snap.exists) prior = snap.data() || null;
+    } catch (e) { console.warn('pba journal read failed:', e.message || e); }
+  }
+  var journal = buildPbaJournal(prior, matches, nowIso);
+  if (db && !dryRun) {
+    try { await db.collection(COLL).doc('sports-pba-journal').set(journal); }
+    catch (e) { console.warn('pba journal write failed:', e.message || e); }
+  }
+  module.projectionJournal = journal.stats; // compact stats only in the daily doc
+  console.log('PBA journal: ' + journal.stats.resolved + ' scored, ' + journal.stats.pending + ' pending' +
+    (journal.stats.accuracy != null ? ', ' + journal.stats.accuracy + '% overall / ' + (journal.stats.decisiveAccuracy == null ? '—' : journal.stats.decisiveAccuracy + '%') + ' decisive' : '') + '.');
+  return journal.stats;
+}
+
 async function fetchPbaModule() {
   var now = new Date();
   var pages = await Promise.all([
@@ -1893,6 +2050,9 @@ async function fetchPbaModule() {
   if (!upcoming.length && !recent.length) throw new Error('PBA schedule and recap pages returned no games.');
   if (!standings.length) throw new Error('PBA standings page returned no table rows.');
   var momentum = buildPbaMomentum(recent, standings);
+  // Mutates upcoming's items in place, so moduleMatches (built below from the
+  // SAME objects) carries the projections through automatically.
+  buildPbaProjections(upcoming, momentum);
   var leaderCategories = parsePbaLeaders(pages[3]);
   var playerLeaders = { conference: '', categories: leaderCategories };
   var moduleMatches = recent.slice().reverse().concat(upcoming);
@@ -2724,6 +2884,7 @@ async function main() {
       console.log('PBA: loaded ' + doc.modules.pba.upcoming.length + ' upcoming, ' +
         doc.modules.pba.recent.length + ' recent, ' + doc.modules.pba.standings.length +
         ' standings rows and ' + doc.modules.pba.momentum.length + ' momentum rows.');
+      await updatePbaJournal(db, doc.modules.pba, DRY_RUN);
     } catch (e) {
       console.warn('PBA fetch failed:', e.message || e);
       var priorPba = prevDocData && prevDocData.modules && prevDocData.modules.pba;
@@ -2908,6 +3069,12 @@ export {
   buildModuleChanges,
   scheduleReadiness,
   buildPbaMomentum,
+  pbaWinProb,
+  pbaProjTag,
+  buildPbaProjections,
+  pbaMatchWinner,
+  collectPbaMatches,
+  buildPbaJournal,
   classifyTennis,
   buildTennisDraw,
   normTennisEvent,

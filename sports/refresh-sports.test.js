@@ -25,6 +25,12 @@ import {
   buildModuleChanges,
   scheduleReadiness,
   buildPbaMomentum,
+  pbaWinProb,
+  pbaProjTag,
+  buildPbaProjections,
+  pbaMatchWinner,
+  collectPbaMatches,
+  buildPbaJournal,
   classifyTennis,
   buildTennisDraw,
   normTennisEvent,
@@ -257,6 +263,112 @@ test('PBA momentum ranks on recent wins and POINT differential, not sets', funct
   assert.equal(smb.recentForm, 'L');
   assert.equal(smb.averagePointDiff, -6);
   assert.ok(nlex.score > smb.score);
+});
+
+test('pbaWinProb is symmetric around a 0 gap and capped like tennis/FIFA single-game variance', function () {
+  assert.equal(pbaWinProb(50, 50), 0.5);
+  var favored = pbaWinProb(70, 30);
+  var underdog = pbaWinProb(30, 70);
+  assert.ok(Math.abs(favored - (1 - underdog)) < 1e-9);
+  assert.ok(favored > 0.5 && favored <= 0.85);
+  // an extreme gap still doesn't approach certainty — the logistic only
+  // asymptotically nears the 15/85 cap, it never needs to hit it exactly at the
+  // domain's actual max (a 100-point momentum-score gap)
+  assert.ok(pbaWinProb(100, 0) < 0.85 && pbaWinProb(100, 0) > 0.8);
+  assert.ok(pbaWinProb(0, 100) > 0.15 && pbaWinProb(0, 100) < 0.2);
+  // the cap is still a real ceiling for any gap beyond the domain's natural max
+  assert.equal(pbaWinProb(1000, 0), 0.85);
+});
+
+test('pbaProjTag thresholds match FIFA\'s exact vocabulary', function () {
+  assert.equal(pbaProjTag(2), 'Toss-up');
+  assert.equal(pbaProjTag(8), 'Watch only');
+  assert.equal(pbaProjTag(18), 'Moderate edge');
+  assert.equal(pbaProjTag(40), 'Strong edge');
+});
+
+test('buildPbaProjections only projects NOT-YET-PLAYED matches, and degrades gracefully with missing momentum', function () {
+  var momentum = [
+    { team: 'Barangay Ginebra San Miguel', score: 80 },
+    { team: 'TNT Tropang 5G', score: 40 }
+  ];
+  var upcoming = { id: 'g1', status: 'SCHEDULED', home: 'Barangay Ginebra San Miguel', away: 'TNT Tropang 5G' };
+  var finished = { id: 'g2', status: 'FINISHED', home: 'Barangay Ginebra San Miguel', away: 'TNT Tropang 5G', score: { home: 88, away: 73 } };
+  var noData = { id: 'g3', status: 'SCHEDULED', home: 'Meralco Bolts', away: 'Phoenix' };
+  var matches = [upcoming, finished, noData];
+  buildPbaProjections(matches, momentum);
+
+  assert.ok(upcoming.projection);
+  assert.equal(upcoming.projection.favorite, 'Barangay Ginebra San Miguel');
+  assert.equal(upcoming.projection.tag, 'Strong edge');
+  assert.ok(Math.abs(upcoming.projection.probs.home + upcoming.projection.probs.away - 1) < 1e-6);
+  assert.equal(upcoming.projection.probs.draw, 0);
+
+  // never projects a known result — lookahead guard
+  assert.equal(finished.projection, undefined);
+
+  // neither team has a momentum row: no projection at all rather than a fake 50/50
+  assert.equal(noData.projection, undefined);
+});
+
+test('a near-even momentum gap is called Toss-up with no favorite named', function () {
+  var momentum = [
+    { team: 'Meralco Bolts', score: 51 },
+    { team: 'Phoenix', score: 49 }
+  ];
+  var m = { id: 'g4', status: 'SCHEDULED', home: 'Meralco Bolts', away: 'Phoenix' };
+  buildPbaProjections([m], momentum);
+  assert.equal(m.projection.tag, 'Toss-up');
+  assert.equal(m.projection.favorite, null);
+});
+
+test('pbaMatchWinner reads the score, refusing an unplayed or unfinished game', function () {
+  assert.equal(pbaMatchWinner({ status: 'FINISHED', home: 'A', away: 'B', score: { home: 90, away: 88 } }), 'A');
+  assert.equal(pbaMatchWinner({ status: 'FINISHED', home: 'A', away: 'B', score: { home: 80, away: 90 } }), 'B');
+  assert.equal(pbaMatchWinner({ status: 'SCHEDULED', home: 'A', away: 'B', score: { home: null, away: null } }), null);
+  assert.equal(pbaMatchWinner({ status: 'FINISHED', home: 'A', away: 'B', score: { home: 90, away: 90 } }), null);
+});
+
+test('PBA projection journal locks a scheduled pick and scores it when finished, with no hindsight', function () {
+  var scheduled = [{
+    id: 'pba-2026-08-10-a-b', status: 'SCHEDULED', home: 'Barangay Ginebra San Miguel', away: 'TNT Tropang 5G',
+    projection: { favorite: 'Barangay Ginebra San Miguel', tag: 'Strong edge', probs: { home: 0.8, draw: 0, away: 0.2 } }
+  }];
+  var j1 = buildPbaJournal(null, scheduled, '2026-08-09T00:00:00Z');
+  assert.equal(j1.stats.resolved, 0);
+  assert.equal(j1.stats.pending, 1);
+  assert.equal(j1.preds['pba-2026-08-10-a-b'].resolved, false);
+
+  var finished = [{
+    id: 'pba-2026-08-10-a-b', status: 'FINISHED', home: 'Barangay Ginebra San Miguel', away: 'TNT Tropang 5G',
+    score: { home: 95, away: 80 }
+  }];
+  var j2 = buildPbaJournal(j1, finished, '2026-08-11T00:00:00Z');
+  assert.equal(j2.stats.resolved, 1);
+  assert.equal(j2.stats.accuracy, 100);
+  assert.equal(j2.stats.decisive, 1);
+  assert.equal(j2.stats.decisiveAccuracy, 100);
+  assert.ok(Math.abs(j2.preds['pba-2026-08-10-a-b'].brier - 0.04) < 1e-9); // (0.8 − 1)^2
+
+  // a finished game that was never locked while scheduled is ignored — no hindsight
+  var j3 = buildPbaJournal(null, finished, '2026-08-11T00:00:00Z');
+  assert.equal(j3.stats.resolved, 0);
+
+  // a Toss-up (no favorite) is never locked at all — it can't be silently graded a miss
+  var tossup = [{
+    id: 'pba-2026-08-12-c-d', status: 'SCHEDULED', home: 'C', away: 'D',
+    projection: { favorite: null, tag: 'Toss-up', probs: { home: 0.51, draw: 0, away: 0.49 } }
+  }];
+  var j4 = buildPbaJournal(null, tossup, '2026-08-09T00:00:00Z');
+  assert.equal(j4.stats.pending, 0);
+  assert.equal(Object.keys(j4.preds).length, 0);
+});
+
+test('collectPbaMatches pulls straight from the merged matches list', function () {
+  var mod = { matches: [{ id: 'm1', home: 'A', away: 'B' }, { id: null }, { home: 'no-id' }] };
+  var out = collectPbaMatches(mod);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'm1');
 });
 
 test('parses the tableless PBA leaders card grid from its data attributes', function () {
