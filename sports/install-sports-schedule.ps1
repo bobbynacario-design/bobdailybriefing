@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('nba', 'pvl', 'tennis')]
+  [ValidateSet('nba', 'pba', 'tennis')]
   [string]$Module,
   [switch]$Force
 )
@@ -34,13 +34,13 @@ $action = New-ScheduledTaskAction -Execute $powershell -Argument $arguments -Wor
 # doc), so two tasks firing in the same minute means the loser's refresh is
 # silently reverted to yesterday's snapshot. PVL therefore runs at 08:20, clear
 # of the 08:00 tennis job.
-if ($Module -eq 'pvl') {
-  $taskName = 'BobDailyBriefing-PvlRefresh'
+if ($Module -eq 'pba') {
+  $taskName = 'BobDailyBriefing-PbaRefresh'
   $triggers = @(
     (New-ScheduledTaskTrigger -Daily -At '08:20'),
     (New-ScheduledTaskTrigger -Daily -At '21:30')
   )
-  $description = 'Official PVL schedule, result, standings and player-leader refresh at 08:20 and 21:30 PHT. 08:20 (not 08:00) keeps it clear of the tennis job writing the same doc.'
+  $description = 'Official PBA schedule, result, standings and conference-leader refresh at 08:20 and 21:30 PHT. 08:20 (not 08:00) keeps it clear of the tennis job writing the same doc; 21:30 lands after a PBA doubleheader ends.'
 } elseif ($Module -eq 'tennis') {
   $taskName = 'BobDailyBriefing-TennisRefresh'
   $triggers = @(

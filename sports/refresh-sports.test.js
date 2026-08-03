@@ -13,15 +13,17 @@ import {
   nbaPlayoffRound,
   buildNbaBracket,
   nbaSeasonYear,
-  parsePvlSchedule,
-  parsePvlRecaps,
-  parsePvlStandings,
-  parsePvlLeaders,
-  buildPvlBracket,
+  parsePbaSchedule,
+  parsePbaRecaps,
+  parsePbaStandings,
+  parsePbaLeaders,
+  pbaTeamIndex,
+  pbaTitleCase,
+  buildPbaBracket,
   buildTeamProfiles,
   buildModuleChanges,
   scheduleReadiness,
-  buildPvlMomentum,
+  buildPbaMomentum,
   classifyTennis,
   buildTennisDraw,
   normTennisEvent,
@@ -172,55 +174,100 @@ test('normalizes ESPN playoff rounds and builds current series bracket rows', fu
   assert.equal(bracket.rounds[0].series[0].completed, true);
 });
 
-test('parses official PVL schedule cards with shared date and venue headings', function () {
-  var html = fixture('pvl-schedule.html');
-  var games = parsePvlSchedule(html, new Date('2026-07-18T00:00:00Z'));
+test('parses official PBA schedule days, sharing the date heading across games', function () {
+  var games = parsePbaSchedule(fixture('pba-schedule.html'), new Date('2026-08-03T00:00:00Z'));
+  assert.equal(games.length, 3);
+  // Shouted source names are title-cased for the tab.
+  assert.equal(games[0].home, 'Titan Ultra Giant Risers');
+  assert.equal(games[0].away, 'Macau Giant Pandas');
+  assert.equal(games[0].venue, 'Ninoy Aquino Stadium');
+  // 05:15 PM PHT on Aug 04 == 09:15Z, i.e. the PHT offset is applied.
+  assert.equal(games[0].utcDate, '2026-08-04T09:15:00.000Z');
+  assert.deepEqual(games[0].score, { home: null, away: null });
+  // The doubleheader's second game has an EMPTY h2 and must inherit the date
+  // above it — dropping it silently loses half the schedule.
+  assert.equal(games[1].home, 'NLEX Road Warriors');
+  assert.equal(games[1].away, 'TNT Tropang 5G');
+  assert.equal(games[1].utcDate, '2026-08-04T11:30:00.000Z');
+  assert.equal(games[1].venue, 'Ninoy Aquino Stadium');
+  // The next dated heading takes over again.
+  assert.equal(games[2].utcDate, '2026-08-05T09:15:00.000Z');
+  assert.equal(games[2].away, 'Phoenix');
+});
+
+test('parses PBA standings across group tables despite the invalid anchor-wrapped rows', function () {
+  var standings = parsePbaStandings(fixture('pba-standings.html'));
+  assert.equal(standings.length, 3);
+  assert.equal(standings[0].team, 'NLEX Road Warriors');
+  assert.equal(standings[0].conference, 'GROUP A');
+  assert.equal(standings[0].wins, 5);
+  assert.equal(standings[0].losses, 0);
+  assert.equal(standings[0].pct, 1);
+  assert.equal(standings[0].teamId, '6');
+  // Position restarts per group, and the second group is picked up too.
+  assert.equal(standings[2].conference, 'GROUP B');
+  assert.equal(standings[2].position, 1);
+  assert.equal(standings[2].team, 'Barangay Ginebra San Miguel');
+});
+
+test('resolves PBA recap teams from logo ids, since results markup carries no team text', function () {
+  var standings = parsePbaStandings(fixture('pba-standings.html'));
+  var schedule = parsePbaSchedule(fixture('pba-schedule.html'), new Date('2026-08-03T00:00:00Z'));
+  var index = pbaTeamIndex(standings, schedule);
+  var games = parsePbaRecaps(fixture('pba-recap.html'), index, new Date('2026-08-03T00:00:00Z'));
   assert.equal(games.length, 2);
-  assert.equal(games[0].home, 'Nxled Chameleons');
-  assert.equal(games[0].away, 'Capital1 Solar Spikers');
-  assert.equal(games[0].venue, 'Vigan City, Ilocos Sur');
-  assert.equal(games[1].utcDate, '2026-07-25T10:30:00.000Z');
-  assert.deepEqual(games[1].score, { home: null, away: null });
+  // teams/4 is in standings (Ginebra); teams/2 is in neither, so it degrades to
+  // the game-leaders abbreviation rather than dropping the game.
+  assert.equal(games[0].home, 'Barangay Ginebra San Miguel');
+  assert.deepEqual(games[0].score, { home: 73, away: 88 });
+  assert.equal(games[0].status, 'FINISHED');
+  assert.equal(games[0].venue, 'Smart Araneta Coliseum');
+  assert.equal(games[1].home, 'NLEX Road Warriors');
+  assert.equal(games[1].away, 'San Miguel Beermen');
+  // Sorted newest first.
+  assert.ok(games[0].utcDate > games[1].utcDate);
 });
 
-test('parses PVL recaps and standings into momentum-ready rows', function () {
-  var recap = fixture('pvl-recap-standings.html');
-  var standingsHtml = recap;
-  var games = parsePvlRecaps(recap, new Date('2026-07-18T00:00:00Z'));
-  var standings = parsePvlStandings(standingsHtml);
-  var momentum = buildPvlMomentum(games, standings);
-  assert.equal(games.length, 1);
-  assert.deepEqual(games[0].score, { home: 3, away: 1 });
-  assert.equal(standings.length, 2);
-  assert.equal(standings[0].points, 6);
-  assert.equal(momentum[0].team, 'ZUS Coffee Thunderbelles');
-  assert.equal(momentum[0].recentForm, 'W');
+test('PBA momentum ranks on recent wins and POINT differential, not sets', function () {
+  var standings = parsePbaStandings(fixture('pba-standings.html'));
+  var schedule = parsePbaSchedule(fixture('pba-schedule.html'), new Date('2026-08-03T00:00:00Z'));
+  var games = parsePbaRecaps(fixture('pba-recap.html'), pbaTeamIndex(standings, schedule), new Date('2026-08-03T00:00:00Z'));
+  var momentum = buildPbaMomentum(games, standings);
+  var nlex = momentum.find(function (r) { return r.team === 'NLEX Road Warriors'; });
+  assert.equal(nlex.recentForm, 'W');
+  assert.equal(nlex.averagePointDiff, 6);
+  assert.equal(nlex.averageSetDiff, undefined);
+  var smb = momentum.find(function (r) { return r.team === 'San Miguel Beermen'; });
+  assert.equal(smb.recentForm, 'L');
+  assert.equal(smb.averagePointDiff, -6);
+  assert.ok(nlex.score > smb.score);
 });
 
-test('parses official PVL leader tables with conference metadata', function () {
-  var parsed = parsePvlLeaders(fixture('pvl-leaders.html'), 'scorers');
-  assert.equal(parsed.conference, '2026 All Filipino Conference');
-  assert.equal(parsed.label, 'Scorer');
-  assert.equal(parsed.leaders[0].name, 'BELEN, MHICAELA');
-  assert.equal(parsed.leaders[0].valueLabel, 'Total');
-  assert.equal(parsed.leaders[0].value, '49');
+test('pbaTitleCase tames the shouted source names but leaves real casing alone', function () {
+  assert.equal(pbaTitleCase('NLEX ROAD WARRIORS'), 'NLEX Road Warriors');
+  assert.equal(pbaTitleCase('TNT TROPANG 5G'), 'TNT Tropang 5G');
+  assert.equal(pbaTitleCase('Barangay Ginebra'), 'Barangay Ginebra');
+  // Internal capitals the shouted source destroys.
+  assert.equal(pbaTitleCase('CONVERGE FIBERXERS'), 'Converge FiberXers');
+  assert.equal(pbaTitleCase(''), '');
 });
 
-test('builds PVL postseason rounds and team detail profiles only from official match fields', function () {
+test('builds PBA postseason rounds and team detail profiles only from official match fields', function () {
   var matches = [{
-    id:'pvl-final', utcDate:'2026-08-30T10:00:00Z', status:'SCHEDULED', stage:'Semifinals',
-    home:'Creamline Cool Smashers', away:'ZUS Coffee Thunderbelles', score:{home:null,away:null}
+    id:'pba-final', utcDate:'2026-08-30T10:00:00Z', status:'SCHEDULED', stage:'Semifinals',
+    home:'Barangay Ginebra San Miguel', away:'TNT Tropang 5G', score:{home:null,away:null}
   }];
-  var bracket = buildPvlBracket(matches);
+  var bracket = buildPbaBracket(matches);
   assert.equal(bracket.active, true);
   assert.equal(bracket.rounds[0].label, 'Semifinals');
-  var profiles = buildTeamProfiles('pvl', [
-    { team:'Creamline Cool Smashers', position:1, wins:3, losses:0, points:9, setRatio:4 }
+  var profiles = buildTeamProfiles('pba', [
+    { team:'Barangay Ginebra San Miguel', position:1, wins:3, losses:0, pct:1, streak:'+3' }
   ], [
-    { team:'Creamline Cool Smashers', score:88, label:'RISING', recentForm:'WWW', averageSetDiff:2 }
+    { team:'Barangay Ginebra San Miguel', score:88, label:'RISING', recentForm:'WWW', averagePointDiff:7.5 }
   ], matches, []);
   assert.equal(profiles[0].momentumScore, 88);
-  assert.equal(profiles[0].next.away, 'ZUS Coffee Thunderbelles');
+  assert.equal(profiles[0].margin, 7.5);
+  assert.equal(profiles[0].next.away, 'TNT Tropang 5G');
 });
 
 test('builds a concise refresh delta from results, fixtures and standings movement', function () {
@@ -240,12 +287,12 @@ test('builds a concise refresh delta from results, fixtures and standings moveme
     standings:[{ team:'Creamline', position:1, wins:2, losses:0, points:6 }],
     momentum:[{ team:'Creamline', score:74, label:'RISING', recentForm:'WW' }]
   };
-  var changes = buildModuleChanges('pvl', current, previous);
+  var changes = buildModuleChanges('pba', current, previous);
   assert.equal(changes.since, '2026-07-20T00:00:00Z');
   assert.deepEqual(changes.items.map(function (item) { return item.type; }), ['result', 'fixture', 'standing', 'momentum']);
   assert.match(changes.items[2].detail, /#2 to #1/);
 
-  var repeated = buildModuleChanges('pvl', {
+  var repeated = buildModuleChanges('pba', {
     lastSuccessfulAt:'2026-07-22T04:00:00Z', recent:[], upcoming:[], standings:[], momentum:[]
   }, {
     lastSuccessfulAt:'2026-07-22T00:00:00Z', matches:[], standings:[], momentum:[],
@@ -355,17 +402,17 @@ test('tennis projection journal locks a scheduled pick and scores it when finish
 
 test('scheduler readiness requires successful refreshes on three distinct PHT days', function () {
   var history = [
-    { completedAt:'2026-07-18T00:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } },
-    { completedAt:'2026-07-18T05:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } },
-    { completedAt:'2026-07-19T00:00:00Z', modules:{ pvl:{ refreshStatus:'fallback' } } },
-    { completedAt:'2026-07-20T00:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } }
+    { completedAt:'2026-07-18T00:00:00Z', modules:{ pba:{ refreshStatus:'ok' } } },
+    { completedAt:'2026-07-18T05:00:00Z', modules:{ pba:{ refreshStatus:'ok' } } },
+    { completedAt:'2026-07-19T00:00:00Z', modules:{ pba:{ refreshStatus:'fallback' } } },
+    { completedAt:'2026-07-20T00:00:00Z', modules:{ pba:{ refreshStatus:'ok' } } }
   ];
-  var blocked = scheduleReadiness(history, 'pvl', 3);
+  var blocked = scheduleReadiness(history, 'pba', 3);
   assert.equal(blocked.ready, false);
   assert.equal(blocked.successfulDays.length, 2);
   var ready = scheduleReadiness(history.concat([
-    { completedAt:'2026-07-21T00:00:00Z', modules:{ pvl:{ refreshStatus:'ok' } } }
-  ]), 'pvl', 3);
+    { completedAt:'2026-07-21T00:00:00Z', modules:{ pba:{ refreshStatus:'ok' } } }
+  ]), 'pba', 3);
   assert.equal(ready.ready, true);
 });
 
@@ -375,7 +422,7 @@ function laneDoc() {
     worldCup: { matches: [{ id: 1, status: 'FINISHED' }] },
     modules: {
       nba: { matches: [{ id: 'a' }], standings: [{ team: 'BOS' }] },
-      pvl: { standings: [{ team: 'Creamline' }], upcoming: [] },
+      pba: { standings: [{ team: 'Barangay Ginebra San Miguel' }], upcoming: [] },
       tennis: { tiers: { slam: { current: { name: 'US Open' } }, masters: {}, tour500: {} } }
     }
   };
@@ -383,7 +430,7 @@ function laneDoc() {
 
 test('moduleHasData recognises real lane data and rejects empty scaffolding', function () {
   var d = laneDoc();
-  ['nba', 'pvl', 'tennis', 'worldcup'].forEach(function (k) {
+  ['nba', 'pba', 'tennis', 'worldcup'].forEach(function (k) {
     assert.equal(moduleHasData(k, laneValue(d, k)), true, k + ' should count as populated');
   });
   assert.equal(moduleHasData('nba', { matches: [], standings: [], upcoming: [] }), false);
@@ -395,7 +442,7 @@ test('moduleHasData recognises real lane data and rejects empty scaffolding', fu
 test('lanesMissing flags every lane a module-scoped run would erase', function () {
   var onlyTennis = { modules: { tennis: laneDoc().modules.tennis } };
   var wantsTennis = function (k) { return k === 'tennis'; };
-  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'pvl', 'worldcup']);
+  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'pba', 'worldcup']);
   // Lanes carried forward from the previous doc are not missing.
   assert.deepEqual(lanesMissing(laneDoc(), wantsTennis), []);
   // A lane this run is responsible for is never reported (its own fallback owns it).
@@ -409,7 +456,7 @@ test('setLane restores into the right slot for modules and the legacy worldCup k
   setLane(target, 'worldcup', laneValue(source, 'worldcup'));
   assert.equal(target.modules.nba.matches.length, 1);
   assert.equal(target.worldCup.matches.length, 1);
-  assert.deepEqual(lanesMissing(target, function (k) { return k === 'pvl' || k === 'tennis'; }), []);
+  assert.deepEqual(lanesMissing(target, function (k) { return k === 'pba' || k === 'tennis'; }), []);
 });
 
 test('shiftDateKey walks back across month boundaries', function () {

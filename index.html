@@ -2049,15 +2049,15 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 
     <div class="help-card">
       <div class="help-h">⚽ Sports — NBA momentum and PH local volleyball</div>
-      <p>The Sports tab defaults to <b>NBA</b>, with <b>PH Local / PVL</b> beside it and FIFA retained as an archive. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
+      <p>The Sports tab defaults to <b>NBA</b>, with <b>PH Local / PBA</b> beside it and FIFA retained as an archive. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
       <ul>
         <li><b>Freshness banner</b> — says DATA CURRENT, STALE DATA, FALLBACK SNAPSHOT, or REFRESH FAILED and shows the last successful provider update.</li>
         <li><b>NBA</b> — schedule/results, conference standings, last-five form and margin, rest/back-to-back flags, recent game leaders, and ESPN availability entries.</li>
-        <li><b>PVL</b> — official fixtures, venues, recaps, standings, recent set differential, and leaders for scoring, spiking, blocking, serving, digging, setting, and receiving.</li>
-        <li><b>Competition Bracket</b> — uses provider-published NBA round/series data and activates for PVL when official match stages become quarterfinals, semifinals, or finals.</li>
+        <li><b>PBA</b> — official fixtures, venues, results, standings, recent point differential, and conference leaders.</li>
+        <li><b>Competition Bracket</b> — uses provider-published NBA round/series data and activates for PBA when official match stages become quarterfinals, semifinals, or finals.</li>
         <li><b>Team Detail</b> — select a team to see record, momentum, average margin or set differential, next/latest match, and current availability count.</li>
         <li><b>Team Momentum</b> — <span class="help-pill">Score</span> combines recent wins, form margin or set differential, and current standings. <span class="help-pill" style="color:var(--green)">RISING</span> is strongest, <span class="help-pill" style="color:#F0A832">WATCH</span> needs confirmation, and <span class="help-pill" style="color:var(--red)">FADING</span> is weakening.</li>
-        <li><b>Watchlist</b> — configurable NBA and PVL teams with their current record and recent form.</li>
+        <li><b>Watchlist</b> — configurable NBA and PBA teams with their current record and recent form.</li>
       </ul>
       <p class="help-key">Best use: start with the freshness banner, scan RISING and WATCH teams, then check the actual fixtures, rest, availability, and recent results. Momentum is context, not a prediction or betting recommendation.</p>
     </div>
@@ -2068,7 +2068,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <li><b>Radar</b> = today's framing: what's strong, why, and where it breaks. Use the status + stop + catalyst.</li>
         <li><b>Journal</b> = the reality check: look at <b>excess</b>, not raw. It currently says "we've mostly been long the AI trade" — so weight the radar accordingly.</li>
         <li><b>Markets</b> = what changed in event probabilities that matter to your Philippine, macro, regional-risk, energy, trade, or AI context. Use moves as research prompts, not recommendations.</li>
-        <li><b>Sports</b> = who is moving up or down in NBA and PVL. Check freshness first, then use Momentum alongside fixtures, rest, availability, and official results.</li>
+        <li><b>Sports</b> = who is moving up or down in NBA and PBA. Check freshness first, then use Momentum alongside fixtures, rest, availability, and official results.</li>
       </ul>
     </div>
 
@@ -4941,7 +4941,7 @@ function sportsBracketHtml(mod, key) {
   var bracket = mod && mod.bracket || {};
   var rounds = bracket.rounds || [];
   if (!rounds.length) {
-    return '<div class="sports-empty">No ' + esc(key === 'pvl' ? 'PVL elimination bracket' : 'active NBA playoff bracket') + ' is published in the current provider window.</div>';
+    return '<div class="sports-empty">No ' + esc(key === 'pba' ? 'PBA elimination bracket' : 'active NBA playoff bracket') + ' is published in the current provider window.</div>';
   }
   return '<div class="sports-series">' + rounds.map(function (round) {
     return '<div class="sports-series-round"><h4>' + esc(round.label || round.key || 'Round') + '</h4>' +
@@ -4973,7 +4973,7 @@ function sportsTeamProfilesHtml(mod, key) {
     var margin = profile.margin == null ? '-' : ((profile.margin > 0 ? '+' : '') + profile.margin);
     var availability = (profile.availability || []).map(function (row) { return (row.player || '') + ' (' + (row.status || 'Unknown') + ')'; }).join(', ');
     return '<div class="sports-team-profile" data-team-profile="' + idx + '" style="display:' + (idx ? 'none' : 'block') + '"><h3>' + esc(profile.team || '') + '</h3>' +
-      '<div class="sports-team-facts"><span>RECORD<br><b>' + esc(record) + '</b></span><span>MOMENTUM<br><b>' + esc((profile.momentumLabel || '-') + ' ' + (profile.momentumScore == null ? '-' : profile.momentumScore)) + '</b></span><span>' + esc(key === 'pvl' ? 'SET +/-' : 'AVG MARGIN') + '<br><b>' + esc(margin) + '</b></span><span>AVAILABILITY<br><b>' + esc(String(profile.availabilityCount || 0)) + '</b></span></div>' +
+      '<div class="sports-team-facts"><span>RECORD<br><b>' + esc(record) + '</b></span><span>MOMENTUM<br><b>' + esc((profile.momentumLabel || '-') + ' ' + (profile.momentumScore == null ? '-' : profile.momentumScore)) + '</b></span><span>' + 'AVG MARGIN' + '<br><b>' + esc(margin) + '</b></span><span>AVAILABILITY<br><b>' + esc(String(profile.availabilityCount || 0)) + '</b></span></div>' +
       sportsProfileMatchLine('Next', profile.next) + sportsProfileMatchLine('Latest', profile.latest) +
       (availability ? '<div class="sports-team-line"><b>Availability:</b> ' + esc(availability) + '</div>' : '') + '</div>';
   }).join('');
@@ -5628,7 +5628,7 @@ function sportsWorldCupHtml(d, miro) {
 }
 function sportsModuleTitle(key, mod) {
   if (key === 'nba') return 'NBA';
-  if (key === 'pvl') return 'PH Local';
+  if (key === 'pba') return 'PH Local';
   if (key === 'tennis') return 'Tennis';
   if (key === 'worldcup') return 'FIFA Archive';
   return (mod && (mod.title || mod.name)) || key;
@@ -5637,7 +5637,7 @@ function sportsAvailableModules(d) {
   var out = [];
   var mods = d && d.modules || {};
   if (mods.nba && mods.nba.enabled !== false) out.push({ key:'nba', label:'NBA', module:mods.nba });
-  if (mods.pvl && mods.pvl.enabled !== false) out.push({ key:'pvl', label:'PH Local', module:mods.pvl });
+  if (mods.pba && mods.pba.enabled !== false) out.push({ key:'pba', label:'PH Local', module:mods.pba });
   if (mods.tennis && mods.tennis.enabled !== false) out.push({ key:'tennis', label:'Tennis', module:mods.tennis });
   if (d && d.worldCup) out.push({ key:'worldcup', label:'FIFA Archive', module:d.worldCup });
   return out;
@@ -5737,7 +5737,7 @@ function sportsMyTeamsHtml(mod, key) {
     var record = profile.wins + '-' + profile.losses + (profile.points == null ? '' : ' / ' + profile.points + ' pts');
     var margin = profile.margin == null ? '-' : (profile.margin > 0 ? '+' : '') + profile.margin;
     var next = profile.next ? ((profile.next.home || 'TBD') + ' vs ' + (profile.next.away || 'TBD') + ' / ' + sportsDate(profile.next.utcDate)) : 'No fixture in current window';
-    return '<div class="sports-team-brief"><div class="sports-team-brief-top"><h4>' + esc(profile.team) + '</h4><div class="sports-team-record">' + esc(record) + '</div></div><div class="sports-team-brief-meta">' + esc((profile.momentumLabel || 'STEADY') + ' ' + (profile.momentumScore == null ? '-' : profile.momentumScore) + ' / form ' + (profile.recentForm || '-') + ' / ' + (key === 'pvl' ? 'set ' : 'margin ') + margin) + (profile.availabilityCount ? ' / ' + profile.availabilityCount + ' availability updates' : '') + '</div><div class="sports-team-brief-next">' + esc(next) + '</div></div>';
+    return '<div class="sports-team-brief"><div class="sports-team-brief-top"><h4>' + esc(profile.team) + '</h4><div class="sports-team-record">' + esc(record) + '</div></div><div class="sports-team-brief-meta">' + esc((profile.momentumLabel || 'STEADY') + ' ' + (profile.momentumScore == null ? '-' : profile.momentumScore) + ' / form ' + (profile.recentForm || '-') + ' / ' + 'margin ' + margin) + (profile.availabilityCount ? ' / ' + profile.availabilityCount + ' availability updates' : '') + '</div><div class="sports-team-brief-next">' + esc(next) + '</div></div>';
   }).join('') + '</div>';
 }
 function sportsMyPlayersHtml(mod, key) {
@@ -5757,7 +5757,7 @@ function sportsContextHtml(mod, key) {
     { h:'Team', v:function (r) { return r.team || ''; } },
     { h:'W', num:true, v:function (r) { return r.wins == null ? '-' : r.wins; } },
     { h:'L', num:true, v:function (r) { return r.losses == null ? '-' : r.losses; } },
-    { h:key === 'pvl' ? 'Pts' : 'Pct', num:true, v:function (r) { return key === 'pvl' ? (r.points == null ? '-' : r.points) : (r.pct == null ? '-' : r.pct); } }
+    { h:'Pct', num:true, v:function (r) { return r.pct == null ? '-' : r.pct; } }
   ]);
 }
 function sportsLeagueDetailsHtml(mod, key) {
@@ -5769,13 +5769,13 @@ function sportsLeagueDetailsHtml(mod, key) {
     { h:'Team', v:function (r) { return r.team || ''; } }, { h:'Tag', v:function (r) { return r.label || ''; } }, { h:'Score', num:true, v:function (r) { return r.score == null ? '-' : r.score; } }, { h:'Form', v:function (r) { return r.recentForm || '-'; } }
   ]) + '</div>';
   html += '<div class="sports-panel"><div class="sports-panel-title">Full Standings</div>' + sportsTable(standings, 'Standings unavailable.', [
-    { h:'Conf', v:function (r) { return r.conference || '-'; } }, { h:'#', num:true, v:function (r) { return r.position == null ? '-' : r.position; } }, { h:'Team', v:function (r) { return r.team || ''; } }, { h:'W', num:true, v:function (r) { return r.wins == null ? '-' : r.wins; } }, { h:'L', num:true, v:function (r) { return r.losses == null ? '-' : r.losses; } }, { h:key === 'pvl' ? 'Pts' : 'Pct', num:true, v:function (r) { return key === 'pvl' ? (r.points == null ? '-' : r.points) : (r.pct == null ? '-' : r.pct); } }
+    { h:'Conf', v:function (r) { return r.conference || '-'; } }, { h:'#', num:true, v:function (r) { return r.position == null ? '-' : r.position; } }, { h:'Team', v:function (r) { return r.team || ''; } }, { h:'W', num:true, v:function (r) { return r.wins == null ? '-' : r.wins; } }, { h:'L', num:true, v:function (r) { return r.losses == null ? '-' : r.losses; } }, { h:'Pct', num:true, v:function (r) { return r.pct == null ? '-' : r.pct; } }
   ]) + '</div>';
   if (mod.bracket && mod.bracket.active && String(mod.phase || '').toLowerCase() === 'offseason') html += '<div class="sports-panel"><div class="sports-panel-title">Postseason Archive</div>' + sportsBracketHtml(mod, key) + '</div>';
   if (key === 'nba') html += '<div class="sports-panel"><div class="sports-panel-title">Availability</div>' + sportsTable((mod.injuries || []).slice(0, 30), 'No current availability entries.', [
     { h:'Team', v:function (r) { return r.team || ''; } }, { h:'Player', v:function (r) { return r.player || ''; } }, { h:'Status', v:function (r) { return r.status || '-'; } }, { h:'Update', v:function (r) { return r.note || '-'; } }
   ]) + '</div>';
-  if (key === 'pvl') {
+  if (key === 'pba') {
     var rows = sportsPlayerRows(mod, key);
     html += '<div class="sports-panel"><div class="sports-panel-title">Player Leaders</div>' + sportsTable(rows, 'Player leaders unavailable.', [
       { h:'Player', v:function (r) { return r.name || ''; } }, { h:'Leading categories', v:function (r) { return r.line || '-'; } }
@@ -5788,7 +5788,7 @@ function sportsModuleTabs(d) {
   var mods = sportsAvailableModules(d);
   if (!mods.length) return '';
   if (!sportsActiveModule || !mods.some(function (m) { return m.key === sportsActiveModule; })) {
-    var active = mods.find(function (m) { return m.key === 'pvl' && (m.module.upcoming || []).length; }) ||
+    var active = mods.find(function (m) { return m.key === 'pba' && (m.module.upcoming || []).length; }) ||
       mods.find(function (m) { return (m.module.upcoming || []).length && String(m.module.phase || '').toLowerCase() !== 'offseason'; });
     sportsActiveModule = active ? active.key : (mods.some(function (m) { return m.key === 'nba'; }) ? 'nba' : mods[0].key);
   }
@@ -5805,7 +5805,7 @@ function sportsModuleTabs(d) {
 function sportsPhaseNote(mod, key) {
   var phase = String(mod.phase || '').toLowerCase();
   if (phase !== 'offseason' && phase !== 'preseason') return '';
-  var league = key === 'pvl' ? 'PVL' : 'NBA';
+  var league = key === 'pba' ? 'PBA' : 'NBA';
   var next = (mod.upcoming || []).slice().sort(function (a, b) {
     return String(a.utcDate).localeCompare(String(b.utcDate));
   })[0];

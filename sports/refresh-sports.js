@@ -1,7 +1,7 @@
 // sports/refresh-sports.js
 //
 // Local runner for the Daily Briefer Sports tab. First lane: FIFA World Cup.
-// Current forward lanes: NBA Momentum Radar and PH Local Pulse (PVL).
+// Current forward lanes: NBA Momentum Radar and PH Local Pulse (PBA).
 // It fetches provider data, normalises it into a small UI document, and writes:
 //   briefings-bob/sports-YYYY-MM-DD
 //   briefings-bob/sports-latest
@@ -48,7 +48,7 @@ var COLL = 'briefings-bob';
 var FOOTBALL_DATA = 'https://api.football-data.org/v4';
 var ESPN_NBA = 'https://site.api.espn.com/apis';
 var ESPN_TENNIS = 'https://site.api.espn.com/apis/site/v2/sports/tennis';
-var PVL_SITE = 'https://www.pvl.ph';
+var PBA_SITE = 'https://www.pba.ph';
 var FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
 var FOLLOW_TEAMS = (process.env.SPORTS_FOLLOW_TEAMS || '')
   .split(',')
@@ -62,7 +62,7 @@ var NBA_FOLLOW_PLAYERS = (process.env.NBA_FOLLOW_PLAYERS || '')
   .split(',')
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
-var PVL_FOLLOW_TEAMS = (process.env.PVL_FOLLOW_TEAMS || 'Creamline,Choco Mucho,PLDT,ZUS Coffee')
+var PBA_FOLLOW_TEAMS = (process.env.PBA_FOLLOW_TEAMS || 'Ginebra,San Miguel,TNT,Magnolia')
   .split(',')
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
@@ -360,7 +360,7 @@ function normNbaInjuries(json) {
         player: athlete.displayName || athlete.fullName || '',
         status: row.status || 'Unknown',
         date: row.date || '',
-        note: cleanPvlText(row.shortComment || row.longComment || '').slice(0, 240)
+        note: cleanPbaText(row.shortComment || row.longComment || '').slice(0, 240)
       });
     });
   });
@@ -447,63 +447,76 @@ function buildNbaBracket(matches) {
   return { active: rounds.length > 0, rounds: rounds };
 }
 
-var PVL_TEAM_NAMES = {
-  AKA: 'Akari Chargers',
-  CAP: 'Capital1 Solar Spikers',
-  CCS: 'Creamline Cool Smashers',
-  CMF: 'Choco Mucho Flying Titans',
-  CSS: 'Cignal Super Spikers',
-  CTC: 'Chery Tiggo Crossovers',
-  FFF: 'Farm Fresh Foxies',
-  GTH: 'Galeries Tower Highrisers',
-  HSH: 'PLDT Home Fiber High Speed Hitters',
-  NXL: 'Nxled Chameleons',
-  PGA: 'Petro Gazz Angels',
-  ZUS: 'ZUS Coffee Thunderbelles'
-};
-var PVL_LEADER_CATEGORIES = ['scorers', 'spikers', 'blockers', 'servers', 'diggers', 'setters', 'receivers'];
+// PBA has no public API (ESPN carries no PBA league — every candidate slug 400s),
+// so this reads the official pba.ph pages the same way the PVL lane used to read
+// pvl.ph. Both sites serve the identical Cloudflare-managed robots policy:
+// `User-agent: * / Allow: /` with `Content-Signal: use=reference`.
+//
+// Team identity is the one awkward part. /schedule carries team names as text,
+// but /recap identifies each side ONLY by its logo URL (.../teams/<id>/logo_L1.png)
+// — there is no team name in the results markup. /standings carries BOTH the logo
+// id and the full name, so it is used to build an id -> name index that resolves
+// the recap rows. Guest teams (EASL visitors) are absent from standings, so the
+// index also absorbs the schedule's id/name pairs, and anything still unresolved
+// degrades to the game-leaders abbreviation rather than dropping the game.
+var PBA_LEADER_URL = '/leaders';
 
-function cleanPvlText(value) {
+function cleanPbaText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function pvlTeamName(value) {
-  var raw = cleanPvlText(value);
-  var code = raw.toUpperCase();
-  if (PVL_TEAM_NAMES[code]) return PVL_TEAM_NAMES[code];
-  var canonical = Object.keys(PVL_TEAM_NAMES).find(function (key) {
-    return teamKey(PVL_TEAM_NAMES[key]) === teamKey(raw);
-  });
-  return canonical ? PVL_TEAM_NAMES[canonical] : raw;
+// Titles on pba.ph are shouted ("NLEX ROAD WARRIORS"); render them in title case
+// so the tab matches the NBA lane instead of yelling.
+function pbaTitleCase(value) {
+  var raw = cleanPbaText(value);
+  if (!raw || raw !== raw.toUpperCase()) return raw;
+  var small = { of: 1, the: 1, and: 1, or: 1 };
+  // Team names that are acronyms, not words — these must stay shouted.
+  var acronyms = { tnt: 1, nlex: 1, pba: 1, smb: 1, ros: 1, gin: 1, easl: 1, np: 1 };
+  // Internal capitals the source destroys by shouting everything.
+  var camel = { fiberxers: 'FiberXers', northport: 'NorthPort' };
+  return raw.toLowerCase().split(' ').map(function (word, idx) {
+    if (idx && small[word]) return word;
+    if (acronyms[word]) return word.toUpperCase();
+    if (camel[word]) return camel[word];
+    if (/^\d/.test(word)) return word.toUpperCase();
+    return word.replace(/^./, function (c) { return c.toUpperCase(); });
+  }).join(' ');
 }
 
-function pvlMatchId(utcDate, home, away) {
-  return 'pvl-' + utcDate.slice(0, 10) + '-' +
+function pbaTeamId(src) {
+  var m = String(src || '').match(/\/teams\/(\d+)\//);
+  return m ? m[1] : '';
+}
+
+function pbaMatchId(utcDate, home, away) {
+  return 'pba-' + utcDate.slice(0, 10) + '-' +
     teamKey(home).replace(/ /g, '-').slice(0, 12).replace(/-+$/, '') + '-' +
     teamKey(away).replace(/ /g, '-').slice(0, 12).replace(/-+$/, '');
 }
 
-async function pvlFetch(path) {
-  var res = await fetchRetry(PVL_SITE + path, {
+async function pbaFetch(path) {
+  var res = await fetchRetry(PBA_SITE + path, {
     headers: {
       'accept': 'text/html,application/xhtml+xml',
       'user-agent': 'BobDailyBriefing/1.0 (+https://bobbynacario-design.github.io/bobdailybriefing/)'
     }
-  }, 'PVL ' + path);
-  if (!res.ok) throw new Error('PVL ' + path + ' HTTP ' + res.status);
+  }, 'PBA ' + path);
+  if (!res.ok) throw new Error('PBA ' + path + ' HTTP ' + res.status);
   return res.text();
 }
 
-function pvlDateTime(dateText, timeText, now, preferFuture) {
+// Handles both orderings pba.ph uses: "Tue, Aug 04" (schedule) and
+// "Aug 02, Sun" (recap). Anchoring on the month name avoids matching the weekday.
+function pbaDateTime(dateText, timeText, now, preferFuture) {
   var months = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
-  var dm = cleanPvlText(dateText).match(/\b([A-Z][a-z]{2})\s+(\d{1,2})\b/);
-  if (!dm || months[dm[1]] == null) return '';
-  var tm = cleanPvlText(timeText).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  var dm = cleanPbaText(dateText).match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})\b/);
+  if (!dm) return '';
+  var tm = cleanPbaText(timeText).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   var hour = tm ? Number(tm[1]) % 12 + (String(tm[3]).toUpperCase() === 'PM' ? 12 : 0) : 12;
   var minute = tm ? Number(tm[2]) : 0;
   now = now || new Date();
-  var phtYear = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric' }).format(now));
-  var year = phtYear;
+  var year = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric' }).format(now));
   var ms = Date.UTC(year, months[dm[1]], Number(dm[2]), hour - 8, minute);
   var tolerance = 45 * 86400000;
   if (preferFuture && ms < now.getTime() - tolerance) year++;
@@ -511,137 +524,194 @@ function pvlDateTime(dateText, timeText, now, preferFuture) {
   return new Date(Date.UTC(year, months[dm[1]], Number(dm[2]), hour - 8, minute)).toISOString();
 }
 
-function parsePvlSchedule(html, now) {
+// pba.ph renders ONE game per .schedule-day, and the date <h2> only appears on
+// the first game of a calendar day — the second game of a doubleheader has an
+// EMPTY h2 and inherits the date above it. Requiring a date per block silently
+// dropped every second game (18 of 36) and made every fixture look like a 5:15pm
+// tip, so the heading is carried forward instead.
+function parsePbaSchedule(html, now) {
   var $ = cheerio.load(html || '');
-  var firstCard = $('.match-card').first();
-  if (!firstCard.length) return [];
-  var container = firstCard.parent().parent();
-  var dateText = '';
-  var venue = '';
   var out = [];
-  container.children().each(function () {
-    var child = $(this);
-    var card = child.find('.match-card').first();
-    if (!card.length) {
-      var heading = cleanPvlText(child.text());
-      var dateMatch = heading.match(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+[A-Z][a-z]{2}\s+\d{1,2}\b/);
-      if (dateMatch) {
-        dateText = dateMatch[0];
-        venue = cleanPvlText(heading.replace(dateMatch[0], '').replace(/^\s*\|\s*/, ''));
-      }
-      return;
-    }
-    var teams = card.find('.match-card-teams h3').map(function () { return cleanPvlText($(this).text()); }).get();
-    var times = card.find('.match-card-time').map(function () { return cleanPvlText($(this).text()); }).get();
-    var utcDate = pvlDateTime(dateText, times[0], now, true);
-    if (teams.length < 2 || !utcDate) return;
-    var home = pvlTeamName(teams[0]);
-    var away = pvlTeamName(teams[1]);
-    out.push({
-      id: pvlMatchId(utcDate, home, away),
-      utcDate: utcDate,
-      status: 'SCHEDULED',
-      stage: times[1] || 'PVL',
-      group: '',
-      home: home,
-      away: away,
-      venue: venue,
-      score: { home: null, away: null }
+  var dateText = '';
+  $('.schedule-day').each(function () {
+    var day = $(this);
+    var heading = cleanPbaText(day.find('h2').first().text());
+    if (heading) dateText = heading;
+    if (!dateText) return;
+    day.find('.schedule-teams').each(function () {
+      var teamsBlock = $(this);
+      // The time/venue column is a sibling of the teams column inside one game row.
+      var row = teamsBlock.parent();
+      var timeVenue = row.find('.schedule-time-venue').first().find('p').map(function () {
+        return cleanPbaText($(this).text());
+      }).get();
+      var sides = teamsBlock.find('.schedule-team').map(function () {
+        var side = $(this);
+        return {
+          name: pbaTitleCase(side.find('p').first().text()),
+          teamId: pbaTeamId(side.find('img').first().attr('src'))
+        };
+      }).get();
+      if (sides.length < 2 || !sides[0].name || !sides[1].name) return;
+      var utcDate = pbaDateTime(dateText, timeVenue[0], now, true);
+      if (!utcDate) return;
+      out.push({
+        id: pbaMatchId(utcDate, sides[0].name, sides[1].name),
+        utcDate: utcDate,
+        status: 'SCHEDULED',
+        stage: 'PBA',
+        group: '',
+        home: sides[0].name,
+        away: sides[1].name,
+        homeId: sides[0].teamId,
+        awayId: sides[1].teamId,
+        venue: timeVenue[1] || '',
+        score: { home: null, away: null }
+      });
     });
   });
   return out.sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); });
 }
 
-function parsePvlRecaps(html, now) {
+// teamIndex maps logo id -> team name (built from standings + schedule). Results
+// markup carries no team text at all, so without the index a game can only be
+// labelled by its game-leaders abbreviation.
+function parsePbaRecaps(html, teamIndex, now) {
   var $ = cheerio.load(html || '');
+  var index = teamIndex || {};
   var out = [];
-  $('.match-card').each(function () {
-    var card = $(this);
-    var scores = card.find('.match-card-score').map(function () { return num(cleanPvlText($(this).text())); }).get();
-    if (scores.length < 2) return;
-    var teams = card.find('.match-card-teams h3').map(function () { return cleanPvlText($(this).text()); }).get();
-    var dates = card.find('.match-card-date').map(function () { return cleanPvlText($(this).text()); }).get();
-    var time = cleanPvlText(card.find('.match-card-time').first().text());
-    var utcDate = pvlDateTime(dates[0], time, now, false);
-    if (teams.length < 2 || !utcDate) return;
-    var home = pvlTeamName(teams[0]);
-    var away = pvlTeamName(teams[1]);
-    out.push({
-      id: pvlMatchId(utcDate, home, away),
-      utcDate: utcDate,
-      status: 'FINISHED',
-      stage: dates[1] || 'PVL',
-      group: '',
-      home: home,
-      away: away,
-      venue: '',
-      score: { home: scores[0], away: scores[1] }
+  $('.recap').each(function () {
+    var block = $(this);
+    var dateText = cleanPbaText(block.find('h2').first().text());
+    var venue = cleanPbaText(block.find('h4').first().text());
+    block.find('.recap-game').each(function () {
+      var game = $(this);
+      var sides = game.find('.recap-team').map(function () {
+        var side = $(this);
+        return {
+          teamId: pbaTeamId(side.find('img').first().attr('src')),
+          score: num(cleanPbaText(side.find('span').first().text()))
+        };
+      }).get();
+      if (sides.length < 2) return;
+      if (sides[0].score == null || sides[1].score == null) return;
+      var abbrs = game.parent().parent().find('.recap-stats-lbl .fw-bold').map(function () {
+        return cleanPbaText($(this).text());
+      }).get();
+      var name = function (side, idx) {
+        return index[side.teamId] || pbaTitleCase(abbrs[idx] || '') || ('Team ' + (side.teamId || '?'));
+      };
+      var home = name(sides[0], 0);
+      var away = name(sides[1], 1);
+      var utcDate = pbaDateTime(dateText, '', now, false);
+      if (!utcDate) return;
+      out.push({
+        id: pbaMatchId(utcDate, home, away),
+        utcDate: utcDate,
+        status: 'FINISHED',
+        stage: 'PBA',
+        group: '',
+        home: home,
+        away: away,
+        homeId: sides[0].teamId,
+        awayId: sides[1].teamId,
+        venue: venue,
+        score: { home: sides[0].score, away: sides[1].score }
+      });
     });
   });
   return out.sort(function (a, b) { return String(b.utcDate).localeCompare(String(a.utcDate)); });
 }
 
-function parsePvlStandings(html) {
+// Columns are Teams | W | L | STK | PCT %, split across one table per group.
+// NB the live markup wraps each <tr> in an <a>, which is invalid HTML — the
+// parser hoists the anchor out of the table, so read rows off the table and take
+// the name from the first cell's <p>. The fixture reproduces that same nesting.
+function parsePbaStandings(html) {
   var $ = cheerio.load(html || '');
   var out = [];
-  $('table').first().find('tr').each(function () {
-    var row = $(this);
-    var cells = row.find('td').map(function () { return cleanPvlText($(this).text()); }).get();
-    if (cells.length < 11) return;
-    out.push({
-      position: num(cleanPvlText(row.find('th').first().text())),
-      team: pvlTeamName(cells[0]),
-      wins: num(cells[1]) || 0,
-      losses: num(cells[2]) || 0,
-      points: num(cells[3]) || 0,
-      playedGames: num(cells[4]) || 0,
-      setsWon: num(cells[5]) || 0,
-      setsLost: num(cells[6]) || 0,
-      setRatio: num(cells[7]) || 0,
-      pointsWon: num(cells[8]) || 0,
-      pointsLost: num(cells[9]) || 0,
-      pointRatio: num(cells[10]) || 0
+  $('table.stats-table').each(function () {
+    var table = $(this);
+    var group = cleanPbaText(table.closest('.group-col').find('.group-heading').first().text());
+    var position = 0;
+    table.find('tr').each(function () {
+      var row = $(this);
+      var cells = row.find('td');
+      if (cells.length < 5) return;
+      var first = cells.eq(0);
+      var team = pbaTitleCase(first.find('p').first().text() || first.text());
+      if (!team) return;
+      position++;
+      var pct = cleanPbaText(cells.eq(4).text()).replace('%', '');
+      out.push({
+        position: position,
+        conference: group,
+        team: team,
+        teamId: pbaTeamId(first.find('img').first().attr('src')),
+        wins: num(cleanPbaText(cells.eq(1).text())) || 0,
+        losses: num(cleanPbaText(cells.eq(2).text())) || 0,
+        streak: cleanPbaText(cells.eq(3).text()),
+        pct: num(pct) == null ? null : round2(num(pct) / 100)
+      });
     });
   });
-  return out.sort(function (a, b) { return (a.position || 99) - (b.position || 99); });
+  return out;
 }
 
-function parsePvlLeaders(html, category) {
+// id -> display name, so the recap rows (logo id only) can be resolved. Standings
+// covers the league; the schedule adds guest teams that never appear in a table.
+function pbaTeamIndex() {
+  var index = {};
+  Array.prototype.slice.call(arguments).forEach(function (rows) {
+    (rows || []).forEach(function (row) {
+      if (row.teamId && row.team) index[row.teamId] = row.team;
+      if (row.homeId && row.home) index[row.homeId] = row.home;
+      if (row.awayId && row.away) index[row.awayId] = row.away;
+    });
+  });
+  return index;
+}
+
+// Best-effort: pba.ph publishes conference leaders as plain tables whose headers
+// name the stat. If the markup moves, this yields nothing and the module simply
+// ships without a player-leaders panel rather than failing the whole refresh.
+function parsePbaLeaders(html) {
   var $ = cheerio.load(html || '');
-  var table = $('#record-table').first();
-  var selected = $('select option[selected]').first();
-  var conference = cleanPvlText(selected.text());
-  var headers = table.find('thead th').map(function () { return cleanPvlText($(this).text()); }).get();
-  var rows = [];
-  table.find('tbody tr').each(function () {
-    var row = $(this);
-    var rank = num(cleanPvlText(row.find('th').first().text()));
-    var cells = row.find('td').map(function () { return cleanPvlText($(this).text()); }).get();
-    if (!rank || cells.length < 2 || !cells[0]) return;
-    var metrics = {};
-    cells.slice(1).forEach(function (value, idx) {
-      metrics[headers[idx + 2] || ('Metric ' + (idx + 1))] = value;
+  var categories = [];
+  $('table').each(function () {
+    var table = $(this);
+    var headers = table.find('th').map(function () { return cleanPbaText($(this).text()); }).get();
+    if (headers.length < 2) return;
+    var statLabel = headers[headers.length - 1];
+    var rows = [];
+    table.find('tbody tr').each(function () {
+      var cells = $(this).find('td').map(function () { return cleanPbaText($(this).text()); }).get();
+      if (cells.length < 2) return;
+      var name = cells.find(function (c) { return /[A-Za-z]{3,}/.test(c) && !/^\d/.test(c); });
+      var value = cells[cells.length - 1];
+      if (!name || !value) return;
+      rows.push({ rank: rows.length + 1, name: name, value: value, valueLabel: statLabel, metrics: {} });
     });
-    rows.push({
-      rank: rank,
-      name: cells[0],
-      value: cells[cells.length - 1],
-      valueLabel: headers[headers.length - 1] || 'Value',
-      metrics: metrics
-    });
+    if (rows.length) {
+      categories.push({
+        key: teamKey(statLabel).replace(/ /g, '-'),
+        label: statLabel,
+        conference: '',
+        leaders: rows.slice(0, 10)
+      });
+    }
   });
-  return {
-    key: category || '',
-    label: (category || 'leaders').replace(/s$/, '').replace(/^./, function (c) { return c.toUpperCase(); }),
-    conference: conference,
-    leaders: rows.slice(0, 10)
-  };
+  return categories.slice(0, 6);
 }
 
-function buildPvlMomentum(matches, standings) {
+// Basketball margins, so this blends on POINT differential (the PVL version used
+// set differential). Same 0-100 shape and labels as the NBA lane so the two read
+// consistently on the tab.
+function buildPbaMomentum(matches, standings) {
   var byTeam = {};
   (standings || []).forEach(function (s) { byTeam[s.team] = []; });
   (matches || []).forEach(function (m) {
+    if (m.status !== 'FINISHED' || !m.score || m.score.home == null || m.score.away == null) return;
     [m.home, m.away].forEach(function (team) {
       if (!byTeam[team]) byTeam[team] = [];
       byTeam[team].push(m);
@@ -657,15 +727,17 @@ function buildPvlMomentum(matches, standings) {
       return own > opp ? 'W' : 'L';
     });
     var recentWins = form.filter(function (r) { return r === 'W'; }).length;
-    var setDiff = games.reduce(function (sum, m) {
+    var pointDiff = games.reduce(function (sum, m) {
       return sum + (m.home === team ? m.score.home - m.score.away : m.score.away - m.score.home);
     }, 0);
-    var averageSetDiff = games.length ? setDiff / games.length : 0;
+    var averagePointDiff = games.length ? pointDiff / games.length : 0;
     var standing = standingByTeam[team] || {};
     var standingGames = (standing.wins || 0) + (standing.losses || 0);
     var standingPct = standingGames ? standing.wins / standingGames : 0.5;
     var recentPct = games.length ? recentWins / games.length : standingPct;
-    var score = Math.round(clamp(recentPct * 55 + standingPct * 20 + clamp(50 + averageSetDiff * 18, 0, 100) * 0.25, 0, 100));
+    // /2.5 keeps a typical NBA-scale margin (~10 pts) inside the same band the
+    // NBA lane uses, so a blowout does not peg the score at 100.
+    var score = Math.round(clamp(recentPct * 55 + standingPct * 20 + clamp(50 + averagePointDiff / 2.5 * 18, 0, 100) * 0.25, 0, 100));
     var label = score >= 72 ? 'RISING' : (score >= 58 ? 'WATCH' : (score <= 38 ? 'FADING' : 'STEADY'));
     return {
       team: team,
@@ -674,18 +746,17 @@ function buildPvlMomentum(matches, standings) {
       recentForm: form.join(''),
       recentGames: games.length,
       recentWins: recentWins,
-      averageSetDiff: round2(averageSetDiff),
-      averagePointDiff: round2(averageSetDiff),
+      averagePointDiff: round2(averagePointDiff),
       standingPct: round2(standingPct),
       note: games.length
-        ? 'Momentum blends recent match wins, set differential and the current PVL table.'
-        : 'No completed match is present in the current recap window; score is table-based.'
+        ? 'Momentum blends recent wins, point differential and the current PBA table.'
+        : 'No completed game is present in the current recap window; score is table-based.'
     };
-  }).sort(function (a, b) { return b.score - a.score || b.averageSetDiff - a.averageSetDiff; });
+  }).sort(function (a, b) { return b.score - a.score || b.averagePointDiff - a.averagePointDiff; });
 }
 
-function pvlPostseasonRound(stage) {
-  var value = cleanPvlText(stage);
+function pbaPostseasonRound(stage) {
+  var value = cleanPbaText(stage);
   if (/quarter/i.test(value)) return { key: 'quarterfinals', label: 'Quarterfinals', order: 10 };
   if (/semi/i.test(value)) return { key: 'semifinals', label: 'Semifinals', order: 20 };
   if (/third|bronze/i.test(value)) return { key: 'third-place', label: 'Third Place', order: 30 };
@@ -693,10 +764,10 @@ function pvlPostseasonRound(stage) {
   return null;
 }
 
-function buildPvlBracket(matches) {
+function buildPbaBracket(matches) {
   var rounds = {};
   (matches || []).forEach(function (match) {
-    var round = pvlPostseasonRound(match.stage);
+    var round = pbaPostseasonRound(match.stage);
     if (!round) return;
     if (!rounds[round.key]) rounds[round.key] = { key:round.key, label:round.label, order:round.order, series:[] };
     rounds[round.key].series.push({
@@ -746,12 +817,13 @@ function buildTeamProfiles(kind, standings, momentum, matches, injuries) {
       wins: standing.wins == null ? (standing.w || 0) : standing.wins,
       losses: standing.losses == null ? (standing.l || 0) : standing.losses,
       points: standing.points == null ? null : standing.points,
-      setRatio: standing.setRatio == null ? null : standing.setRatio,
-      pointRatio: standing.pointRatio == null ? null : standing.pointRatio,
+      pct: standing.pct == null ? null : standing.pct,
+      streak: standing.streak || '',
       momentumScore: form.score == null ? null : form.score,
       momentumLabel: form.label || '',
       recentForm: form.recentForm || '',
-      margin: kind === 'pvl' ? form.averageSetDiff : form.averagePointDiff,
+      // Both forward lanes are basketball now, so the margin is always points.
+      margin: form.averagePointDiff,
       next: next,
       latest: latest,
       availabilityCount: teamInjuries.length,
@@ -802,11 +874,7 @@ function buildModuleChanges(kind, current, previous) {
     if (!positionChanged && !recordChanged) return;
     var detail = [];
     if (positionChanged) detail.push('#' + before.position + ' to #' + row.position);
-    if (recordChanged) {
-      detail.push(kind === 'pvl'
-        ? row.wins + '-' + row.losses + ' / ' + row.points + ' pts'
-        : row.wins + '-' + row.losses);
-    }
+    if (recordChanged) detail.push(row.wins + '-' + row.losses);
     result.items.push({
       type: 'standing', importance: positionChanged ? 'high' : 'medium', team: row.team,
       title: row.team + (positionChanged ? (row.position < before.position ? ' moved up' : ' moved down') : ' record updated'),
@@ -1574,10 +1642,10 @@ function setupDoc(reason) {
 function activeSportsList() {
   var out = [];
   if (wantsModule('nba')) out.push('nba');
-  if (wantsModule('pvl')) out.push('pvl');
+  if (wantsModule('pba')) out.push('pba');
   if (wantsModule('tennis')) out.push('tennis');
   if (wantsModule('worldcup')) out.push('worldcup');
-  if (!out.length || wantsModule('all')) out = ['nba', 'pvl', 'tennis', 'worldcup'];
+  if (!out.length || wantsModule('all')) out = ['nba', 'pba', 'tennis', 'worldcup'];
   return out;
 }
 
@@ -1601,7 +1669,7 @@ function emptyModule(kind, title, phase, provider, note) {
     lastSuccessfulAt: '',
     refreshStatus: 'error',
     fallback: false,
-    staleAfterHours: kind === 'pvl' ? 36 : 168
+    staleAfterHours: kind === 'pba' ? 36 : 168
   };
 }
 
@@ -1723,95 +1791,87 @@ async function fetchNbaModule() {
   };
 }
 
-function buildPvlModule() {
+function buildPbaModule() {
   var m = emptyModule(
-    'pvl',
-    'PH Local Pulse: PVL',
+    'pba',
+    'PH Local Pulse: PBA',
     'feed unavailable',
-    'official pvl.ph pages',
-    'PVL data is temporarily unavailable. The refresh job will keep the last good snapshot when one exists.'
+    'official pba.ph pages',
+    'PBA data is temporarily unavailable. The refresh job will keep the last good snapshot when one exists.'
   );
-  m.watchlist = PVL_FOLLOW_TEAMS.map(function (team) {
+  m.watchlist = PBA_FOLLOW_TEAMS.map(function (team) {
     return { team: team, note: 'Pinned for PH Local Pulse.' };
   });
   return m;
 }
 
-function pvlWatchlist(standings, momentum) {
-  return PVL_FOLLOW_TEAMS.map(function (needle) {
+function pbaWatchlist(standings, momentum) {
+  return PBA_FOLLOW_TEAMS.map(function (needle) {
     var key = teamKey(needle);
     var standing = (standings || []).find(function (s) { return teamKey(s.team).indexOf(key) !== -1; });
     var team = standing ? standing.team : needle;
     var form = (momentum || []).find(function (m) { return m.team === team; });
     var details = [];
-    if (standing) details.push(standing.wins + '-' + standing.losses + ', ' + standing.points + ' pts');
+    if (standing) details.push(standing.wins + '-' + standing.losses);
     if (form && form.recentForm) details.push('recent: ' + form.recentForm);
     return { team: team, note: details.join(' / ') || 'Pinned for PH Local Pulse.' };
   });
 }
 
-async function fetchPvlModule() {
+async function fetchPbaModule() {
   var now = new Date();
-  var fetched = await Promise.all([
-    Promise.all([
-      pvlFetch('/schedule'),
-      pvlFetch('/'),
-      pvlFetch('/standings')
-    ]),
-    Promise.allSettled(PVL_LEADER_CATEGORIES.map(function (category) {
-      return pvlFetch('/leaders/' + category);
-    }))
+  var pages = await Promise.all([
+    pbaFetch('/schedule'),
+    pbaFetch('/recap'),
+    pbaFetch('/standings'),
+    pbaFetch(PBA_LEADER_URL).catch(function (e) {
+      console.warn('PBA leaders unavailable:', e.message || e);
+      return '';
+    })
   ]);
-  var pages = fetched[0];
-  var upcoming = parsePvlSchedule(pages[0], now).filter(function (m) {
+  var standings = parsePbaStandings(pages[2]);
+  var scheduled = parsePbaSchedule(pages[0], now);
+  // Resolve the recap's logo-only sides against everything that carries a name.
+  var teamIndex = pbaTeamIndex(standings, scheduled);
+  var upcoming = scheduled.filter(function (m) {
     return new Date(m.utcDate).getTime() >= now.getTime() - 21600000;
   }).slice(0, 20);
-  var parsedRecent = parsePvlRecaps(pages[1], now);
+  var parsedRecent = parsePbaRecaps(pages[1], teamIndex, now);
   var latestRecentMs = parsedRecent.length ? new Date(parsedRecent[0].utcDate).getTime() : 0;
   var recent = parsedRecent.filter(function (m) {
     return !latestRecentMs || latestRecentMs - new Date(m.utcDate).getTime() <= 45 * 86400000;
   }).slice(0, 20);
-  var standings = parsePvlStandings(pages[2]);
-  if (!upcoming.length && !recent.length) throw new Error('PVL schedule and recap pages returned no matches.');
-  if (!standings.length) throw new Error('PVL standings page returned no table rows.');
-  var momentum = buildPvlMomentum(recent, standings);
-  var leaderCategories = fetched[1].map(function (result, idx) {
-    if (result.status !== 'fulfilled') {
-      console.warn('PVL ' + PVL_LEADER_CATEGORIES[idx] + ' leaders unavailable:', result.reason && (result.reason.message || result.reason));
-      return null;
-    }
-    return parsePvlLeaders(result.value, PVL_LEADER_CATEGORIES[idx]);
-  }).filter(function (category) { return category && category.leaders.length; });
-  var playerLeaders = {
-    conference: leaderCategories[0] ? leaderCategories[0].conference : '',
-    categories: leaderCategories
-  };
+  if (!upcoming.length && !recent.length) throw new Error('PBA schedule and recap pages returned no games.');
+  if (!standings.length) throw new Error('PBA standings page returned no table rows.');
+  var momentum = buildPbaMomentum(recent, standings);
+  var leaderCategories = parsePbaLeaders(pages[3]);
+  var playerLeaders = { conference: '', categories: leaderCategories };
   var moduleMatches = recent.slice().reverse().concat(upcoming);
-  var bracket = buildPvlBracket(moduleMatches);
-  var teamProfiles = buildTeamProfiles('pvl', standings, momentum, moduleMatches, []);
+  var bracket = buildPbaBracket(moduleMatches);
+  var teamProfiles = buildTeamProfiles('pba', standings, momentum, moduleMatches, []);
   var keyDates = [];
   if (upcoming[0]) {
     keyDates.push({
       date: upcoming[0].utcDate.slice(0, 10),
-      label: 'Next PVL match',
+      label: 'Next PBA game',
       note: upcoming[0].home + ' vs ' + upcoming[0].away + (upcoming[0].venue ? ' / ' + upcoming[0].venue : '')
     });
   }
   if (recent[0]) {
     keyDates.push({
       date: recent[0].utcDate.slice(0, 10),
-      label: 'Latest PVL result',
+      label: 'Latest PBA result',
       note: recent[0].home + ' ' + recent[0].score.home + ', ' + recent[0].away + ' ' + recent[0].score.away
     });
   }
   var generatedAt = new Date().toISOString();
   return {
     enabled: true,
-    kind: 'pvl',
-    title: 'PH Local Pulse: PVL',
+    kind: 'pba',
+    title: 'PH Local Pulse: PBA',
     phase: upcoming.length ? 'active schedule' : 'between fixtures',
-    provider: 'official pvl.ph pages',
-    providerNote: 'PVL fixtures, recaps, standings and player leaders are refreshed from official pvl.ph pages. Momentum blends recent match wins, set differential and the active standings table.',
+    provider: 'official pba.ph pages',
+    providerNote: 'PBA fixtures, results, standings and conference leaders are refreshed from official pba.ph pages. Momentum blends recent wins, point differential and the active standings table.',
     asOf: phtDateKey(),
     generatedAt: generatedAt,
     refreshAttemptedAt: generatedAt,
@@ -1827,7 +1887,7 @@ async function fetchPvlModule() {
     playerLeaders: playerLeaders,
     bracket: bracket,
     teamProfiles: teamProfiles,
-    watchlist: pvlWatchlist(standings, momentum),
+    watchlist: pbaWatchlist(standings, momentum),
     keyDates: keyDates
   };
 }
@@ -2360,8 +2420,8 @@ async function updateTennisJournal(db, module, dryRun) {
 // previous doc. On 2026-08-01 the scheduled 08:00 tennis run fired before the
 // machine's network was up: the prev-doc read threw (DNS), nothing was carried
 // forward, and the write went ahead with a tennis-only doc. That silently erased
-// NBA, PVL and the FIFA archive, and every later run inherited the loss.
-var LANE_KEYS = ['nba', 'pvl', 'tennis', 'worldcup'];
+// NBA, PBA and the FIFA archive, and every later run inherited the loss.
+var LANE_KEYS = ['nba', 'pba', 'tennis', 'worldcup'];
 var LANE_LOOKBACK_DAYS = 21;
 
 function laneValue(docData, key) {
@@ -2419,11 +2479,11 @@ async function recoverLanes(db, doc, dateKey, lanes, maxDays) {
 function buildForwardModules(reason) {
   var modules = {};
   if (wantsModule('nba')) modules.nba = buildNbaModule();
-  if (wantsModule('pvl')) modules.pvl = buildPvlModule();
+  if (wantsModule('pba')) modules.pba = buildPbaModule();
   if (wantsModule('tennis')) modules.tennis = buildTennisModule();
   if (wantsModule('all')) {
     if (!modules.nba) modules.nba = buildNbaModule();
-    if (!modules.pvl) modules.pvl = buildPvlModule();
+    if (!modules.pba) modules.pba = buildPbaModule();
     if (!modules.tennis) modules.tennis = buildTennisModule();
   }
   Object.keys(modules).forEach(function (k) {
@@ -2577,8 +2637,8 @@ async function main() {
     modules: buildForwardModules('')
   };
   // Module-specific refreshes share one Firestore/public document. Preserve the
-  // other forward lane so a scheduled PVL run cannot erase NBA (and vice versa).
-  ['nba', 'pvl', 'tennis'].forEach(function (key) {
+  // other forward lane so a scheduled PBA run cannot erase NBA (and vice versa).
+  ['nba', 'pba', 'tennis'].forEach(function (key) {
     if (!wantsModule(key) && prevDocData && prevDocData.modules && prevDocData.modules[key]) {
       doc.modules[key] = prevDocData.modules[key];
     }
@@ -2609,27 +2669,27 @@ async function main() {
       }
     }
   }
-  if (wantsModule('pvl')) {
+  if (wantsModule('pba')) {
     try {
-      doc.modules.pvl = await fetchPvlModule();
-      console.log('PVL: loaded ' + doc.modules.pvl.upcoming.length + ' upcoming, ' +
-        doc.modules.pvl.recent.length + ' recent, ' + doc.modules.pvl.standings.length +
-        ' standings rows and ' + doc.modules.pvl.momentum.length + ' momentum rows.');
+      doc.modules.pba = await fetchPbaModule();
+      console.log('PBA: loaded ' + doc.modules.pba.upcoming.length + ' upcoming, ' +
+        doc.modules.pba.recent.length + ' recent, ' + doc.modules.pba.standings.length +
+        ' standings rows and ' + doc.modules.pba.momentum.length + ' momentum rows.');
     } catch (e) {
-      console.warn('PVL fetch failed:', e.message || e);
-      var priorPvl = prevDocData && prevDocData.modules && prevDocData.modules.pvl;
-      if (priorPvl && ((priorPvl.matches || []).length || (priorPvl.standings || []).length)) {
-        doc.modules.pvl = priorPvl;
-        doc.modules.pvl.lastSuccessfulAt = priorPvl.lastSuccessfulAt || priorPvl.generatedAt || '';
-        doc.modules.pvl.refreshAttemptedAt = new Date().toISOString();
-        doc.modules.pvl.refreshStatus = 'fallback';
-        doc.modules.pvl.fallback = true;
-        doc.modules.pvl.staleAfterHours = priorPvl.staleAfterHours || 36;
-        doc.modules.pvl.providerNote = 'Showing the last good PVL snapshot because the current refresh failed: ' + (e.message || e);
-        console.warn('PVL: retained the last good module snapshot.');
+      console.warn('PBA fetch failed:', e.message || e);
+      var priorPba = prevDocData && prevDocData.modules && prevDocData.modules.pba;
+      if (priorPba && ((priorPba.matches || []).length || (priorPba.standings || []).length)) {
+        doc.modules.pba = priorPba;
+        doc.modules.pba.lastSuccessfulAt = priorPba.lastSuccessfulAt || priorPba.generatedAt || '';
+        doc.modules.pba.refreshAttemptedAt = new Date().toISOString();
+        doc.modules.pba.refreshStatus = 'fallback';
+        doc.modules.pba.fallback = true;
+        doc.modules.pba.staleAfterHours = priorPba.staleAfterHours || 36;
+        doc.modules.pba.providerNote = 'Showing the last good PBA snapshot because the current refresh failed: ' + (e.message || e);
+        console.warn('PBA: retained the last good module snapshot.');
       } else {
-        doc.modules.pvl = buildPvlModule();
-        doc.modules.pvl.setupNote = 'PVL fetch failed: ' + (e.message || e);
+        doc.modules.pba = buildPbaModule();
+        doc.modules.pba.setupNote = 'PBA fetch failed: ' + (e.message || e);
       }
     }
   }
@@ -2661,7 +2721,7 @@ async function main() {
       }
     }
   }
-  ['nba', 'pvl'].forEach(function (key) {
+  ['nba', 'pba'].forEach(function (key) {
     if (!wantsModule(key) || !doc.modules[key]) return;
     var previousModule = prevDocData && prevDocData.modules && prevDocData.modules[key];
     if (doc.modules[key].refreshStatus === 'fallback' && previousModule && previousModule.changes) {
@@ -2744,7 +2804,7 @@ async function main() {
   // Public mirror for the friction-free shared page (sports.html on GitHub Pages
   // reads this static file — no Firebase, no sign-in). Only on real data, never
   // the empty fallback. The refresh-sports.ps1 wrapper commits/pushes it.
-  var hasForwardData = doc.modules && ['nba', 'pvl'].some(function (key) {
+  var hasForwardData = doc.modules && ['nba', 'pba'].some(function (key) {
     var mod = doc.modules[key];
     return mod && (((mod.matches || []).length > 0) || ((mod.standings || []).length > 0));
   });
@@ -2786,15 +2846,18 @@ export {
   nbaPlayoffRound,
   buildNbaBracket,
   nbaSeasonYear,
-  parsePvlSchedule,
-  parsePvlRecaps,
-  parsePvlStandings,
-  parsePvlLeaders,
-  buildPvlBracket,
+  parsePbaSchedule,
+  parsePbaRecaps,
+  parsePbaStandings,
+  parsePbaLeaders,
+  pbaTeamIndex,
+  pbaTitleCase,
+  pbaDateTime,
+  buildPbaBracket,
   buildTeamProfiles,
   buildModuleChanges,
   scheduleReadiness,
-  buildPvlMomentum,
+  buildPbaMomentum,
   classifyTennis,
   buildTennisDraw,
   normTennisEvent,
