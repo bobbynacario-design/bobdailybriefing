@@ -479,6 +479,9 @@ function pbaTitleCase(value) {
     if (idx && small[word]) return word;
     if (acronyms[word]) return word.toUpperCase();
     if (camel[word]) return camel[word];
+    // Ordinals stay lowercase ("49th Season"); other digit-led tokens are
+    // branding that must shout ("5G" in TNT Tropang 5G).
+    if (/^\d+(st|nd|rd|th)$/.test(word)) return word;
     if (/^\d/.test(word)) return word.toUpperCase();
     return word.replace(/^./, function (c) { return c.toUpperCase(); });
   }).join(' ');
@@ -672,36 +675,71 @@ function pbaTeamIndex() {
   return index;
 }
 
-// Best-effort: pba.ph publishes conference leaders as plain tables whose headers
-// name the stat. If the markup moves, this yields nothing and the module simply
-// ships without a player-leaders panel rather than failing the whole refresh.
+// /leaders has NO tables — it is a card grid. Each category is one column with a
+// `.top-player` hero card (the stat name sits in a plain span, not a heading) and
+// a row of `.bottom-player` cards whose data-* attributes carry the whole top
+// three. Reading the data attributes is sturdier than the nested display markup.
+// "#94 / SG / SAN MIGUEL BEERMEN" -> jersey, position, team.
+function pbaPlayerMeta(raw) {
+  var parts = cleanPbaText(raw).split('/').map(function (s) { return s.trim(); }).filter(Boolean);
+  var meta = {};
+  parts.forEach(function (part) {
+    if (/^#/.test(part)) meta.jersey = part;
+    else if (part.length <= 3 && part === part.toUpperCase() && /^[A-Z]+$/.test(part)) meta.position = part;
+    else meta.team = pbaTitleCase(part);
+  });
+  return meta;
+}
+
+// NB the conference/cup name is NOT available. pba.ph has it commented out on
+// /standings (`<!-- <h3>49th SEASON PBA PHILIPPINE CUP</h3> -->`) and publishes
+// it nowhere else in live markup — the season dropdown is filled by script. So
+// categories carry an empty conference until the site restores the heading.
 function parsePbaLeaders(html) {
   var $ = cheerio.load(html || '');
   var categories = [];
-  $('table').each(function () {
-    var table = $(this);
-    var headers = table.find('th').map(function () { return cleanPbaText($(this).text()); }).get();
-    if (headers.length < 2) return;
-    var statLabel = headers[headers.length - 1];
+  $('.top-player').each(function () {
+    var card = $(this);
+    // The stat name is the span right after the value, e.g. "POINTS PER GAME".
+    var label = pbaTitleCase(card.find('span.fw-bold').first().text());
+    if (!label) return;
+    var column = card.parent();
     var rows = [];
-    table.find('tbody tr').each(function () {
-      var cells = $(this).find('td').map(function () { return cleanPbaText($(this).text()); }).get();
-      if (cells.length < 2) return;
-      var name = cells.find(function (c) { return /[A-Za-z]{3,}/.test(c) && !/^\d/.test(c); });
-      var value = cells[cells.length - 1];
+    column.find('.bottom-player').each(function () {
+      var el = $(this);
+      var name = cleanPbaText(el.attr('data-name'));
+      var value = cleanPbaText(el.attr('data-ppg'));
       if (!name || !value) return;
-      rows.push({ rank: rows.length + 1, name: name, value: value, valueLabel: statLabel, metrics: {} });
+      var meta = pbaPlayerMeta(el.attr('data-team'));
+      rows.push({
+        rank: rows.length + 1,
+        name: name,
+        team: meta.team || '',
+        position: meta.position || '',
+        value: value,
+        valueLabel: '',
+        metrics: meta
+      });
     });
-    if (rows.length) {
-      categories.push({
-        key: teamKey(statLabel).replace(/ /g, '-'),
-        label: statLabel,
-        conference: '',
-        leaders: rows.slice(0, 10)
+    // Fall back to the hero card alone if the data attributes ever disappear.
+    if (!rows.length) {
+      var heroName = cleanPbaText(card.find('.top-player-name').text());
+      var heroValue = cleanPbaText(card.find('.top-player-ppg').text());
+      if (!heroName || !heroValue) return;
+      var heroMeta = pbaPlayerMeta(card.find('.top-player-team').text());
+      rows.push({
+        rank: 1, name: heroName, team: heroMeta.team || '', position: heroMeta.position || '',
+        value: heroValue, valueLabel: '', metrics: heroMeta
       });
     }
+    categories.push({
+      key: teamKey(label).replace(/ /g, '-'),
+      label: label,
+      conference: '',
+      leaders: rows.slice(0, 10)
+    });
   });
-  return categories.slice(0, 6);
+  return categories;
 }
 
 // Basketball margins, so this blends on POINT differential (the PVL version used
@@ -2850,6 +2888,7 @@ export {
   parsePbaRecaps,
   parsePbaStandings,
   parsePbaLeaders,
+  pbaPlayerMeta,
   pbaTeamIndex,
   pbaTitleCase,
   pbaDateTime,

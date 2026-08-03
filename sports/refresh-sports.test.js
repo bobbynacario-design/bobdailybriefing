@@ -17,6 +17,7 @@ import {
   parsePbaRecaps,
   parsePbaStandings,
   parsePbaLeaders,
+  pbaPlayerMeta,
   pbaTeamIndex,
   pbaTitleCase,
   buildPbaBracket,
@@ -243,12 +244,56 @@ test('PBA momentum ranks on recent wins and POINT differential, not sets', funct
   assert.ok(nlex.score > smb.score);
 });
 
+test('parses the tableless PBA leaders card grid from its data attributes', function () {
+  var cats = parsePbaLeaders(fixture('pba-leaders.html'));
+  assert.equal(cats.length, 3);
+
+  // Stat name comes from a plain span in the hero card, not a heading.
+  assert.equal(cats[0].label, 'Points Per Game');
+  assert.equal(cats[0].key, 'points-per-game');
+  // pba.ph has the cup name commented out, so there is nothing to attribute to.
+  assert.equal(cats[0].conference, '');
+  assert.equal(cats[0].leaders.length, 3);
+  // data-name carries a trailing space in the live markup.
+  assert.equal(cats[0].leaders[0].name, 'George King');
+  assert.equal(cats[0].leaders[0].value, '34.8');
+  assert.equal(cats[0].leaders[0].team, 'San Miguel Beermen');
+  assert.equal(cats[0].leaders[0].position, 'SG');
+  assert.equal(cats[0].leaders[2].rank, 3);
+
+  // Each column's bottom-player cards must not bleed into the next category.
+  assert.equal(cats[1].label, 'Rebounds Per Game');
+  assert.equal(cats[1].leaders.length, 2);
+  assert.equal(cats[1].leaders[0].name, "De'Vondre Perry");
+
+  // A hero card with no bottom-player row still yields its leader.
+  assert.equal(cats[2].label, 'Blocks Per Game');
+  assert.equal(cats[2].leaders.length, 1);
+  assert.equal(cats[2].leaders[0].name, 'Shaun Geoffrey Chiu');
+  assert.equal(cats[2].leaders[0].value, '2.5');
+  assert.equal(cats[2].leaders[0].team, 'Terrafirma Dyip');
+
+  // valueLabel stays empty so the front end's "label value" line reads cleanly.
+  assert.equal(cats[0].leaders[0].valueLabel, '');
+  assert.deepEqual(parsePbaLeaders('<html><body></body></html>'), []);
+});
+
+test('pbaPlayerMeta splits the jersey / position / team string', function () {
+  assert.deepEqual(pbaPlayerMeta('#94 / SG / SAN MIGUEL BEERMEN'),
+    { jersey: '#94', position: 'SG', team: 'San Miguel Beermen' });
+  assert.deepEqual(pbaPlayerMeta('#18 / C / TERRAFIRMA DYIP'),
+    { jersey: '#18', position: 'C', team: 'Terrafirma Dyip' });
+  assert.deepEqual(pbaPlayerMeta(''), {});
+});
+
 test('pbaTitleCase tames the shouted source names but leaves real casing alone', function () {
   assert.equal(pbaTitleCase('NLEX ROAD WARRIORS'), 'NLEX Road Warriors');
   assert.equal(pbaTitleCase('TNT TROPANG 5G'), 'TNT Tropang 5G');
   assert.equal(pbaTitleCase('Barangay Ginebra'), 'Barangay Ginebra');
   // Internal capitals the shouted source destroys.
   assert.equal(pbaTitleCase('CONVERGE FIBERXERS'), 'Converge FiberXers');
+  // Ordinals stay lowercase; other digit-led tokens are branding and shout.
+  assert.equal(pbaTitleCase('49TH SEASON PBA PHILIPPINE CUP'), '49th Season PBA Philippine Cup');
   assert.equal(pbaTitleCase(''), '');
 });
 

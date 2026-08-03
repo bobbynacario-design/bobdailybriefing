@@ -5679,11 +5679,13 @@ function sportsPlayerRows(mod, key) {
       var name = leader.name || '';
       if (!name) return;
       var row = byName[name] || (byName[name] = { name:name, team:'', lines:[] });
-      row.lines.push((category.label || 'Leader') + ' ' + (leader.valueLabel || '') + ' ' + (leader.value || '-'));
+      row.team = row.team || leader.team || '';
+      // Filter the parts: an empty valueLabel would otherwise leave a double space.
+      row.lines.push([category.label || 'Leader', leader.valueLabel || '', leader.value || '-'].filter(Boolean).join(' '));
     });
   });
   return Object.keys(byName).map(function (name) {
-    return { name:name, team:'', line:byName[name].lines.join(' / '), date:'' };
+    return { name:name, team:byName[name].team, line:byName[name].lines.join(' / '), date:'' };
   });
 }
 function sportsFollowSettingsHtml(mod, key) {
