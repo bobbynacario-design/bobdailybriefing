@@ -229,6 +229,21 @@ test('resolves PBA recap teams from logo ids, since results markup carries no te
   assert.ok(games[0].utcDate > games[1].utcDate);
 });
 
+test('finished PBA games are flagged time-unknown so no noon tip-off is invented', function () {
+  var now = new Date('2026-08-03T00:00:00Z');
+  var schedule = parsePbaSchedule(fixture('pba-schedule.html'), now);
+  // /schedule publishes a real tip-off time.
+  assert.equal(schedule[0].timeKnown, true);
+  assert.equal(schedule[0].utcDate, '2026-08-04T09:15:00.000Z');
+
+  var standings = parsePbaStandings(fixture('pba-standings.html'));
+  var games = parsePbaRecaps(fixture('pba-recap.html'), pbaTeamIndex(standings, schedule), now);
+  // /recap publishes only a date, so the stored timestamp falls back to noon PHT
+  // (04:00Z) — the flag is what stops the front end from showing it as a tip-off.
+  assert.equal(games[0].timeKnown, false);
+  assert.equal(games[0].utcDate.slice(11, 16), '04:00');
+});
+
 test('PBA momentum ranks on recent wins and POINT differential, not sets', function () {
   var standings = parsePbaStandings(fixture('pba-standings.html'));
   var schedule = parsePbaSchedule(fixture('pba-schedule.html'), new Date('2026-08-03T00:00:00Z'));

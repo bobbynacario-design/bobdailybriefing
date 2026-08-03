@@ -509,6 +509,14 @@ async function pbaFetch(path) {
   return res.text();
 }
 
+// /recap publishes a date and venue per game but NO tip-off time, so anything
+// built from it would otherwise inherit pbaDateTime's noon default and display a
+// 12:00 PHT tip that never happened. Matches carry timeKnown so the front end
+// can render date-only instead of inventing a clock time.
+function pbaHasTime(timeText) {
+  return /(\d{1,2}):(\d{2})\s*(AM|PM)/i.test(cleanPbaText(timeText));
+}
+
 // Handles both orderings pba.ph uses: "Tue, Aug 04" (schedule) and
 // "Aug 02, Sun" (recap). Anchoring on the month name avoids matching the weekday.
 function pbaDateTime(dateText, timeText, now, preferFuture) {
@@ -569,6 +577,7 @@ function parsePbaSchedule(html, now) {
         homeId: sides[0].teamId,
         awayId: sides[1].teamId,
         venue: timeVenue[1] || '',
+        timeKnown: pbaHasTime(timeVenue[0]),
         score: { home: null, away: null }
       });
     });
@@ -619,6 +628,8 @@ function parsePbaRecaps(html, teamIndex, now) {
         homeId: sides[0].teamId,
         awayId: sides[1].teamId,
         venue: venue,
+        // /recap never carries a tip-off time — the date is all it publishes.
+        timeKnown: false,
         score: { home: sides[0].score, away: sides[1].score }
       });
     });

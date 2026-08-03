@@ -4909,6 +4909,20 @@ function sportsDate(v) {
     hour: '2-digit', minute: '2-digit', hour12: false
   }) + ' PHT';
 }
+// Some providers publish a date but no tip-off time (pba.ph /recap). Those
+// matches are stored with timeKnown:false so we show the date alone rather than
+// the noon placeholder the timestamp had to fall back to. Matches without the
+// field are treated as timed, so every other lane is unaffected.
+function sportsDateOnly(v) {
+  if (!v) return 'TBD';
+  var d = new Date(v);
+  if (isNaN(d.getTime())) return String(v);
+  return d.toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' });
+}
+function sportsMatchWhen(match) {
+  if (!match) return 'TBD';
+  return match.timeKnown === false ? sportsDateOnly(match.utcDate) : sportsDate(match.utcDate);
+}
 function sportsFreshnessHtml(mod) {
   mod = mod || {};
   var last = mod.lastSuccessfulAt || mod.generatedAt || '';
@@ -4962,7 +4976,7 @@ function sportsSelectTeamProfile(select) {
 }
 function sportsProfileMatchLine(label, match) {
   if (!match) return '<div class="sports-team-line"><b>' + esc(label) + ':</b> None in current window</div>';
-  return '<div class="sports-team-line"><b>' + esc(label) + ':</b> ' + esc((match.home || 'TBD') + ' ' + sportsScore(match) + ' ' + (match.away || 'TBD')) + ' / ' + esc(sportsDate(match.utcDate)) + '</div>';
+  return '<div class="sports-team-line"><b>' + esc(label) + ':</b> ' + esc((match.home || 'TBD') + ' ' + sportsScore(match) + ' ' + (match.away || 'TBD')) + ' / ' + esc(sportsMatchWhen(match)) + '</div>';
 }
 function sportsTeamProfilesHtml(mod, key) {
   var profiles = mod && mod.teamProfiles || [];
@@ -5036,7 +5050,7 @@ function sportsConfidentCalls(upcoming) {
 function sportsMatchCard(m) {
   return '<div class="sports-match ' + sportsStatusClass(m) + '">' +
     '<div class="sports-match-meta"><span>' + esc(m.stage || m.group || 'World Cup') + '</span><span>' +
-      esc(sportsDate(m.utcDate)) + ' · ' + esc(sportsStatusLabel(m)) + '</span></div>' +
+      esc(sportsMatchWhen(m)) + ' · ' + esc(sportsStatusLabel(m)) + '</span></div>' +
     '<div class="sports-teams">' +
       '<div class="sports-team">' + esc(m.home || 'TBD') + '</div>' +
       '<div class="sports-score">' + esc(sportsScore(m)) + '</div>' +
@@ -5284,7 +5298,7 @@ function sportsKoMatchCard(m) {
     pick = '<div class="sports-bm-pick' + (decisive ? '' : ' low') + '">' + (decisive ? 'Pick ' : 'Lean ') + esc(p.favorite) + ' ' + pct + '%</div>';
   }
   return '<div class="sports-bm ' + sportsStatusClass(m) + '">' +
-    '<div class="sports-bm-meta"><span>' + esc(sportsDate(m.utcDate)) + '</span><span>' + esc(sportsStatusLabel(m)) + '</span></div>' +
+    '<div class="sports-bm-meta"><span>' + esc(sportsMatchWhen(m)) + '</span><span>' + esc(sportsStatusLabel(m)) + '</span></div>' +
     row(m.home, s.home) + row(m.away, s.away) + pick +
   '</div>';
 }
@@ -5715,7 +5729,7 @@ function sportsNextUpHtml(mod, key) {
   if (!matches.length) return '<div class="sports-empty">No upcoming fixtures are published in the current window.</div>';
   return '<div class="sports-next-list">' + matches.map(function (match) {
     var pinned = sportsIsFollowedMatch(match, followed);
-    return '<div class="sports-next-item"><div class="sports-next-time">' + esc(sportsDate(match.utcDate)) + '</div><div><div class="sports-next-match">' + esc((match.home || 'TBD') + ' vs ' + (match.away || 'TBD')) + '</div><div class="sports-next-meta">' + esc((match.stage || 'Match') + (match.venue ? ' / ' + match.venue : '')) + '</div></div><div class="sports-next-flag">' + (pinned ? 'Followed' : 'League') + '</div></div>';
+    return '<div class="sports-next-item"><div class="sports-next-time">' + esc(sportsMatchWhen(match)) + '</div><div><div class="sports-next-match">' + esc((match.home || 'TBD') + ' vs ' + (match.away || 'TBD')) + '</div><div class="sports-next-meta">' + esc((match.stage || 'Match') + (match.venue ? ' / ' + match.venue : '')) + '</div></div><div class="sports-next-flag">' + (pinned ? 'Followed' : 'League') + '</div></div>';
   }).join('') + '</div>';
 }
 function sportsChangesHtml(mod, key) {
@@ -5738,7 +5752,7 @@ function sportsMyTeamsHtml(mod, key) {
   return '<div class="sports-followed-list">' + profiles.map(function (profile) {
     var record = profile.wins + '-' + profile.losses + (profile.points == null ? '' : ' / ' + profile.points + ' pts');
     var margin = profile.margin == null ? '-' : (profile.margin > 0 ? '+' : '') + profile.margin;
-    var next = profile.next ? ((profile.next.home || 'TBD') + ' vs ' + (profile.next.away || 'TBD') + ' / ' + sportsDate(profile.next.utcDate)) : 'No fixture in current window';
+    var next = profile.next ? ((profile.next.home || 'TBD') + ' vs ' + (profile.next.away || 'TBD') + ' / ' + sportsMatchWhen(profile.next)) : 'No fixture in current window';
     return '<div class="sports-team-brief"><div class="sports-team-brief-top"><h4>' + esc(profile.team) + '</h4><div class="sports-team-record">' + esc(record) + '</div></div><div class="sports-team-brief-meta">' + esc((profile.momentumLabel || 'STEADY') + ' ' + (profile.momentumScore == null ? '-' : profile.momentumScore) + ' / form ' + (profile.recentForm || '-') + ' / ' + 'margin ' + margin) + (profile.availabilityCount ? ' / ' + profile.availabilityCount + ' availability updates' : '') + '</div><div class="sports-team-brief-next">' + esc(next) + '</div></div>';
   }).join('') + '</div>';
 }
