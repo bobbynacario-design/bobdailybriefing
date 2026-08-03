@@ -5797,11 +5797,28 @@ function sportsModuleTabs(d) {
       '" onclick="sportsShowModule(\'' + m.key + '\')">' + esc(m.label) + '</button>';
   }).join('') + '</div>';
 }
+// ESPN flips the NBA phase offseason -> preseason months before real games
+// resume (preseason from 2026-08, first fixture Oct 4 PHT). Gating the explainer on
+// 'offseason' alone silently dropped it exactly when it was still needed: the
+// standings, momentum and form on screen are last season's FINAL figures, shown
+// under a green "data current" banner with no fixture for two months.
+function sportsPhaseNote(mod, key) {
+  var phase = String(mod.phase || '').toLowerCase();
+  if (phase !== 'offseason' && phase !== 'preseason') return '';
+  var league = key === 'pvl' ? 'PVL' : 'NBA';
+  var next = (mod.upcoming || []).slice().sort(function (a, b) {
+    return String(a.utcDate).localeCompare(String(b.utcDate));
+  })[0];
+  var note = league + ' is in ' + phase + '. Standings, momentum and form below are final figures from the last completed season, not current-season results. ';
+  note += next ? 'First scheduled fixture: ' + sportsDate(next.utcDate) + '.'
+    : 'Live fixtures will return when the provider publishes the next schedule; completed-season data remains in League details.';
+  return '<div class="sports-offseason">' + esc(note) + '</div>';
+}
 function sportsGenericModuleHtml(mod, key) {
   mod = mod || {};
   var title = mod.title || sportsModuleTitle(key, mod);
   var html = '<div class="sports-brief-head"><div><div class="sports-brief-kicker">Personal briefing</div><h2>' + esc(title) + '</h2></div><div class="sports-brief-phase">' + esc(mod.phase || 'setup') + '<br>' + esc(mod.asOf || '') + '</div></div>';
-  if (String(mod.phase || '').toLowerCase() === 'offseason') html += '<div class="sports-offseason">NBA is in offseason. Live fixtures will return when the provider publishes the next schedule; completed-season data remains in League details.</div>';
+  html += sportsPhaseNote(mod, key);
   html += sportsFreshnessHtml(mod);
   html += sportsFollowSettingsHtml(mod, key);
   html += '<div class="sports-brief-grid"><div><section class="sports-brief-section"><div class="sports-brief-title"><h3>Next Up</h3><span class="sports-brief-count">' + (mod.upcoming || []).length + ' scheduled</span></div>' + sportsNextUpHtml(mod, key) + '</section><section class="sports-brief-section"><div class="sports-brief-title"><h3>Since Last Update</h3><span class="sports-brief-count">' + esc((mod.changes && mod.changes.since) ? sportsDate(mod.changes.since) : 'baseline') + '</span></div>' + sportsChangesHtml(mod, key) + '</section></div>';
