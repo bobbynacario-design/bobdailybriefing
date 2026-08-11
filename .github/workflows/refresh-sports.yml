@@ -1,0 +1,83 @@
+name: Refresh sports and publish Pages
+
+on:
+  schedule:
+    - cron: "0 0 * * *"      # Tennis 08:00 PHT
+    - cron: "20 0 * * *"     # PBA 08:20 PHT
+    - cron: "0 1 * * *"      # NBA 09:00 PHT
+    - cron: "0 7 * * *"      # NBA 15:00 PHT
+    - cron: "0 12 * * *"     # Tennis 20:00 PHT
+    - cron: "30 13 * * *"    # PBA 21:30 PHT
+  workflow_dispatch:
+    inputs:
+      module:
+        description: Sports module to refresh
+        required: true
+        default: nba
+        type: choice
+        options: [nba, pba, tennis, all]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sports-pages-production
+  cancel-in-progress: false
+
+jobs:
+  refresh-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: sports/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix sports ci
+      - name: Select module
+        id: module
+        shell: bash
+        env:
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_MODULE: ${{ github.event.inputs.module }}
+        run: |
+          module="$MANUAL_MODULE"
+          if [[ -z "$module" ]]; then
+            case "$EVENT_SCHEDULE" in
+              "0 0 * * *"|"0 12 * * *") module="tennis" ;;
+              "20 0 * * *"|"30 13 * * *") module="pba" ;;
+              *) module="nba" ;;
+            esac
+          fi
+          echo "module=$module" >> "$GITHUB_OUTPUT"
+      - name: Refresh sports
+        run: node sports/refresh-sports.js --module "${{ steps.module.outputs.module }}"
+        env:
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+          SPORTS_FOLLOW_TEAMS: ${{ vars.SPORTS_FOLLOW_TEAMS }}
+          NBA_FOLLOW_TEAMS: ${{ vars.NBA_FOLLOW_TEAMS }}
+          NBA_FOLLOW_PLAYERS: ${{ vars.NBA_FOLLOW_PLAYERS }}
+          PBA_FOLLOW_TEAMS: ${{ vars.PBA_FOLLOW_TEAMS }}
+      - name: Build static Pages artifact
+        shell: bash
+        run: |
+          mkdir -p _site
+          cp index.html sports.html sports-public.json offline.html manifest.webmanifest sw.js .nojekyll _site/
+          cp -R assets reports _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

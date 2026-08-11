@@ -5,12 +5,13 @@
   "type": "module",
   "main": "refresh-radar.js",
   "scripts": {
-    "refresh": "node refresh-radar.js"
+    "refresh": "node refresh-radar.js",
+    "test": "node --test journal.test.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "firebase-admin": "^13.6.0"
+    "firebase-admin": "^14.2.0"
   }
 }

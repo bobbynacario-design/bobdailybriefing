@@ -1,16 +1,16 @@
 {
   "name": "bobdailybriefing-sports",
-  "description": "Local NBA, PVL, and archived World Cup refresh -> Firestore and public JSON",
+  "description": "Local NBA, PBA, tennis, and archived World Cup refresh -> Firestore and public JSON",
   "private": true,
   "type": "module",
   "main": "refresh-sports.js",
   "scripts": {
     "refresh": "node refresh-sports.js",
     "refresh:nba": "node refresh-sports.js --module nba",
-    "refresh:pvl": "node refresh-sports.js --module pvl",
+    "refresh:pba": "node refresh-sports.js --module pba",
     "dry-run": "node refresh-sports.js --dry-run",
     "dry-run:nba": "node refresh-sports.js --module nba --dry-run",
-    "dry-run:pvl": "node refresh-sports.js --module pvl --dry-run",
+    "dry-run:pba": "node refresh-sports.js --module pba --dry-run",
     "test": "node --test refresh-sports.test.js"
   },
   "engines": {
@@ -18,6 +18,6 @@
   },
   "dependencies": {
     "cheerio": "^1.2.0",
-    "firebase-admin": "^13.6.0"
+    "firebase-admin": "^14.2.0"
   }
 }

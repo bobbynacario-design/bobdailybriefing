@@ -23,6 +23,8 @@ import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as cheerio from 'cheerio';
+import { fetchRetry } from '../lib/http.js';
+import { recordRunHealth } from '../lib/feed-health.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var __radar = join(__dirname, '..', 'radar');
@@ -49,6 +51,8 @@ var FOOTBALL_DATA = 'https://api.football-data.org/v4';
 var ESPN_NBA = 'https://site.api.espn.com/apis';
 var ESPN_TENNIS = 'https://site.api.espn.com/apis/site/v2/sports/tennis';
 var PBA_SITE = 'https://www.pba.ph';
+var SPORTS_RUN_STARTED = Date.now();
+var _sportsDb = null;
 var FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
 var FOLLOW_TEAMS = (process.env.SPORTS_FOLLOW_TEAMS || '')
   .split(',')
@@ -104,23 +108,6 @@ function num(v) {
   if (v === null || v === undefined || v === '') return null;
   var n = Number(v);
   return isNaN(n) ? null : n;
-}
-
-async function fetchRetry(url, opts, label) {
-  var attempts = 4;
-  var lastErr;
-  for (var i = 0; i < attempts; i++) {
-    try {
-      var res = await fetch(url, opts);
-      if (res.status !== 429 && res.status < 500) return res;
-      lastErr = new Error(label + ' HTTP ' + res.status + ': ' + (await res.text()).slice(0, 200));
-    } catch (e) {
-      lastErr = e;
-    }
-    console.log('  ' + label + ' retry ' + (i + 1) + '/' + (attempts - 1));
-    await new Promise(function (r) { setTimeout(r, 1500 * (i + 1)); });
-  }
-  throw lastErr;
 }
 
 async function footballData(path) {
@@ -2715,12 +2702,37 @@ function initAdmin() {
     initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID });
     console.log('firebase-admin: using application default credentials');
   }
-  return getFirestore();
+  _sportsDb = getFirestore();
+  return _sportsDb;
+}
+
+function mergeConcurrentSportsDoc(incoming, existing, requestedLanes) {
+  var merged = Object.assign({}, incoming, {
+    modules: Object.assign({}, (incoming && incoming.modules) || {})
+  });
+  var requested = requestedLanes || [];
+  LANE_KEYS.forEach(function (lane) {
+    if (requested.indexOf(lane) >= 0) return;
+    var current = laneValue(existing, lane);
+    if (moduleHasData(lane, current)) setLane(merged, lane, current);
+  });
+  merged.sports = LANE_KEYS.filter(function (lane) {
+    return moduleHasData(lane, laneValue(merged, lane));
+  });
+  return merged;
 }
 
 async function writeDoc(db, dateKey, doc) {
-  await db.collection(COLL).doc('sports-' + dateKey).set(doc);
-  await db.collection(COLL).doc('sports-latest').set({ value: dateKey });
+  var docRef = db.collection(COLL).doc('sports-' + dateKey);
+  var pointerRef = db.collection(COLL).doc('sports-latest');
+  var requested = SELECTED_MODULES.indexOf('all') >= 0 ? LANE_KEYS.slice() : SELECTED_MODULES.slice();
+  return db.runTransaction(async function (tx) {
+    var currentSnap = await tx.get(docRef);
+    var merged = mergeConcurrentSportsDoc(doc, currentSnap.exists ? currentSnap.data() : null, requested);
+    tx.set(docRef, merged);
+    tx.set(pointerRef, { value: dateKey });
+    return merged;
+  });
 }
 
 function scheduleReadiness(history, moduleName, minimumDistinctDays) {
@@ -2974,7 +2986,8 @@ async function main() {
   if (!doc.sports.length) doc.sports = activeSportsList();
 
   console.log('\n===== briefings-bob/sports-' + dateKey + ' =====');
-  console.log(JSON.stringify(doc, null, 2));
+  console.log('  generatedAt=' + doc.generatedAt + ' lanes=' + (doc.sports || []).join(',') +
+    ' moduleRun=' + MODULE_ARG);
 
   if (DRY_RUN) {
     console.log('\n--dry-run: NOT writing sports-' + dateKey + ' / sports-latest.');
@@ -3009,7 +3022,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  await writeDoc(db, dateKey, doc);
+  doc = await writeDoc(db, dateKey, doc);
   console.log('\nWrote briefings-bob/sports-' + dateKey + ' and sports-latest = ' + dateKey + '.');
   // Public mirror for the friction-free shared page (sports.html on GitHub Pages
   // reads this static file — no Firebase, no sign-in). Only on real data, never
@@ -3029,6 +3042,10 @@ async function main() {
     } catch (e) { console.warn('public mirror write failed:', e.message || e); }
   }
   try { recordRunHistory(doc); } catch (e) { console.warn('run history write failed:', e.message || e); }
+  await recordRunHealth(db, 'sports', {
+    status: 'ok', asOf: dateKey, durationMs: Date.now() - SPORTS_RUN_STARTED,
+    message: 'lanes=' + (doc.sports || []).join(',') + '; module=' + MODULE_ARG
+  });
 }
 
 // Run only when executed directly (node refresh-sports.js), not when imported by
@@ -3037,8 +3054,14 @@ var __invoked = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === __invoked) {
   main().then(function () {
     process.exit(0);
-  }).catch(function (e) {
+  }).catch(async function (e) {
     console.error('\nrefresh-sports failed:', e.message || e);
+    if (_sportsDb && !DRY_RUN) {
+      await recordRunHealth(_sportsDb, 'sports', {
+        status: 'failed', stage: 'refresh', durationMs: Date.now() - SPORTS_RUN_STARTED,
+        message: e.message || String(e)
+      });
+    }
     process.exit(1);
   });
 }
@@ -3090,5 +3113,6 @@ export {
   lanesMissing,
   laneValue,
   setLane,
+  mergeConcurrentSportsDoc,
   shiftDateKey
 };

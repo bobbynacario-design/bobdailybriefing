@@ -34,6 +34,7 @@ import { buildMiroJournal } from './journal-miro.js';
 import { enrichMarketChanges } from './briefing.js';
 import { extractUsage, addUsage, recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
+import { fetchRetry } from '../lib/http.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
 var __radar = join(__dirname, '..', 'radar');
@@ -131,22 +132,6 @@ function phtDateKey() {
 
 // fetch with retry + backoff — this box's network intermittently ECONNRESETs,
 // so a single transient failure should not abort an unattended run.
-async function fetchRetry(url, opts, label) {
-  var attempts = 4;
-  var lastErr;
-  for (var i = 0; i < attempts; i++) {
-    try {
-      return await fetch(url, opts);
-    } catch (e) {
-      lastErr = e;
-      var code = (e && e.cause && e.cause.code) || e.message;
-      console.log('  ' + (label || 'fetch') + ' transient error (' + code + '), retry ' + (i + 1) + '/' + (attempts - 1));
-      await new Promise(function (r) { setTimeout(r, 1500 * (i + 1)); });
-    }
-  }
-  throw lastErr;
-}
-
 // Gamma returns `outcomes` / `outcomePrices` as JSON-encoded STRINGS. Parse
 // defensively (some fields can already be arrays depending on the endpoint).
 function parseArr(v) {
@@ -462,8 +447,10 @@ function initAdmin() {
 async function writeDoc(db, dateKey, doc) {
   // No `uid` field: the front end reads briefings-bob docs that carry no uid
   // (rule: !('uid' in resource.data)). Admin SDK writes bypass rules anyway.
-  await db.collection(COLL).doc('miro-' + dateKey).set(doc);
-  await db.collection(COLL).doc('miro-latest').set({ value: dateKey });
+  var batch = db.batch();
+  batch.set(db.collection(COLL).doc('miro-' + dateKey), doc);
+  batch.set(db.collection(COLL).doc('miro-latest'), { value: dateKey });
+  await batch.commit();
 }
 
 async function loadMiroControl(db) {

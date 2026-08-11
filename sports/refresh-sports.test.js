@@ -43,6 +43,7 @@ import {
   lanesMissing,
   laneValue,
   setLane,
+  mergeConcurrentSportsDoc,
   shiftDateKey
 } from './refresh-sports.js';
 
@@ -629,6 +630,21 @@ test('setLane restores into the right slot for modules and the legacy worldCup k
   assert.equal(target.modules.nba.matches.length, 1);
   assert.equal(target.worldCup.matches.length, 1);
   assert.deepEqual(lanesMissing(target, function (k) { return k === 'pba' || k === 'tennis'; }), []);
+});
+
+test('concurrent module writes preserve lanes committed by another runner', function () {
+  var current = laneDoc();
+  current.modules.pba = { standings: [{ team: 'New PBA snapshot' }], upcoming: [] };
+  var incoming = laneDoc();
+  incoming.generatedAt = '2026-08-11T01:00:00Z';
+  incoming.modules.nba = { matches: [{ id: 'new-nba' }], standings: [] };
+  incoming.modules.pba = { standings: [{ team: 'stale carried PBA' }], upcoming: [] };
+
+  var merged = mergeConcurrentSportsDoc(incoming, current, ['nba']);
+  assert.equal(merged.modules.nba.matches[0].id, 'new-nba');
+  assert.equal(merged.modules.pba.standings[0].team, 'New PBA snapshot');
+  assert.equal(merged.worldCup.matches.length, 1);
+  assert.deepEqual(merged.sports.sort(), ['nba', 'pba', 'tennis', 'worldcup']);
 });
 
 test('shiftDateKey walks back across month boundaries', function () {

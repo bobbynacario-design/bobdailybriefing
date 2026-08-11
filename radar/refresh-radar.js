@@ -36,6 +36,7 @@ import { buildJournal } from './journal.js';
 import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 import { extractUsage, recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
+import { fetchRetry } from '../lib/http.js';
 import { computeDrift, groupByUid } from '../lib/decision-drift.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -118,24 +119,6 @@ function daysAgoIso(n) {
 // the whole run — important for unattended Task Scheduler runs.
 // Budget ~22s (1.5/3/6/12) so a brief mid-run drop is survivable; a cold link
 // at startup is handled by waitForNetwork() below, not here.
-async function fetchRetry(url, opts, label) {
-  var attempts = 5;
-  var lastErr;
-  for (var i = 0; i < attempts; i++) {
-    try {
-      var res = await fetch(url, opts);
-      return res;
-    } catch (e) {
-      lastErr = e;
-      var code = (e && e.cause && e.cause.code) || e.message;
-      console.log('  ' + (label || 'fetch') + ' transient error (' + code + '), attempt ' + (i + 1) + '/' + attempts);
-      if (i === attempts - 1) break;
-      await new Promise(function (r) { setTimeout(r, Math.min(1500 * Math.pow(2, i), 12000)); });
-    }
-  }
-  throw lastErr;
-}
-
 // ── network preflight ──
 // The scheduled run fires at 06:00, and on this Modern-Standby (S0) box it
 // often starts seconds after a resume — before Wi-Fi has associated and DNS is
@@ -399,8 +382,10 @@ function initAdmin() {
 async function writeDoc(db, dateKey, doc) {
   // No `uid` field: the front end reads these under the rule that allows reads
   // of briefings-bob docs that carry no uid. Admin SDK writes bypass rules.
-  await db.collection(COLL).doc('radar-' + dateKey).set(doc);
-  await db.collection(COLL).doc('radar-latest').set({ value: dateKey });
+  var batch = db.batch();
+  batch.set(db.collection(COLL).doc('radar-' + dateKey), doc);
+  batch.set(db.collection(COLL).doc('radar-latest'), { value: dateKey });
+  await batch.commit();
 }
 
 // ── decision drift digest ──
@@ -526,7 +511,8 @@ async function main() {
   };
 
   console.log('\n===== briefings-bob/radar-' + dateKey + ' =====');
-  console.log(JSON.stringify(doc, null, 2));
+  console.log('  asOf=' + doc.asOf + ' signals=' + ((doc.signals || []).length) +
+    ' generatedAt=' + doc.generatedAt);
 
   // V3: rebuild the calibration journal from the same bars (pure, deterministic
   // re-scoring). buildJournal returns the full doc body; we only stamp the

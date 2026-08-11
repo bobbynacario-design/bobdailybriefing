@@ -1,13 +1,25 @@
 param(
   [ValidateSet('all', 'nba', 'pba', 'tennis')]
   [string]$Module = 'all',
-  [switch]$NoPublish
+  [switch]$PublishLegacy
 )
 
 $ErrorActionPreference = 'Stop'
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $log = Join-Path $here ("refresh-{0}.log" -f $Module)
+
+# Keep five 5 MiB local logs. Full data documents are no longer printed, but a
+# bounded fallback log remains useful when this compatibility runner is used.
+if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -ge 5MB) {
+  for ($logIndex = 4; $logIndex -ge 1; $logIndex--) {
+    $sourceLog = if ($logIndex -eq 1) { $log } else { "$log.$($logIndex - 1)" }
+    $targetLog = "$log.$logIndex"
+    if (Test-Path -LiteralPath $sourceLog) {
+      Move-Item -LiteralPath $sourceLog -Destination $targetLog -Force
+    }
+  }
+}
 
 Set-Location $here
 
@@ -32,10 +44,9 @@ $proc.WaitForExit()
 if ($stdout) { $stdout | Out-File -FilePath $log -Encoding utf8 -Append }
 if ($stderr) { $stderr | Out-File -FilePath $log -Encoding utf8 -Append }
 
-# Publish the public mirror (sports-public.json) to GitHub Pages so the
-# no-sign-in shared page (sports.html) stays current. Best-effort: the Firestore
-# write already succeeded, so a git failure here never breaks the refresh.
-if ($proc.ExitCode -eq 0 -and -not $NoPublish) {
+# Legacy escape hatch only. Managed refresh-sports.yml now publishes a Pages
+# artifact without committing generated data to main.
+if ($proc.ExitCode -eq 0 -and $PublishLegacy) {
   try {
     $repo = Split-Path -Parent $here
     Push-Location $repo

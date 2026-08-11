@@ -1,15 +1,19 @@
 "use strict";
 
-const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
+const OpenAI = require("openai");
+const {researchResult} = require("./research-result");
 
 initializeApp();
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const OPENAI_WEBHOOK_SECRET = defineSecret("OPENAI_WEBHOOK_SECRET");
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
 
 // Deep-research generation config (all override-able via env)
@@ -18,6 +22,7 @@ const DEEP_MODEL_PREMIUM = process.env.DEEP_MODEL_PREMIUM || "o3-deep-research";
 const DEEP_RESEARCH_CAP = parseInt(process.env.DEEP_RESEARCH_CAP || "20", 10);
 const REPORTS_COLL = "reports-bob";
 const REPORTS_META = "reports-bob-meta";
+const WEBHOOK_EVENTS_COLL = "openai-webhook-events";
 
 // ── LLM usage telemetry (CJS twin of lib/llm-usage.js) ──
 // Writes token usage to the shared ledger briefings-bob/llm-usage (no uid).
@@ -227,6 +232,7 @@ exports.generateBobDailyBriefing = onCall(
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(480000),
       });
     } catch (err) {
       logger.error("OpenAI network error", err);
@@ -366,6 +372,7 @@ exports.generateDeepResearchReport = onCall(
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(45000),
       });
     } catch (err) {
       logger.error("Deep research kickoff network error", err);
@@ -412,9 +419,127 @@ exports.generateDeepResearchReport = onCall(
   }
 );
 
+async function retrieveOpenAIResponse(openaiId) {
+  const response = await fetch("https://api.openai.com/v1/responses/" + encodeURIComponent(openaiId), {
+    headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value()},
+    signal: AbortSignal.timeout(30000),
+  });
+  const text = await response.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (error) {
+    throw new Error("OpenAI returned a non-JSON research response.");
+  }
+  if (!response.ok) {
+    throw new Error("OpenAI research retrieval failed with HTTP " + response.status + ".");
+  }
+  return json;
+}
+
+async function finalizeResearchReport(db, reportDoc, responseJson, source) {
+  const result = researchResult(responseJson, Date.now());
+  if (!result.terminal) return false;
+  const applied = await db.runTransaction(async (tx) => {
+    const current = await tx.get(reportDoc.ref);
+    if (!current.exists || current.data().status !== "generating") return false;
+    tx.update(reportDoc.ref, Object.assign({}, result.update, {completionSource: source}));
+    return true;
+  });
+  if (applied && result.update.status === "ready") {
+    const d = reportDoc.data();
+    await recordUsage(db, "deep-research", d.model || DEEP_MODEL_DEFAULT,
+      extractUsage(responseJson), phtDateKey());
+  }
+  return applied;
+}
+
+async function findResearchReport(db, openaiId) {
+  const snap = await db.collection(REPORTS_COLL).where("openaiId", "==", openaiId).limit(1).get();
+  return snap.empty ? null : snap.docs[0];
+}
+
+exports.openaiWebhook = onRequest(
+  {
+    region: "asia-southeast1",
+    timeoutSeconds: 30,
+    memory: "256MiB",
+    secrets: [OPENAI_API_KEY, OPENAI_WEBHOOK_SECRET],
+  },
+  async (request, response) => {
+    if (request.method !== "POST") {
+      response.set("Allow", "POST").status(405).send("Method not allowed");
+      return;
+    }
+    let event;
+    try {
+      const client = new OpenAI({apiKey: OPENAI_API_KEY.value()});
+      const rawBody = request.rawBody.toString("utf8");
+      event = await client.webhooks.unwrap(rawBody, request.headers, OPENAI_WEBHOOK_SECRET.value());
+    } catch (error) {
+      logger.warn("Rejected OpenAI webhook", {message: error.message});
+      response.status(400).send("Invalid webhook signature");
+      return;
+    }
+
+    if (!event || typeof event.type !== "string" || !event.type.startsWith("response.")) {
+      response.status(204).send();
+      return;
+    }
+    const openaiId = event.data && event.data.id;
+    if (!openaiId) {
+      response.status(204).send();
+      return;
+    }
+
+    const eventId = String(request.get("webhook-id") || event.id || (event.type + "-" + openaiId));
+    try {
+      await getFirestore().collection(WEBHOOK_EVENTS_COLL).doc(eventId).create({
+        eventId,
+        type: event.type,
+        openaiId,
+        receivedAt: Date.now(),
+        status: "queued",
+      });
+    } catch (error) {
+      // ALREADY_EXISTS means OpenAI retried a webhook we already accepted.
+      if (error.code !== 6 && error.code !== "already-exists") throw error;
+    }
+    response.status(202).send("Accepted");
+  }
+);
+
+exports.processOpenAIWebhook = onDocumentCreated(
+  {
+    document: WEBHOOK_EVENTS_COLL + "/{eventId}",
+    region: "asia-southeast1",
+    timeoutSeconds: 120,
+    memory: "256MiB",
+    retry: true,
+    secrets: [OPENAI_API_KEY],
+  },
+  async (event) => {
+    const eventRef = event.data && event.data.ref;
+    const queued = event.data && event.data.data();
+    if (!eventRef || !queued || !queued.openaiId) return;
+    const db = getFirestore();
+    const reportDoc = await findResearchReport(db, queued.openaiId);
+    if (!reportDoc) {
+      throw new Error("Research report not yet available for " + queued.openaiId);
+    }
+    const json = await retrieveOpenAIResponse(queued.openaiId);
+    const applied = await finalizeResearchReport(db, reportDoc, json, "webhook");
+    await eventRef.set({
+      status: applied ? "processed" : "ignored",
+      processedAt: Date.now(),
+      responseStatus: json.status || "unknown",
+    }, {merge: true});
+  }
+);
+
 exports.pollDeepResearchReports = onSchedule(
   {
-    schedule: "every 1 minutes",
+    schedule: "every 15 minutes",
     region: "asia-southeast1",
     timeoutSeconds: 120,
     memory: "256MiB",
@@ -441,34 +566,13 @@ exports.pollDeepResearchReports = onSchedule(
 
       let json;
       try {
-        const res = await fetch("https://api.openai.com/v1/responses/" + d.openaiId, {
-          headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value()},
-        });
-        json = JSON.parse(await res.text());
+        json = await retrieveOpenAIResponse(d.openaiId);
       } catch (err) {
         logger.warn("Poll fetch failed for " + doc.id, err);
         continue; // retry next tick
       }
 
-      const status = json && json.status;
-      if (status === "completed") {
-        let md = "";
-        try {
-          md = extractText(json);
-        } catch (err) {
-          md = "";
-        }
-        if (md && md.trim()) {
-          await doc.ref.update({md, status: "ready", completedAt: now});
-          // Record deep-research token usage to the shared LLM cost ledger (no-throw).
-          await recordUsage(db, "deep-research", d.model || DEEP_MODEL_DEFAULT, extractUsage(json), phtDateKey());
-        } else {
-          await doc.ref.update({status: "error", error: "Completed with empty output.", completedAt: now});
-        }
-      } else if (status === "failed" || status === "cancelled" || status === "incomplete" || status === "expired") {
-        const msg = (json.error && json.error.message) || ("Job " + status + ".");
-        await doc.ref.update({status: "error", error: msg, completedAt: now});
-      }
+      await finalizeResearchReport(db, doc, json, "recovery-poller");
       // queued / in_progress → leave for the next tick
     }
   }

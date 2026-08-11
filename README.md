@@ -14,9 +14,9 @@ Private daily intelligence briefing desk for Bob.
 - **⚽ Sports** — a provider-backed sports briefing tab. NBA is the default lane,
   with rolling results, conference standings, a last-five momentum model, rest/
   back-to-back flags, recent game leaders, availability, and a configurable team
-  watchlist from ESPN's public basketball feed. PH Local/PVL adds official
-  fixtures, recaps, standings, set-based momentum, and player leaderboards from
-  pvl.ph, while FIFA World Cup remains available as an archive. Each module shows
+  watchlist from ESPN's public basketball feed. PH Local/PBA adds official
+  fixtures, recaps, standings, momentum, and player leaderboards from
+  pba.ph, while FIFA World Cup remains available as an archive. Each module shows
   explicit current, stale, failed, or fallback freshness status. The local
   runner writes `briefings-bob/sports-*` docs and a `sports-public.json` mirror.
 
@@ -26,8 +26,9 @@ Private daily intelligence briefing desk for Bob.
   USD from a single auditable rate table (raw API cost, no markup; unconfirmed
   model rates shown "unpriced", never guessed).
 
-Each market feature is a **local Node refresh script** that writes Firestore docs
-the front end reads — no Cloud Functions, no build step.
+Each feed retains a local Node refresh script for dry runs and recovery. Managed
+GitHub Actions schedules now run production refreshes and write Firestore; the
+front end remains a static reader.
 
 ## Sports refresh
 
@@ -41,32 +42,30 @@ set FOOTBALL_DATA_TOKEN=your_token_here
 set SPORTS_FOLLOW_TEAMS=Australia,England
 set NBA_FOLLOW_TEAMS=Lakers,Warriors,Knicks,Spurs,Mavericks
 set NBA_FOLLOW_PLAYERS=Jalen Brunson,Victor Wembanyama,Stephen Curry
-set PVL_FOLLOW_TEAMS=Creamline,Choco Mucho,PLDT,ZUS Coffee
+set PBA_FOLLOW_TEAMS=Ginebra,San Miguel,TNT,Magnolia
 npm run dry-run:nba
-npm run dry-run:pvl
+npm run dry-run:pba
 npm run refresh
 npm run refresh:nba
-npm run refresh:pvl
+npm run refresh:pba
 ```
 
 Use `npm run dry-run:nba` to inspect NBA only, or `npm run dry-run` to inspect the
 combined document without writing `briefings-bob/sports-<date>` and
 `briefings-bob/sports-latest`.
 
-**Auto-refresh:** the old FIFA task remains removed. Manual production refreshes
-write local validation history to ignored `sports/run-history.json`; failed or
-fallback runs do not count. After three successful PHT days for a module, install
-its guarded Windows task:
+**Auto-refresh:** managed GitHub Actions run the production cadence. The Windows
+scheduler remains a recovery option. After three successful PHT days for a
+module, install its guarded local task:
 
 ```powershell
-.\install-sports-schedule.ps1 -Module pvl
+.\install-sports-schedule.ps1 -Module pba
 .\install-sports-schedule.ps1 -Module nba
 ```
 
-PVL installs at 08:00 and 21:30 PHT. NBA installs weekly on Sunday at 09:00 PHT
-during the offseason. Each module writes a separate ignored log such as
-`sports/refresh-pvl.log`. A module-specific refresh preserves the other module in
-the shared Firestore/public document.
+PBA installs at 08:20 and 21:30 PHT, NBA at 09:00 and 15:00 PHT, and tennis at
+08:00 and 20:00 PHT. Each module writes a bounded ignored log. Transactional
+writes preserve lanes committed concurrently by another module.
 
 ## OpenAI generation
 
@@ -79,10 +78,16 @@ Setup:
 cd C:\Users\AO\projects\bobdailybriefing\functions
 npm install
 firebase functions:secrets:set OPENAI_API_KEY --project pokerhq-a67e4
+firebase functions:secrets:set OPENAI_WEBHOOK_SECRET --project pokerhq-a67e4
 npm run deploy
 ```
 
 After deploy, sign in to the app and use `OPENAI GENERATE`.
+
+Create an OpenAI project webhook subscribed to response completion events and
+point it at the deployed `openaiWebhook` function URL. The 15-minute poller is
+retained only as recovery if webhook delivery fails. See
+[`docs/phase-1-operations.md`](docs/phase-1-operations.md) for cutover steps.
 
 Notes:
 

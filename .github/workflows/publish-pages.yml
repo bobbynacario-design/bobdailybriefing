@@ -1,0 +1,47 @@
+name: Publish static app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - sports.html
+      - sports-public.json
+      - offline.html
+      - manifest.webmanifest
+      - sw.js
+      - assets/**
+      - reports/**
+      - .github/workflows/publish-pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sports-pages-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build static Pages artifact
+        shell: bash
+        run: |
+          mkdir -p _site
+          cp index.html sports.html sports-public.json offline.html manifest.webmanifest sw.js .nojekyll _site/
+          cp -R assets reports _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

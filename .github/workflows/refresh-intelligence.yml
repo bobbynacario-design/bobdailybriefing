@@ -1,0 +1,66 @@
+name: Refresh intelligence feeds
+
+on:
+  schedule:
+    # GitHub cron is UTC. PHT is UTC+8.
+    - cron: "0 22 * * 0-4"   # Radar 06:00 PHT Monday-Friday
+    - cron: "15 22 * * *"    # Markets 06:15 PHT daily
+    - cron: "30 0 * * 1-5"   # Radar catch-up 08:30 PHT Monday-Friday
+  workflow_dispatch:
+    inputs:
+      feed:
+        description: Feed to refresh
+        required: true
+        default: radar
+        type: choice
+        options: [radar, markets]
+
+permissions:
+  contents: read
+
+jobs:
+  radar:
+    if: github.event.schedule == '0 22 * * 0-4' || github.event.schedule == '30 0 * * 1-5' || github.event.inputs.feed == 'radar'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: refresh-radar
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radar/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix radar ci
+      - run: npm --prefix radar run refresh
+        env:
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  markets:
+    if: github.event.schedule == '15 22 * * *' || github.event.inputs.feed == 'markets'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: refresh-markets
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: miro/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix miro ci
+      - run: npm --prefix miro run refresh
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
