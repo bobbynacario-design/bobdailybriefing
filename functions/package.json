@@ -3,7 +3,7 @@
   "description": "Backend OpenAI generator for Bob's Daily Intelligence Briefing",
   "scripts": {
     "test": "node --test *.test.js",
-    "check": "node --check index.js && node --check research-result.js",
+    "check": "node --check index.js && node --check research-result.js && node --check webhook-event.js",
     "deploy": "firebase deploy --only functions:bobdailybriefing --project pokerhq-a67e4"
   },
   "engines": {

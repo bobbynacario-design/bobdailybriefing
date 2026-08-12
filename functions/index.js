@@ -9,6 +9,7 @@ const {initializeApp} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
 const OpenAI = require("openai");
 const {researchResult} = require("./research-result");
+const {missingReportAction} = require("./webhook-event");
 
 initializeApp();
 
@@ -525,7 +526,19 @@ exports.processOpenAIWebhook = onDocumentCreated(
     const db = getFirestore();
     const reportDoc = await findResearchReport(db, queued.openaiId);
     if (!reportDoc) {
-      throw new Error("Research report not yet available for " + queued.openaiId);
+      if (missingReportAction(queued.receivedAt) === "retry") {
+        throw new Error("Research report not yet available for " + queued.openaiId);
+      }
+      await eventRef.set({
+        status: "ignored",
+        reason: "untracked-response",
+        processedAt: Date.now(),
+      }, {merge: true});
+      logger.info("Ignored untracked OpenAI response event", {
+        eventId: queued.eventId,
+        type: queued.type,
+      });
+      return;
     }
     const json = await retrieveOpenAIResponse(queued.openaiId);
     const applied = await finalizeResearchReport(db, reportDoc, json, "webhook");
