@@ -4,6 +4,7 @@ import vm from 'node:vm';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sports = readFileSync(new URL('../sports.html', import.meta.url), 'utf8');
+const pagesWorkflow = readFileSync(new URL('../.github/workflows/publish-pages.yml', import.meta.url), 'utf8');
 
 function ids(source) {
   return Array.from(source.matchAll(/\bid=["']([^"']+)["']/g), function (match) { return match[1]; });
@@ -33,6 +34,8 @@ assert.ok(html.includes('type="module"'), 'Firebase application script must rema
 assert.ok(html.includes('manifest.webmanifest'), 'PWA manifest link is required');
 assert.ok(html.includes('./lib/command-center-core.js'), 'Command Center core must load before the app script');
 assert.ok(html.includes("if (id==='command') renderCommandCenter()"), 'navigation must render Command Center');
+assert.ok(pagesWorkflow.includes('cp lib/command-center-core.js _site/lib/'),
+  'Pages artifact must include the Command Center core');
 assert.ok(sports.includes('sports-public.json'), 'public sports page must load its public data mirror');
 assert.ok(!/function\s+getGeminiPrompt\s*\([^)]*\)[\s\S]*function\s+getGeminiPrompt\s*\(/.test(html),
   'getGeminiPrompt must have only one declaration');
