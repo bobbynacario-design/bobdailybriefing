@@ -1,13 +1,14 @@
 /* Bob Daily Briefing service worker.
    App-shell requests are network-first so deploys update cleanly; cache is the
    offline fallback. Firebase and Google auth traffic always bypasses the cache. */
-var CACHE_NAME = 'bob-briefing-shell-v37';
+var CACHE_NAME = 'bob-briefing-shell-v38';
 
 var PRECACHE = [
   './',
   './index.html',
   './manifest.webmanifest',
   './offline.html',
+  './lib/command-center-core.js',
   './reports/mindanao-eq-2026.html',
   './reports/report-template.html',
   './assets/icons/bob-briefing-mark.svg',

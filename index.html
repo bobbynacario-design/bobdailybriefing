@@ -15,6 +15,7 @@
 <title>Bob's Daily Intelligence Briefing</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="./lib/command-center-core.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -1326,16 +1327,17 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   .mob-tab.active{color:var(--gold)}
   .mob-tab-icon{font-size:19px;line-height:1}
   #mob-today{order:1}
-  #mob-radar{order:2}
-  #mob-decisions{order:3}
-  #mob-journal{order:4}
-  #mob-miro{order:5}
-  #mob-sports{order:6}
-  #mob-pse{order:7}
-  #mob-research{order:8}
-  #mob-trends{order:9}
-  #mob-history{order:10}
-  #mob-help{order:11}
+  #mob-command{order:2}
+  #mob-radar{order:3}
+  #mob-decisions{order:4}
+  #mob-journal{order:5}
+  #mob-miro{order:6}
+  #mob-sports{order:7}
+  #mob-pse{order:8}
+  #mob-research{order:9}
+  #mob-trends{order:10}
+  #mob-history{order:11}
+  #mob-help{order:12}
   body{padding-bottom:70px}
   .trend-rel-grid{grid-template-columns:repeat(2,1fr)}
   .paste-zone textarea{min-height:120px}
@@ -1442,6 +1444,39 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .feed-health-why b{color:#F0A832}
 @media(max-width:768px){.feed-health{padding:.4rem .85rem;font-size:9.5px}}
 
+/* ── COMMAND CENTER ── */
+.command-hero{background:radial-gradient(circle at 88% 18%,rgba(201,168,76,.17),transparent 31%),linear-gradient(135deg,var(--bg2),var(--bg3))}
+.command-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.7rem;margin-bottom:1rem}
+.command-stat{padding:.9rem 1rem;border:1px solid var(--rim);border-radius:11px;background:var(--bg2)}
+.command-stat-value{font-family:var(--mono);font-size:23px;color:var(--txt)}
+.command-stat-label{font-family:var(--mono);font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--txt3);margin-top:.25rem}
+.command-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:1rem;align-items:start}
+.command-panel{border:1px solid var(--rim);border-radius:13px;background:var(--bg2);padding:1rem}
+.command-panel-head{display:flex;align-items:flex-end;justify-content:space-between;gap:.8rem;margin-bottom:.8rem}
+.command-panel-title{font-family:var(--serif);font-size:20px;color:var(--txt)}
+.command-panel-meta{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em}
+.command-five{display:flex;flex-direction:column;gap:.55rem}
+.command-five-item{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:.7rem;align-items:start;padding:.75rem;border:1px solid var(--rim);border-radius:10px;background:var(--bg3);cursor:pointer;transition:border-color .15s,transform .15s}
+.command-five-item:hover,.command-queue-item:hover{border-color:rgba(201,168,76,.5);transform:translateY(-1px)}
+.command-rank{font-family:var(--mono);font-size:14px;color:var(--gold);padding-top:.1rem}
+.command-item-title{font-size:13px;font-weight:600;color:var(--txt);line-height:1.4}
+.command-item-detail{font-size:11px;color:var(--txt3);line-height:1.5;margin-top:.2rem;overflow-wrap:anywhere}
+.command-source{font-family:var(--mono);font-size:8px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--rim2);border-radius:20px;padding:2px 7px;color:var(--txt2);white-space:nowrap}
+.command-source.Reliability{color:var(--red);border-color:rgba(232,92,92,.35);background:var(--red-dim)}
+.command-source.Decisions{color:var(--gold);border-color:rgba(201,168,76,.35);background:var(--gold-dim)}
+.command-filters{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.7rem}
+.command-filter{border:1px solid var(--rim);background:transparent;color:var(--txt3);font-family:var(--mono);font-size:9px;border-radius:20px;padding:.3rem .65rem;cursor:pointer;text-transform:uppercase}
+.command-filter.active{color:var(--gold);border-color:rgba(201,168,76,.4);background:var(--gold-dim)}
+.command-queue{display:flex;flex-direction:column;gap:.45rem;max-height:640px;overflow-y:auto;padding-right:.15rem}
+.command-queue-item{border:1px solid var(--rim);border-left:3px solid var(--blue);border-radius:8px;background:var(--bg3);padding:.65rem .75rem;cursor:pointer;transition:border-color .15s,transform .15s}
+.command-queue-item.act{border-left-color:var(--gold)}
+.command-queue-item.system{border-left-color:var(--red)}
+.command-queue-top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:.2rem}
+.command-confidence{font-family:var(--mono);font-size:8px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em}
+.command-empty{padding:1.5rem;text-align:center;color:var(--txt3);font-family:var(--mono);font-size:10px}
+@media(max-width:900px){.command-layout{grid-template-columns:1fr}.command-queue{max-height:none}}
+@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item .command-source{grid-column:2;justify-self:start}}
+
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:var(--bg)}
@@ -1473,6 +1508,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="nav-brand">INTELLIGENCE <span>// BOB</span></div>
   <div class="nav-center">
     <button class="ntab active" data-page="today" onclick="switchPage('today',this)">📰 Today</button>
+    <button class="ntab" data-page="command" onclick="switchPage('command',this)">◎ Command</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
     <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
     <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
@@ -1504,6 +1540,38 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 </div>
 
 <!-- ═══════════════ TODAY PAGE ═══════════════ -->
+<div class="page" id="page-command">
+  <div class="hero command-hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Cross-feed daily priorities</div>
+    <div class="hero-date" style="font-size:22px">◎ Command Center</div>
+    <div class="hero-sub" id="command-sub">One prioritized view across the briefing, markets, decisions and followed sports.</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div class="command-summary">
+    <div class="command-stat"><div class="command-stat-value" id="command-act">—</div><div class="command-stat-label">Act now</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="command-review">—</div><div class="command-stat-label">Decision reviews</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="command-total">—</div><div class="command-stat-label">Relevant signals</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="command-sources">—</div><div class="command-stat-label">Sources represented</div></div>
+  </div>
+  <div class="command-layout">
+    <section class="command-panel">
+      <div class="command-panel-head"><div><div class="command-panel-title">Morning 5</div><div class="command-panel-meta">Source-diverse, highest priority first</div></div><button class="tool-chip" onclick="renderCommandCenter()">Refresh</button></div>
+      <div class="command-five" id="command-five"><div class="command-empty">Open Command Center to build today's priority stack.</div></div>
+    </section>
+    <section class="command-panel">
+      <div class="command-panel-head"><div><div class="command-panel-title">Attention Queue</div><div class="command-panel-meta" id="command-queue-meta">All relevant items</div></div></div>
+      <div class="command-filters">
+        <button class="command-filter active" data-command-filter="all" onclick="setCommandFilter('all',this)">All</button>
+        <button class="command-filter" data-command-filter="act" onclick="setCommandFilter('act',this)">Act</button>
+        <button class="command-filter" data-command-filter="monitor" onclick="setCommandFilter('monitor',this)">Monitor</button>
+        <button class="command-filter" data-command-filter="system" onclick="setCommandFilter('system',this)">System</button>
+      </div>
+      <div class="command-queue" id="command-queue"><div class="command-empty">Loading cross-feed priorities…</div></div>
+    </section>
+  </div>
+  <div class="radar-disclaimer">Priority is a deterministic triage aid built from existing app data. It does not create trades, bets, or new factual claims; open the source tab before acting.</div>
+</div>
+
 <div class="page active" id="page-today">
 
   <div class="hero">
@@ -2079,6 +2147,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
+  <button class="mob-tab" id="mob-command" onclick="switchPageMobile('command',this)"><span class="mob-tab-icon">◎</span>CMD</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
   <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
   <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
@@ -2314,6 +2383,7 @@ function switchPage(id, el) {
   var mob = document.getElementById('mob-'+id);
   if (mob) mob.classList.add('active');
   if (id==='history') renderHistory();
+  if (id==='command') renderCommandCenter();
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
@@ -2336,6 +2406,7 @@ function switchPageMobile(id, el) {
     if (t.getAttribute('data-page')===id) t.classList.add('active');
   });
   if (id==='history') renderHistory();
+  if (id==='command') renderCommandCenter();
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
@@ -3367,11 +3438,109 @@ function renderFeedHealth(health) {
 }
 window.loadFeedHealth = async function () {
   try {
-    renderFeedHealth(window.fbLoadFeedHealth ? await window.fbLoadFeedHealth() : null);
+    var health = window.fbLoadFeedHealth ? await window.fbLoadFeedHealth() : null;
+    window._feedHealthData = health;
+    renderFeedHealth(health);
   } catch (e) {
     console.error('Feed health render failed:', e);
   }
 };
+
+// ── COMMAND CENTER ──────────────────────────────────────────────────────────
+// A deterministic cross-feed triage layer. It makes no provider calls of its
+// own: the page combines the same documents the individual tabs already read.
+var commandCenterData = null;
+var commandFilter = 'all';
+var commandLoadToken = 0;
+
+function commandSportsFollows(sports) {
+  var result = {};
+  var modules = sports && sports.modules || {};
+  Object.keys(modules).forEach(function (key) {
+    result[key] = sportsFollowed(modules[key] || {}, key, 'teams');
+  });
+  return result;
+}
+function commandGo(page) {
+  var button = document.querySelector('.ntab[data-page="' + page + '"]');
+  switchPage(page, button);
+}
+function commandItemHtml(item, rank, featured) {
+  var sourceClass = esc(item.source).replace(/[^A-Za-z0-9_-]/g, '');
+  var body = '<div><div class="command-item-title">' + esc(item.title) + '</div>' +
+    '<div class="command-item-detail">' + esc(item.detail || 'Open source for detail.') + '</div></div>';
+  if (featured) {
+    return '<div class="command-five-item" role="button" tabindex="0" onclick="commandGo(\'' + esc(item.page) + '\')">' +
+      '<div class="command-rank">' + (rank + 1) + '</div>' + body +
+      '<span class="command-source ' + sourceClass + '">' + esc(item.source) + '</span></div>';
+  }
+  var cls = item.kind === 'system' ? ' system' : (item.urgency === 'act' ? ' act' : '');
+  return '<div class="command-queue-item' + cls + '" role="button" tabindex="0" onclick="commandGo(\'' + esc(item.page) + '\')">' +
+    '<div class="command-queue-top"><span class="command-source ' + sourceClass + '">' + esc(item.source) + '</span>' +
+    '<span class="command-confidence">' + esc(item.urgency) + ' / ' + esc(item.confidence) + ' confidence</span></div>' + body + '</div>';
+}
+function paintCommandCenter() {
+  var five = document.getElementById('command-five');
+  var queue = document.getElementById('command-queue');
+  if (!five || !queue || !commandCenterData) return;
+  setText('command-act', commandCenterData.counts.act);
+  setText('command-review', commandCenterData.counts.review);
+  setText('command-total', commandCenterData.counts.total);
+  setText('command-sources', commandCenterData.counts.sources);
+  five.innerHTML = commandCenterData.morningFive.length
+    ? commandCenterData.morningFive.map(function (item, index) { return commandItemHtml(item, index, true); }).join('')
+    : '<div class="command-empty">No priority items are available yet.</div>';
+  var rows = commandCenterData.items.filter(function (item) {
+    if (commandFilter === 'all') return true;
+    if (commandFilter === 'system') return item.kind === 'system';
+    return item.urgency === commandFilter && item.kind !== 'system';
+  });
+  queue.innerHTML = rows.length
+    ? rows.map(function (item) { return commandItemHtml(item, 0, false); }).join('')
+    : '<div class="command-empty">Nothing in this queue.</div>';
+  setText('command-queue-meta', rows.length + ' of ' + commandCenterData.items.length + ' items');
+  setText('command-sub', 'Prioritized at ' + new Date(commandCenterData.generatedAt).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', hour12:false}) + ' PHT / tap any item to open its source.');
+}
+function setCommandFilter(filter, button) {
+  commandFilter = filter || 'all';
+  document.querySelectorAll('.command-filter').forEach(function (item) {
+    item.classList.toggle('active', item.getAttribute('data-command-filter') === commandFilter);
+  });
+  if (button) button.classList.add('active');
+  paintCommandCenter();
+}
+function renderCommandCenter() {
+  var five = document.getElementById('command-five');
+  var queue = document.getElementById('command-queue');
+  if (!five || !queue || !window.CommandCenterCore) return;
+  var token = ++commandLoadToken;
+  five.innerHTML = '<div class="command-empty">Building today\'s Morning 5…</div>';
+  queue.innerHTML = '<div class="command-empty">Loading current feed snapshots…</div>';
+  var read = function (loader) {
+    return loader ? Promise.resolve(loader()).catch(function () { return null; }) : Promise.resolve(null);
+  };
+  Promise.all([
+    read(window.fbLoadRadar), read(window.fbLoadMiro), read(window.fbLoadSports),
+    read(window.fbLoadDecisions), read(window.fbLoadFeedHealth)
+  ]).then(function (data) {
+    if (token !== commandLoadToken) return;
+    window._feedHealthData = data[4] || window._feedHealthData || null;
+    commandCenterData = window.CommandCenterCore.buildCommandCenter({
+      briefing: _currentData,
+      radar: data[0],
+      markets: data[1],
+      sports: data[2],
+      decisions: data[3],
+      health: window._feedHealthData,
+      sportsFollows: commandSportsFollows(data[2]),
+      today: manilaDateKey()
+    });
+    paintCommandCenter();
+  }).catch(function (error) {
+    console.error('Command Center load failed:', error);
+    queue.innerHTML = '<div class="command-empty">COMMAND CENTER LOAD FAILED — OPEN SOURCE TABS DIRECTLY</div>';
+  });
+}
 
 // DECISIONS - Bob's process journal. Captures calls and post-mortems without
 // turning Radar into an execution surface.
