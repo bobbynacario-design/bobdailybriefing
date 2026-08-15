@@ -5,6 +5,8 @@ import vm from 'node:vm';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sports = readFileSync(new URL('../sports.html', import.meta.url), 'utf8');
 const pagesWorkflow = readFileSync(new URL('../.github/workflows/publish-pages.yml', import.meta.url), 'utf8');
+const functionsIndex = readFileSync(new URL('../functions/index.js', import.meta.url), 'utf8');
+const serviceWorker = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 
 function ids(source) {
   return Array.from(source.matchAll(/\bid=["']([^"']+)["']/g), function (match) { return match[1]; });
@@ -37,6 +39,14 @@ assert.ok(html.includes("if (id==='command') renderCommandCenter()"), 'navigatio
 assert.ok(html.includes('fbLoadCommandPrefs') && html.includes('fbSaveCommandPrefs'),
   'Command Center preferences must load and save through the signed-in account');
 assert.ok(html.includes('Why this rank?'), 'Command Center must explain item ranking');
+assert.ok(html.includes('fbEnableBriefingDelivery') && html.includes('command-delivery-audit'),
+  'Command Center must expose device delivery and its audit trail');
+assert.ok(functionsIndex.includes('exports.deliverMorningFive = onSchedule') &&
+  functionsIndex.includes('exports.registerBriefingDevice = onCall') &&
+  functionsIndex.includes('exports.muteBriefingDelivery = onCall'),
+  'Functions must schedule Morning 5 delivery and manage authenticated devices');
+assert.ok(serviceWorker.includes('onBackgroundMessage') && serviceWorker.includes("action: 'mute'"),
+  'service worker must receive background delivery and expose a mute action');
 assert.ok(pagesWorkflow.includes('cp lib/command-center-core.js _site/lib/'),
   'Pages artifact must include the Command Center core');
 assert.ok(sports.includes('sports-public.json'), 'public sports page must load its public data mirror');

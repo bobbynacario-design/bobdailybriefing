@@ -2,8 +2,12 @@
   "name": "bobdailybriefing-functions",
   "description": "Backend OpenAI generator for Bob's Daily Intelligence Briefing",
   "scripts": {
+    "sync:command-core": "node sync-command-core.js",
+    "pretest": "npm run sync:command-core",
     "test": "node --test *.test.js",
-    "check": "node --check index.js && node --check research-result.js && node --check webhook-event.js",
+    "precheck": "npm run sync:command-core",
+    "check": "node --check index.js && node --check delivery-core.js && node --check research-result.js && node --check webhook-event.js",
+    "predeploy": "npm run sync:command-core",
     "deploy": "firebase deploy --only functions:bobdailybriefing --project pokerhq-a67e4"
   },
   "engines": {

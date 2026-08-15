@@ -21,11 +21,17 @@ generation.
 - On-demand score composition for every queue item.
 - Reliability warnings remain visible and cannot be muted or dismissed.
 
-## Slice 2.3 — Briefing delivery
+## Slice 2.3 — Briefing delivery (implemented)
 
-- Optional morning digest notification when the Morning 5 changes materially.
-- Configurable quiet hours and source thresholds.
-- Delivery audit trail and one-click mute controls.
+- Optional Firebase web-push notification when the Morning 5 changes materially.
+- PHT morning checks that defer inside configurable quiet hours and do not
+  repeat an unchanged digest.
+- Per-source delivery thresholds applied after personal priority weights;
+  reliability failures always remain eligible.
+- Authenticated device registration, invalid-token cleanup, test delivery,
+  bounded audit history, and one-click mute controls.
+- Deterministic server-side reconstruction uses the same Command Center core and
+  adds no LLM cost.
 
 ## Slice 2.4 — Review loop
 

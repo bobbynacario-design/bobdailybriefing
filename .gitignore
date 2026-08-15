@@ -3,6 +3,9 @@ firestore-debug.log*
 ui-debug.log*
 .firebase/
 
+# generated into the deployable Functions source from the browser-shared core
+functions/command-center-core.js
+
 # radar — local-only secrets and deps (never committed)
 radar/node_modules/
 radar/serviceAccountKey.json

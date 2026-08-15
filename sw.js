@@ -1,7 +1,40 @@
 /* Bob Daily Briefing service worker.
    App-shell requests are network-first so deploys update cleanly; cache is the
    offline fallback. Firebase and Google auth traffic always bypasses the cache. */
-var CACHE_NAME = 'bob-briefing-shell-v39';
+var CACHE_NAME = 'bob-briefing-shell-v40';
+
+var briefingMessaging = null;
+try {
+  importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+  firebase.initializeApp({
+    apiKey: 'AIzaSyB_6PnXWdtpR-x-jcJIuzOaROoVRplY5SM',
+    authDomain: 'pokerhq-a67e4.firebaseapp.com',
+    projectId: 'pokerhq-a67e4',
+    storageBucket: 'pokerhq-a67e4.firebasestorage.app',
+    messagingSenderId: '91226487101',
+    appId: '1:91226487101:web:0cf1b3411ff9d17a00ad54'
+  });
+  briefingMessaging = firebase.messaging();
+  briefingMessaging.onBackgroundMessage(function(payload) {
+    var data = payload && payload.data || {};
+    if (!data.title) return;
+    return self.registration.showNotification(data.title, {
+      body: data.body || '',
+      icon: './assets/icons/icon-192.png',
+      badge: './assets/icons/icon-192.png',
+      tag: data.signature || 'bob-morning-five',
+      renotify: true,
+      actions: [
+        {action: 'open', title: 'Open Command Center'},
+        {action: 'mute', title: 'Mute delivery'}
+      ],
+      data: {url: data.url || './#command'}
+    });
+  });
+} catch (error) {
+  console.warn('[BobBriefing] Background messaging unavailable:', error);
+}
 
 var PRECACHE = [
   './',
@@ -37,6 +70,25 @@ self.addEventListener('install', function(event) {
 
 self.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  var target = event.notification.data && event.notification.data.url || './#command';
+  if (event.action === 'mute') {
+    var muted = new URL(target, self.location.origin);
+    muted.searchParams.set('mute', 'delivery');
+    target = muted.href;
+  }
+  event.waitUntil(clients.matchAll({type: 'window', includeUncontrolled: true}).then(function(windows) {
+    for (var i = 0; i < windows.length; i++) {
+      if ('focus' in windows[i]) {
+        if ('navigate' in windows[i]) return windows[i].navigate(target).then(function(client) { return client.focus(); });
+        return windows[i].focus();
+      }
+    }
+    return clients.openWindow ? clients.openWindow(target) : null;
+  }));
 });
 
 self.addEventListener('activate', function(event) {

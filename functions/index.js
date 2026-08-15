@@ -7,9 +7,15 @@ const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
+const {getMessaging} = require("firebase-admin/messaging");
 const OpenAI = require("openai");
 const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
+const {buildCommandCenter} = require("./command-center-core");
+const {
+  normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
+  isMaterialChange, notificationCopy,
+} = require("./delivery-core");
 
 initializeApp();
 
@@ -24,6 +30,10 @@ const DEEP_RESEARCH_CAP = parseInt(process.env.DEEP_RESEARCH_CAP || "20", 10);
 const REPORTS_COLL = "reports-bob";
 const REPORTS_META = "reports-bob-meta";
 const WEBHOOK_EVENTS_COLL = "openai-webhook-events";
+const COMMAND_PREF_PREFIX = "command-prefs-";
+const BRIEFINGS_COLL = "briefings-bob";
+const JOURNAL_COLL = "journal-bob";
+const COMMAND_URL = "https://bobbynacario-design.github.io/bobdailybriefing/#command";
 
 // ── LLM usage telemetry (CJS twin of lib/llm-usage.js) ──
 // Writes token usage to the shared ledger briefings-bob/llm-usage (no uid).
@@ -587,6 +597,237 @@ exports.pollDeepResearchReports = onSchedule(
 
       await finalizeResearchReport(db, doc, json, "recovery-poller");
       // queued / in_progress → leave for the next tick
+    }
+  }
+);
+
+// ── MORNING 5 WEB-PUSH DELIVERY ───────────────────────────────────────────
+// Delivery uses Firebase Cloud Messaging and the same deterministic Command
+// Center core as the browser. No LLM call is made. The scheduler runs through
+// the morning so quiet hours can delay a digest; the material-change signature
+// prevents repeat notifications when the queue is unchanged.
+
+function phtParts(now) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(now == null ? Date.now() : now));
+  const out = {};
+  parts.forEach((part) => { if (part.type !== "literal") out[part.type] = part.value; });
+  return {date: out.year + "-" + out.month + "-" + out.day, time: out.hour + ":" + out.minute};
+}
+
+async function pointedDocument(db, pointerId, prefix) {
+  const pointer = await db.collection(BRIEFINGS_COLL).doc(pointerId).get();
+  if (!pointer.exists || !pointer.data().value) return null;
+  const snap = await db.collection(BRIEFINGS_COLL).doc(prefix + pointer.data().value).get();
+  return snap.exists ? snap.data() : null;
+}
+
+async function sharedCommandInputs(db) {
+  const [radar, markets, sports, health] = await Promise.all([
+    pointedDocument(db, "radar-latest", "radar-"),
+    pointedDocument(db, "miro-latest", "miro-"),
+    pointedDocument(db, "sports-latest", "sports-"),
+    db.collection(BRIEFINGS_COLL).doc("feed-health").get().then((snap) => snap.exists ? snap.data() : null),
+  ]);
+  return {radar, markets, sports, health};
+}
+
+async function userCommandInputs(db, uid, prefs, shared, now) {
+  const [briefingSnap, decisionsSnap] = await Promise.all([
+    db.collection(BRIEFINGS_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(5).get(),
+    db.collection(JOURNAL_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(100).get(),
+  ]);
+  let briefing = null;
+  briefingSnap.docs.some((doc) => {
+    const value = doc.data();
+    if (!value.data) return false;
+    try { briefing = JSON.parse(value.data); } catch (error) { briefing = null; }
+    return !!briefing;
+  });
+  const decisions = decisionsSnap.docs.map((doc) => Object.assign({id: doc.id}, doc.data()));
+  return Object.assign({}, shared, {
+    briefing,
+    decisions,
+    preferences: prefs,
+    today: phtParts(now).date,
+  });
+}
+
+function invalidMessagingToken(error) {
+  const code = error && error.code;
+  return code === "messaging/registration-token-not-registered" ||
+    code === "messaging/invalid-registration-token" ||
+    code === "messaging/invalid-argument";
+}
+
+async function updateDeliveryState(db, prefRef, updater) {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(prefRef);
+    if (!snap.exists) throw new Error("Command preferences no longer exist.");
+    const current = snap.data().deliveryState || {};
+    const next = updater(Object.assign({}, current)) || current;
+    tx.set(prefRef, {deliveryState: next, updatedAt: new Date().toISOString()}, {merge: true});
+    return next;
+  });
+}
+
+function auditEntry(type, detail) {
+  return Object.assign({type, at: new Date().toISOString()}, detail || {});
+}
+
+function withAudit(state, entry) {
+  state.audit = [entry].concat(Array.isArray(state.audit) ? state.audit : []).slice(0, 20);
+  return state;
+}
+
+async function deliverMorningFiveForUser(db, prefDoc, options) {
+  options = options || {};
+  const prefs = prefDoc.data();
+  const config = normalizeDelivery(prefs.delivery);
+  const state = prefs.deliveryState || {};
+  const tokens = Array.isArray(state.tokens) ? state.tokens.filter(Boolean).slice(0, 500) : [];
+  if (!options.test && !config.enabled) return {status: "muted"};
+  if (!tokens.length) return {status: "no-device"};
+
+  const now = options.now == null ? Date.now() : options.now;
+  const local = phtParts(now);
+  if (!options.test && isQuietTime(local.time, config.quietStart, config.quietEnd)) {
+    return {status: "quiet-hours"};
+  }
+
+  const shared = options.shared || await sharedCommandInputs(db);
+  const inputs = await userCommandInputs(db, prefs.uid, prefs, shared, now);
+  const command = buildCommandCenter(inputs, now);
+  const items = selectDeliverable(command.morningFive, config);
+  const signature = digestSignature(items);
+  if (!options.test && !isMaterialChange(state.lastSignature, items)) return {status: "unchanged"};
+  if (!items.length && !options.test) return {status: "below-threshold"};
+
+  const copy = notificationCopy(items, !!options.test);
+  const response = await getMessaging().sendEachForMulticast({
+    tokens,
+    data: {
+      type: options.test ? "morning-digest-test" : "morning-digest",
+      title: copy.title,
+      body: copy.body,
+      url: COMMAND_URL,
+      signature: signature || "test-empty",
+    },
+    webpush: {headers: {Urgency: "high"}},
+  });
+  const invalid = [];
+  response.responses.forEach((result, index) => {
+    if (!result.success && invalidMessagingToken(result.error)) invalid.push(tokens[index]);
+  });
+  const validTokens = tokens.filter((token) => invalid.indexOf(token) < 0);
+  const type = options.test ? "test" : (response.successCount ? "sent" : "failed");
+  await updateDeliveryState(db, prefDoc.ref, (next) => {
+    next.tokens = validTokens;
+    if (!options.test && response.successCount) {
+      next.lastSignature = signature;
+      next.lastSentAt = new Date(now).toISOString();
+    }
+    return withAudit(next, auditEntry(type, {
+      itemCount: items.length,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      lead: items[0] ? items[0].source + ": " + items[0].title : "No items above threshold",
+    }));
+  });
+  return {status: type, successCount: response.successCount, failureCount: response.failureCount};
+}
+
+exports.registerBriefingDevice = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 30, memory: "256MiB"},
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before enabling delivery.");
+    const token = String(request.data && request.data.token || "").trim();
+    if (token.length < 20 || token.length > 4096) {
+      throw new HttpsError("invalid-argument", "The browser returned an invalid delivery token.");
+    }
+    const uid = request.auth.uid;
+    const db = getFirestore();
+    const ref = db.collection(BRIEFINGS_COLL).doc(COMMAND_PREF_PREFIX + uid);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const data = snap.exists ? snap.data() : {};
+      const state = Object.assign({}, data.deliveryState || {});
+      state.tokens = [token].concat(Array.isArray(state.tokens) ? state.tokens.filter((item) => item !== token) : []).slice(0, 5);
+      state.tokenUpdatedAt = new Date().toISOString();
+      withAudit(state, auditEntry("enabled", {lead: "Notifications enabled on a browser device"}));
+      tx.set(ref, {uid, deliveryState: state, updatedAt: new Date().toISOString()}, {merge: true});
+    });
+    return {registered: true};
+  }
+);
+
+exports.muteBriefingDelivery = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 30, memory: "256MiB"},
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before muting delivery.");
+    const uid = request.auth.uid;
+    const db = getFirestore();
+    const ref = db.collection(BRIEFINGS_COLL).doc(COMMAND_PREF_PREFIX + uid);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const data = snap.exists ? snap.data() : {};
+      const state = withAudit(Object.assign({}, data.deliveryState || {}),
+        auditEntry("muted", {lead: "Morning delivery muted"}));
+      tx.set(ref, {
+        uid,
+        delivery: Object.assign({}, data.delivery || {}, {enabled: false}),
+        deliveryState: state,
+        updatedAt: new Date().toISOString(),
+      }, {merge: true});
+    });
+    return {muted: true};
+  }
+);
+
+exports.testBriefingDelivery = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 60, memory: "256MiB"},
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before testing delivery.");
+    const uid = request.auth.uid;
+    const db = getFirestore();
+    const doc = await db.collection(BRIEFINGS_COLL).doc(COMMAND_PREF_PREFIX + uid).get();
+    if (!doc.exists) throw new HttpsError("failed-precondition", "Save delivery preferences first.");
+    try {
+      const result = await deliverMorningFiveForUser(db, doc, {test: true});
+      if (result.status === "no-device") throw new HttpsError("failed-precondition", "Enable notifications on this device first.");
+      return result;
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error("Test Morning 5 delivery failed", error);
+      throw new HttpsError("internal", "The test notification could not be sent.");
+    }
+  }
+);
+
+exports.deliverMorningFive = onSchedule(
+  {
+    schedule: "0,30 6-11 * * *",
+    timeZone: "Asia/Manila",
+    region: "asia-southeast1",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+  },
+  async () => {
+    const db = getFirestore();
+    const prefs = await db.collection(BRIEFINGS_COLL).where("delivery.enabled", "==", true).limit(100).get();
+    if (prefs.empty) return;
+    const shared = await sharedCommandInputs(db);
+    for (const doc of prefs.docs) {
+      if (!doc.id.startsWith(COMMAND_PREF_PREFIX) || !doc.data().uid) continue;
+      try {
+        await deliverMorningFiveForUser(db, doc, {shared});
+      } catch (error) {
+        logger.error("Morning 5 delivery failed", {uid: doc.data().uid, message: error.message});
+        await updateDeliveryState(db, doc.ref, (next) => withAudit(next,
+          auditEntry("failed", {message: String(error.message || error).slice(0, 180)})));
+      }
     }
   }
 );

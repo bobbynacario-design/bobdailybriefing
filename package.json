@@ -11,7 +11,7 @@
     "test": "npm run test:lib && npm --prefix functions test && npm --prefix radar test && npm --prefix miro test && npm --prefix sports test && npm run check:app",
     "test:lib": "node --test lib/*.test.js",
     "check:app": "node scripts/check-app-smoke.js",
-    "check:functions": "node --check functions/index.js && node --check functions/research-result.js",
+    "check:functions": "npm --prefix functions run check",
     "audit": "npm --prefix functions audit --omit=dev --audit-level=high && npm --prefix radar audit --omit=dev --audit-level=high && npm --prefix miro audit --omit=dev --audit-level=high && npm --prefix sports audit --omit=dev --audit-level=high",
     "deploy:functions": "npm --prefix functions run deploy"
   }

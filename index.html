@@ -23,6 +23,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, orderBy, limit, startAfter, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+import { getMessaging, getToken, onMessage, isSupported as isMessagingSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_6PnXWdtpR-x-jcJIuzOaROoVRplY5SM",
@@ -32,6 +33,8 @@ const firebaseConfig = {
   messagingSenderId: "91226487101",
   appId: "1:91226487101:web:0cf1b3411ff9d17a00ad54"
 };
+// Public (not secret) Web Push certificate key from Firebase Console.
+const WEB_PUSH_VAPID_KEY = "BHX6p0oBShXii-xbBQ3dgDeupowEED_FoHuMqRzizOSEltneQNu-TatKRQtg-jW_ssGXW0utLGdcqWiogkOpwVA";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -440,11 +443,74 @@ window.fbSaveCommandPrefs = async function(prefs) {
     sourceWeights: prefs && prefs.sourceWeights || {},
     quietSources: prefs && prefs.quietSources || [],
     daily: prefs && prefs.daily || {date:'', pinned:[], dismissed:[]},
+    delivery: prefs && prefs.delivery || {enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}},
     updatedAt: new Date().toISOString()
   };
-  await setDoc(doc(db, COLL, 'command-prefs-' + uid), body);
+  await setDoc(doc(db, COLL, 'command-prefs-' + uid), body, { merge: true });
   return body;
 };
+
+var briefingMessagingPromise = null;
+async function briefingMessaging() {
+  if (!briefingMessagingPromise) {
+    briefingMessagingPromise = isMessagingSupported().then(function(supported) {
+      if (!supported) throw new Error('Web notifications are not supported by this browser');
+      return getMessaging(app);
+    });
+  }
+  return briefingMessagingPromise;
+}
+
+window.fbEnableBriefingDelivery = async function() {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    throw new Error('This browser does not support briefing notifications');
+  }
+  var permission = Notification.permission;
+  if (permission !== 'granted') permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('Notification permission was not granted');
+  var registration = await navigator.serviceWorker.ready;
+  var messaging = await briefingMessaging();
+  var tokenOptions = {serviceWorkerRegistration: registration};
+  if (WEB_PUSH_VAPID_KEY) tokenOptions.vapidKey = WEB_PUSH_VAPID_KEY;
+  var token = await getToken(messaging, tokenOptions);
+  if (!token) throw new Error('Firebase did not return a delivery token');
+  var register = httpsCallable(functions, 'registerBriefingDevice', {timeout: 30000});
+  await register({token: token});
+  return {registered:true};
+};
+
+window.fbTestBriefingDelivery = async function() {
+  var sendTest = httpsCallable(functions, 'testBriefingDelivery', {timeout: 60000});
+  var response = await sendTest({});
+  return response.data;
+};
+
+window.fbMuteBriefingDelivery = async function() {
+  var mute = httpsCallable(functions, 'muteBriefingDelivery', {timeout: 30000});
+  var response = await mute({});
+  return response.data;
+};
+
+isMessagingSupported().then(function(supported) {
+  if (!supported) return;
+  onMessage(getMessaging(app), function(payload) {
+    var data = payload && payload.data || {};
+    if (!data.title || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(function(registration) {
+      registration.showNotification(data.title, {
+        body: data.body || '',
+        icon: './assets/icons/icon-192.png',
+        badge: './assets/icons/icon-192.png',
+        tag: data.signature || 'bob-morning-five',
+        data: {url: data.url || './#command'}
+      });
+    });
+  });
+}).catch(function(error) {
+  console.warn('Briefing delivery unavailable:', error);
+});
 
 // Load a specific dated radar doc (briefings-bob/radar-YYYY-MM-DD). Used by the
 // Decisions tab to backfill a reference price for calls logged before the
@@ -1526,9 +1592,23 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .command-explain-body{padding-top:.3rem}
 .command-queue-item .command-explain{grid-column:auto;margin-top:.45rem}
 .command-hidden-note{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:.3rem}
+.command-delivery{margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--rim)}
+.command-delivery-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.65rem}
+.command-delivery-title{font-family:var(--mono);font-size:10px;color:var(--txt);letter-spacing:.05em;text-transform:uppercase}
+.command-delivery-status{font-family:var(--mono);font-size:9px;color:var(--txt3)}
+.command-delivery-grid{display:grid;grid-template-columns:minmax(190px,.7fr) minmax(0,1.3fr);gap:.65rem}
+.command-delivery-card{border:1px solid var(--rim);border-radius:9px;background:var(--bg3);padding:.65rem}
+.command-delivery-label{display:block;font-family:var(--mono);font-size:8px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem}
+.command-quiet-hours{display:flex;align-items:center;gap:.4rem;font-family:var(--mono);font-size:9px;color:var(--txt2)}
+.command-quiet-hours input,.command-threshold select{border:1px solid var(--rim2);border-radius:5px;background:var(--bg2);color:var(--txt);font-family:var(--mono);font-size:9px;padding:.28rem .35rem}
+.command-thresholds{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.35rem}
+.command-threshold{min-width:0}.command-threshold select{width:100%}
+.command-delivery-audit{display:flex;flex-direction:column;gap:.3rem;margin-top:.6rem}
+.command-audit-row{display:grid;grid-template-columns:64px 44px minmax(0,1fr);gap:.4rem;font-family:var(--mono);font-size:8.5px;color:var(--txt3);line-height:1.4}
+.command-audit-type{color:var(--gold);text-transform:uppercase}.command-audit-row.failed .command-audit-type{color:var(--red)}
 @media(max-width:900px){.command-layout{grid-template-columns:1fr}.command-queue{max-height:none}}
-@media(max-width:900px){.command-source-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls{grid-template-columns:1fr}}
+@media(max-width:900px){.command-source-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.command-delivery-grid{grid-template-columns:1fr}.command-thresholds{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls,.command-thresholds{grid-template-columns:1fr}.command-delivery-head{align-items:flex-start;flex-direction:column}}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -1609,6 +1689,25 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
         <button class="tool-chip" onclick="resetCommandPreferences()">Reset source controls</button>
         <button class="tool-chip" onclick="clearCommandDailyState()">Clear today's pins &amp; dismissals</button>
         <span class="command-hidden-note" id="command-pref-status">Using default priorities</span>
+      </div>
+      <div class="command-delivery">
+        <div class="command-delivery-head">
+          <div><div class="command-delivery-title">Morning delivery</div><div class="command-delivery-status" id="command-delivery-status">Muted until enabled on this device</div></div>
+          <div class="command-settings-actions" id="command-delivery-actions"></div>
+        </div>
+        <div class="command-delivery-grid">
+          <div class="command-delivery-card">
+            <span class="command-delivery-label">Quiet hours · PHT</span>
+            <div class="command-quiet-hours"><input type="time" id="command-quiet-start" value="22:00" onchange="setCommandQuietHours()"><span>to</span><input type="time" id="command-quiet-end" value="06:00" onchange="setCommandQuietHours()"></div>
+            <div class="command-settings-note">Delivery checks every 30 minutes from 06:00–11:30 PHT and sends only after a material Morning 5 change.</div>
+          </div>
+          <div class="command-delivery-card">
+            <span class="command-delivery-label">Minimum delivery score by source</span>
+            <div class="command-thresholds" id="command-delivery-thresholds"></div>
+            <div class="command-settings-note">Reliability failures always remain eligible. Priority weights are applied before these thresholds.</div>
+          </div>
+        </div>
+        <div class="command-delivery-audit" id="command-delivery-audit"><div class="command-hidden-note">No delivery activity yet.</div></div>
       </div>
     </div>
   </details>
@@ -2275,7 +2374,24 @@ function onSignedIn() {
   if (!window._feedHealthTimer && window.loadFeedHealth) {
     window._feedHealthTimer = setInterval(window.loadFeedHealth, 15 * 60 * 1000);
   }
+  consumeBriefingDeliveryMute();
   navFromHash();  // open the deep-linked tab (e.g. a shared #sports link)
+}
+
+function consumeBriefingDeliveryMute() {
+  var requested = false;
+  try { requested = new URL(window.location.href).searchParams.get('mute') === 'delivery'; } catch (e) {}
+  if (!requested || !window.fbMuteBriefingDelivery) return;
+  window.fbMuteBriefingDelivery().then(function () {
+    if (commandPreferences && commandPreferences.delivery) commandPreferences.delivery.enabled = false;
+    if (typeof renderCommandDeliveryControls === 'function') renderCommandDeliveryControls();
+    var clean = new URL(window.location.href);
+    clean.searchParams.delete('mute');
+    history.replaceState(null, '', clean.pathname + clean.search + clean.hash);
+    showToast('Morning delivery muted', 'ok');
+  }).catch(function (error) {
+    console.error('Notification mute failed:', error);
+  });
 }
 
 async function handleAuth() {
@@ -3522,9 +3638,15 @@ var commandFilter = 'all';
 var commandLoadToken = 0;
 var commandCenterInputs = null;
 var commandSources = ['Briefing','Radar','Markets','Decisions','Sports'];
-var commandPreferences = {sourceWeights:{}, quietSources:[], daily:{date:'',pinned:[],dismissed:[]}};
+var commandPreferences = {sourceWeights:{}, quietSources:[], daily:{date:'',pinned:[],dismissed:[]}, delivery:{enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}}, deliveryState:{audit:[]}};
 var commandPreferenceSaveChain = Promise.resolve();
 var commandPreferenceRevision = 0;
+
+function commandDeliveryDefaults() {
+  var thresholds = {};
+  commandSources.forEach(function (source) { thresholds[source] = 80; });
+  return {enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:thresholds};
+}
 
 function normalizeCommandPreferences(raw) {
   raw = raw || {};
@@ -3535,6 +3657,14 @@ function normalizeCommandPreferences(raw) {
     var value = Number(raw.sourceWeights && raw.sourceWeights[source]);
     weights[source] = value === 0.5 || value === 1.5 ? value : 1;
   });
+  var delivery = commandDeliveryDefaults();
+  delivery.enabled = !!(raw.delivery && raw.delivery.enabled);
+  if (/^\d{2}:\d{2}$/.test(raw.delivery && raw.delivery.quietStart || '')) delivery.quietStart = raw.delivery.quietStart;
+  if (/^\d{2}:\d{2}$/.test(raw.delivery && raw.delivery.quietEnd || '')) delivery.quietEnd = raw.delivery.quietEnd;
+  commandSources.forEach(function (source) {
+    var threshold = Number(raw.delivery && raw.delivery.sourceThresholds && raw.delivery.sourceThresholds[source]);
+    if (threshold >= 50 && threshold <= 100) delivery.sourceThresholds[source] = Math.round(threshold);
+  });
   return {
     sourceWeights: weights,
     quietSources: (raw.quietSources || []).filter(function (source) { return commandSources.indexOf(source) >= 0; }),
@@ -3542,6 +3672,11 @@ function normalizeCommandPreferences(raw) {
       date: today,
       pinned: Array.isArray(daily.pinned) ? daily.pinned.slice(0, 30) : [],
       dismissed: Array.isArray(daily.dismissed) ? daily.dismissed.slice(0, 100) : []
+    },
+    delivery: delivery,
+    deliveryState: {
+      audit: raw.deliveryState && Array.isArray(raw.deliveryState.audit) ? raw.deliveryState.audit.slice(0, 20) : [],
+      lastSentAt: raw.deliveryState && raw.deliveryState.lastSentAt || ''
     }
   };
 }
@@ -3587,6 +3722,102 @@ function renderCommandControls() {
         return '<button class="' + (weight === value ? 'active' : '') + '" onclick="setCommandWeight(\'' + source + '\',' + value + ')">' + label + '</button>';
       }).join('') + '</div></div>';
   }).join('');
+  renderCommandDeliveryControls();
+}
+
+function renderCommandDeliveryControls() {
+  var delivery = commandPreferences.delivery || commandDeliveryDefaults();
+  var start = document.getElementById('command-quiet-start');
+  var end = document.getElementById('command-quiet-end');
+  if (start) start.value = delivery.quietStart;
+  if (end) end.value = delivery.quietEnd;
+  var thresholds = document.getElementById('command-delivery-thresholds');
+  if (thresholds) thresholds.innerHTML = commandSources.map(function (source) {
+    var current = delivery.sourceThresholds[source] || 80;
+    return '<label class="command-threshold"><span class="command-delivery-label">' + esc(source) + '</span><select onchange="setCommandDeliveryThreshold(\'' + source + '\',this.value)">' +
+      [70,80,90,100].map(function (value) { return '<option value="' + value + '"' + (current === value ? ' selected' : '') + '>' + (value === 70 ? '70 · broad' : value === 80 ? '80 · priority' : value === 90 ? '90 · high' : '100 · critical') + '</option>'; }).join('') +
+      '</select></label>';
+  }).join('');
+  var status = document.getElementById('command-delivery-status');
+  var permission = 'Notification' in window ? Notification.permission : 'unsupported';
+  if (status) status.textContent = delivery.enabled
+    ? 'Enabled · browser permission ' + permission + (commandPreferences.deliveryState.lastSentAt ? ' · last sent ' + commandAuditTime(commandPreferences.deliveryState.lastSentAt) : '')
+    : 'Muted · preferences and device registration are retained';
+  var actions = document.getElementById('command-delivery-actions');
+  if (actions) actions.innerHTML = delivery.enabled
+    ? '<button class="tool-chip" onclick="testCommandDelivery()">Send test</button><button class="tool-chip" onclick="muteCommandDelivery()">Mute delivery</button>'
+    : '<button class="tool-chip" onclick="enableCommandDelivery()">Enable on this device</button>';
+  var audit = document.getElementById('command-delivery-audit');
+  var entries = commandPreferences.deliveryState.audit || [];
+  if (audit) audit.innerHTML = entries.length ? entries.slice(0, 8).map(function (entry) {
+    return '<div class="command-audit-row ' + esc(entry.type || '') + '"><span>' + esc(commandAuditTime(entry.at)) + '</span><span class="command-audit-type">' + esc(entry.type || 'event') + '</span><span>' + esc(entry.lead || entry.message || ((entry.itemCount || 0) + ' items')) + '</span></div>';
+  }).join('') : '<div class="command-hidden-note">No delivery activity yet.</div>';
+}
+
+function commandAuditTime(value) {
+  var date = new Date(value);
+  if (isNaN(date.getTime())) return '—';
+  return date.toLocaleString('en-PH', {timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+}
+
+function setCommandQuietHours() {
+  var start = document.getElementById('command-quiet-start');
+  var end = document.getElementById('command-quiet-end');
+  commandPreferences.delivery.quietStart = start && start.value || '22:00';
+  commandPreferences.delivery.quietEnd = end && end.value || '06:00';
+  saveCommandPreferences('Quiet hours synced');
+}
+
+function setCommandDeliveryThreshold(source, value) {
+  if (commandSources.indexOf(source) < 0) return;
+  commandPreferences.delivery.sourceThresholds[source] = Math.max(50, Math.min(100, Number(value) || 80));
+  saveCommandPreferences(source + ' delivery threshold synced');
+}
+
+async function enableCommandDelivery() {
+  var status = document.getElementById('command-delivery-status');
+  if (status) status.textContent = 'Requesting browser permission…';
+  try {
+    await window.fbEnableBriefingDelivery();
+    commandPreferences.delivery.enabled = true;
+    await saveCommandPreferences('Morning delivery enabled');
+    renderCommandDeliveryControls();
+    showToast('Morning 5 delivery enabled on this device', 'ok');
+  } catch (error) {
+    console.error('Delivery enable failed:', error);
+    if (status) status.textContent = error.message || 'Could not enable delivery';
+    showToast(error.message || 'Could not enable notifications', 'warn');
+  }
+}
+
+async function muteCommandDelivery() {
+  try {
+    await window.fbMuteBriefingDelivery();
+    commandPreferences.delivery.enabled = false;
+    var fresh = await window.fbLoadCommandPrefs();
+    commandPreferences = normalizeCommandPreferences(fresh);
+    renderCommandDeliveryControls();
+    showToast('Morning delivery muted', 'ok');
+  } catch (error) {
+    console.error('Delivery mute failed:', error);
+    showToast(error.message || 'Could not mute delivery', 'warn');
+  }
+}
+
+async function testCommandDelivery() {
+  var status = document.getElementById('command-delivery-status');
+  if (status) status.textContent = 'Sending test notification…';
+  try {
+    await window.fbTestBriefingDelivery();
+    var fresh = await window.fbLoadCommandPrefs();
+    commandPreferences = normalizeCommandPreferences(fresh);
+    renderCommandDeliveryControls();
+    showToast('Test notification sent', 'ok');
+  } catch (error) {
+    console.error('Delivery test failed:', error);
+    if (status) status.textContent = 'Test failed · ' + (error.message || 'try again');
+    showToast(error.message || 'Test notification failed', 'warn');
+  }
 }
 
 function setCommandWeight(source, weight) {

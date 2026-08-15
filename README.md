@@ -9,7 +9,9 @@ Private daily intelligence briefing desk for Bob.
   decision reviews, followed sports fixtures, and feed-health warnings while
   preserving a direct link back to the source tab. Source weights, quiet
   sources, daily pins/dismissals, and score explanations sync with the signed-in
-  account; reliability warnings cannot be silenced.
+  account; reliability warnings cannot be silenced. Optional Firebase web-push
+  delivery sends a materially changed Morning 5 during the PHT morning window,
+  with quiet hours, source thresholds, a test action, audit history, and mute.
 
 - **Daily briefing** — OpenAI-generated intelligence desk (see below).
 - **📡 Market Radar** — daily ranking of ~30 assets across 11 themes, with a
@@ -95,6 +97,9 @@ Create an OpenAI project webhook subscribed to response completion events and
 point it at the deployed `openaiWebhook` function URL. The 15-minute poller is
 retained only as recovery if webhook delivery fails. See
 [`docs/phase-1-operations.md`](docs/phase-1-operations.md) for cutover steps.
+
+Morning 5 web-push setup and verification are documented in
+[`docs/phase-2-delivery.md`](docs/phase-2-delivery.md).
 
 Notes:
 
