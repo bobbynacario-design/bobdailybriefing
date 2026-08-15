@@ -7,7 +7,9 @@ Private daily intelligence briefing desk for Bob.
 - **Command Center** — a zero-extra-cost cross-feed “Morning 5” and attention
   queue. It ranks current briefing items, Radar setups, Markets changes, open
   decision reviews, followed sports fixtures, and feed-health warnings while
-  preserving a direct link back to the source tab.
+  preserving a direct link back to the source tab. Source weights, quiet
+  sources, daily pins/dismissals, and score explanations sync with the signed-in
+  account; reliability warnings cannot be silenced.
 
 - **Daily briefing** — OpenAI-generated intelligence desk (see below).
 - **📡 Market Radar** — daily ranking of ~30 assets across 11 themes, with a

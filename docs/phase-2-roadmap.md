@@ -13,12 +13,13 @@ generation.
 - Every item opens its original tab; confidence and urgency remain explicit.
 - Deterministic client-side aggregation means no added API cost or schema change.
 
-## Slice 2.2 — Personal priority controls
+## Slice 2.2 — Personal priority controls (implemented)
 
-- User-set source weights and quiet sources.
-- Pin or dismiss an item for the day.
-- Persist preferences per signed-in user across devices.
-- Explain score composition on demand.
+- User-set Low, Normal, or High source weights and quiet sources.
+- Pin or dismiss an item for the current PHT day.
+- Account-synced preferences in a uid-scoped Firestore document.
+- On-demand score composition for every queue item.
+- Reliability warnings remain visible and cannot be muted or dismissed.
 
 ## Slice 2.3 — Briefing delivery
 

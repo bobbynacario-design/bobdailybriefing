@@ -418,6 +418,34 @@ window.fbLoadFeedHealth = async function() {
   }
 };
 
+// Command Center preferences live in the existing uid-scoped briefings
+// collection so they follow the user across devices without a rules change.
+window.fbLoadCommandPrefs = async function() {
+  var uid = getUid();
+  if (!uid) return null;
+  try {
+    var snap = await getDoc(doc(db, COLL, 'command-prefs-' + uid));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    console.error('Command preferences load failed:', e);
+    return null;
+  }
+};
+
+window.fbSaveCommandPrefs = async function(prefs) {
+  var uid = getUid();
+  if (!uid) throw new Error('Not authenticated');
+  var body = {
+    uid: uid,
+    sourceWeights: prefs && prefs.sourceWeights || {},
+    quietSources: prefs && prefs.quietSources || [],
+    daily: prefs && prefs.daily || {date:'', pinned:[], dismissed:[]},
+    updatedAt: new Date().toISOString()
+  };
+  await setDoc(doc(db, COLL, 'command-prefs-' + uid), body);
+  return body;
+};
+
 // Load a specific dated radar doc (briefings-bob/radar-YYYY-MM-DD). Used by the
 // Decisions tab to backfill a reference price for calls logged before the
 // snapshot carried one — the close on the decision date is already stored.
@@ -1474,8 +1502,33 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .command-queue-top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:.2rem}
 .command-confidence{font-family:var(--mono);font-size:8px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em}
 .command-empty{padding:1.5rem;text-align:center;color:var(--txt3);font-family:var(--mono);font-size:10px}
+.command-settings{border:1px solid var(--rim);border-radius:11px;background:var(--bg2);margin-bottom:1rem}
+.command-settings>summary{cursor:pointer;padding:.7rem .9rem;font-family:var(--mono);font-size:10px;color:var(--txt2);letter-spacing:.06em;text-transform:uppercase;list-style:none}
+.command-settings>summary::-webkit-details-marker{display:none}
+.command-settings>summary::before{content:'＋';color:var(--gold);margin-right:.5rem}.command-settings[open]>summary::before{content:'−'}
+.command-settings-body{padding:.15rem .9rem .9rem;border-top:1px solid var(--rim)}
+.command-settings-note{font-size:11px;color:var(--txt3);line-height:1.55;margin:.65rem 0}
+.command-source-controls{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.5rem}
+.command-source-control{border:1px solid var(--rim);border-radius:9px;background:var(--bg3);padding:.6rem}
+.command-source-control-head{display:flex;align-items:center;justify-content:space-between;gap:.4rem;margin-bottom:.5rem}
+.command-source-control-name{font-family:var(--mono);font-size:10px;color:var(--txt)}
+.command-quiet{display:flex;align-items:center;gap:.3rem;font-family:var(--mono);font-size:8px;color:var(--txt3);cursor:pointer}.command-quiet input{accent-color:var(--gold)}
+.command-weight{display:grid;grid-template-columns:repeat(3,1fr);gap:.2rem}
+.command-weight button{font-family:var(--mono);font-size:8px;padding:.25rem .2rem;border:1px solid var(--rim);border-radius:5px;background:transparent;color:var(--txt3);cursor:pointer}
+.command-weight button.active{color:var(--gold);border-color:rgba(201,168,76,.4);background:var(--gold-dim)}
+.command-settings-actions{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;margin-top:.65rem}
+.command-item-actions{display:flex;gap:.25rem;align-items:center;margin-left:auto}
+.command-item-btn{border:1px solid var(--rim);background:transparent;color:var(--txt3);font-family:var(--mono);font-size:8px;border-radius:5px;padding:.2rem .4rem;cursor:pointer;white-space:nowrap}
+.command-item-btn:hover{color:var(--gold);border-color:rgba(201,168,76,.4)}
+.command-item-btn.pinned{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.4)}
+.command-explain{grid-column:2 / -1;border-top:1px dashed var(--rim);margin-top:.35rem;padding-top:.35rem;font-family:var(--mono);font-size:8.5px;color:var(--txt3);line-height:1.55}
+.command-explain summary{cursor:pointer;color:var(--txt2)}
+.command-explain-body{padding-top:.3rem}
+.command-queue-item .command-explain{grid-column:auto;margin-top:.45rem}
+.command-hidden-note{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:.3rem}
 @media(max-width:900px){.command-layout{grid-template-columns:1fr}.command-queue{max-height:none}}
-@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item .command-source{grid-column:2;justify-self:start}}
+@media(max-width:900px){.command-source-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls{grid-template-columns:1fr}}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -1547,6 +1600,18 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div class="hero-sub" id="command-sub">One prioritized view across the briefing, markets, decisions and followed sports.</div>
     <div class="hero-divider"></div>
   </div>
+  <details class="command-settings" id="command-settings">
+    <summary>Personal priority controls</summary>
+    <div class="command-settings-body">
+      <div class="command-settings-note">Boost or reduce a source's rank, or quiet it completely. Reliability warnings cannot be muted. Preferences sync to your signed-in account; pins and dismissals reset each PHT day.</div>
+      <div class="command-source-controls" id="command-source-controls"></div>
+      <div class="command-settings-actions">
+        <button class="tool-chip" onclick="resetCommandPreferences()">Reset source controls</button>
+        <button class="tool-chip" onclick="clearCommandDailyState()">Clear today's pins &amp; dismissals</button>
+        <span class="command-hidden-note" id="command-pref-status">Using default priorities</span>
+      </div>
+    </div>
+  </details>
   <div class="command-summary">
     <div class="command-stat"><div class="command-stat-value" id="command-act">—</div><div class="command-stat-label">Act now</div></div>
     <div class="command-stat"><div class="command-stat-value" id="command-review">—</div><div class="command-stat-label">Decision reviews</div></div>
@@ -2201,6 +2266,9 @@ function onSignedIn() {
   if (window.fbLoadHistory) {
     Promise.resolve(window.fbLoadHistory()).then(function () {
       if (window.loadFeedHealth) window.loadFeedHealth();
+      if (document.getElementById('page-command') && document.getElementById('page-command').classList.contains('active')) {
+        renderCommandCenter();
+      }
     });
   }
   if (window.loadTodayDrift) window.loadTodayDrift();
@@ -3452,6 +3520,128 @@ window.loadFeedHealth = async function () {
 var commandCenterData = null;
 var commandFilter = 'all';
 var commandLoadToken = 0;
+var commandCenterInputs = null;
+var commandSources = ['Briefing','Radar','Markets','Decisions','Sports'];
+var commandPreferences = {sourceWeights:{}, quietSources:[], daily:{date:'',pinned:[],dismissed:[]}};
+var commandPreferenceSaveChain = Promise.resolve();
+var commandPreferenceRevision = 0;
+
+function normalizeCommandPreferences(raw) {
+  raw = raw || {};
+  var today = manilaDateKey();
+  var daily = raw.daily && raw.daily.date === today ? raw.daily : {date:today,pinned:[],dismissed:[]};
+  var weights = {};
+  commandSources.forEach(function (source) {
+    var value = Number(raw.sourceWeights && raw.sourceWeights[source]);
+    weights[source] = value === 0.5 || value === 1.5 ? value : 1;
+  });
+  return {
+    sourceWeights: weights,
+    quietSources: (raw.quietSources || []).filter(function (source) { return commandSources.indexOf(source) >= 0; }),
+    daily: {
+      date: today,
+      pinned: Array.isArray(daily.pinned) ? daily.pinned.slice(0, 30) : [],
+      dismissed: Array.isArray(daily.dismissed) ? daily.dismissed.slice(0, 100) : []
+    }
+  };
+}
+
+function saveCommandPreferences(message) {
+  var status = document.getElementById('command-pref-status');
+  if (status) status.textContent = 'Saving preferences…';
+  if (!window.fbSaveCommandPrefs) return Promise.resolve();
+  var revision = ++commandPreferenceRevision;
+  var snapshot = JSON.parse(JSON.stringify(commandPreferences));
+  commandPreferenceSaveChain = commandPreferenceSaveChain.catch(function () {}).then(function () {
+    return window.fbSaveCommandPrefs(snapshot);
+  }).then(function () {
+    if (status && revision === commandPreferenceRevision) status.textContent = message || 'Preferences synced';
+  }).catch(function (error) {
+    console.error('Command preferences save failed:', error);
+    if (status && revision === commandPreferenceRevision) status.textContent = 'Could not sync — changes remain in this session';
+    if (revision === commandPreferenceRevision) showToast('Command preference sync failed', 'warn');
+  });
+  return commandPreferenceSaveChain;
+}
+
+function rebuildCommandCenter() {
+  if (!commandCenterInputs || !window.CommandCenterCore) return;
+  commandCenterData = window.CommandCenterCore.buildCommandCenter(Object.assign({}, commandCenterInputs, {
+    preferences: commandPreferences,
+    today: manilaDateKey()
+  }));
+  paintCommandCenter();
+}
+
+function renderCommandControls() {
+  var out = document.getElementById('command-source-controls');
+  if (!out) return;
+  out.innerHTML = commandSources.map(function (source) {
+    var weight = commandPreferences.sourceWeights[source] || 1;
+    var quiet = commandPreferences.quietSources.indexOf(source) >= 0;
+    return '<div class="command-source-control"><div class="command-source-control-head">' +
+      '<span class="command-source-control-name">' + esc(source) + '</span>' +
+      '<label class="command-quiet"><input type="checkbox" onchange="toggleCommandQuiet(\'' + source + '\',this.checked)"' + (quiet ? ' checked' : '') + '> quiet</label></div>' +
+      '<div class="command-weight">' + [0.5,1,1.5].map(function (value) {
+        var label = value === 0.5 ? 'Low' : (value === 1.5 ? 'High' : 'Normal');
+        return '<button class="' + (weight === value ? 'active' : '') + '" onclick="setCommandWeight(\'' + source + '\',' + value + ')">' + label + '</button>';
+      }).join('') + '</div></div>';
+  }).join('');
+}
+
+function setCommandWeight(source, weight) {
+  commandPreferences.sourceWeights[source] = weight;
+  renderCommandControls();
+  rebuildCommandCenter();
+  saveCommandPreferences(source + ' priority set to ' + (weight === 0.5 ? 'Low' : weight === 1.5 ? 'High' : 'Normal'));
+}
+
+function toggleCommandQuiet(source, quiet) {
+  var sources = commandPreferences.quietSources;
+  var index = sources.indexOf(source);
+  if (quiet && index < 0) sources.push(source);
+  if (!quiet && index >= 0) sources.splice(index, 1);
+  rebuildCommandCenter();
+  saveCommandPreferences(quiet ? source + ' quieted' : source + ' restored');
+}
+
+function resetCommandPreferences() {
+  commandPreferences.sourceWeights = {Briefing:1,Radar:1,Markets:1,Decisions:1,Sports:1};
+  commandPreferences.quietSources = [];
+  renderCommandControls();
+  rebuildCommandCenter();
+  saveCommandPreferences('Default source priorities restored');
+}
+
+function clearCommandDailyState() {
+  commandPreferences.daily = {date:manilaDateKey(),pinned:[],dismissed:[]};
+  rebuildCommandCenter();
+  saveCommandPreferences('Today\'s pins and dismissals cleared');
+}
+
+function commandItemId(encoded) { try { return decodeURIComponent(encoded); } catch (e) { return ''; } }
+function commandTogglePin(encoded) {
+  var id = commandItemId(encoded);
+  if (!id) return;
+  var daily = commandPreferences.daily;
+  var pinned = daily.pinned.indexOf(id);
+  if (pinned >= 0) daily.pinned.splice(pinned, 1); else daily.pinned.push(id);
+  var dismissed = daily.dismissed.indexOf(id);
+  if (dismissed >= 0) daily.dismissed.splice(dismissed, 1);
+  rebuildCommandCenter();
+  saveCommandPreferences(pinned >= 0 ? 'Pin removed' : 'Pinned for today');
+}
+
+function commandDismiss(encoded) {
+  var id = commandItemId(encoded);
+  if (!id) return;
+  var daily = commandPreferences.daily;
+  if (daily.dismissed.indexOf(id) < 0) daily.dismissed.push(id);
+  var pinned = daily.pinned.indexOf(id);
+  if (pinned >= 0) daily.pinned.splice(pinned, 1);
+  rebuildCommandCenter();
+  saveCommandPreferences('Dismissed for today');
+}
 
 function commandSportsFollows(sports) {
   var result = {};
@@ -3467,17 +3657,23 @@ function commandGo(page) {
 }
 function commandItemHtml(item, rank, featured) {
   var sourceClass = esc(item.source).replace(/[^A-Za-z0-9_-]/g, '');
+  var encodedId = encodeURIComponent(item.id);
   var body = '<div><div class="command-item-title">' + esc(item.title) + '</div>' +
     '<div class="command-item-detail">' + esc(item.detail || 'Open source for detail.') + '</div></div>';
+  var actions = '<div class="command-item-actions"><span class="command-source ' + sourceClass + '">' + esc(item.source) + '</span>' +
+    (item.source === 'Reliability' ? '' :
+      '<button class="command-item-btn' + (item.pinned ? ' pinned' : '') + '" onclick="event.stopPropagation();commandTogglePin(\'' + encodedId + '\')">' + (item.pinned ? 'Pinned' : 'Pin') + '</button>' +
+      '<button class="command-item-btn" onclick="event.stopPropagation();commandDismiss(\'' + encodedId + '\')">Dismiss</button>') + '</div>';
+  var explanation = '<details class="command-explain" onclick="event.stopPropagation()"><summary>Why this rank?</summary><div class="command-explain-body">' +
+    esc((item.scoreBreakdown || []).join(' · ')) + ' · final ' + (item.pinned ? 'pinned' : Math.round(item.score)) +
+    (featured ? ' · Morning 5 also favors source diversity' : '') + '</div></details>';
   if (featured) {
     return '<div class="command-five-item" role="button" tabindex="0" onclick="commandGo(\'' + esc(item.page) + '\')">' +
-      '<div class="command-rank">' + (rank + 1) + '</div>' + body +
-      '<span class="command-source ' + sourceClass + '">' + esc(item.source) + '</span></div>';
+      '<div class="command-rank">' + (rank + 1) + '</div>' + body + actions + explanation + '</div>';
   }
   var cls = item.kind === 'system' ? ' system' : (item.urgency === 'act' ? ' act' : '');
   return '<div class="command-queue-item' + cls + '" role="button" tabindex="0" onclick="commandGo(\'' + esc(item.page) + '\')">' +
-    '<div class="command-queue-top"><span class="command-source ' + sourceClass + '">' + esc(item.source) + '</span>' +
-    '<span class="command-confidence">' + esc(item.urgency) + ' / ' + esc(item.confidence) + ' confidence</span></div>' + body + '</div>';
+    '<div class="command-queue-top"><span class="command-confidence">' + esc(item.urgency) + ' / ' + esc(item.confidence) + ' confidence</span>' + actions + '</div>' + body + explanation + '</div>';
 }
 function paintCommandCenter() {
   var five = document.getElementById('command-five');
@@ -3487,6 +3683,7 @@ function paintCommandCenter() {
   setText('command-review', commandCenterData.counts.review);
   setText('command-total', commandCenterData.counts.total);
   setText('command-sources', commandCenterData.counts.sources);
+  renderCommandControls();
   five.innerHTML = commandCenterData.morningFive.length
     ? commandCenterData.morningFive.map(function (item, index) { return commandItemHtml(item, index, true); }).join('')
     : '<div class="command-empty">No priority items are available yet.</div>';
@@ -3498,7 +3695,8 @@ function paintCommandCenter() {
   queue.innerHTML = rows.length
     ? rows.map(function (item) { return commandItemHtml(item, 0, false); }).join('')
     : '<div class="command-empty">Nothing in this queue.</div>';
-  setText('command-queue-meta', rows.length + ' of ' + commandCenterData.items.length + ' items');
+  setText('command-queue-meta', rows.length + ' of ' + commandCenterData.items.length + ' items' +
+    (commandCenterData.counts.hidden ? ' / ' + commandCenterData.counts.hidden + ' hidden' : ''));
   setText('command-sub', 'Prioritized at ' + new Date(commandCenterData.generatedAt).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', hour12:false}) + ' PHT / tap any item to open its source.');
 }
 function setCommandFilter(filter, button) {
@@ -3521,21 +3719,21 @@ function renderCommandCenter() {
   };
   Promise.all([
     read(window.fbLoadRadar), read(window.fbLoadMiro), read(window.fbLoadSports),
-    read(window.fbLoadDecisions), read(window.fbLoadFeedHealth)
+    read(window.fbLoadDecisions), read(window.fbLoadFeedHealth), read(window.fbLoadCommandPrefs)
   ]).then(function (data) {
     if (token !== commandLoadToken) return;
     window._feedHealthData = data[4] || window._feedHealthData || null;
-    commandCenterData = window.CommandCenterCore.buildCommandCenter({
-      briefing: _currentData,
+    commandPreferences = normalizeCommandPreferences(data[5]);
+    commandCenterInputs = {
+      briefing: _currentData || ((window._briefingHistory || [])[0] || {}).data || null,
       radar: data[0],
       markets: data[1],
       sports: data[2],
       decisions: data[3],
       health: window._feedHealthData,
-      sportsFollows: commandSportsFollows(data[2]),
-      today: manilaDateKey()
-    });
-    paintCommandCenter();
+      sportsFollows: commandSportsFollows(data[2])
+    };
+    rebuildCommandCenter();
   }).catch(function (error) {
     console.error('Command Center load failed:', error);
     queue.innerHTML = '<div class="command-empty">COMMAND CENTER LOAD FAILED — OPEN SOURCE TABS DIRECTLY</div>';

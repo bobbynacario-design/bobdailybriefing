@@ -34,6 +34,9 @@ assert.ok(html.includes('type="module"'), 'Firebase application script must rema
 assert.ok(html.includes('manifest.webmanifest'), 'PWA manifest link is required');
 assert.ok(html.includes('./lib/command-center-core.js'), 'Command Center core must load before the app script');
 assert.ok(html.includes("if (id==='command') renderCommandCenter()"), 'navigation must render Command Center');
+assert.ok(html.includes('fbLoadCommandPrefs') && html.includes('fbSaveCommandPrefs'),
+  'Command Center preferences must load and save through the signed-in account');
+assert.ok(html.includes('Why this rank?'), 'Command Center must explain item ranking');
 assert.ok(pagesWorkflow.includes('cp lib/command-center-core.js _site/lib/'),
   'Pages artifact must include the Command Center core');
 assert.ok(sports.includes('sports-public.json'), 'public sports page must load its public data mirror');
