@@ -16,11 +16,15 @@ and no model call is made merely to find or open existing material.
 - Search terms are processed in the browser, add no LLM cost, and are cleared
   with the in-memory index on sign-out.
 
-## Slice 3.2 — Saved evidence sets
+## Slice 3.2 — Saved evidence sets (implemented)
 
-- Save search results and Command Center items into named evidence sets.
-- Preserve source identity, capture date, and a short user note.
-- Reopen the original record; never copy a claim without provenance.
+- Save Search results and Command Center items into named, account-synced sets.
+- Preserve source identity, compact source text, capture date, route, and a
+  bounded personal note for every item.
+- Dedicated Evidence workspace supports create, rename, remove, delete, note,
+  and reopen-source workflows.
+- Storage is capped at 12 sets and 30 items per set inside the existing
+  authenticated preferences document, requiring no new rules or backend.
 
 ## Slice 3.3 — Entity timelines
 

@@ -20,7 +20,9 @@ Private daily intelligence briefing desk for Bob.
 - **Unified search** — press `Ctrl+K` (`Cmd+K` on macOS) to search up to 100
   archived briefings plus research reports, decisions, and current Radar,
   Markets, and Sports snapshots. Ranking runs locally with no model call and
-  every result opens its original source surface.
+  every result opens its original source surface. Search results and Command
+  Center priorities can be saved into account-synced **Evidence** sets with
+  provenance, capture time, and personal notes.
 - **📡 Market Radar** — daily ranking of ~30 assets across 11 themes, with a
   performance journal. Docs: [`radar/README.md`](radar/README.md).
 - **🎲 Markets** — daily "scenario read" over curated Polymarket event markets:

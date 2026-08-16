@@ -15,6 +15,7 @@ on:
       - lib/command-center-core.js
       - lib/command-review-core.js
       - lib/intelligence-search-core.js
+      - lib/evidence-sets-core.js
       - .github/workflows/publish-pages.yml
   workflow_dispatch:
 
@@ -42,10 +43,11 @@ jobs:
           cp index.html sports.html sports-public.json offline.html manifest.webmanifest sw.js .nojekyll _site/
           cp -R assets reports _site/
           mkdir -p _site/lib
-          cp lib/command-center-core.js lib/command-review-core.js lib/intelligence-search-core.js _site/lib/
+          cp lib/command-center-core.js lib/command-review-core.js lib/intelligence-search-core.js lib/evidence-sets-core.js _site/lib/
           test -f _site/lib/command-center-core.js
           test -f _site/lib/command-review-core.js
           test -f _site/lib/intelligence-search-core.js
+          test -f _site/lib/evidence-sets-core.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

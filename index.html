@@ -18,6 +18,7 @@
 <script src="./lib/command-center-core.js"></script>
 <script src="./lib/command-review-core.js"></script>
 <script src="./lib/intelligence-search-core.js"></script>
+<script src="./lib/evidence-sets-core.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -93,6 +94,7 @@ onAuthStateChanged(auth, function(user) {
     window._firebaseUid = null;
     window._firebaseUser = null;
     if (window.resetIntelligenceSearch) window.resetIntelligenceSearch();
+    if (window.resetEvidenceSets) window.resetEvidenceSets();
   }
 });
 
@@ -443,6 +445,21 @@ window.fbLoadSearchBriefings = async function() {
   }
 };
 
+window.fbLoadBriefingByKey = async function(key) {
+  var uid = getUid();
+  if (!uid || !key) return null;
+  try {
+    var snap = await getDoc(doc(db, COLL, key));
+    if (!snap.exists()) return null;
+    var data = snap.data();
+    if (data.uid && data.uid !== uid) return null;
+    return {key:snap.id, saved:data.saved, data:JSON.parse(data.data)};
+  } catch(e) {
+    console.error('Evidence briefing load failed:', e);
+    return null;
+  }
+};
+
 // Command Center preferences live in the existing uid-scoped briefings
 // collection so they follow the user across devices without a rules change.
 window.fbLoadCommandPrefs = async function() {
@@ -471,6 +488,26 @@ window.fbSaveCommandPrefs = async function(prefs) {
   };
   await setDoc(doc(db, COLL, 'command-prefs-' + uid), body, { merge: true });
   return body;
+};
+
+window.fbLoadEvidenceSets = async function() {
+  var uid = getUid();
+  if (!uid) return null;
+  try {
+    var snap = await getDoc(doc(db, COLL, 'command-prefs-' + uid));
+    return snap.exists() ? (snap.data().evidenceSets || null) : null;
+  } catch(e) {
+    console.error('Evidence sets load failed:', e);
+    return null;
+  }
+};
+
+window.fbSaveEvidenceSets = async function(evidenceSets) {
+  var uid = getUid();
+  if (!uid) throw new Error('Not authenticated');
+  var body = {uid:uid, evidenceSets:evidenceSets || {version:1,sets:[]}, evidenceUpdatedAt:new Date().toISOString()};
+  await setDoc(doc(db, COLL, 'command-prefs-' + uid), body, {merge:true});
+  return body.evidenceSets;
 };
 
 var briefingMessagingPromise = null;
@@ -1606,7 +1643,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .command-weight button{font-family:var(--mono);font-size:8px;padding:.25rem .2rem;border:1px solid var(--rim);border-radius:5px;background:transparent;color:var(--txt3);cursor:pointer}
 .command-weight button.active{color:var(--gold);border-color:rgba(201,168,76,.4);background:var(--gold-dim)}
 .command-settings-actions{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;margin-top:.65rem}
-.command-item-actions{display:flex;gap:.25rem;align-items:center;margin-left:auto}
+.command-item-actions{display:flex;gap:.25rem;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-left:auto}
 .command-item-btn{border:1px solid var(--rim);background:transparent;color:var(--txt3);font-family:var(--mono);font-size:8px;border-radius:5px;padding:.2rem .4rem;cursor:pointer;white-space:nowrap}
 .command-item-btn:hover{color:var(--gold);border-color:rgba(201,168,76,.4)}
 .command-item-btn.pinned{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.4)}
@@ -1661,9 +1698,20 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .intel-search-empty{padding:2.4rem 1rem;text-align:center;color:var(--txt3);font-family:var(--mono);font-size:10px;line-height:1.7}
 .intel-search-foot{display:flex;justify-content:space-between;gap:.7rem;padding:.55rem 1rem;border-top:1px solid var(--rim);font-family:var(--mono);font-size:8px;color:var(--txt3)}
 .intel-search-shortcut{font-family:var(--mono);font-size:9px;padding:.1rem .35rem;border:1px solid var(--rim);border-radius:4px;color:var(--txt3)}
+
+/* ── EVIDENCE SETS ── */
+.evidence-toolbar{display:flex;gap:.5rem;align-items:center;margin-bottom:1rem}.evidence-name-input{min-width:0;flex:1;border:1px solid var(--rim2);border-radius:8px;background:var(--bg2);color:var(--txt);font-family:var(--sans);font-size:13px;padding:.58rem .7rem;outline:none}.evidence-name-input:focus,.evidence-note:focus{border-color:var(--gold)}
+.evidence-layout{display:grid;grid-template-columns:minmax(230px,.55fr) minmax(0,1.45fr);gap:1rem;align-items:start}.evidence-set-list,.evidence-item-list{display:flex;flex-direction:column;gap:.45rem}
+.evidence-set-row{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;text-align:left;border:1px solid var(--rim);border-radius:9px;background:var(--bg3);color:inherit;padding:.65rem .7rem;cursor:pointer}.evidence-set-row:hover,.evidence-set-row.active{border-color:rgba(201,168,76,.4);background:var(--gold-dim)}
+.evidence-set-name{font-size:12.5px;font-weight:600;color:var(--txt)}.evidence-set-meta{font-family:var(--mono);font-size:8px;color:var(--txt3);margin-top:.18rem}.evidence-count{font-family:var(--mono);font-size:10px;color:var(--gold)}
+.evidence-detail-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:center;margin-bottom:.75rem}.evidence-rename{border:0;border-bottom:1px solid var(--rim2);background:transparent;color:var(--txt);font-family:var(--serif);font-size:21px;outline:none;padding:.15rem 0}.evidence-rename:focus{border-color:var(--gold)}
+.evidence-item{border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem}.evidence-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem}.evidence-item-title{font-size:13px;font-weight:600;color:var(--txt);line-height:1.4}.evidence-item-detail{font-size:11px;color:var(--txt2);line-height:1.5;margin-top:.25rem}.evidence-item-provenance{font-family:var(--mono);font-size:8px;color:var(--txt3);letter-spacing:.04em;text-transform:uppercase;margin-top:.35rem}
+.evidence-item-actions{display:flex;gap:.3rem;flex-wrap:wrap;justify-content:flex-end}.evidence-note{width:100%;min-height:58px;resize:vertical;margin-top:.55rem;border:1px solid var(--rim);border-radius:7px;background:var(--bg2);color:var(--txt2);font-family:var(--sans);font-size:11px;line-height:1.45;padding:.5rem .6rem;outline:none}
+.evidence-picker-overlay{position:fixed;inset:0;z-index:8500;background:rgba(3,5,8,.72);display:flex;align-items:center;justify-content:center;padding:1rem}.evidence-picker-overlay[hidden]{display:none}.evidence-picker{width:min(460px,100%);max-height:75vh;overflow-y:auto;border:1px solid var(--rim2);border-radius:13px;background:var(--bg2);padding:1rem;box-shadow:0 25px 80px rgba(0,0,0,.5)}.evidence-picker-target{font-size:12px;color:var(--txt2);line-height:1.45;margin:.35rem 0 .8rem}.evidence-picker-list{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.75rem}.evidence-picker-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;border:1px solid var(--rim);border-radius:8px;background:var(--bg3);color:var(--txt);padding:.55rem .65rem;cursor:pointer;font-size:12px}.evidence-picker-row:hover{border-color:var(--gold)}
+.intel-search-result-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem;align-items:stretch}.intel-search-save{align-self:stretch;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--txt3);font-family:var(--mono);font-size:8px;padding:.35rem .5rem;cursor:pointer}.intel-search-save:hover{border-color:rgba(201,168,76,.35);color:var(--gold);background:var(--gold-dim)}
 @media(max-width:900px){.command-layout{grid-template-columns:1fr}.command-queue{max-height:none}}
-@media(max-width:900px){.command-source-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.command-delivery-grid,.command-review-grid{grid-template-columns:1fr}.command-thresholds{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls,.command-thresholds{grid-template-columns:1fr}.command-delivery-head{align-items:flex-start;flex-direction:column}.command-review-row{grid-template-columns:1fr}.command-review-actions{justify-content:flex-start}.intel-search-overlay{padding:.5rem}.intel-search-dialog{max-height:calc(100vh - 1rem)}.intel-search-result{grid-template-columns:1fr}.intel-search-meta{justify-content:flex-start}}
+@media(max-width:900px){.command-source-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.command-delivery-grid,.command-review-grid,.evidence-layout{grid-template-columns:1fr}.command-thresholds{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls,.command-thresholds{grid-template-columns:1fr}.command-delivery-head{align-items:flex-start;flex-direction:column}.command-review-row{grid-template-columns:1fr}.command-review-actions{justify-content:flex-start}.intel-search-overlay{padding:.5rem}.intel-search-dialog{max-height:calc(100vh - 1rem)}.intel-search-result,.intel-search-result-wrap{grid-template-columns:1fr}.intel-search-meta{justify-content:flex-start}.intel-search-save{justify-self:start}.evidence-detail-head{grid-template-columns:1fr}.evidence-item-head{display:block}.evidence-item-actions{justify-content:flex-start;margin-top:.45rem}}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -1697,6 +1745,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <div class="nav-center">
     <button class="ntab active" data-page="today" onclick="switchPage('today',this)">📰 Today</button>
     <button class="ntab" data-page="command" onclick="switchPage('command',this)">◎ Command</button>
+    <button class="ntab" data-page="evidence" onclick="switchPage('evidence',this)">▣ Evidence</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
     <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
     <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
@@ -1726,6 +1775,15 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <div class="intel-search-status" id="intel-search-status"><span id="intel-search-label">Unified intelligence search</span></div>
     <div class="intel-search-results" id="intel-search-results"><div class="intel-search-empty">Type at least two characters to search the loaded intelligence archive.</div></div>
     <div class="intel-search-foot"><span>↑↓ select · Enter open · Esc close</span><span>Local ranking · no model cost</span></div>
+  </section>
+</div>
+
+<div class="evidence-picker-overlay" id="evidence-picker-overlay" hidden onclick="if(event.target===this)closeEvidencePicker()">
+  <section class="evidence-picker" role="dialog" aria-modal="true" aria-labelledby="evidence-picker-title">
+    <div class="command-panel-head"><div><div class="command-panel-title" id="evidence-picker-title">Save to evidence</div><div class="command-panel-meta">Preserves source and capture date</div></div><button class="intel-search-close" onclick="closeEvidencePicker()">ESC</button></div>
+    <div class="evidence-picker-target" id="evidence-picker-target">Choose a set.</div>
+    <div class="evidence-picker-list" id="evidence-picker-list"><div class="command-empty">Loading evidence sets…</div></div>
+    <div class="evidence-toolbar"><input class="evidence-name-input" id="evidence-picker-name" maxlength="80" placeholder="New evidence set name" onkeydown="if(event.key==='Enter')createEvidenceSetFromPicker()"><button class="tool-chip" onclick="createEvidenceSetFromPicker()">Create &amp; save</button></div>
   </section>
 </div>
 
@@ -1806,6 +1864,27 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     </div>
   </section>
   <div class="radar-disclaimer">Priority is a deterministic triage aid built from existing app data. It does not create trades, bets, or new factual claims; open the source tab before acting.</div>
+</div>
+
+<div class="page" id="page-evidence">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Reusable source-backed working sets</div>
+    <div class="hero-date" style="font-size:22px">▣ Evidence</div>
+    <div class="hero-sub">Collect signals and records without losing where they came from.</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div class="command-summary">
+    <div class="command-stat"><div class="command-stat-value" id="evidence-set-count">—</div><div class="command-stat-label">Evidence sets</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="evidence-item-count">—</div><div class="command-stat-label">Saved items</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="evidence-source-count">—</div><div class="command-stat-label">Sources represented</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="evidence-note-count">—</div><div class="command-stat-label">Items with notes</div></div>
+  </div>
+  <div class="evidence-toolbar"><input class="evidence-name-input" id="evidence-new-name" maxlength="80" placeholder="Name a new evidence set" onkeydown="if(event.key==='Enter')createEvidenceSet()"><button class="tool-chip" onclick="createEvidenceSet()">Create set</button><span class="command-hidden-note" id="evidence-sync-status">Account-synced · up to 12 sets</span></div>
+  <div class="evidence-layout">
+    <aside class="command-panel"><div class="command-panel-head"><div><div class="command-panel-title">Sets</div><div class="command-panel-meta">Newest activity first</div></div></div><div class="evidence-set-list" id="evidence-set-list"><div class="command-empty">Loading evidence sets…</div></div></aside>
+    <section class="command-panel" id="evidence-set-detail"><div class="command-empty">Select or create an evidence set.</div></section>
+  </div>
+  <div class="radar-disclaimer">Evidence sets are personal working collections. Saved text is a compact snapshot; use Open source to confirm the authoritative record before relying on it.</div>
 </div>
 
 <div class="page active" id="page-today">
@@ -2384,6 +2463,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 <div class="mobile-nav">
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
   <button class="mob-tab" id="mob-command" onclick="switchPageMobile('command',this)"><span class="mob-tab-icon">◎</span>CMD</button>
+  <button class="mob-tab" id="mob-evidence" onclick="switchPageMobile('evidence',this)"><span class="mob-tab-icon">▣</span>EVID</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
   <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
   <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
@@ -2485,6 +2565,7 @@ function lockSession() {
   if (window.fbSignOut) window.fbSignOut();
   window._briefingHistory = [];
   resetIntelligenceSearch();
+  resetEvidenceSets();
   _currentData = null;
   var lockBtn = document.getElementById('lock-btn');
   if (lockBtn) {
@@ -2641,6 +2722,7 @@ function switchPage(id, el) {
   if (mob) mob.classList.add('active');
   if (id==='history') renderHistory();
   if (id==='command') renderCommandCenter();
+  if (id==='evidence') renderEvidencePage();
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
@@ -2664,6 +2746,7 @@ function switchPageMobile(id, el) {
   });
   if (id==='history') renderHistory();
   if (id==='command') renderCommandCenter();
+  if (id==='evidence') renderEvidencePage();
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
@@ -2786,7 +2869,7 @@ function paintIntelligenceSearchResults() {
     return;
   }
   out.innerHTML = results.map(function (item, index) {
-    return '<button class="intel-search-result' + (index === intelligenceSearchState.active ? ' active' : '') + '" data-search-index="' + index + '" onclick="openIntelligenceSearchResult(' + index + ')" aria-selected="' + (index === intelligenceSearchState.active) + '"><span><span class="intel-search-title">' + esc(item.title) + '</span><span class="intel-search-detail">' + esc(item.excerpt || item.detail || 'Open source for context.') + '</span></span><span class="intel-search-meta"><span class="intel-search-source">' + esc(item.source) + '</span><span class="intel-search-date">' + esc(item.meta) + '</span></span></button>';
+    return '<div class="intel-search-result-wrap"><button class="intel-search-result' + (index === intelligenceSearchState.active ? ' active' : '') + '" data-search-index="' + index + '" onclick="openIntelligenceSearchResult(' + index + ')" aria-selected="' + (index === intelligenceSearchState.active) + '"><span><span class="intel-search-title">' + esc(item.title) + '</span><span class="intel-search-detail">' + esc(item.excerpt || item.detail || 'Open source for context.') + '</span></span><span class="intel-search-meta"><span class="intel-search-source">' + esc(item.source) + '</span><span class="intel-search-date">' + esc(item.meta) + '</span></span></button><button class="intel-search-save" onclick="saveIntelligenceSearchResult(' + index + ')">＋ Evidence</button></div>';
   }).join('');
 }
 
@@ -2823,12 +2906,228 @@ function openIntelligenceSearchResult(index) {
   if (item.source === 'Research') openReport(item.ref);
 }
 
+function saveIntelligenceSearchResult(index) {
+  var item = intelligenceSearchState.results[index];
+  if (!item) return;
+  openEvidencePicker({id:item.id,source:item.source,title:item.title,detail:item.excerpt || item.detail,meta:item.meta,page:item.page,ref:item.ref});
+}
+
+// ── SAVED EVIDENCE SETS ──────────────────────────────────────────────────
+var evidenceSetState = {loaded:false,loading:false,data:{version:1,sets:[]},selectedId:'',pendingItem:null,saveChain:Promise.resolve(),revision:0};
+
+function evidenceDecode(value) { try { return decodeURIComponent(value); } catch (error) { return ''; } }
+function evidenceEncode(value) { return encodeURIComponent(String(value || '')).replace(/'/g, '%27'); }
+function evidenceDate(value) {
+  var date = new Date(value);
+  return isNaN(date.getTime()) ? '—' : date.toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+}
+function resetEvidenceSets() {
+  closeEvidencePicker();
+  evidenceSetState = {loaded:false,loading:false,data:{version:1,sets:[]},selectedId:'',pendingItem:null,saveChain:Promise.resolve(),revision:0};
+}
+function evidenceSelectedSet() {
+  return evidenceSetState.data.sets.find(function (set) { return set.id === evidenceSetState.selectedId; }) || null;
+}
+function loadEvidenceSets(force) {
+  if (!window.EvidenceSetsCore) return Promise.resolve();
+  if (evidenceSetState.loaded && !force) { paintEvidencePage(); paintEvidencePicker(); return Promise.resolve(); }
+  if (evidenceSetState.loading) return Promise.resolve();
+  evidenceSetState.loading = true;
+  setText('evidence-sync-status','Loading account evidence…');
+  return (window.fbLoadEvidenceSets ? window.fbLoadEvidenceSets() : Promise.resolve(null)).then(function (raw) {
+    evidenceSetState.data = window.EvidenceSetsCore.normalize(raw);
+    evidenceSetState.loaded = true;
+    evidenceSetState.loading = false;
+    if (!evidenceSelectedSet()) evidenceSetState.selectedId = evidenceSetState.data.sets[0] && evidenceSetState.data.sets[0].id || '';
+    paintEvidencePage();
+    paintEvidencePicker();
+    setText('evidence-sync-status','Account-synced · up to 12 sets');
+  }).catch(function (error) {
+    evidenceSetState.loading = false;
+    console.error('Evidence load failed:', error);
+    setText('evidence-sync-status','Could not load evidence sets');
+  });
+}
+function saveEvidenceSets(message) {
+  if (!window.fbSaveEvidenceSets) return Promise.resolve();
+  var revision = ++evidenceSetState.revision;
+  var snapshot = JSON.parse(JSON.stringify(evidenceSetState.data));
+  setText('evidence-sync-status','Saving evidence…');
+  evidenceSetState.saveChain = evidenceSetState.saveChain.catch(function () {}).then(function () {
+    return window.fbSaveEvidenceSets(snapshot);
+  }).then(function () {
+    if (revision === evidenceSetState.revision) setText('evidence-sync-status',message || 'Evidence synced');
+  }).catch(function (error) {
+    console.error('Evidence save failed:', error);
+    if (revision === evidenceSetState.revision) setText('evidence-sync-status','Could not sync · retained this session');
+    showToast('Evidence sync failed','warn');
+  });
+  return evidenceSetState.saveChain;
+}
+function renderEvidencePage() {
+  if (!evidenceSetState.loaded) loadEvidenceSets(); else paintEvidencePage();
+}
+function createEvidenceSet() {
+  if (!evidenceSetState.loaded) { loadEvidenceSets(); showToast('Loading evidence sets first','info'); return; }
+  var input = document.getElementById('evidence-new-name');
+  var name = input && input.value || '';
+  var id = 'set-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,6);
+  var result = window.EvidenceSetsCore.createSet(evidenceSetState.data,name,new Date().toISOString(),id);
+  if (!result.changed) { showToast(result.error || 'Could not create evidence set','warn'); return; }
+  evidenceSetState.data = result.state;
+  evidenceSetState.selectedId = result.id;
+  if (input) input.value = '';
+  paintEvidencePage();
+  saveEvidenceSets('Evidence set created');
+}
+function selectEvidenceSet(encoded) {
+  var id = evidenceDecode(encoded);
+  if (!id) return;
+  evidenceSetState.selectedId = id;
+  paintEvidencePage();
+}
+function renameEvidenceSet(encoded, name) {
+  var id = evidenceDecode(encoded);
+  var result = window.EvidenceSetsCore.renameSet(evidenceSetState.data,id,name,new Date().toISOString());
+  if (result.error) { showToast(result.error,'warn'); paintEvidencePage(); return; }
+  if (!result.changed) return;
+  evidenceSetState.data = result.state;
+  paintEvidencePage();
+  saveEvidenceSets('Evidence set renamed');
+}
+function deleteEvidenceSet(encoded) {
+  var id = evidenceDecode(encoded);
+  var set = evidenceSetState.data.sets.find(function (candidate) { return candidate.id === id; });
+  if (!set || !confirm('Delete evidence set "' + set.name + '" and its ' + set.items.length + ' saved item' + (set.items.length === 1 ? '' : 's') + '?')) return;
+  var result = window.EvidenceSetsCore.deleteSet(evidenceSetState.data,id);
+  if (!result.changed) { showToast(result.error,'warn'); return; }
+  evidenceSetState.data = result.state;
+  evidenceSetState.selectedId = result.state.sets[0] && result.state.sets[0].id || '';
+  paintEvidencePage();
+  saveEvidenceSets('Evidence set deleted');
+}
+function updateEvidenceNote(setEncoded, keyEncoded, note) {
+  var result = window.EvidenceSetsCore.updateNote(evidenceSetState.data,evidenceDecode(setEncoded),evidenceDecode(keyEncoded),note,new Date().toISOString());
+  if (result.error) { showToast(result.error,'warn'); return; }
+  if (!result.changed) return;
+  evidenceSetState.data = result.state;
+  saveEvidenceSets('Evidence note synced');
+}
+function removeEvidenceItem(setEncoded, keyEncoded) {
+  var setId = evidenceDecode(setEncoded), key = evidenceDecode(keyEncoded);
+  var set = evidenceSetState.data.sets.find(function (candidate) { return candidate.id === setId; });
+  var item = set && set.items.find(function (candidate) { return candidate.key === key; });
+  if (!item || !confirm('Remove "' + item.title + '" from this evidence set?')) return;
+  var result = window.EvidenceSetsCore.removeItem(evidenceSetState.data,setId,key,new Date().toISOString());
+  if (!result.changed) { showToast(result.error,'warn'); return; }
+  evidenceSetState.data = result.state;
+  paintEvidencePage();
+  saveEvidenceSets('Evidence item removed');
+}
+function paintEvidencePage() {
+  var list = document.getElementById('evidence-set-list');
+  var detail = document.getElementById('evidence-set-detail');
+  if (!list || !detail || !window.EvidenceSetsCore) return;
+  var sets = evidenceSetState.data.sets || [];
+  var allItems = sets.reduce(function (items,set) { return items.concat(set.items); },[]);
+  setText('evidence-set-count',sets.length);
+  setText('evidence-item-count',allItems.length);
+  setText('evidence-source-count',Object.keys(allItems.reduce(function (seen,item) { seen[item.source] = true; return seen; },{})).length);
+  setText('evidence-note-count',allItems.filter(function (item) { return !!item.note; }).length);
+  list.innerHTML = sets.length ? sets.map(function (set) {
+    var encoded = evidenceEncode(set.id);
+    return '<button class="evidence-set-row' + (set.id === evidenceSetState.selectedId ? ' active' : '') + '" onclick="selectEvidenceSet(\'' + encoded + '\')"><span><span class="evidence-set-name">' + esc(set.name) + '</span><span class="evidence-set-meta">Updated ' + esc(evidenceDate(set.updatedAt)) + '</span></span><span class="evidence-count">' + set.items.length + '</span></button>';
+  }).join('') : '<div class="command-empty">No evidence sets yet. Create one here or save an item from Search or Command Center.</div>';
+  var selected = evidenceSelectedSet();
+  if (!selected) { detail.innerHTML = '<div class="command-empty">Select or create an evidence set.</div>'; return; }
+  var setEncoded = evidenceEncode(selected.id);
+  var itemsHtml = selected.items.length ? selected.items.map(function (item) {
+    var keyEncoded = evidenceEncode(item.key);
+    return '<article class="evidence-item"><div class="evidence-item-head"><div><div class="evidence-item-title">' + esc(item.title) + '</div><div class="evidence-item-detail">' + esc(item.detail || 'Saved source item.') + '</div><div class="evidence-item-provenance">' + esc(item.source) + ' · captured ' + esc(evidenceDate(item.capturedAt)) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions"><button class="command-item-btn" onclick="openEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open source</button><button class="command-item-btn" onclick="removeEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Remove</button></div></div><textarea class="evidence-note" maxlength="500" placeholder="Add your note — why this matters, what to verify, or how it connects…" onblur="updateEvidenceNote(\'' + setEncoded + '\',\'' + keyEncoded + '\',this.value)">' + esc(item.note) + '</textarea></article>';
+  }).join('') : '<div class="command-empty">This set is empty. Save results from Search or items from Command Center.</div>';
+  detail.innerHTML = '<div class="evidence-detail-head"><input class="evidence-rename" maxlength="80" value="' + esc(selected.name) + '" onchange="renameEvidenceSet(\'' + setEncoded + '\',this.value)" aria-label="Evidence set name"><div class="evidence-item-actions"><button class="tool-chip" onclick="openIntelligenceSearch()">Search to add</button><button class="tool-chip" onclick="deleteEvidenceSet(\'' + setEncoded + '\')">Delete set</button></div></div><div class="evidence-item-list">' + itemsHtml + '</div>';
+}
+function openEvidencePicker(item) {
+  if (!item || !item.title) return;
+  evidenceSetState.pendingItem = item;
+  var overlay = document.getElementById('evidence-picker-overlay');
+  if (overlay) overlay.hidden = false;
+  setText('evidence-picker-target','Save “' + item.title + '” from ' + item.source + '.');
+  if (!evidenceSetState.loaded) loadEvidenceSets(); else paintEvidencePicker();
+}
+function closeEvidencePicker() {
+  var overlay = document.getElementById('evidence-picker-overlay');
+  if (overlay) overlay.hidden = true;
+  evidenceSetState.pendingItem = null;
+}
+function paintEvidencePicker() {
+  var list = document.getElementById('evidence-picker-list');
+  if (!list) return;
+  if (evidenceSetState.loading) { list.innerHTML = '<div class="command-empty">Loading evidence sets…</div>'; return; }
+  list.innerHTML = evidenceSetState.data.sets.length ? evidenceSetState.data.sets.map(function (set) {
+    return '<button class="evidence-picker-row" onclick="addPendingEvidenceToSet(\'' + evidenceEncode(set.id) + '\')"><span>' + esc(set.name) + '</span><span class="evidence-count">' + set.items.length + '/30</span></button>';
+  }).join('') : '<div class="command-empty">No sets yet. Create the first one below.</div>';
+}
+function addPendingEvidenceToSet(encoded) {
+  var setId = evidenceDecode(encoded);
+  var pending = evidenceSetState.pendingItem;
+  if (!setId || !pending) return;
+  var result = window.EvidenceSetsCore.addItem(evidenceSetState.data,setId,pending,new Date().toISOString());
+  if (!result.changed) { showToast(result.error || 'Could not save evidence','warn'); return; }
+  evidenceSetState.data = result.state;
+  evidenceSetState.selectedId = setId;
+  closeEvidencePicker();
+  paintEvidencePage();
+  saveEvidenceSets('Evidence item saved');
+  showToast('Saved to evidence','ok');
+}
+function createEvidenceSetFromPicker() {
+  if (!evidenceSetState.loaded) { loadEvidenceSets(); showToast('Loading evidence sets first','info'); return; }
+  var input = document.getElementById('evidence-picker-name');
+  var pending = evidenceSetState.pendingItem;
+  var id = 'set-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,6);
+  var created = window.EvidenceSetsCore.createSet(evidenceSetState.data,input && input.value || '',new Date().toISOString(),id);
+  if (!created.changed) { showToast(created.error || 'Could not create evidence set','warn'); return; }
+  var added = window.EvidenceSetsCore.addItem(created.state,created.id,pending,new Date().toISOString());
+  evidenceSetState.data = added.state;
+  evidenceSetState.selectedId = created.id;
+  if (input) input.value = '';
+  closeEvidencePicker();
+  paintEvidencePage();
+  saveEvidenceSets('Evidence set and item saved');
+  showToast('Evidence set created','ok');
+}
+async function openEvidenceItem(setEncoded,keyEncoded) {
+  var set = evidenceSetState.data.sets.find(function (candidate) { return candidate.id === evidenceDecode(setEncoded); });
+  var item = set && set.items.find(function (candidate) { return candidate.key === evidenceDecode(keyEncoded); });
+  if (!item) return;
+  if (item.source === 'Briefing' && item.id.indexOf('briefing:') === 0) {
+    var archived = (window._briefingHistory || []).find(function (entry) { return entry.key === item.ref; }) || intelligenceSearchState.briefings.find(function (entry) { return entry.key === item.ref; });
+    if (!archived && window.fbLoadBriefingByKey) archived = await window.fbLoadBriefingByKey(item.ref);
+    if (archived) {
+      if (!(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
+      loadBriefing(item.ref);
+      return;
+    }
+  }
+  if (item.source === 'Research') {
+    if (!getReportById(item.ref) && window.fbLoadReports) window._reportFeed = await window.fbLoadReports();
+    switchPage('research',document.querySelector('.ntab[data-page="research"]'));
+    openReport(item.ref);
+    return;
+  }
+  var page = item.page || (item.source === 'Briefing' ? 'today' : 'evidence');
+  switchPage(page,document.querySelector('.ntab[data-page="' + page + '"]'));
+}
+
 document.addEventListener('keydown', function (event) {
   if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'k') {
     event.preventDefault();
     var auth = document.getElementById('auth-overlay');
     if (!auth || auth.classList.contains('hidden')) openIntelligenceSearch();
   } else if (event.key === 'Escape') {
+    var picker = document.getElementById('evidence-picker-overlay');
+    if (picker && !picker.hidden) { closeEvidencePicker(); return; }
     var overlay = document.getElementById('intel-search-overlay');
     if (overlay && !overlay.hidden) closeIntelligenceSearch();
   }
@@ -4083,6 +4382,17 @@ function commandReviewSnapshot(item) {
   var rank = commandCenterData && commandCenterData.morningFive.findIndex(function (row) { return row.id === item.id; });
   return Object.assign({}, item, {morningFive: rank >= 0, rank: rank >= 0 ? rank + 1 : 0});
 }
+function saveCommandEvidence(encoded) {
+  var id = commandItemId(encoded);
+  var item = commandFindItem(id);
+  if (!item) return;
+  var ref = item.source === 'Decisions' && id.indexOf('decision-') === 0 ? id.slice(9) : id;
+  openEvidencePicker({
+    id:id, source:item.source, title:item.title, detail:item.detail,
+    meta:[item.urgency,item.confidence + ' confidence','score ' + Math.round(item.score)].join(' · '),
+    page:item.page, ref:ref
+  });
+}
 function setCommandReviewState(encoded, state) {
   var id = commandItemId(encoded);
   var item = commandFindItem(id) || commandReviewItem(id);
@@ -4150,6 +4460,7 @@ function commandItemHtml(item, rank, featured) {
   var body = '<div><div class="command-item-title">' + esc(item.title) + '</div>' +
     '<div class="command-item-detail">' + esc(item.detail || 'Open source for detail.') + '</div></div>';
   var actions = '<div class="command-item-actions"><span class="command-source ' + sourceClass + '">' + esc(item.source) + '</span>' +
+    '<button class="command-item-btn" onclick="event.stopPropagation();saveCommandEvidence(\'' + encodedId + '\')">Save</button>' +
     '<button class="command-item-btn' + (review && review.state === quickState ? ' pinned' : '') + '" onclick="event.stopPropagation();setCommandReviewState(\'' + encodedId + '\',\'' + quickState + '\')">' + quickLabel + '</button>' +
     (item.source === 'Reliability' ? '' :
       '<button class="command-item-btn' + (item.pinned ? ' pinned' : '') + '" onclick="event.stopPropagation();commandTogglePin(\'' + encodedId + '\')">' + (item.pinned ? 'Pinned' : 'Pin') + '</button>' +
