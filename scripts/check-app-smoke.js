@@ -36,6 +36,7 @@ assert.ok(html.includes('type="module"'), 'Firebase application script must rema
 assert.ok(html.includes('manifest.webmanifest'), 'PWA manifest link is required');
 assert.ok(html.includes('./lib/command-center-core.js'), 'Command Center core must load before the app script');
 assert.ok(html.includes('./lib/command-review-core.js'), 'Command review core must load before the app script');
+assert.ok(html.includes('./lib/intelligence-search-core.js'), 'Unified search core must load before the app script');
 assert.ok(html.includes("if (id==='command') renderCommandCenter()"), 'navigation must render Command Center');
 assert.ok(html.includes('fbLoadCommandPrefs') && html.includes('fbSaveCommandPrefs'),
   'Command Center preferences must load and save through the signed-in account');
@@ -44,6 +45,8 @@ assert.ok(html.includes('fbEnableBriefingDelivery') && html.includes('command-de
   'Command Center must expose device delivery and its audit trail');
 assert.ok(html.includes('completeCommandReviewDay') && html.includes('command-review-week'),
   'Command Center must expose the daily review checklist and weekly discipline view');
+assert.ok(html.includes('openIntelligenceSearch') && html.includes('intelligenceSearchKey') && html.includes('fbLoadSearchBriefings'),
+  'App must expose lazy unified search with keyboard navigation and archive loading');
 assert.ok(functionsIndex.includes('exports.deliverMorningFive = onSchedule') &&
   functionsIndex.includes('exports.registerBriefingDevice = onCall') &&
   functionsIndex.includes('exports.muteBriefingDelivery = onCall'),
@@ -54,6 +57,8 @@ assert.ok(pagesWorkflow.includes('cp lib/command-center-core.js') && pagesWorkfl
   'Pages artifact must include the Command Center core');
 assert.ok(pagesWorkflow.includes('lib/command-review-core.js') && pagesWorkflow.includes('_site/lib/'),
   'Pages artifact must include the Command review core');
+assert.ok(pagesWorkflow.includes('lib/intelligence-search-core.js') && pagesWorkflow.includes('_site/lib/'),
+  'Pages artifact must include the unified search core');
 assert.ok(sports.includes('sports-public.json'), 'public sports page must load its public data mirror');
 assert.ok(!/function\s+getGeminiPrompt\s*\([^)]*\)[\s\S]*function\s+getGeminiPrompt\s*\(/.test(html),
   'getGeminiPrompt must have only one declaration');
