@@ -19,6 +19,7 @@
 <script src="./lib/command-review-core.js"></script>
 <script src="./lib/intelligence-search-core.js"></script>
 <script src="./lib/evidence-sets-core.js"></script>
+<script src="./lib/entity-timeline-core.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -738,16 +739,19 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .ntab:hover{color:var(--txt);background:var(--bg3)}
 .ntab.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.2)}
 .ntab[data-page="today"]{order:1}
-.ntab[data-page="radar"]{order:2}
-.ntab[data-page="decisions"]{order:3}
-.ntab[data-page="journal"]{order:4}
-.ntab[data-page="miro"]{order:5}
-.ntab[data-page="sports"]{order:6}
-.ntab[data-page="pse"]{order:7}
-.ntab[data-page="research"]{order:8}
-.ntab[data-page="trends"]{order:9}
-.ntab[data-page="history"]{order:10}
-.ntab[data-page="help"]{order:11}
+.ntab[data-page="command"]{order:2}
+.ntab[data-page="evidence"]{order:3}
+.ntab[data-page="timeline"]{order:4}
+.ntab[data-page="radar"]{order:5}
+.ntab[data-page="decisions"]{order:6}
+.ntab[data-page="journal"]{order:7}
+.ntab[data-page="miro"]{order:8}
+.ntab[data-page="sports"]{order:9}
+.ntab[data-page="pse"]{order:10}
+.ntab[data-page="research"]{order:11}
+.ntab[data-page="trends"]{order:12}
+.ntab[data-page="history"]{order:13}
+.ntab[data-page="help"]{order:14}
 .nav-right{display:flex;align-items:center;gap:.6rem}
 .nav-clock{font-family:var(--mono);font-size:12px;color:var(--txt3);letter-spacing:.05em}
 #sync-status{font-family:var(--mono);font-size:11px;color:var(--txt3);transition:color .3s;white-space:nowrap}
@@ -1482,16 +1486,18 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   .mob-tab-icon{font-size:19px;line-height:1}
   #mob-today{order:1}
   #mob-command{order:2}
-  #mob-radar{order:3}
-  #mob-decisions{order:4}
-  #mob-journal{order:5}
-  #mob-miro{order:6}
-  #mob-sports{order:7}
-  #mob-pse{order:8}
-  #mob-research{order:9}
-  #mob-trends{order:10}
-  #mob-history{order:11}
-  #mob-help{order:12}
+  #mob-evidence{order:3}
+  #mob-timeline{order:4}
+  #mob-radar{order:5}
+  #mob-decisions{order:6}
+  #mob-journal{order:7}
+  #mob-miro{order:8}
+  #mob-sports{order:9}
+  #mob-pse{order:10}
+  #mob-research{order:11}
+  #mob-trends{order:12}
+  #mob-history{order:13}
+  #mob-help{order:14}
   body{padding-bottom:70px}
   .trend-rel-grid{grid-template-columns:repeat(2,1fr)}
   .paste-zone textarea{min-height:120px}
@@ -1708,10 +1714,16 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .evidence-item{border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem}.evidence-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem}.evidence-item-title{font-size:13px;font-weight:600;color:var(--txt);line-height:1.4}.evidence-item-detail{font-size:11px;color:var(--txt2);line-height:1.5;margin-top:.25rem}.evidence-item-provenance{font-family:var(--mono);font-size:8px;color:var(--txt3);letter-spacing:.04em;text-transform:uppercase;margin-top:.35rem}
 .evidence-item-actions{display:flex;gap:.3rem;flex-wrap:wrap;justify-content:flex-end}.evidence-note{width:100%;min-height:58px;resize:vertical;margin-top:.55rem;border:1px solid var(--rim);border-radius:7px;background:var(--bg2);color:var(--txt2);font-family:var(--sans);font-size:11px;line-height:1.45;padding:.5rem .6rem;outline:none}
 .evidence-picker-overlay{position:fixed;inset:0;z-index:8500;background:rgba(3,5,8,.72);display:flex;align-items:center;justify-content:center;padding:1rem}.evidence-picker-overlay[hidden]{display:none}.evidence-picker{width:min(460px,100%);max-height:75vh;overflow-y:auto;border:1px solid var(--rim2);border-radius:13px;background:var(--bg2);padding:1rem;box-shadow:0 25px 80px rgba(0,0,0,.5)}.evidence-picker-target{font-size:12px;color:var(--txt2);line-height:1.45;margin:.35rem 0 .8rem}.evidence-picker-list{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.75rem}.evidence-picker-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;border:1px solid var(--rim);border-radius:8px;background:var(--bg3);color:var(--txt);padding:.55rem .65rem;cursor:pointer;font-size:12px}.evidence-picker-row:hover{border-color:var(--gold)}
-.intel-search-result-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem;align-items:stretch}.intel-search-save{align-self:stretch;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--txt3);font-family:var(--mono);font-size:8px;padding:.35rem .5rem;cursor:pointer}.intel-search-save:hover{border-color:rgba(201,168,76,.35);color:var(--gold);background:var(--gold-dim)}
+.intel-search-result-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem;align-items:stretch}.intel-search-result-actions{display:flex;flex-direction:column;gap:.2rem}.intel-search-save{flex:1;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--txt3);font-family:var(--mono);font-size:8px;padding:.35rem .5rem;cursor:pointer}.intel-search-save:hover{border-color:rgba(201,168,76,.35);color:var(--gold);background:var(--gold-dim)}
+
+/* ── ENTITY TIMELINES ── */
+.timeline-query{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;margin-bottom:.7rem}.timeline-query input{width:100%;border:1px solid var(--rim2);border-radius:9px;background:var(--bg2);color:var(--txt);font-family:var(--sans);font-size:15px;padding:.7rem .8rem;outline:none}.timeline-query input:focus{border-color:var(--gold)}
+.timeline-suggestions{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem}.timeline-suggestion{border:1px solid var(--rim);border-radius:999px;background:var(--bg3);color:var(--txt2);font-family:var(--mono);font-size:8px;padding:.35rem .55rem;cursor:pointer}.timeline-suggestion:hover{color:var(--gold);border-color:rgba(201,168,76,.4)}.timeline-suggestion span{color:var(--txt3);margin-left:.25rem}
+.timeline-filters{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;margin:.75rem 0}.timeline-status{font-family:var(--mono);font-size:9px;color:var(--txt3);line-height:1.5}.timeline-list{display:flex;flex-direction:column;gap:.75rem}.timeline-day{display:grid;grid-template-columns:110px minmax(0,1fr);gap:.8rem;align-items:start}.timeline-day-label{position:sticky;top:78px;font-family:var(--mono);font-size:9px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase;padding-top:.65rem}.timeline-day-items{border-left:1px solid var(--rim2);padding-left:.8rem;display:flex;flex-direction:column;gap:.5rem}
+.timeline-entry{position:relative;border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem}.timeline-entry::before{content:'';position:absolute;width:7px;height:7px;border-radius:50%;background:var(--gold);left:-12px;top:1rem;box-shadow:0 0 0 3px var(--bg)}.timeline-entry-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.65rem}.timeline-entry-title{font-size:13px;font-weight:600;color:var(--txt);line-height:1.4}.timeline-entry-detail{font-size:11px;color:var(--txt2);line-height:1.5;margin-top:.25rem}.timeline-entry-meta{font-family:var(--mono);font-size:8px;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-top:.4rem}.timeline-empty{padding:2rem 1rem;text-align:center;color:var(--txt3);font-family:var(--mono);font-size:10px;line-height:1.7}
 @media(max-width:900px){.command-layout{grid-template-columns:1fr}.command-queue{max-height:none}}
 @media(max-width:900px){.command-source-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.command-delivery-grid,.command-review-grid,.evidence-layout{grid-template-columns:1fr}.command-thresholds{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls,.command-thresholds{grid-template-columns:1fr}.command-delivery-head{align-items:flex-start;flex-direction:column}.command-review-row{grid-template-columns:1fr}.command-review-actions{justify-content:flex-start}.intel-search-overlay{padding:.5rem}.intel-search-dialog{max-height:calc(100vh - 1rem)}.intel-search-result,.intel-search-result-wrap{grid-template-columns:1fr}.intel-search-meta{justify-content:flex-start}.intel-search-save{justify-self:start}.evidence-detail-head{grid-template-columns:1fr}.evidence-item-head{display:block}.evidence-item-actions{justify-content:flex-start;margin-top:.45rem}}
+@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls,.command-thresholds{grid-template-columns:1fr}.command-delivery-head{align-items:flex-start;flex-direction:column}.command-review-row{grid-template-columns:1fr}.command-review-actions{justify-content:flex-start}.intel-search-overlay{padding:.5rem}.intel-search-dialog{max-height:calc(100vh - 1rem)}.intel-search-result,.intel-search-result-wrap{grid-template-columns:1fr}.intel-search-result-actions{flex-direction:row}.intel-search-meta{justify-content:flex-start}.intel-search-save{justify-self:start}.evidence-detail-head{grid-template-columns:1fr}.evidence-item-head{display:block}.evidence-item-actions{justify-content:flex-start;margin-top:.45rem}.timeline-query{grid-template-columns:1fr}.timeline-day{grid-template-columns:1fr;gap:.25rem}.timeline-day-label{position:static;padding-top:.25rem}.timeline-entry-head{display:block}}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -1746,6 +1758,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <button class="ntab active" data-page="today" onclick="switchPage('today',this)">📰 Today</button>
     <button class="ntab" data-page="command" onclick="switchPage('command',this)">◎ Command</button>
     <button class="ntab" data-page="evidence" onclick="switchPage('evidence',this)">▣ Evidence</button>
+    <button class="ntab" data-page="timeline" onclick="switchPage('timeline',this)">◷ Timeline</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
     <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
     <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
@@ -1885,6 +1898,29 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
     <section class="command-panel" id="evidence-set-detail"><div class="command-empty">Select or create an evidence set.</div></section>
   </div>
   <div class="radar-disclaimer">Evidence sets are personal working collections. Saved text is a compact snapshot; use Open source to confirm the authoritative record before relying on it.</div>
+</div>
+
+<div class="page" id="page-timeline">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Cross-source history without inferred gaps</div>
+    <div class="hero-date" style="font-size:22px">◷ Entity Timeline</div>
+    <div class="hero-sub">Follow a company, asset, event, team, or topic through stored intelligence.</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div class="timeline-query"><input id="timeline-query" maxlength="100" aria-label="Timeline entity or topic" placeholder="Entity, asset, team, event, or topic…" oninput="runEntityTimeline(this.value)" onkeydown="if(event.key==='Enter')runEntityTimeline(this.value)"><button class="tool-chip" onclick="runEntityTimeline((document.getElementById('timeline-query')||{}).value)">Build timeline</button></div>
+  <div class="timeline-suggestions" id="timeline-suggestions"><span class="timeline-status">Loading source-supplied entities…</span></div>
+  <div class="command-summary">
+    <div class="command-stat"><div class="command-stat-value" id="timeline-record-count">—</div><div class="command-stat-label">Stored records</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="timeline-source-count">—</div><div class="command-stat-label">Sources represented</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="timeline-first-date">—</div><div class="command-stat-label">Earliest record</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="timeline-last-date">—</div><div class="command-stat-label">Latest record</div></div>
+  </div>
+  <section class="command-panel">
+    <div class="command-panel-head"><div><div class="command-panel-title" id="timeline-title">Choose an entity or enter a topic</div><div class="timeline-status" id="timeline-status">The timeline is built locally from the same six-source index as Search.</div></div></div>
+    <div class="timeline-filters" id="timeline-filters"></div>
+    <div class="timeline-list" id="timeline-list"><div class="timeline-empty">Select a suggested entity above or type at least two characters.</div></div>
+  </section>
+  <div class="radar-disclaimer">Only matching stored records are shown. Missing dates are gaps in the archive, not evidence that nothing happened; no continuity or causality is inferred between entries.</div>
 </div>
 
 <div class="page active" id="page-today">
@@ -2464,6 +2500,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
   <button class="mob-tab" id="mob-command" onclick="switchPageMobile('command',this)"><span class="mob-tab-icon">◎</span>CMD</button>
   <button class="mob-tab" id="mob-evidence" onclick="switchPageMobile('evidence',this)"><span class="mob-tab-icon">▣</span>EVID</button>
+  <button class="mob-tab" id="mob-timeline" onclick="switchPageMobile('timeline',this)"><span class="mob-tab-icon">◷</span>TIME</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
   <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
   <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
@@ -2723,6 +2760,7 @@ function switchPage(id, el) {
   if (id==='history') renderHistory();
   if (id==='command') renderCommandCenter();
   if (id==='evidence') renderEvidencePage();
+  if (id==='timeline') renderEntityTimeline();
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
@@ -2747,6 +2785,7 @@ function switchPageMobile(id, el) {
   if (id==='history') renderHistory();
   if (id==='command') renderCommandCenter();
   if (id==='evidence') renderEvidencePage();
+  if (id==='timeline') renderEntityTimeline();
   if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='research') renderResearchList();
   if (id==='radar') renderRadar();
@@ -2780,12 +2819,13 @@ window.addEventListener('hashchange', navFromHash);
 // A lazy, deterministic index over data the account can already read. The
 // browser builds it once per signed-in session; no text or query leaves the app
 // and there is no model call.
-var intelligenceSearchState = {loaded:false,loading:false,index:[],results:[],active:0,briefings:[],reports:[]};
+var intelligenceSearchState = {loaded:false,loading:false,promise:null,index:[],results:[],active:0,briefings:[],reports:[]};
 
 function resetIntelligenceSearch() {
   closeIntelligenceSearch();
   window._reportFeed = [];
-  intelligenceSearchState = {loaded:false,loading:false,index:[],results:[],active:0,briefings:[],reports:[]};
+  intelligenceSearchState = {loaded:false,loading:false,promise:null,index:[],results:[],active:0,briefings:[],reports:[]};
+  if (typeof resetEntityTimeline === 'function') resetEntityTimeline();
 }
 
 function intelligenceSearchRead(loader, fallback) {
@@ -2793,10 +2833,12 @@ function intelligenceSearchRead(loader, fallback) {
 }
 
 function loadIntelligenceSearchData() {
-  if (intelligenceSearchState.loaded || intelligenceSearchState.loading || !window.IntelligenceSearchCore) return Promise.resolve();
+  if (intelligenceSearchState.loaded) return Promise.resolve(intelligenceSearchState.index);
+  if (intelligenceSearchState.loading) return intelligenceSearchState.promise || Promise.resolve();
+  if (!window.IntelligenceSearchCore) return Promise.resolve();
   intelligenceSearchState.loading = true;
   setText('intel-search-status', 'Loading account archive and current feed snapshots…');
-  return Promise.all([
+  var request = Promise.all([
     intelligenceSearchRead(window.fbLoadSearchBriefings, window._briefingHistory || []),
     intelligenceSearchRead(window.fbLoadReports, []),
     intelligenceSearchRead(window.fbLoadDecisions, []),
@@ -2815,12 +2857,17 @@ function loadIntelligenceSearchData() {
     });
     intelligenceSearchState.loaded = true;
     intelligenceSearchState.loading = false;
+    intelligenceSearchState.promise = null;
     runIntelligenceSearch((document.getElementById('intel-search-input') || {}).value || '');
+    return intelligenceSearchState.index;
   }).catch(function (error) {
     intelligenceSearchState.loading = false;
+    intelligenceSearchState.promise = null;
     console.error('Unified search load failed:', error);
     setText('intel-search-status', 'Could not load the search index · source tabs remain available');
   });
+  intelligenceSearchState.promise = request;
+  return request;
 }
 
 function openIntelligenceSearch() {
@@ -2869,7 +2916,7 @@ function paintIntelligenceSearchResults() {
     return;
   }
   out.innerHTML = results.map(function (item, index) {
-    return '<div class="intel-search-result-wrap"><button class="intel-search-result' + (index === intelligenceSearchState.active ? ' active' : '') + '" data-search-index="' + index + '" onclick="openIntelligenceSearchResult(' + index + ')" aria-selected="' + (index === intelligenceSearchState.active) + '"><span><span class="intel-search-title">' + esc(item.title) + '</span><span class="intel-search-detail">' + esc(item.excerpt || item.detail || 'Open source for context.') + '</span></span><span class="intel-search-meta"><span class="intel-search-source">' + esc(item.source) + '</span><span class="intel-search-date">' + esc(item.meta) + '</span></span></button><button class="intel-search-save" onclick="saveIntelligenceSearchResult(' + index + ')">＋ Evidence</button></div>';
+    return '<div class="intel-search-result-wrap"><button class="intel-search-result' + (index === intelligenceSearchState.active ? ' active' : '') + '" data-search-index="' + index + '" onclick="openIntelligenceSearchResult(' + index + ')" aria-selected="' + (index === intelligenceSearchState.active) + '"><span><span class="intel-search-title">' + esc(item.title) + '</span><span class="intel-search-detail">' + esc(item.excerpt || item.detail || 'Open source for context.') + '</span></span><span class="intel-search-meta"><span class="intel-search-source">' + esc(item.source) + '</span><span class="intel-search-date">' + esc(item.meta) + '</span></span></button><span class="intel-search-result-actions"><button class="intel-search-save" onclick="saveIntelligenceSearchResult(' + index + ')">＋ Evidence</button><button class="intel-search-save" onclick="openEntityTimelineFromSearch(' + index + ')">◷ Timeline</button></span></div>';
   }).join('');
 }
 
@@ -2895,6 +2942,11 @@ function openIntelligenceSearchResult(index) {
   var item = intelligenceSearchState.results[index];
   if (!item) return;
   closeIntelligenceSearch();
+  openIndexedIntelligenceItem(item);
+}
+
+function openIndexedIntelligenceItem(item) {
+  if (!item) return;
   if (item.source === 'Briefing') {
     var archived = intelligenceSearchState.briefings.find(function (entry) { return entry.key === item.ref; });
     if (archived && !(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
@@ -2910,6 +2962,144 @@ function saveIntelligenceSearchResult(index) {
   var item = intelligenceSearchState.results[index];
   if (!item) return;
   openEvidencePicker({id:item.id,source:item.source,title:item.title,detail:item.excerpt || item.detail,meta:item.meta,page:item.page,ref:item.ref});
+}
+
+function openEntityTimelineFromSearch(index) {
+  var item = intelligenceSearchState.results[index];
+  if (!item) return;
+  var firstEntity = item.entities && item.entities[0] && item.entities[0].label;
+  closeIntelligenceSearch();
+  openEntityTimeline(firstEntity || item.title);
+}
+
+// ── ENTITY TIMELINES ─────────────────────────────────────────────────────
+// Timelines are a read-only projection of the local search index. Explicit
+// entity suggestions come only from source-supplied structured fields; typed
+// topics use the same deterministic all-token matching as unified search.
+var entityTimelineState = {query:'',source:'all',catalog:[],entries:[],result:null};
+
+function timelineEncode(value) { return encodeURIComponent(String(value || '')).replace(/'/g,'%27'); }
+function timelineDecode(value) { try { return decodeURIComponent(value); } catch (error) { return ''; } }
+function timelineDate(value, compact) {
+  if (!value) return 'Undated';
+  var date = new Date(Number(value));
+  if (isNaN(date.getTime())) return 'Undated';
+  return date.toLocaleDateString('en-PH',{timeZone:'Asia/Manila',year:compact ? undefined : 'numeric',month:'short',day:'numeric'});
+}
+function resetEntityTimeline() {
+  entityTimelineState = {query:'',source:'all',catalog:[],entries:[],result:null};
+  var input = document.getElementById('timeline-query');
+  if (input) input.value = '';
+  setText('timeline-record-count','—'); setText('timeline-source-count','—');
+  setText('timeline-first-date','—'); setText('timeline-last-date','—');
+}
+function renderEntityTimeline() {
+  if (!window.EntityTimelineCore) return;
+  setText('timeline-status',intelligenceSearchState.loaded ? 'Choose an entity or enter a topic.' : 'Loading account archive and current source snapshots…');
+  return loadIntelligenceSearchData().then(function () {
+    entityTimelineState.catalog = window.EntityTimelineCore.catalog(intelligenceSearchState.index,{limit:24});
+    paintEntitySuggestions();
+    var input = document.getElementById('timeline-query');
+    runEntityTimeline(entityTimelineState.query || (input && input.value) || '');
+  });
+}
+function paintEntitySuggestions() {
+  var out = document.getElementById('timeline-suggestions');
+  if (!out) return;
+  var suggestions = entityTimelineState.catalog.slice(0,16);
+  out.innerHTML = suggestions.length ? '<span class="timeline-status">Source entities:</span>' + suggestions.map(function (entry) {
+    return '<button class="timeline-suggestion" onclick="selectEntityTimeline(\'' + timelineEncode(entry.label) + '\')">' + esc(entry.label) + '<span>' + entry.records + '</span></button>';
+  }).join('') : '<span class="timeline-status">Type any topic to build a timeline; no structured entity suggestions are available yet.</span>';
+}
+function selectEntityTimeline(encoded) {
+  var label = timelineDecode(encoded);
+  var input = document.getElementById('timeline-query');
+  if (input) input.value = label;
+  entityTimelineState.source = 'all';
+  runEntityTimeline(label);
+}
+function openEntityTimeline(label) {
+  var button = document.querySelector('.ntab[data-page="timeline"]');
+  switchPage('timeline',button);
+  var input = document.getElementById('timeline-query');
+  if (input) input.value = label || '';
+  entityTimelineState.source = 'all';
+  runEntityTimeline(label || '');
+}
+function runEntityTimeline(query) {
+  query = String(query || '').trim().slice(0,100);
+  if (query !== entityTimelineState.query) entityTimelineState.source = 'all';
+  entityTimelineState.query = query;
+  if (!intelligenceSearchState.loaded) {
+    if (!intelligenceSearchState.loading) renderEntityTimeline();
+    return;
+  }
+  paintEntityTimeline();
+}
+function setEntityTimelineSource(source, element) {
+  entityTimelineState.source = timelineDecode(source) || 'all';
+  document.querySelectorAll('[data-timeline-source]').forEach(function (button) { button.classList.remove('active'); });
+  if (element) element.classList.add('active');
+  paintEntityTimeline();
+}
+function entityTimelineItem(encoded) {
+  var id = timelineDecode(encoded);
+  return intelligenceSearchState.index.find(function (item) { return item.id === id; }) || null;
+}
+function openEntityTimelineItem(encoded) { openIndexedIntelligenceItem(entityTimelineItem(encoded)); }
+function saveEntityTimelineItem(encoded) {
+  var item = entityTimelineItem(encoded);
+  if (!item) return;
+  openEvidencePicker({id:item.id,source:item.source,title:item.title,detail:item.detail || item.body,meta:item.meta,page:item.page,ref:item.ref});
+}
+function paintEntityTimeline() {
+  var out = document.getElementById('timeline-list');
+  var filters = document.getElementById('timeline-filters');
+  if (!out || !filters || !window.EntityTimelineCore) return;
+  var query = entityTimelineState.query;
+  if (query.length < 2) {
+    entityTimelineState.entries = []; entityTimelineState.result = null;
+    setText('timeline-title','Choose an entity or enter a topic');
+    setText('timeline-status','The timeline is built locally from the same six-source index as Search.');
+    setText('timeline-record-count','—'); setText('timeline-source-count','—'); setText('timeline-first-date','—'); setText('timeline-last-date','—');
+    filters.innerHTML = '';
+    out.innerHTML = '<div class="timeline-empty">Select a suggested entity above or type at least two characters.</div>';
+    return;
+  }
+  var all = window.EntityTimelineCore.build(intelligenceSearchState.index,query,{limit:150});
+  var activeSource = entityTimelineState.source === 'all' ? '' : entityTimelineState.source;
+  var current = activeSource ? window.EntityTimelineCore.build(intelligenceSearchState.index,query,{source:activeSource,limit:150}) : all;
+  entityTimelineState.result = all;
+  entityTimelineState.entries = current.entries;
+  setText('timeline-title','Timeline · ' + query);
+  setText('timeline-record-count',all.total);
+  setText('timeline-source-count',all.sources.length);
+  setText('timeline-first-date',timelineDate(all.firstSeen,true));
+  setText('timeline-last-date',timelineDate(all.lastSeen,true));
+  setText('timeline-status',(activeSource ? current.total + ' of ' + all.total : all.total) + ' matching stored record' + (all.total === 1 ? '' : 's') + (all.undated ? ' · ' + all.undated + ' undated' : '') + '. Newest first; gaps are not interpreted.');
+  var sourceCounts = all.entries.reduce(function (counts,item) { counts[item.source] = (counts[item.source] || 0) + 1; return counts; },{});
+  var filterSources = ['all'].concat(all.sources);
+  filters.innerHTML = filterSources.map(function (source) {
+    var label = source === 'all' ? 'All ' + all.total : source + ' ' + sourceCounts[source];
+    return '<button class="command-filter' + (entityTimelineState.source === source ? ' active' : '') + '" data-timeline-source="' + esc(source) + '" onclick="setEntityTimelineSource(\'' + timelineEncode(source) + '\',this)">' + esc(label) + '</button>';
+  }).join('');
+  if (!current.entries.length) {
+    out.innerHTML = '<div class="timeline-empty">No stored records match this entity or topic' + (activeSource ? ' in ' + esc(activeSource) : '') + '.</div>';
+    return;
+  }
+  var groups = [];
+  current.entries.forEach(function (item) {
+    var label = timelineDate(item.saved,false);
+    var group = groups[groups.length - 1];
+    if (!group || group.label !== label) { group = {label:label,items:[]}; groups.push(group); }
+    group.items.push(item);
+  });
+  out.innerHTML = groups.map(function (group) {
+    return '<div class="timeline-day"><div class="timeline-day-label">' + esc(group.label) + '</div><div class="timeline-day-items">' + group.items.map(function (item) {
+      var encoded = timelineEncode(item.id);
+      return '<article class="timeline-entry"><div class="timeline-entry-head"><div><div class="timeline-entry-title">' + esc(item.title) + '</div><div class="timeline-entry-detail">' + esc(item.detail || item.body || 'Open the source for context.') + '</div><div class="timeline-entry-meta">' + esc(item.source) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions"><button class="command-item-btn" onclick="openEntityTimelineItem(\'' + encoded + '\')">Open source</button><button class="command-item-btn" onclick="saveEntityTimelineItem(\'' + encoded + '\')">Save</button></div></div></article>';
+    }).join('') + '</div></div>';
+  }).join('');
 }
 
 // ── SAVED EVIDENCE SETS ──────────────────────────────────────────────────

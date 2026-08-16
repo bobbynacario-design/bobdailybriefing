@@ -26,11 +26,16 @@ and no model call is made merely to find or open existing material.
 - Storage is capped at 12 sets and 30 items per set inside the existing
   authenticated preferences document, requiring no new rules or backend.
 
-## Slice 3.3 — Entity timelines
+## Slice 3.3 — Entity timelines (implemented)
 
-- Group existing briefing, research, decision, and signal records by selected
-  company, asset, event, team, or topic.
-- Show dated source entries and changes without inventing missing continuity.
+- Build a newest-first timeline for any typed company, asset, event, team, or
+  topic from the existing six-source local index.
+- Offer quick picks only from structured entity fields already supplied by the
+  source, including assets, companies, market events, report tags, and teams.
+- Filter matching records by source, reopen every authoritative source, or save
+  an entry into an Evidence set.
+- Clearly label undated records and archive gaps; no continuity, causality, or
+  missing events are inferred.
 
 ## Slice 3.4 — Evidence-pack export
 
