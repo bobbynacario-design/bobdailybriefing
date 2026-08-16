@@ -16,6 +16,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="./lib/command-center-core.js"></script>
+<script src="./lib/command-review-core.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -444,6 +445,7 @@ window.fbSaveCommandPrefs = async function(prefs) {
     quietSources: prefs && prefs.quietSources || [],
     daily: prefs && prefs.daily || {date:'', pinned:[], dismissed:[]},
     delivery: prefs && prefs.delivery || {enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}},
+    review: prefs && prefs.review || {days:{}},
     updatedAt: new Date().toISOString()
   };
   await setDoc(doc(db, COLL, 'command-prefs-' + uid), body, { merge: true });
@@ -1606,9 +1608,23 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .command-delivery-audit{display:flex;flex-direction:column;gap:.3rem;margin-top:.6rem}
 .command-audit-row{display:grid;grid-template-columns:64px 44px minmax(0,1fr);gap:.4rem;font-family:var(--mono);font-size:8.5px;color:var(--txt3);line-height:1.4}
 .command-audit-type{color:var(--gold);text-transform:uppercase}.command-audit-row.failed .command-audit-type{color:var(--red)}
+.command-review-panel{margin-top:1rem}
+.command-review-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:1rem}
+.command-review-list{display:flex;flex-direction:column;gap:.4rem}
+.command-review-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;align-items:center;padding:.6rem .7rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg3)}
+.command-review-name{font-size:12px;color:var(--txt);line-height:1.4}.command-review-meta{font-family:var(--mono);font-size:8px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-top:.18rem}
+.command-review-actions{display:flex;gap:.25rem;flex-wrap:wrap;justify-content:flex-end}
+.command-review-state{border:1px solid var(--rim);background:transparent;color:var(--txt3);font-family:var(--mono);font-size:8px;border-radius:5px;padding:.24rem .4rem;cursor:pointer}
+.command-review-state.active{color:var(--txt);border-color:var(--gold);background:var(--gold-dim)}
+.command-review-state.active.ignored{color:var(--red);border-color:rgba(232,92,92,.4);background:var(--red-dim)}
+.command-review-close{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--rim)}
+.command-review-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;margin-bottom:.65rem}
+.command-review-stat{border:1px solid var(--rim);border-radius:8px;background:var(--bg3);padding:.6rem}.command-review-stat strong{display:block;font-family:var(--mono);font-size:18px;color:var(--txt)}.command-review-stat span{font-family:var(--mono);font-size:8px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em}
+.command-review-source{display:flex;justify-content:space-between;gap:.6rem;padding:.35rem 0;border-top:1px solid var(--rim);font-family:var(--mono);font-size:9px;color:var(--txt2)}
+.command-review-outcomes{font-size:10.5px;line-height:1.55;color:var(--txt2);padding:.55rem .65rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg3);margin-bottom:.55rem}
 @media(max-width:900px){.command-layout{grid-template-columns:1fr}.command-queue{max-height:none}}
-@media(max-width:900px){.command-source-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.command-delivery-grid{grid-template-columns:1fr}.command-thresholds{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls,.command-thresholds{grid-template-columns:1fr}.command-delivery-head{align-items:flex-start;flex-direction:column}}
+@media(max-width:900px){.command-source-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.command-delivery-grid,.command-review-grid{grid-template-columns:1fr}.command-thresholds{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.command-summary{grid-template-columns:repeat(2,1fr)}.command-five-item{grid-template-columns:26px minmax(0,1fr)}.command-five-item>.command-source{grid-column:2;justify-self:start}.command-source-controls,.command-thresholds{grid-template-columns:1fr}.command-delivery-head{align-items:flex-start;flex-direction:column}.command-review-row{grid-template-columns:1fr}.command-review-actions{justify-content:flex-start}}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -1733,6 +1749,13 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
       <div class="command-queue" id="command-queue"><div class="command-empty">Loading cross-feed priorities…</div></div>
     </section>
   </div>
+  <section class="command-panel command-review-panel">
+    <div class="command-panel-head"><div><div class="command-panel-title">Review loop</div><div class="command-panel-meta">Account-synced handling discipline · rolling 7 PHT days</div></div></div>
+    <div class="command-review-grid">
+      <div><div class="command-delivery-title">Today’s checklist</div><div class="command-settings-note">Classify each Morning 5 item, plus queue items you act on or dismiss. Closing the review explicitly marks anything still pending as ignored.</div><div id="command-review-today" class="command-review-list"><div class="command-empty">Today’s priorities will appear after the Command Center loads.</div></div></div>
+      <div><div class="command-delivery-title">Weekly discipline</div><div class="command-settings-note">These are workflow measures, not evidence of forecasting skill.</div><div id="command-review-week"><div class="command-empty">No review history yet.</div></div></div>
+    </div>
+  </section>
   <div class="radar-disclaimer">Priority is a deterministic triage aid built from existing app data. It does not create trades, bets, or new factual claims; open the source tab before acting.</div>
 </div>
 
@@ -3638,7 +3661,7 @@ var commandFilter = 'all';
 var commandLoadToken = 0;
 var commandCenterInputs = null;
 var commandSources = ['Briefing','Radar','Markets','Decisions','Sports'];
-var commandPreferences = {sourceWeights:{}, quietSources:[], daily:{date:'',pinned:[],dismissed:[]}, delivery:{enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}}, deliveryState:{audit:[]}};
+var commandPreferences = {sourceWeights:{}, quietSources:[], daily:{date:'',pinned:[],dismissed:[]}, delivery:{enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}}, deliveryState:{audit:[]}, review:{days:{}}};
 var commandPreferenceSaveChain = Promise.resolve();
 var commandPreferenceRevision = 0;
 
@@ -3677,7 +3700,8 @@ function normalizeCommandPreferences(raw) {
     deliveryState: {
       audit: raw.deliveryState && Array.isArray(raw.deliveryState.audit) ? raw.deliveryState.audit.slice(0, 20) : [],
       lastSentAt: raw.deliveryState && raw.deliveryState.lastSentAt || ''
-    }
+    },
+    review: window.CommandReviewCore ? window.CommandReviewCore.normalizeReview(raw.review) : {days:{}}
   };
 }
 
@@ -3705,6 +3729,11 @@ function rebuildCommandCenter() {
     preferences: commandPreferences,
     today: manilaDateKey()
   }));
+  if (window.CommandReviewCore) {
+    var capture = window.CommandReviewCore.captureDay(commandPreferences.review, commandCenterData, manilaDateKey(), new Date().toISOString());
+    commandPreferences.review = capture.review;
+    if (capture.changed) saveCommandPreferences('Today’s Morning 5 captured');
+  }
   paintCommandCenter();
 }
 
@@ -3851,6 +3880,37 @@ function clearCommandDailyState() {
 }
 
 function commandItemId(encoded) { try { return decodeURIComponent(encoded); } catch (e) { return ''; } }
+function commandFindItem(id) {
+  return commandCenterData && commandCenterData.items.find(function (item) { return item.id === id; }) || null;
+}
+function commandReviewItem(id) {
+  var day = commandPreferences.review && commandPreferences.review.days && commandPreferences.review.days[manilaDateKey()];
+  return day && day.items.find(function (item) { return item.id === id; }) || null;
+}
+function commandReviewSnapshot(item) {
+  if (!item) return null;
+  var rank = commandCenterData && commandCenterData.morningFive.findIndex(function (row) { return row.id === item.id; });
+  return Object.assign({}, item, {morningFive: rank >= 0, rank: rank >= 0 ? rank + 1 : 0});
+}
+function setCommandReviewState(encoded, state) {
+  var id = commandItemId(encoded);
+  var item = commandFindItem(id) || commandReviewItem(id);
+  if (!id || !item || !window.CommandReviewCore) return;
+  var current = commandReviewItem(id);
+  var nextState = current && current.state === state ? 'pending' : state;
+  var result = window.CommandReviewCore.setItemState(commandPreferences.review, manilaDateKey(), commandReviewSnapshot(item), nextState, new Date().toISOString());
+  commandPreferences.review = result.review;
+  paintCommandCenter();
+  saveCommandPreferences(nextState === 'pending' ? 'Review status cleared' : 'Marked ' + nextState);
+}
+function completeCommandReviewDay() {
+  if (!window.CommandReviewCore) return;
+  var result = window.CommandReviewCore.completeDay(commandPreferences.review, manilaDateKey(), new Date().toISOString());
+  commandPreferences.review = result.review;
+  paintCommandCenter();
+  saveCommandPreferences('Today’s review closed');
+  showToast('Review closed; remaining items marked ignored', 'ok');
+}
 function commandTogglePin(encoded) {
   var id = commandItemId(encoded);
   if (!id) return;
@@ -3866,6 +3926,10 @@ function commandTogglePin(encoded) {
 function commandDismiss(encoded) {
   var id = commandItemId(encoded);
   if (!id) return;
+  var item = commandFindItem(id);
+  if (item && window.CommandReviewCore) {
+    commandPreferences.review = window.CommandReviewCore.setItemState(commandPreferences.review, manilaDateKey(), commandReviewSnapshot(item), 'ignored', new Date().toISOString()).review;
+  }
   var daily = commandPreferences.daily;
   if (daily.dismissed.indexOf(id) < 0) daily.dismissed.push(id);
   var pinned = daily.pinned.indexOf(id);
@@ -3888,10 +3952,14 @@ function commandGo(page) {
 }
 function commandItemHtml(item, rank, featured) {
   var sourceClass = esc(item.source).replace(/[^A-Za-z0-9_-]/g, '');
-  var encodedId = encodeURIComponent(item.id);
+  var encodedId = encodeURIComponent(item.id).replace(/'/g, '%27');
+  var review = commandReviewItem(item.id);
+  var quickState = item.source === 'Reliability' ? 'reviewed' : 'acted';
+  var quickLabel = quickState === 'reviewed' ? 'Reviewed' : 'Acted';
   var body = '<div><div class="command-item-title">' + esc(item.title) + '</div>' +
     '<div class="command-item-detail">' + esc(item.detail || 'Open source for detail.') + '</div></div>';
   var actions = '<div class="command-item-actions"><span class="command-source ' + sourceClass + '">' + esc(item.source) + '</span>' +
+    '<button class="command-item-btn' + (review && review.state === quickState ? ' pinned' : '') + '" onclick="event.stopPropagation();setCommandReviewState(\'' + encodedId + '\',\'' + quickState + '\')">' + quickLabel + '</button>' +
     (item.source === 'Reliability' ? '' :
       '<button class="command-item-btn' + (item.pinned ? ' pinned' : '') + '" onclick="event.stopPropagation();commandTogglePin(\'' + encodedId + '\')">' + (item.pinned ? 'Pinned' : 'Pin') + '</button>' +
       '<button class="command-item-btn" onclick="event.stopPropagation();commandDismiss(\'' + encodedId + '\')">Dismiss</button>') + '</div>';
@@ -3929,6 +3997,41 @@ function paintCommandCenter() {
   setText('command-queue-meta', rows.length + ' of ' + commandCenterData.items.length + ' items' +
     (commandCenterData.counts.hidden ? ' / ' + commandCenterData.counts.hidden + ' hidden' : ''));
   setText('command-sub', 'Prioritized at ' + new Date(commandCenterData.generatedAt).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', hour12:false}) + ' PHT / tap any item to open its source.');
+  renderCommandReview();
+}
+
+function renderCommandReview() {
+  var todayOut = document.getElementById('command-review-today');
+  var weekOut = document.getElementById('command-review-week');
+  if (!todayOut || !weekOut || !window.CommandReviewCore) return;
+  var today = manilaDateKey();
+  var day = commandPreferences.review && commandPreferences.review.days && commandPreferences.review.days[today];
+  var items = day && day.items || [];
+  var handled = items.filter(function (item) { return item.state !== 'pending'; }).length;
+  var rows = items.map(function (item) {
+    var encoded = encodeURIComponent(item.id).replace(/'/g, '%27');
+    var actions = ['acted','reviewed','ignored'].map(function (state) {
+      return '<button class="command-review-state ' + state + (item.state === state ? ' active' : '') + '" onclick="setCommandReviewState(\'' + encoded + '\',\'' + state + '\')">' + state.charAt(0).toUpperCase() + state.slice(1) + '</button>';
+    }).join('');
+    return '<div class="command-review-row"><div><div class="command-review-name">' + esc(item.title) + '</div><div class="command-review-meta">' + esc(item.source) + (item.morningFive ? ' · Morning 5 #' + item.rank : ' · tracked queue item') + '</div></div><div class="command-review-actions">' + actions + '</div></div>';
+  }).join('');
+  todayOut.innerHTML = rows || '<div class="command-empty">No priorities captured today.</div>';
+  if (items.length) todayOut.innerHTML += '<div class="command-review-close"><span class="command-hidden-note">' + handled + ' of ' + items.length + ' classified' + (day.completedAt ? ' · review closed' : '') + '</span><button class="tool-chip" onclick="completeCommandReviewDay()"' + (day.completedAt ? ' disabled' : '') + '>' + (day.completedAt ? 'Review closed' : 'Close review') + '</button></div>';
+
+  var summary = window.CommandReviewCore.weeklySummary(commandPreferences.review, commandCenterInputs && commandCenterInputs.decisions || [], today);
+  var outcome = summary.outcomes.sample
+    ? 'Linked closed decisions: ' + summary.outcomes.sample + ' · ' + summary.outcomes.win + ' win · ' + summary.outcomes.loss + ' loss · ' + summary.outcomes.scratch + ' scratch · ' + summary.outcomes.beatBenchmark + ' beat benchmark.'
+    : 'No closed decision outcomes are linked to acted Command Center items this week.';
+  var sourceRows = summary.sources.filter(function (row) { return row.ignored || row.pending; }).slice(0, 5).map(function (row) {
+    return '<div class="command-review-source"><span>' + esc(row.source) + '</span><span>' + row.ignored + ' ignored · ' + row.pending + ' pending / ' + row.total + '</span></div>';
+  }).join('');
+  weekOut.innerHTML = '<div class="command-review-stats">' +
+    '<div class="command-review-stat"><strong>' + summary.completedDays + '/' + summary.capturedDays + '</strong><span>Days closed</span></div>' +
+    '<div class="command-review-stat"><strong>' + summary.completionRate + '%</strong><span>Review completion</span></div>' +
+    '<div class="command-review-stat"><strong>' + summary.morningFiveHandlingRate + '%</strong><span>Morning 5 handled</span></div>' +
+    '<div class="command-review-stat"><strong>' + summary.totals.ignored + '</strong><span>Signals ignored</span></div></div>' +
+    '<div class="command-review-outcomes">' + esc(outcome) + ' Outcomes are descriptive journal records, not a forecast score.</div>' +
+    (sourceRows || '<div class="command-hidden-note">No ignored or pending signals in the rolling seven-day window.</div>');
 }
 function setCommandFilter(filter, button) {
   commandFilter = filter || 'all';

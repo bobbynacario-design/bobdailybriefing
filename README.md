@@ -12,6 +12,9 @@ Private daily intelligence briefing desk for Bob.
   account; reliability warnings cannot be silenced. Optional Firebase web-push
   delivery sends a materially changed Morning 5 during the PHT morning window,
   with quiet hours, source thresholds, a test action, audit history, and mute.
+  An account-synced review loop classifies each priority as acted, reviewed, or
+  ignored and shows seven-day review discipline, source-level misses, and linked
+  closed decision outcomes without treating workflow metrics as forecast skill.
 
 - **Daily briefing** — OpenAI-generated intelligence desk (see below).
 - **📡 Market Radar** — daily ranking of ~30 assets across 11 themes, with a
@@ -100,6 +103,8 @@ retained only as recovery if webhook delivery fails. See
 
 Morning 5 web-push setup and verification are documented in
 [`docs/phase-2-delivery.md`](docs/phase-2-delivery.md).
+The review-state model and metric definitions are documented in
+[`docs/phase-2-review-loop.md`](docs/phase-2-review-loop.md).
 
 Notes:
 

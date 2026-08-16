@@ -33,9 +33,14 @@ generation.
 - Deterministic server-side reconstruction uses the same Command Center core and
   adds no LLM cost.
 
-## Slice 2.4 — Review loop
+## Slice 2.4 — Review loop (implemented)
 
-- End-of-day review checklist for acted-on items.
-- Weekly command-center outcomes and ignored-signal analysis.
-- Measure whether prioritization improves review discipline without overstating
-  forecasting accuracy.
+- Account-synced end-of-day checklist for the Morning 5 and any additional
+  queue items explicitly acted on.
+- Explicit Acted, Reviewed, and Ignored states; closing a day classifies any
+  remaining pending items as ignored rather than silently treating them as done.
+- Rolling seven-PHT-day completion, Morning 5 handling, and ignored/pending
+  source analysis, backed by a bounded 35-day review history.
+- Linked closed decision outcomes are descriptive journal counts only. The UI
+  labels workflow measures separately and does not present them as a forecast
+  score or evidence of predictive skill.

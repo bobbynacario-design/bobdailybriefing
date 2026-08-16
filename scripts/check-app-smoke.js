@@ -35,20 +35,25 @@ assert.deepEqual(duplicateIds(sports), [], 'sports.html must not contain duplica
 assert.ok(html.includes('type="module"'), 'Firebase application script must remain a module');
 assert.ok(html.includes('manifest.webmanifest'), 'PWA manifest link is required');
 assert.ok(html.includes('./lib/command-center-core.js'), 'Command Center core must load before the app script');
+assert.ok(html.includes('./lib/command-review-core.js'), 'Command review core must load before the app script');
 assert.ok(html.includes("if (id==='command') renderCommandCenter()"), 'navigation must render Command Center');
 assert.ok(html.includes('fbLoadCommandPrefs') && html.includes('fbSaveCommandPrefs'),
   'Command Center preferences must load and save through the signed-in account');
 assert.ok(html.includes('Why this rank?'), 'Command Center must explain item ranking');
 assert.ok(html.includes('fbEnableBriefingDelivery') && html.includes('command-delivery-audit'),
   'Command Center must expose device delivery and its audit trail');
+assert.ok(html.includes('completeCommandReviewDay') && html.includes('command-review-week'),
+  'Command Center must expose the daily review checklist and weekly discipline view');
 assert.ok(functionsIndex.includes('exports.deliverMorningFive = onSchedule') &&
   functionsIndex.includes('exports.registerBriefingDevice = onCall') &&
   functionsIndex.includes('exports.muteBriefingDelivery = onCall'),
   'Functions must schedule Morning 5 delivery and manage authenticated devices');
 assert.ok(serviceWorker.includes('onBackgroundMessage') && serviceWorker.includes("action: 'mute'"),
   'service worker must receive background delivery and expose a mute action');
-assert.ok(pagesWorkflow.includes('cp lib/command-center-core.js _site/lib/'),
+assert.ok(pagesWorkflow.includes('cp lib/command-center-core.js') && pagesWorkflow.includes('_site/lib/'),
   'Pages artifact must include the Command Center core');
+assert.ok(pagesWorkflow.includes('lib/command-review-core.js') && pagesWorkflow.includes('_site/lib/'),
+  'Pages artifact must include the Command review core');
 assert.ok(sports.includes('sports-public.json'), 'public sports page must load its public data mirror');
 assert.ok(!/function\s+getGeminiPrompt\s*\([^)]*\)[\s\S]*function\s+getGeminiPrompt\s*\(/.test(html),
   'getGeminiPrompt must have only one declaration');
