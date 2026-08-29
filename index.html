@@ -626,6 +626,20 @@ window.fbLoadMiro = async function() {
   }
 };
 
+window.fbLoadNews = async function() {
+  try {
+    var latestSnap = await getDoc(doc(db, COLL, 'news-latest'));
+    if (!latestSnap.exists()) return null;
+    var dateKey = latestSnap.data().value;
+    if (!dateKey) return null;
+    var docSnap = await getDoc(doc(db, COLL, 'news-' + dateKey));
+    return docSnap.exists() ? docSnap.data() : null;
+  } catch(e) {
+    console.error('Insurance news load failed:', e);
+    return null;
+  }
+};
+
 window.fbLoadMiroControl = async function() {
   try {
     var snap = await getDoc(doc(db, COLL, 'miro-control'));
@@ -1642,7 +1656,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .command-settings>summary::before{content:'＋';color:var(--gold);margin-right:.5rem}.command-settings[open]>summary::before{content:'−'}
 .command-settings-body{padding:.15rem .9rem .9rem;border-top:1px solid var(--rim)}
 .command-settings-note{font-size:11px;color:var(--txt3);line-height:1.55;margin:.65rem 0}
-.command-source-controls{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.5rem}
+.command-source-controls{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.5rem}
 .command-source-control{border:1px solid var(--rim);border-radius:9px;background:var(--bg3);padding:.6rem}
 .command-source-control-head{display:flex;align-items:center;justify-content:space-between;gap:.4rem;margin-bottom:.5rem}
 .command-source-control-name{font-family:var(--mono);font-size:10px;color:var(--txt)}
@@ -4342,7 +4356,7 @@ var commandCenterData = null;
 var commandFilter = 'all';
 var commandLoadToken = 0;
 var commandCenterInputs = null;
-var commandSources = ['Briefing','Radar','Markets','Decisions','Sports'];
+var commandSources = ['Briefing','News','Radar','Markets','Decisions','Sports'];
 var commandPreferences = {sourceWeights:{}, quietSources:[], daily:{date:'',pinned:[],dismissed:[]}, delivery:{enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}}, deliveryState:{audit:[]}, review:{days:{}}};
 var commandPreferenceSaveChain = Promise.resolve();
 var commandPreferenceRevision = 0;
@@ -4643,6 +4657,17 @@ function commandGo(page) {
   var button = document.querySelector('.ntab[data-page="' + page + '"]');
   switchPage(page, button);
 }
+// Queue items that carry a publisher url (currently insurance news) get a direct
+// way out to the article. Tapping the row still routes to the source TAB, which
+// for news is the briefing — useful, but not the story itself.
+//
+// Every url reaching here came from a fetched feed rather than a model, and the
+// protocol test is the last stop before a string is handed to window.open.
+function commandOpenUrl(encoded) {
+  var url = decodeURIComponent(encoded);
+  if (!/^https?:\/\//i.test(url)) return;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 function commandItemHtml(item, rank, featured) {
   var sourceClass = esc(item.source).replace(/[^A-Za-z0-9_-]/g, '');
   var encodedId = encodeURIComponent(item.id).replace(/'/g, '%27');
@@ -4651,7 +4676,12 @@ function commandItemHtml(item, rank, featured) {
   var quickLabel = quickState === 'reviewed' ? 'Reviewed' : 'Acted';
   var body = '<div><div class="command-item-title">' + esc(item.title) + '</div>' +
     '<div class="command-item-detail">' + esc(item.detail || 'Open source for detail.') + '</div></div>';
+  var openBtn = /^https?:\/\//i.test(String(item.url || ''))
+    ? '<button class="command-item-btn" onclick="event.stopPropagation();commandOpenUrl(\'' +
+      encodeURIComponent(item.url).replace(/'/g, '%27') + '\')">Open ↗</button>'
+    : '';
   var actions = '<div class="command-item-actions"><span class="command-source ' + sourceClass + '">' + esc(item.source) + '</span>' +
+    openBtn +
     '<button class="command-item-btn" onclick="event.stopPropagation();saveCommandEvidence(\'' + encodedId + '\')">Save</button>' +
     '<button class="command-item-btn' + (review && review.state === quickState ? ' pinned' : '') + '" onclick="event.stopPropagation();setCommandReviewState(\'' + encodedId + '\',\'' + quickState + '\')">' + quickLabel + '</button>' +
     (item.source === 'Reliability' ? '' :
@@ -4747,7 +4777,8 @@ function renderCommandCenter() {
   };
   Promise.all([
     read(window.fbLoadRadar), read(window.fbLoadMiro), read(window.fbLoadSports),
-    read(window.fbLoadDecisions), read(window.fbLoadFeedHealth), read(window.fbLoadCommandPrefs)
+    read(window.fbLoadDecisions), read(window.fbLoadFeedHealth), read(window.fbLoadCommandPrefs),
+    read(window.fbLoadNews)
   ]).then(function (data) {
     if (token !== commandLoadToken) return;
     window._feedHealthData = data[4] || window._feedHealthData || null;
@@ -4758,6 +4789,7 @@ function renderCommandCenter() {
       markets: data[1],
       sports: data[2],
       decisions: data[3],
+      news: data[6],
       health: window._feedHealthData,
       sportsFollows: commandSportsFollows(data[2])
     };

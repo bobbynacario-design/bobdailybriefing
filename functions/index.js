@@ -712,13 +712,14 @@ async function pointedDocument(db, pointerId, prefix) {
 }
 
 async function sharedCommandInputs(db) {
-  const [radar, markets, sports, health] = await Promise.all([
+  const [radar, markets, sports, news, health] = await Promise.all([
     pointedDocument(db, "radar-latest", "radar-"),
     pointedDocument(db, "miro-latest", "miro-"),
     pointedDocument(db, "sports-latest", "sports-"),
+    pointedDocument(db, "news-latest", "news-"),
     db.collection(BRIEFINGS_COLL).doc("feed-health").get().then((snap) => snap.exists ? snap.data() : null),
   ]);
-  return {radar, markets, sports, health};
+  return {radar, markets, sports, news, health};
 }
 
 async function userCommandInputs(db, uid, prefs, shared, now) {
