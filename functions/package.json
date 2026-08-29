@@ -6,7 +6,7 @@
     "pretest": "npm run sync:command-core",
     "test": "node --test *.test.js",
     "precheck": "npm run sync:command-core",
-    "check": "node --check index.js && node --check delivery-core.js && node --check research-result.js && node --check webhook-event.js",
+    "check": "node --check index.js && node --check delivery-core.js && node --check research-result.js && node --check webhook-event.js && node --check briefing-evidence.js",
     "predeploy": "npm run sync:command-core",
     "deploy": "firebase deploy --only functions:bobdailybriefing --project pokerhq-a67e4"
   },

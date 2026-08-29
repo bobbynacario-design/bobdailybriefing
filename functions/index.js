@@ -12,6 +12,7 @@ const OpenAI = require("openai");
 const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
+const {buildEvidence, verifyGrounding} = require("./briefing-evidence");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
   isMaterialChange, notificationCopy,
@@ -99,7 +100,38 @@ async function recordUsage(db, feature, model, usage, dateKey) {
   }
 }
 
-function buildBriefingPrompt(dateLabel) {
+// Rules that only apply when we have a fetched-news block to ground on. Returns
+// [] when there is nothing to ground with, so the prompt is byte-identical to
+// the pre-grounding version and the fallback path stays the known-good one.
+//
+// The insurance section becomes CLOSED — only the supplied stories — because
+// that is the whole point: a section whose every item can be re-opened from the
+// app. Interruptions stays OPEN, because the feed is Australian insurance trade
+// press and a Philippine port closure or a regional supply-chain failure will
+// not be in it; forcing that section closed would trade real coverage for a
+// tidier rule.
+function groundingRules(evidence) {
+  if (!evidence || evidence.unavailable || !evidence.block) return [];
+  return [
+    "",
+    "GROUNDING — this overrides the instructions above where they conflict:",
+    "- A list of real, already-fetched Australian insurance stories appears at the end of this prompt.",
+    "- Build the insurance section ONLY from that list. Do not web-search for it and do not add stories from your own knowledge.",
+    "- Choose the 3-5 stories most relevant to Bob. If fewer than 3 are genuinely relevant, return fewer. Never pad.",
+    "- For each chosen story: copy its headline as the headline, copy its publisher as the source, and copy its url EXACTLY as written.",
+    "- Never invent, guess, shorten or tidy a url. A url that is not in the list is worse than no url at all.",
+    "- body remains your own 2-3 sentence summary, and relevance remains the Bob-facing insight. Those are yours to write; the headline, publisher and url are not.",
+    "- The interruptions section may also draw on the list where a story fits, using the same exact url. For anything else in that section, web-search as usual and leave url empty.",
+    "- Leave url empty in every other section.",
+  ];
+}
+
+function evidenceBlock(evidence) {
+  if (!evidence || evidence.unavailable || !evidence.block) return [];
+  return ["", evidence.block];
+}
+
+function buildBriefingPrompt(dateLabel, evidence) {
   const date = dateLabel || new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
     timeZone: "Asia/Manila",
@@ -135,8 +167,8 @@ function buildBriefingPrompt(dateLabel) {
     '  "sections": {',
     '    "global": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "high"}],',
     '    "ph": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "med", "market_category": "macro", "market_subject": ""}],',
-    '    "insurance": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "high"}],',
-    '    "interruptions": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "high"}],',
+    '    "insurance": [{"headline": "", "body": "", "source": "", "url": "", "relevance": "", "relevance_level": "high"}],',
+    '    "interruptions": [{"headline": "", "body": "", "source": "", "url": "", "relevance": "", "relevance_level": "high"}],',
     '    "ai": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "low"}],',
     '    "markets": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "none", "market_category": "none", "market_subject": ""}],',
     '    "ev": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "low"}]',
@@ -167,7 +199,7 @@ function buildBriefingPrompt(dateLabel) {
     "  - Omit market_category for all other sections (global, insurance, interruptions, ai, ev).",
     "- Each story body should be 2-3 concise sentences.",
     "- Market values should be current and realistic.",
-  ].join("\n");
+  ].concat(groundingRules(evidence)).concat(evidenceBlock(evidence)).join("\n");
 }
 
 function extractText(responseJson) {
@@ -193,6 +225,31 @@ function parseBriefing(raw) {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
+// Load the day's fetched insurance headlines so the briefing can be grounded in
+// them. NEVER throws: if the news feed is unreachable, stale or empty, the
+// briefing still generates on the pre-grounding prompt and records why, rather
+// than a news outage taking down briefing generation entirely.
+async function loadNewsEvidence(db) {
+  try {
+    const pointer = await db.collection(BRIEFINGS_COLL).doc("news-latest").get();
+    const value = pointer.exists && pointer.data() && pointer.data().value;
+    if (!value) return {evidence: null, reason: "no-pointer"};
+
+    const snap = await db.collection(BRIEFINGS_COLL).doc("news-" + value).get();
+    if (!snap.exists) return {evidence: null, reason: "no-doc"};
+
+    const evidence = buildEvidence(snap.data());
+    if (!evidence) return {evidence: null, reason: "no-doc"};
+    if (evidence.unavailable) {
+      return {evidence: null, reason: evidence.unavailable, ageDays: evidence.ageDays || null};
+    }
+    return {evidence, reason: null};
+  } catch (error) {
+    logger.warn("news evidence unavailable", {message: error.message});
+    return {evidence: null, reason: "error"};
+  }
+}
+
 exports.generateBobDailyBriefing = onCall(
   {
     region: "asia-southeast1",
@@ -205,7 +262,10 @@ exports.generateBobDailyBriefing = onCall(
       throw new HttpsError("unauthenticated", "Sign in before generating a briefing.");
     }
 
-    const prompt = buildBriefingPrompt(String((request.data && request.data.date) || "").trim());
+    const db = getFirestore();
+    const {evidence, reason: groundingReason} = await loadNewsEvidence(db);
+    const prompt = buildBriefingPrompt(
+      String((request.data && request.data.date) || "").trim(), evidence);
     const model = String((request.data && request.data.model) || DEFAULT_MODEL);
 
     const body = {
@@ -274,8 +334,35 @@ exports.generateBobDailyBriefing = onCall(
       throw new HttpsError("internal", "OpenAI returned invalid briefing JSON.");
     }
 
+    // Check the returned citations against what was actually supplied, and
+    // record the outcome on the briefing so the app can show provenance —
+    // including when grounding did not happen, and why.
+    const verified = verifyGrounding(briefing, evidence);
+    briefing = verified.briefing;
+    briefing.grounding = evidence ? {
+      mode: "grounded",
+      snapshot: "news-" + evidence.date,
+      snapshotDate: evidence.date,
+      snapshotAgeDays: evidence.ageDays,
+      offered: evidence.itemCount,
+      pool: evidence.poolCount,
+      feedsOk: evidence.feedsOk,
+      feedsTotal: evidence.feedsTotal,
+      sources: evidence.sources,
+      grounded: verified.stats.grounded,
+      ungrounded: verified.stats.ungrounded,
+      unmatchedUrls: verified.stats.unmatched,
+      bySection: verified.stats.bySection,
+    } : {mode: "ungrounded", reason: groundingReason || "unavailable"};
+
+    if (verified.stats.unmatched) {
+      logger.warn("briefing cited urls that were not supplied", {
+        count: verified.stats.unmatched, snapshot: evidence && evidence.date,
+      });
+    }
+
     // Record token usage to the shared LLM cost ledger (no-throw).
-    await recordUsage(getFirestore(), "briefing", model, extractUsage(json), phtDateKey());
+    await recordUsage(db, "briefing", model, extractUsage(json), phtDateKey());
 
     return {
       model,
