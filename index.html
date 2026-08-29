@@ -919,6 +919,8 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .card-body{font-size:13px;color:var(--txt2);line-height:1.75;margin-bottom:.7rem}
 .card-footer{display:flex;align-items:flex-start;gap:.6rem;flex-wrap:wrap}
 .src{font-family:var(--mono);font-size:10px;color:var(--txt3);background:var(--bg3);border:1px solid var(--rim);border-radius:5px;padding:2px 8px;white-space:nowrap;flex-shrink:0}
+a.src{text-decoration:none;cursor:pointer;transition:color .15s,border-color .15s}
+a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .rel-text{font-size:12px;color:var(--txt2);line-height:1.5;flex:1}
 .rel-text strong{color:var(--gold);font-weight:500}
 .rel-none-txt{font-size:11px;color:var(--txt3);font-style:italic}
@@ -7519,6 +7521,44 @@ function resetBriefConsole() {
   setText('reader-meta', 'All stories visible');
 }
 
+// Where the insurance section came from, stated plainly. A briefing is either
+// built from the day's fetched news snapshot or it is not, and the reader should
+// never have to guess which — an ungrounded briefing looks identical on the page
+// otherwise. Warns when the model cited a url that was not in the snapshot: the
+// link is already withheld server-side, and this is where that shows.
+//
+// The element is created on demand next to the schema line so this needs no
+// markup or layout change.
+function renderGroundingLine(data, anchor) {
+  if (!anchor || !anchor.parentNode) return;
+  var el = document.getElementById('grounding-line');
+  var g = data && data.grounding;
+  if (!g || !g.mode) { if (el) el.style.display = 'none'; return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'grounding-line';
+    el.style.marginTop = '.35rem';
+    anchor.parentNode.insertBefore(el, anchor.nextSibling);
+  }
+  el.style.display = '';
+  if (g.mode === 'grounded') {
+    var linked = Number(g.grounded || 0);
+    var total = linked + Number(g.ungrounded || 0);
+    var parts = ['Insurance grounded in ' + (g.snapshot || 'news snapshot'),
+      linked + '/' + total + ' stories linked',
+      (g.feedsOk || 0) + '/' + (g.feedsTotal || 0) + ' feeds'];
+    if (g.unmatchedUrls) {
+      parts.push(g.unmatchedUrls + ' unverified link' + (g.unmatchedUrls === 1 ? '' : 's') + ' withheld');
+    }
+    el.className = 'qa-line ' + (g.unmatchedUrls ? 'warn' : 'ok');
+    el.textContent = parts.join(' / ') + '.';
+  } else {
+    el.className = 'qa-line warn';
+    el.textContent = 'Insurance NOT grounded (' + (g.reason || 'unavailable') +
+      ') - sources are model-supplied and may not be linkable.';
+  }
+}
+
 function renderBriefConsole(data, schemaErrors) {
   var stats = getStoryStats(data);
   var counts = stats.counts;
@@ -7573,6 +7613,7 @@ function renderBriefConsole(data, schemaErrors) {
     qa.className = 'qa-line ' + (schemaErrors && schemaErrors.length ? 'warn' : 'ok');
     qa.textContent = schemaErrors && schemaErrors.length ? ('Schema warnings: ' + schemaErrors.slice(0, 2).join(' / ')) : 'Schema check passed for required briefing fields.';
   }
+  renderGroundingLine(data, qa);
   updateCompactButton();
   applyRelevanceFilter();
 }
@@ -7679,7 +7720,7 @@ function parseInput(raw) {
 }
 
 function normalise(d) {
-  var r = {date:d.date||'', markets:d.markets||null, peso:d.peso||d.fx||null, weather:d.weather||null, watch:d.watch||'', watch_source:d.watch_source||'', sections:{}};
+  var r = {date:d.date||'', markets:d.markets||null, peso:d.peso||d.fx||null, weather:d.weather||null, watch:d.watch||'', watch_source:d.watch_source||'', grounding:d.grounding||null, sections:{}};
   var secs = Array.isArray(d.sections) ? d.sections : Object.keys(d.sections).map(function(k){ return {id:k,stories:d.sections[k]}; });
   secs.forEach(function(sec) {
     r.sections[sec.id] = (sec.stories||[]).map(function(st) {
@@ -7687,6 +7728,11 @@ function normalise(d) {
         headline:st.headline||'',
         body:st.body||'',
         source:st.source||'',
+        // Carried through so a pasted briefing keeps the same provenance a
+        // generated one has. Dropping them here would quietly downgrade the
+        // paste path to unlinkable sources.
+        url:st.url||'',
+        grounded:st.grounded===true,
         relevance:st.relevant===false?'':(st.relevance||''),
         relevance_level:st.relevance_level||''
       };
@@ -7799,7 +7845,7 @@ function renderBriefing() {
       secHTML += '<div class="card-main">';
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
-      if (st.source) secHTML += '<span class="src">📍 '+esc(st.source)+'</span>';
+      if (st.source) secHTML += srcHTML(st);
       secHTML += '</div>';
       // Column 2: Bob's relevance note.
       secHTML += '<div class="card-aside">';
@@ -7853,6 +7899,21 @@ function setTick(vi,mi,val,mov) {
 }
 
 function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// A grounded story carries the publisher's own url, verified server-side against
+// the feed the story was actually drawn from. Render that as a link so the
+// source is one click away. Anything without a verified url stays plain text —
+// that visible difference between a citation and a claim is the point, so do NOT
+// make this fall back to linking a bare source name.
+//
+// The http(s) test is defence in depth: verifyGrounding already refuses any url
+// it did not supply, but this is the last stop before a string becomes an href.
+function srcHTML(st) {
+  var label = '📍 ' + esc(st.source);
+  var url = String(st && st.url || '');
+  if (!/^https?:\/\//i.test(url)) return '<span class="src">' + label + '</span>';
+  return '<a class="src" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(url) + '">' + label + ' ↗</a>';
+}
 
 function clearBriefing() {
   document.getElementById('raw-input').value='';
