@@ -76,10 +76,29 @@ syndicates, not a hot path.
 - `rank.js` — pure. Dedupe, window, score, rank, and the document shape.
 - `refresh-news.js` — the only file that does I/O.
 
+## Schedule
+
+Managed by `.github/workflows/refresh-intelligence.yml`:
+
+| Cron (UTC) | PHT | Purpose |
+|---|---|---|
+| `45 21 * * *` | 05:45 daily | Production run |
+| `45 0 * * *` | 08:45 daily | Catch-up |
+
+05:45 puts it ahead of Radar (06:00) and Markets (06:15), and 15 minutes before
+`deliverMorningFive` starts its 06:00–11:30 PHT checks, so the day's headlines
+are in Firestore before anything reads them.
+
+The catch-up costs nothing when it is not needed: the run is a no-op if today's
+doc exists, so it exits `skipped` in about a second without fetching a feed. It
+still lands inside the delivery window, so a recovered run can reach a later
+delivery check.
+
+To run one on demand: Actions → *Refresh intelligence feeds* → Run workflow →
+feed `news`.
+
 ## Not done yet
 
-- **No schedule.** Nothing runs this unattended; it needs a cron in
-  `.github/workflows/refresh-intelligence.yml` at ~05:45 PHT, before the briefing.
 - **Nothing reads the doc.** No Command Center source, no front-end surface, and
   the briefing is not yet grounded in it.
 - **Regulators are covered indirectly**, via insuranceNEWS's regulatory section.

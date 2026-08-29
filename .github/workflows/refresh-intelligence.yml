@@ -3,8 +3,10 @@ name: Refresh intelligence feeds
 on:
   schedule:
     # GitHub cron is UTC. PHT is UTC+8.
+    - cron: "45 21 * * *"    # News 05:45 PHT daily
     - cron: "0 22 * * 0-4"   # Radar 06:00 PHT Monday-Friday
     - cron: "15 22 * * *"    # Markets 06:15 PHT daily
+    - cron: "45 0 * * *"     # News catch-up 08:45 PHT daily
     - cron: "30 0 * * 1-5"   # Radar catch-up 08:30 PHT Monday-Friday
   workflow_dispatch:
     inputs:
@@ -13,12 +15,43 @@ on:
         required: true
         default: radar
         type: choice
-        options: [radar, markets]
+        options: [radar, markets, news]
 
 permissions:
   contents: read
 
 jobs:
+  # News runs FIRST at 05:45 PHT — ahead of Radar (06:00) and Markets (06:15),
+  # and 15 minutes before deliverMorningFive begins its 06:00-11:30 PHT checks,
+  # so the day's headlines are in Firestore before anything reads them.
+  #
+  # The catch-up at 08:45 PHT is free: refresh-news is a no-op when today's doc
+  # already exists, so a successful 05:45 run makes the second one exit as
+  # 'skipped' without fetching. It still lands inside the delivery window, so a
+  # recovered run can reach a later delivery check.
+  #
+  # No OPENAI_API_KEY here, deliberately: this feed makes no model call, and
+  # handing it a key it does not use would obscure that.
+  news:
+    if: github.event.schedule == '45 21 * * *' || github.event.schedule == '45 0 * * *' || github.event.inputs.feed == 'news'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: refresh-news
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: news/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix news ci
+      - run: npm --prefix news run refresh
+
   radar:
     if: github.event.schedule == '0 22 * * 0-4' || github.event.schedule == '30 0 * * 1-5' || github.event.inputs.feed == 'radar'
     runs-on: ubuntu-latest
