@@ -2860,7 +2860,8 @@ function loadIntelligenceSearchData() {
     intelligenceSearchRead(window.fbLoadDecisions, []),
     intelligenceSearchRead(window.fbLoadRadar, null),
     intelligenceSearchRead(window.fbLoadMiro, null),
-    intelligenceSearchRead(window.fbLoadSports, null)
+    intelligenceSearchRead(window.fbLoadSports, null),
+    intelligenceSearchRead(window.fbLoadNews, null)
   ]).then(function (data) {
     intelligenceSearchState.briefings = data[0] || [];
     intelligenceSearchState.reports = data[1] || [];
@@ -2869,7 +2870,7 @@ function loadIntelligenceSearchData() {
     intelligenceSearchState.index = window.IntelligenceSearchCore.buildIndex({
       briefings: intelligenceSearchState.briefings,
       reports: builtins.concat(intelligenceSearchState.reports),
-      decisions: data[2], radar: data[3], markets: data[4], sports: data[5]
+      decisions: data[2], radar: data[3], markets: data[4], sports: data[5], news: data[6]
     });
     intelligenceSearchState.loaded = true;
     intelligenceSearchState.loading = false;
@@ -2961,8 +2962,18 @@ function openIntelligenceSearchResult(index) {
   openIndexedIntelligenceItem(item);
 }
 
+// A news record's source is the publisher's article, not a tab in this app.
+// Opening it beats routing to the briefing page, which at best mentions the
+// story and after a day or two will have moved on entirely. Falls through to
+// normal page routing if the record somehow carries no url.
+function openNewsRecord(ref) {
+  if (!/^https?:\/\//i.test(String(ref || ''))) return false;
+  window.open(ref, '_blank', 'noopener,noreferrer');
+  return true;
+}
 function openIndexedIntelligenceItem(item) {
   if (!item) return;
+  if (item.source === 'News' && openNewsRecord(item.ref)) return;
   if (item.source === 'Briefing') {
     var archived = intelligenceSearchState.briefings.find(function (entry) { return entry.key === item.ref; });
     if (archived && !(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
@@ -3322,6 +3333,7 @@ async function openEvidenceItem(setEncoded,keyEncoded) {
     openReport(item.ref);
     return;
   }
+  if (item.source === 'News' && openNewsRecord(item.ref)) return;
   var page = item.page || (item.source === 'Briefing' ? 'today' : 'evidence');
   switchPage(page,document.querySelector('.ntab[data-page="' + page + '"]'));
 }
