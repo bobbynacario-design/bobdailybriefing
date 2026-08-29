@@ -23,6 +23,7 @@ jobs:
             radar/package-lock.json
             miro/package-lock.json
             sports/package-lock.json
+            news/package-lock.json
       - name: Install workspaces
         run: npm run install:all
       - name: Run complete verification suite
