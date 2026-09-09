@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
-import {readFileSync,existsSync} from 'node:fs';
+import {readFileSync,existsSync,readdirSync} from 'node:fs';
 import vm from 'node:vm';
+// Scheduled publishers replace the entire site too. Every publishing path must
+// build the same complete artifact before uploading it.
+const workflowDir = new URL('../.github/workflows/',import.meta.url);
+for (const file of readdirSync(workflowDir).filter(name => /\.ya?ml$/.test(name))) {
+  const workflow = readFileSync(new URL(file,workflowDir),'utf8');
+  if (!workflow.includes('actions/deploy-pages@')) continue;
+  const build = workflow.indexOf('run: npm run check:site');
+  const upload = workflow.indexOf('actions/upload-pages-artifact@');
+  assert.ok(build >= 0 && upload > build,file+' must verify the complete site before upload');
+  assert.match(workflow,/path: _site\s/,file+' must upload the verified artifact');
+}
 const html=readFileSync(new URL('../_site/index.html',import.meta.url),'utf8');
 assert.ok(!/<script src="\.\/lib\//.test(html),'shared application code must be bundled');
 const scripts=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];

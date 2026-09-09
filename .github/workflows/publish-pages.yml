@@ -21,6 +21,7 @@ on:
       - lib/evidence-sets-core.js
       - lib/entity-timeline-core.js
       - .github/workflows/publish-pages.yml
+      - .github/workflows/refresh-sports.yml
   workflow_dispatch:
 
 permissions:
