@@ -1,6 +1,6 @@
 # Audit fixes — 9 September 2026
 
-Implemented locally; not deployed.
+Deployed on 9 September 2026: GitHub Pages release `8b08e6d` (artifact `0e10b541ed3c`) and all nine Firebase functions in the `bobdailybriefing` codebase. The Pages verification and publish jobs passed, and the previously missing shared scripts return HTTP 200 in production.
 
 ## Reliability and data handling
 
