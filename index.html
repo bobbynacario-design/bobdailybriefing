@@ -14,7 +14,14 @@
 <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon-180.png">
 <title>Bob's Daily Intelligence Briefing</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">// Account changes invalidate results still in flight from the old session.
+Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !== 'fbLoadHistory'; }).forEach(function(key) {
+  var load = window[key];
+  window[key] = async function() { var uid = getUid(); var result = await load.apply(this,arguments); if (uid !== getUid()) throw new Error('Account changed'); return result; };
+});
+</script>
+<script src="./lib/app-reliability.js"></script>
+<script src="./lib/ui-shell.js"></script>
 <script src="./lib/command-center-core.js"></script>
 <script src="./lib/command-review-core.js"></script>
 <script src="./lib/intelligence-search-core.js"></script>
@@ -25,7 +32,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, orderBy, limit, startAfter, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, orderBy, limit, startAfter, where, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 import { getMessaging, getToken, onMessage, isSupported as isMessagingSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
@@ -80,6 +87,7 @@ window.fbSignIn = async function() {
 
 // Sign out — clears Firebase session
 window.fbSignOut = async function() {
+  window._firebaseUid = null; window._firebaseUser = null;
   try { await signOut(auth); } catch(e) { console.warn(e); }
   window._firebaseUid = null;
   window._firebaseUser = null;
@@ -87,6 +95,8 @@ window.fbSignOut = async function() {
 
 // Listen for auth state changes (auto sign-in if Firebase has a persisted session)
 onAuthStateChanged(auth, function(user) {
+  if (window._sessionUid && window._sessionUid !== (user && user.uid) && window.clearPrivateSession) window.clearPrivateSession();
+  window._sessionUid = user && user.uid || null;
   if (user) {
     window._firebaseUid = user.uid;
     window._firebaseUser = user;
@@ -174,9 +184,11 @@ window.fbLoadHistory = async function(loadMore) {
       }
     }
     var snap = await getDocs(q);
+    if (uid !== getUid()) return;
     if (snap.empty && !loadMore) {
-      window.lsLoadHistory();
-      setSyncStatus('ok','From cache');
+      window._allLoaded = true; window.lsSyncFromFirebase();
+      setSyncStatus('ok','No saved briefings');
+      if (window.renderHistory) window.renderHistory();
       return;
     }
     snap.forEach(function(d) {
@@ -195,6 +207,7 @@ window.fbLoadHistory = async function(loadMore) {
     setSyncStatus('ok','Synced');
     if (window.renderHistory) window.renderHistory();
   } catch(e) {
+    if (uid !== getUid()) return;
     setSyncStatus('error','Load failed — using cache');
     console.error(e);
     window.lsLoadHistory();
@@ -211,7 +224,7 @@ window.fbGenerateBriefing = async function(dateLabel) {
     var res = await generate({
       date: dateLabel || '',
       timezone: 'Asia/Manila',
-      audience: 'Bob'
+      audience: 'Bob', requestId: crypto.randomUUID()
     });
     setSyncStatus('ok','Generated');
     return res.data;
@@ -251,7 +264,7 @@ window.fbSaveReport = async function(report) {
   }
 };
 
-window.fbLoadReports = async function() {
+window.fbLoadReports = async function(strict) {
   var uid = getUid();
   if (!uid) return [];
   try {
@@ -264,6 +277,7 @@ window.fbLoadReports = async function() {
     });
     return out;
   } catch(e) {
+    if (strict) throw e;
     setSyncStatus('error','Reports load failed');
     console.error(e);
     return [];
@@ -330,7 +344,7 @@ window.fbSaveDecision = async function(entry) {
   }
 };
 
-window.fbLoadDecisions = async function() {
+window.fbLoadDecisions = async function(strict) {
   var uid = getUid();
   if (!uid) return [];
   try {
@@ -344,6 +358,7 @@ window.fbLoadDecisions = async function() {
     });
     return out;
   } catch(e) {
+    if (strict) throw e;
     setSyncStatus('error','Decisions load failed');
     console.error(e);
     return [];
@@ -371,7 +386,7 @@ window.fbGenerateDeepResearch = async function(topic, premium) {
   try {
     setSyncStatus('syncing','Starting deep research...');
     var fn = httpsCallable(functions, 'generateDeepResearchReport', { timeout: 120000 });
-    var res = await fn({ topic: topic, premium: !!premium });
+    var res = await fn({ topic: topic, premium: !!premium, requestId: crypto.randomUUID() });
     setSyncStatus('ok','Research started');
     return res.data;
   } catch(e) {
@@ -384,7 +399,7 @@ window.fbGenerateDeepResearch = async function(topic, premium) {
 // Load the latest Market Radar doc: read the radar-latest pointer, then the
 // dated doc it names. Radar docs are written by radar/refresh-radar.js (no uid),
 // so they are readable here under the existing briefings-bob rule.
-window.fbLoadRadar = async function() {
+window.fbLoadRadar = async function(strict) {
   try {
     var latestSnap = await getDoc(doc(db, COLL, 'radar-latest'));
     if (!latestSnap.exists()) return null;
@@ -395,6 +410,7 @@ window.fbLoadRadar = async function() {
     return docSnap.data();
   } catch(e) {
     console.error('Radar load failed:', e);
+    if (strict) throw e;
     return null;
   }
 };
@@ -417,19 +433,20 @@ window.fbLoadDecisionDrift = async function() {
 // Load the shared feed-health doc written by the local refresh scripts
 // (lib/feed-health.js). One small doc, no uid. Null on any failure — the strip
 // then falls back to reporting what it can and says so.
-window.fbLoadFeedHealth = async function() {
+window.fbLoadFeedHealth = async function(strict) {
   try {
     var snap = await getDoc(doc(db, COLL, 'feed-health'));
     return snap.exists() ? snap.data() : null;
   } catch(e) {
     console.error('Feed health load failed:', e);
+    if (strict) throw e;
     return null;
   }
 };
 
 // Search loads a wider, read-only archive window without disturbing History's
 // pagination cursor or replacing its locally cached page.
-window.fbLoadSearchBriefings = async function() {
+window.fbLoadSearchBriefings = async function(strict) {
   var uid = getUid();
   if (!uid) return window._briefingHistory || [];
   try {
@@ -442,6 +459,7 @@ window.fbLoadSearchBriefings = async function() {
     return out;
   } catch(e) {
     console.error('Search archive load failed:', e);
+    if (strict) throw e;
     return window._briefingHistory || [];
   }
 };
@@ -463,7 +481,7 @@ window.fbLoadBriefingByKey = async function(key) {
 
 // Command Center preferences live in the existing uid-scoped briefings
 // collection so they follow the user across devices without a rules change.
-window.fbLoadCommandPrefs = async function() {
+window.fbLoadCommandPrefs = async function(strict) {
   var uid = getUid();
   if (!uid) return null;
   try {
@@ -471,6 +489,7 @@ window.fbLoadCommandPrefs = async function() {
     return snap.exists() ? snap.data() : null;
   } catch(e) {
     console.error('Command preferences load failed:', e);
+    if (strict) throw e;
     return null;
   }
 };
@@ -491,24 +510,40 @@ window.fbSaveCommandPrefs = async function(prefs) {
   return body;
 };
 
+var evidenceBase = null;
+window.fbAcceptEvidenceBase = function(value) { evidenceBase = value; };
 window.fbLoadEvidenceSets = async function() {
   var uid = getUid();
   if (!uid) return null;
   try {
     var snap = await getDoc(doc(db, COLL, 'command-prefs-' + uid));
-    return snap.exists() ? (snap.data().evidenceSets || null) : null;
+    if (uid !== getUid()) throw new Error('Account changed');
+    evidenceBase = snap.exists() ? (snap.data().evidenceSets || {version:1,sets:[]}) : {version:1,sets:[]};
+    return evidenceBase;
   } catch(e) {
     console.error('Evidence sets load failed:', e);
-    return null;
+    throw e;
   }
 };
 
 window.fbSaveEvidenceSets = async function(evidenceSets) {
   var uid = getUid();
   if (!uid) throw new Error('Not authenticated');
-  var body = {uid:uid, evidenceSets:evidenceSets || {version:1,sets:[]}, evidenceUpdatedAt:new Date().toISOString()};
-  await setDoc(doc(db, COLL, 'command-prefs-' + uid), body, {merge:true});
-  return body.evidenceSets;
+  if (!evidenceBase) throw new Error('Load evidence before saving.');
+  var base = evidenceBase;
+  var merged = await runTransaction(db, async function(tx) {
+    if (uid !== getUid()) throw new Error('Account changed');
+    var ref = doc(db, COLL, 'command-prefs-' + uid);
+    var snap = await tx.get(ref);
+    var remote = snap.exists() ? snap.data().evidenceSets : null;
+    var next = window.AppReliability.mergeEvidence(base,evidenceSets,remote);
+    if (next.sets.length > 12 || next.sets.some(function(set) { return set.items.length > 30; })) throw new Error('Combined evidence exceeds the set/item limit. Export pending edits and reload.');
+    tx.set(ref,{uid:uid,evidenceSets:next,evidenceUpdatedAt:new Date().toISOString()},{merge:true});
+    return next;
+  });
+  if (uid !== getUid()) throw new Error('Account changed');
+  evidenceBase = evidenceSets; // Base for the next queued local snapshot.
+  return merged;
 };
 
 var briefingMessagingPromise = null;
@@ -612,7 +647,7 @@ window.fbLoadPh = async function() {
 
 // Load the latest Event-Markets "scenario read" doc: read the miro-latest
 // pointer, then the dated doc it names. Written by miro/refresh-miro.js (no uid).
-window.fbLoadMiro = async function() {
+window.fbLoadMiro = async function(strict) {
   try {
     var latestSnap = await getDoc(doc(db, COLL, 'miro-latest'));
     if (!latestSnap.exists()) return null;
@@ -622,11 +657,12 @@ window.fbLoadMiro = async function() {
     return docSnap.exists() ? docSnap.data() : null;
   } catch(e) {
     console.error('Markets load failed:', e);
+    if (strict) throw e;
     return null;
   }
 };
 
-window.fbLoadNews = async function() {
+window.fbLoadNews = async function(strict) {
   try {
     var latestSnap = await getDoc(doc(db, COLL, 'news-latest'));
     if (!latestSnap.exists()) return null;
@@ -636,6 +672,7 @@ window.fbLoadNews = async function() {
     return docSnap.exists() ? docSnap.data() : null;
   } catch(e) {
     console.error('Insurance news load failed:', e);
+    if (strict) throw e;
     return null;
   }
 };
@@ -686,7 +723,7 @@ async function loadPublicSports() {
     return null;
   }
 }
-window.fbLoadSports = async function() {
+window.fbLoadSports = async function(strict) {
   try {
     var latestSnap = await getDoc(doc(db, COLL, 'sports-latest'));
     if (!latestSnap.exists()) return loadPublicSports();
@@ -695,6 +732,7 @@ window.fbLoadSports = async function() {
     var docSnap = await getDoc(doc(db, COLL, 'sports-' + dateKey));
     return docSnap.exists() ? docSnap.data() : loadPublicSports();
   } catch(e) {
+    if (strict) throw e;
     console.warn('Firestore sports load failed; using public mirror:', e);
     return loadPublicSports();
   }
@@ -729,7 +767,7 @@ window._fbReady = true;
   --serif:'Playfair Display',Georgia,serif;
   --mono:'DM Mono','Courier New',monospace;
   --sans:'DM Sans',system-ui,sans-serif;
-  --txt:#fff;--txt2:rgba(255,255,255,.6);--txt3:rgba(255,255,255,.35);
+  --txt:#fff;--txt2:#BAC2CF;--txt3:#98A3B5;
 }
 body.light{
   --bg:#F0EDE6;--bg2:#FFFFFF;--bg3:#F5F2EC;--bg4:#E8E4DB;
@@ -737,7 +775,7 @@ body.light{
   --gold:#8B6914;--gold2:#A07820;--gold-dim:rgba(139,105,20,0.1);
   --green:#1A7A40;--green-dim:rgba(26,122,64,0.1);
   --red:#C0392B;--red-dim:rgba(192,57,43,0.1);
-  --txt:#1A1A1A;--txt2:rgba(0,0,0,.6);--txt3:rgba(0,0,0,.35);
+  --txt:#1A1A1A;--txt2:#4E5766;--txt3:#556070;
 }
 html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh}
 body{background:linear-gradient(180deg,rgba(201,168,76,.035),transparent 220px),var(--bg)}
@@ -1745,6 +1783,24 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+/* Audit: compact navigation and readable content */
+.nav-center{flex-wrap:nowrap;gap:.4rem;flex:1;justify-content:center}
+.nav-group{position:relative}.nav-group>summary{list-style:none;cursor:pointer;padding:.65rem .8rem;border-radius:7px;color:var(--txt2);font:13px var(--sans)}
+.nav-group>summary::-webkit-details-marker{display:none}.nav-group.active>summary{color:var(--gold);background:var(--gold-dim)}
+.nav-group-panel{position:absolute;top:100%;left:0;min-width:190px;padding:.5rem;background:var(--bg2);border:1px solid var(--rim2);border-radius:10px;box-shadow:0 12px 32px #0008;z-index:120}
+.nav-group-panel .ntab{display:block;width:100%;text-align:left;font-size:12px;padding:.65rem}.nav-group:last-child .nav-group-panel{left:auto;right:0}
+.nav-right{gap:.5rem}.nav-clock{display:none}.mobile-nav{display:none!important}.nav-right .install-btn{display:none}
+.briefing-actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}.import-panel{margin:1rem 0;border:1px solid var(--rim);border-radius:10px;padding:.8rem}.import-panel>summary{cursor:pointer;color:var(--txt2)}
+.metric-detail{font-size:12px;line-height:1.5;margin-top:.5rem;color:var(--txt2)}.metric-detail summary{cursor:pointer}.metric-detail div{padding-top:.5rem}.tick-val{font-size:21px;overflow-wrap:anywhere}.tick-move{font-size:12px}.tick{min-width:0}
+.card-body{font-size:15px;line-height:1.7}.card-hl{font-size:18px}.src{font-size:12px}.command-open-item{font:inherit;color:inherit;text-align:left;border:0;background:none;padding:0;cursor:pointer}.command-open-item:hover{text-decoration:underline}
+.search-coverage{padding:.6rem 1rem;display:flex;gap:.7rem;align-items:center;justify-content:space-between;font-size:12px;color:var(--txt2)}
+#grounding-line{font:13px/1.5 var(--sans);margin-top:.7rem}#command-load-status{font-size:13px;color:var(--txt2);margin-bottom:.7rem}
+.source-highlight{outline:3px solid var(--gold)!important;outline-offset:5px;scroll-margin-top:180px}
+.return-to-source{position:fixed;bottom:20px;right:20px;z-index:110;padding:.75rem 1rem;border-radius:10px;background:var(--bg2);color:var(--gold);border:1px solid var(--gold);cursor:pointer}
+@media(max-width:1100px){.nav{gap:.3rem}.nav-brand{font-size:15px}.nav-center{order:3;flex-basis:100%;justify-content:space-between}.nav-group>summary{padding:.55rem .8rem}.nav-right{margin-left:auto}.hero{padding:1.2rem}}
+@media(max-width:768px){.nav-center{display:flex}.nav-brand{font-size:13px}.nav{padding:.5rem}.nav-group>summary{padding:.55rem .45rem;font-size:12px}.nav-right #sync-status{font-size:10px}.ticker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.tick{width:auto!important}.tick:last-child{grid-column:1/-1}.page{padding-bottom:2rem}.nav-right .nav-btn{font-size:11px}}
+.command-five-item,.command-queue-item{cursor:default}.command-item-title{font-size:15px}.command-item-detail{font-size:13px;color:var(--txt2)}.command-item-btn{font-size:11px;padding:.4rem .55rem}.command-explain{font-size:11px}.command-five-item>.command-item-actions{max-width:260px}summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(max-width:620px){.hero::after{display:none}.command-five-item>.command-item-actions{grid-column:2/-1;justify-content:flex-start;margin-left:0;max-width:none}.command-queue-top{align-items:flex-start;flex-direction:column}.command-queue-top .command-item-actions{margin-left:0;justify-content:flex-start}}
 </style>
 </head>
 <body>
@@ -1765,7 +1821,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 </div>
 
 <!-- TOAST CONTAINER -->
-<div id="toast-container"></div>
+<div id="toast-container" role="status" aria-live="polite"></div>
 
 <!-- NAV -->
 <nav class="nav">
@@ -1790,11 +1846,11 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
     <div class="nav-clock" id="nav-clock">--:--</div>
     <div id="sync-status">○ Loading...</div>
     <button class="lock-btn unlocked" id="lock-btn" onclick="lockSession()" title="Lock session">🔓</button>
-    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">🌙</button>
+    <button class="theme-btn" id="theme-btn" aria-label="Toggle color theme" onclick="toggleTheme()">🌙</button>
     <button class="nav-btn" id="intel-search-open" onclick="openIntelligenceSearch()" title="Search all intelligence (Ctrl+K)">⌕ Search</button>
     <button class="install-btn" id="install-app-btn" onclick="installBriefingApp()" title="Install Bob's Daily Briefing as a desktop app">INSTALL APP</button>
-    <button class="nav-btn" onclick="copyAsText()">📋 Copy</button>
-    <button class="nav-btn" onclick="exportPDF()">⬇ PDF</button>
+
+
   </div>
 </nav>
 
@@ -1802,7 +1858,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
   <section class="intel-search-dialog" role="dialog" aria-modal="true" aria-labelledby="intel-search-label">
     <div class="intel-search-head"><span class="intel-search-icon">⌕</span><input class="intel-search-input" id="intel-search-input" aria-label="Search all intelligence" placeholder="Search briefings, reports, decisions, Radar, Markets, Sports…" autocomplete="off" oninput="runIntelligenceSearch(this.value)" onkeydown="intelligenceSearchKey(event)"><button class="intel-search-close" onclick="closeIntelligenceSearch()">ESC</button></div>
     <div class="intel-search-status" id="intel-search-status"><span id="intel-search-label">Unified intelligence search</span></div>
-    <div class="intel-search-results" id="intel-search-results"><div class="intel-search-empty">Type at least two characters to search the loaded intelligence archive.</div></div>
+    <div class="search-coverage"><span id="intel-search-coverage" role="status">Coverage not loaded</span><button class="tool-chip" onclick="loadIntelligenceSearchData()">Refresh sources</button></div>
+    <div class="intel-search-results" id="intel-search-results" role="status"><div class="intel-search-empty">Type at least two characters to search the loaded intelligence archive.</div></div>
     <div class="intel-search-foot"><span>↑↓ select · Enter open · Esc close</span><span>Local ranking · no model cost</span></div>
   </section>
 </div>
@@ -1826,6 +1883,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 
 <!-- ═══════════════ TODAY PAGE ═══════════════ -->
 <div class="page" id="page-command">
+  <div id="command-load-status" role="status"></div>
   <div class="hero command-hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Cross-feed daily priorities</div>
     <div class="hero-date" style="font-size:22px">◎ Command Center</div>
@@ -1908,7 +1966,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
     <div class="command-stat"><div class="command-stat-value" id="evidence-source-count">—</div><div class="command-stat-label">Sources represented</div></div>
     <div class="command-stat"><div class="command-stat-value" id="evidence-note-count">—</div><div class="command-stat-label">Items with notes</div></div>
   </div>
-  <div class="evidence-toolbar"><input class="evidence-name-input" id="evidence-new-name" maxlength="80" placeholder="Name a new evidence set" onkeydown="if(event.key==='Enter')createEvidenceSet()"><button class="tool-chip" onclick="createEvidenceSet()">Create set</button><span class="command-hidden-note" id="evidence-sync-status">Account-synced · up to 12 sets</span></div>
+  <div class="evidence-toolbar"><input class="evidence-name-input" id="evidence-new-name" maxlength="80" placeholder="Name a new evidence set" onkeydown="if(event.key==='Enter')createEvidenceSet()"><button class="tool-chip" onclick="createEvidenceSet()">Create set</button><span class="command-hidden-note" id="evidence-sync-status" role="status">Account-synced · up to 12 sets</span><button class="tool-chip" onclick="exportEvidenceEdits()">Export evidence</button><button class="tool-chip" onclick="reloadEvidenceEdits()">Reload evidence</button></div>
   <div class="evidence-layout">
     <aside class="command-panel"><div class="command-panel-head"><div><div class="command-panel-title">Sets</div><div class="command-panel-meta">Newest activity first</div></div></div><div class="evidence-set-list" id="evidence-set-list"><div class="command-empty">Loading evidence sets…</div></div></aside>
     <section class="command-panel" id="evidence-set-detail"><div class="command-empty">Select or create an evidence set.</div></section>
@@ -1946,6 +2004,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
     <div class="hero-date" id="hero-date">Paste briefing to begin</div>
     <div class="hero-sub">FORENSIC BI · AUSTRALIAN INSURANCE · PH CONSULTING</div>
     <div class="hero-timestamp" id="hero-timestamp"></div>
+    <div id="grounding-line" class="qa-line warn" role="status">Source verification unknown</div>
     <div class="hero-divider"></div>
   </div>
 
@@ -1984,7 +2043,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
     </div>
     <div class="summary-card">
       <div>
-        <div class="summary-kicker">Actionable</div>
+        <div class="summary-kicker">Relevant</div>
         <div class="summary-value" id="sum-actionable">0</div>
       </div>
       <div class="summary-copy" id="sum-actionable-copy">High + medium items</div>
@@ -1993,6 +2052,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 
   <div id="auto-load-banner"></div>
 
+  <div class="briefing-actions"><button class="btn-sec" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button><button class="nav-btn" onclick="copyAsText()">Copy briefing</button><button class="nav-btn" onclick="exportPDF()">Export PDF</button><button class="nav-btn" onclick="commandGo('command')">Open Morning 5</button></div>
+  <details class="import-panel"><summary>Import / advanced</summary>
   <div class="paste-zone">
     <div class="paste-label">Generate or Paste Briefing JSON Here</div>
     <textarea id="raw-input" placeholder="Generate with OpenAI or paste your daily briefing JSON here..."></textarea>
@@ -2000,7 +2061,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
       <span class="paste-hint">JSON → RENDER → AUTO-SAVE ↗ <span class="kbd-hint">(<span class="kbd">Ctrl+Enter</span> to render)</span></span>
       <div class="btn-row">
         <span class="prompt-toggle" onclick="togglePrompt()">📝 AI Prompt</span>
-        <button class="btn-sec" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button>
+
         <button class="btn-sec" onclick="clearBriefing()">CLEAR</button>
         <button class="btn-primary" onclick="renderBriefing()">RENDER ↗</button>
       </div>
@@ -2011,6 +2072,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
     </div>
   </div>
 
+  </details>
   <div class="score-bar" id="score-bar">
     <span class="score-label">Relevance:</span>
     <span class="score-chip sc-high" id="sc-high">● HIGH: 0</span>
@@ -2022,9 +2084,9 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
   <div class="brief-desk" id="brief-desk">
     <div class="desk-panel">
       <div class="desk-head">
-        <div class="desk-title">Priority Stack</div>
+        <div class="desk-title">Briefing priorities · high relevance first</div>
         <div class="desk-actions">
-          <button class="tool-chip" onclick="copyActionQueue()">Copy actions</button>
+          <button class="tool-chip" onclick="copyActionQueue()">Copy relevant items</button>
           <button class="tool-chip" onclick="expandAllSections()">Expand all</button>
           <button class="tool-chip" onclick="collapseAllSections()">Collapse all</button>
         </div>
@@ -2051,7 +2113,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
   <div class="reader-tools" id="reader-tools">
     <div class="reader-filter-row">
       <button class="filter-chip active" data-filter="all" onclick="setRelevanceFilter('all',this)">All</button>
-      <button class="filter-chip" data-filter="actionable" onclick="setRelevanceFilter('actionable',this)">Actionable</button>
+      <button class="filter-chip" data-filter="actionable" onclick="setRelevanceFilter('actionable',this)">Relevant</button>
       <button class="filter-chip" data-filter="high" onclick="setRelevanceFilter('high',this)">High</button>
       <button class="filter-chip" data-filter="med" onclick="setRelevanceFilter('med',this)">Medium</button>
       <button class="filter-chip" data-filter="low" onclick="setRelevanceFilter('low',this)">Low</button>
@@ -2552,12 +2614,15 @@ window._briefingHistory = [];
 if (_compactMode) document.body.classList.add('compact');
 // ── GOOGLE AUTH GATE ──
 function initAuthGate() {
+  setApplicationLocked(true);
   var overlay = document.getElementById('auth-overlay');
   overlay.classList.remove('hidden');
   document.getElementById('auth-error').textContent = '';
 }
 
 function onSignedIn() {
+  setApplicationLocked(false);
+  document.querySelectorAll('.page').forEach(function(el) { el.inert = false; });
   document.getElementById('auth-overlay').classList.add('hidden');
   var lockBtn = document.getElementById('lock-btn');
   if (lockBtn) {
@@ -2614,7 +2679,34 @@ async function handleAuth() {
   }
 }
 
+function clearPrivateSession() {
+  var key = briefingCacheKey();
+  if (key) { try { localStorage.removeItem(key); } catch (e) {} }
+  if (window._feedHealthTimer) { clearInterval(window._feedHealthTimer); window._feedHealthTimer = null; }
+  window._briefingHistory = []; window._reportFeed = []; window._feedHealthData = null;
+  decisionEntries = []; decisionEditingId = null; decisionLinkedSignal = null; decisionDatedCache = {};
+  decisionRadarJournal = null; decisionRadarLive = null; decisionRefPrice = {};
+  _currentData = null; commandLoadToken++; commandCenterData = null; commandCenterInputs = null;
+  commandPreferences = normalizeCommandPreferences(null); commandPrefsAvailable = false;
+  sportsCachedData = null; _miroCachedData = null; _miroCachedJournal = null;
+  if (_currentReportUrl && _currentReportUrl.indexOf('blob:') === 0) URL.revokeObjectURL(_currentReportUrl);
+  _currentReportUrl = null;
+  resetIntelligenceSearch(); resetEvidenceSets();
+  if (window.fbAcceptEvidenceBase) window.fbAcceptEvidenceBase(null);
+  resetTicker();
+  setText('hero-date','Sign in to read your briefing');
+  setText('hero-timestamp','');
+  setText('grounding-line','');
+  var back = document.getElementById('return-command'); if (back) back.remove();
+  ['command-review-today','command-review-week','auto-load-banner','priority-list','evidence-picker-list'].forEach(function(id) { setText(id,''); });
+  document.querySelectorAll('.page input,.page textarea').forEach(function(el) { el.value = ''; });
+  document.querySelectorAll('.page [id$="-out"],#command-five,#command-queue,#evidence-set-list,#evidence-set-detail,#intel-search-results').forEach(function(el) { el.textContent = 'Sign in to load your data.'; });
+  document.querySelectorAll('iframe').forEach(function(el) { el.removeAttribute('srcdoc'); el.src = 'about:blank'; });
+  document.querySelectorAll('.page').forEach(function(el) { el.inert = true; });
+  initAuthGate();
+}
 function lockSession() {
+  clearPrivateSession();
   if (window.fbSignOut) window.fbSignOut();
   window._briefingHistory = [];
   resetIntelligenceSearch();
@@ -2703,9 +2795,12 @@ window.showToast = function(msg, type) {
 };
 
 // ── LOCALSTORAGE FALLBACK ──
-var LS_KEY = 'briefings_bob_cache';
+function briefingCacheKey() { return window.AppReliability.cacheKey(window._firebaseUid); }
+try { localStorage.removeItem('briefings_bob_cache'); } catch (e) {} // Unowned legacy data cannot be safely assigned to an account.
 
 window.lsSaveBriefing = function(dateKey, data) {
+  var LS_KEY = briefingCacheKey();
+  if (!LS_KEY) return;
   try {
     var cache = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
     cache[dateKey] = { data: data, saved: Date.now() };
@@ -2714,6 +2809,8 @@ window.lsSaveBriefing = function(dateKey, data) {
 };
 
 window.lsDeleteBriefing = function(dateKey) {
+  var LS_KEY = briefingCacheKey();
+  if (!LS_KEY) return;
   try {
     var cache = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
     delete cache[dateKey];
@@ -2722,6 +2819,8 @@ window.lsDeleteBriefing = function(dateKey) {
 };
 
 window.lsLoadHistory = function() {
+  var LS_KEY = briefingCacheKey();
+  if (!LS_KEY) return;
   try {
     var cache = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
     var history = [];
@@ -2735,6 +2834,8 @@ window.lsLoadHistory = function() {
 };
 
 window.lsSyncFromFirebase = function() {
+  var LS_KEY = briefingCacheKey();
+  if (!LS_KEY) return;
   try {
     var cache = {};
     (window._briefingHistory || []).forEach(function(h) {
@@ -2765,6 +2866,7 @@ if (localStorage.getItem('briefing_theme')==='light') {
 
 // ── PAGE SWITCHING ──
 function switchPage(id, el) {
+  var pending;
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -2773,23 +2875,26 @@ function switchPage(id, el) {
   if (el) el.classList.add('active');
   var mob = document.getElementById('mob-'+id);
   if (mob) mob.classList.add('active');
-  if (id==='history') renderHistory();
-  if (id==='command') renderCommandCenter();
-  if (id==='evidence') renderEvidencePage();
-  if (id==='timeline') renderEntityTimeline();
-  if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
-  if (id==='research') renderResearchList();
-  if (id==='radar') renderRadar();
-  if (id==='journal') renderJournal();
-  if (id==='decisions') renderDecisions();
-  if (id==='pse') renderPh();
-  if (id==='miro') renderMiro();
-  if (id==='sports') renderSports();
-  if (id==='help') renderLlmUsage();
+  if (id==='history') pending = renderHistory();
+  if (id==='command') pending = renderCommandCenter();
+  if (id==='evidence') pending = renderEvidencePage();
+  if (id==='timeline') pending = renderEntityTimeline();
+  if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
+  if (id==='research') pending = renderResearchList();
+  if (id==='radar') pending = renderRadar();
+  if (id==='journal') pending = renderJournal();
+  if (id==='decisions') pending = renderDecisions();
+  if (id==='pse') pending = renderPh();
+  if (id==='miro') pending = renderMiro();
+  if (id==='sports') pending = renderSports();
+  if (id==='help') pending = renderLlmUsage();
   setPageHash(id);
   window.scrollTo(0,0);
+  updatePrimaryNavigation(id);
+  return Promise.resolve(pending);
 }
 function switchPageMobile(id, el) {
+  var pending;
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab,.mob-tab').forEach(function(t){ t.classList.remove('active'); });
   var pg = document.getElementById('page-'+id);
@@ -2798,21 +2903,23 @@ function switchPageMobile(id, el) {
   document.querySelectorAll('.ntab').forEach(function(t){
     if (t.getAttribute('data-page')===id) t.classList.add('active');
   });
-  if (id==='history') renderHistory();
-  if (id==='command') renderCommandCenter();
-  if (id==='evidence') renderEvidencePage();
-  if (id==='timeline') renderEntityTimeline();
-  if (id==='trends') renderTrends(7, document.querySelector('.trend-period-btn.active'));
-  if (id==='research') renderResearchList();
-  if (id==='radar') renderRadar();
-  if (id==='journal') renderJournal();
-  if (id==='decisions') renderDecisions();
-  if (id==='pse') renderPh();
-  if (id==='miro') renderMiro();
-  if (id==='sports') renderSports();
-  if (id==='help') renderLlmUsage();
+  if (id==='history') pending = renderHistory();
+  if (id==='command') pending = renderCommandCenter();
+  if (id==='evidence') pending = renderEvidencePage();
+  if (id==='timeline') pending = renderEntityTimeline();
+  if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
+  if (id==='research') pending = renderResearchList();
+  if (id==='radar') pending = renderRadar();
+  if (id==='journal') pending = renderJournal();
+  if (id==='decisions') pending = renderDecisions();
+  if (id==='pse') pending = renderPh();
+  if (id==='miro') pending = renderMiro();
+  if (id==='sports') pending = renderSports();
+  if (id==='help') pending = renderLlmUsage();
   setPageHash(id);
   window.scrollTo(0,0);
+  updatePrimaryNavigation(id);
+  return Promise.resolve(pending);
 }
 // ── Deep-linking: keep the active tab in the URL hash (so a view can be shared)
 // and open the right tab when a #hash link is loaded, pasted, or navigated. ──
@@ -2845,68 +2952,62 @@ function resetIntelligenceSearch() {
 }
 
 function intelligenceSearchRead(loader, fallback) {
-  return loader ? Promise.resolve(loader()).catch(function () { return fallback; }) : Promise.resolve(fallback);
+  return window.AppReliability.readSource(loader ? function() { return loader(true); } : null,fallback);
 }
-
 function loadIntelligenceSearchData() {
-  if (intelligenceSearchState.loaded) return Promise.resolve(intelligenceSearchState.index);
   if (intelligenceSearchState.loading) return intelligenceSearchState.promise || Promise.resolve();
-  if (!window.IntelligenceSearchCore) return Promise.resolve();
-  intelligenceSearchState.loading = true;
-  setText('intel-search-status', 'Loading account archive and current feed snapshots…');
-  var request = Promise.all([
-    intelligenceSearchRead(window.fbLoadSearchBriefings, window._briefingHistory || []),
-    intelligenceSearchRead(window.fbLoadReports, []),
-    intelligenceSearchRead(window.fbLoadDecisions, []),
-    intelligenceSearchRead(window.fbLoadRadar, null),
-    intelligenceSearchRead(window.fbLoadMiro, null),
-    intelligenceSearchRead(window.fbLoadSports, null),
-    intelligenceSearchRead(window.fbLoadNews, null)
-  ]).then(function (data) {
-    intelligenceSearchState.briefings = data[0] || [];
-    intelligenceSearchState.reports = data[1] || [];
-    window._reportFeed = intelligenceSearchState.reports;
+  if (!window.IntelligenceSearchCore) {
+    setText('intel-search-results','Search could not load its application files. Reload the app; source tabs remain available.');
+    return Promise.resolve();
+  }
+  var state = intelligenceSearchState;
+  state.loading = true;
+  setText('intel-search-status','Loading account archive and feed snapshots…');
+  var names = ['Briefings','Research','Decisions','Radar','Markets','Sports','News'];
+  var loaders = [window.fbLoadSearchBriefings,window.fbLoadReports,window.fbLoadDecisions,window.fbLoadRadar,window.fbLoadMiro,window.fbLoadSports,window.fbLoadNews];
+  state.promise = Promise.all(loaders.map(function(loader,i) { return intelligenceSearchRead(loader,i < 3 ? [] : null); })).then(function(results) {
+    if (state !== intelligenceSearchState) return [];
+    var data = results.map(function(result) { return result.value; });
+    state.failures = results.map(function(result,i) { return result.ok ? '' : names[i]; }).filter(Boolean);
+    state.briefings = data[0] || [];
+    state.reports = data[1] || [];
+    window._reportFeed = state.reports;
     var builtins = typeof BUILTIN_REPORTS !== 'undefined' ? BUILTIN_REPORTS : [];
-    intelligenceSearchState.index = window.IntelligenceSearchCore.buildIndex({
-      briefings: intelligenceSearchState.briefings,
-      reports: builtins.concat(intelligenceSearchState.reports),
-      decisions: data[2], radar: data[3], markets: data[4], sports: data[5], news: data[6]
-    });
-    intelligenceSearchState.loaded = true;
-    intelligenceSearchState.loading = false;
-    intelligenceSearchState.promise = null;
+    state.index = window.IntelligenceSearchCore.buildIndex({briefings:state.briefings,reports:builtins.concat(state.reports),decisions:data[2],radar:data[3],markets:data[4],sports:data[5],news:data[6]});
+    state.loaded = true; state.loading = false; state.loadedAt = Date.now(); state.promise = null;
+    setText('intel-search-coverage',(state.failures.length ? 'Unavailable: ' + state.failures.join(', ') + '. Results are partial. ' : 'All sources loaded. ') + 'Archive: ' + state.briefings.length + ' briefings (up to 100).');
     runIntelligenceSearch((document.getElementById('intel-search-input') || {}).value || '');
-    return intelligenceSearchState.index;
-  }).catch(function (error) {
-    intelligenceSearchState.loading = false;
-    intelligenceSearchState.promise = null;
-    console.error('Unified search load failed:', error);
-    setText('intel-search-status', 'Could not load the search index · source tabs remain available');
+    return state.index;
+  }).catch(function(error) {
+    if (state !== intelligenceSearchState) return;
+    state.loading = false; state.promise = null;
+    setText('intel-search-status','Could not build search. Retry loading the sources.');
   });
-  intelligenceSearchState.promise = request;
-  return request;
+  return state.promise;
 }
 
 function openIntelligenceSearch() {
   var overlay = document.getElementById('intel-search-overlay');
   var input = document.getElementById('intel-search-input');
   if (!overlay || !input) return;
+  rememberModalFocus(overlay);
   overlay.hidden = false;
   input.focus();
   input.select();
-  if (!intelligenceSearchState.loaded) loadIntelligenceSearchData();
+  if (!intelligenceSearchState.loaded || Date.now() - (intelligenceSearchState.loadedAt || 0) > 300000) loadIntelligenceSearchData();
   else runIntelligenceSearch(input.value);
 }
 
 function closeIntelligenceSearch() {
   var overlay = document.getElementById('intel-search-overlay');
-  if (overlay) overlay.hidden = true;
+  if (overlay) { overlay.hidden = true; restoreModalFocus(overlay); }
 }
 
 function runIntelligenceSearch(query) {
   var out = document.getElementById('intel-search-results');
   var status = document.getElementById('intel-search-status');
   if (!out || !status) return;
+  if (!window.IntelligenceSearchCore) { out.textContent = 'Search is unavailable. Reload the app to retry.'; return; }
   query = String(query || '').trim();
   if (intelligenceSearchState.loading) {
     out.innerHTML = '<div class="intel-search-empty">Building the index from your account and live feed snapshots…</div>';
@@ -2914,7 +3015,7 @@ function runIntelligenceSearch(query) {
   }
   if (query.length < 2) {
     intelligenceSearchState.results = [];
-    status.textContent = intelligenceSearchState.loaded ? intelligenceSearchState.index.length + ' items indexed across six sources' : 'Unified intelligence search';
+    status.textContent = intelligenceSearchState.loaded ? intelligenceSearchState.index.length + ' items indexed' : 'Unified intelligence search';
     out.innerHTML = '<div class="intel-search-empty">Type at least two characters to search briefing history, research, decisions, Radar, Markets, and Sports.</div>';
     return;
   }
@@ -2978,6 +3079,7 @@ function openIndexedIntelligenceItem(item) {
     var archived = intelligenceSearchState.briefings.find(function (entry) { return entry.key === item.ref; });
     if (archived && !(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
     loadBriefing(item.ref);
+    highlightSourceTitle(item.title,'today');
     return;
   }
   var button = document.querySelector('.ntab[data-page="' + item.page + '"]');
@@ -3146,12 +3248,15 @@ function evidenceSelectedSet() {
   return evidenceSetState.data.sets.find(function (set) { return set.id === evidenceSetState.selectedId; }) || null;
 }
 function loadEvidenceSets(force) {
-  if (!window.EvidenceSetsCore) return Promise.resolve();
+  if (!window.EvidenceSetsCore) { setText('evidence-sync-status','Evidence could not load its application files. Reload the app.'); return Promise.resolve(); }
   if (evidenceSetState.loaded && !force) { paintEvidencePage(); paintEvidencePicker(); return Promise.resolve(); }
   if (evidenceSetState.loading) return Promise.resolve();
+  var state = evidenceSetState;
   evidenceSetState.loading = true;
   setText('evidence-sync-status','Loading account evidence…');
   return (window.fbLoadEvidenceSets ? window.fbLoadEvidenceSets() : Promise.resolve(null)).then(function (raw) {
+    if (state !== evidenceSetState) return;
+    evidenceSetState.conflict = false;
     evidenceSetState.data = window.EvidenceSetsCore.normalize(raw);
     evidenceSetState.loaded = true;
     evidenceSetState.loading = false;
@@ -3161,22 +3266,31 @@ function loadEvidenceSets(force) {
     setText('evidence-sync-status','Account-synced · up to 12 sets');
   }).catch(function (error) {
     evidenceSetState.loading = false;
+    if (state !== evidenceSetState) return;
     console.error('Evidence load failed:', error);
     setText('evidence-sync-status','Could not load evidence sets');
   });
 }
 function saveEvidenceSets(message) {
   if (!window.fbSaveEvidenceSets) return Promise.resolve();
+  if (evidenceSetState.conflict) { showToast('Export pending edits and reload evidence first.','warn'); return Promise.resolve(); }
+  var state = evidenceSetState;
   var revision = ++evidenceSetState.revision;
   var snapshot = JSON.parse(JSON.stringify(evidenceSetState.data));
   setText('evidence-sync-status','Saving evidence…');
   evidenceSetState.saveChain = evidenceSetState.saveChain.catch(function () {}).then(function () {
+    if (state !== evidenceSetState || state.conflict) throw new Error('Evidence session changed or has a pending conflict.');
     return window.fbSaveEvidenceSets(snapshot);
-  }).then(function () {
+  }).then(function (merged) {
+    if (state !== evidenceSetState) return;
+    if (revision === state.revision) { state.data = merged; window.fbAcceptEvidenceBase(merged); }
+    paintEvidencePage();
     if (revision === evidenceSetState.revision) setText('evidence-sync-status',message || 'Evidence synced');
   }).catch(function (error) {
     console.error('Evidence save failed:', error);
-    if (revision === evidenceSetState.revision) setText('evidence-sync-status','Could not sync · retained this session');
+    if (state !== evidenceSetState) return;
+    state.conflict = true;
+    setText('evidence-sync-status',error.message + ' Pending edits retained this session.');
     showToast('Evidence sync failed','warn');
   });
   return evidenceSetState.saveChain;
@@ -3268,13 +3382,13 @@ function openEvidencePicker(item) {
   if (!item || !item.title) return;
   evidenceSetState.pendingItem = item;
   var overlay = document.getElementById('evidence-picker-overlay');
-  if (overlay) overlay.hidden = false;
+  if (overlay) { rememberModalFocus(overlay); overlay.hidden = false; var focus = overlay.querySelector('button'); if (focus) focus.focus(); }
   setText('evidence-picker-target','Save “' + item.title + '” from ' + item.source + '.');
   if (!evidenceSetState.loaded) loadEvidenceSets(); else paintEvidencePicker();
 }
 function closeEvidencePicker() {
   var overlay = document.getElementById('evidence-picker-overlay');
-  if (overlay) overlay.hidden = true;
+  if (overlay) { overlay.hidden = true; restoreModalFocus(overlay); }
   evidenceSetState.pendingItem = null;
 }
 function paintEvidencePicker() {
@@ -3324,6 +3438,7 @@ async function openEvidenceItem(setEncoded,keyEncoded) {
     if (archived) {
       if (!(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
       loadBriefing(item.ref);
+      highlightSourceTitle(item.title,'today');
       return;
     }
   }
@@ -3434,7 +3549,7 @@ function radarCard(s) {
   var upside = radarUpsideLabel(s);
   var plan = upside + '  ·  Entry ' + radarLevel(s.entry) + '  ·  Stop ' + radarLevel(s.stop) +
     '  ·  Target ' + radarLevel(s.target) + '  ·  R:R ' + (s.rr == null ? '—' : s.rr);
-  return '<div class="card radar-card">' +
+  return '<div class="card radar-card" data-command-id="radar-' + esc(s.symbol) + '">' +
     '<div class="card-accent" style="background:' + radarAccent(s.status) + '"></div>' +
     '<div class="card-top">' +
       '<div class="card-hl">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme) + '</span></div>' +
@@ -3830,7 +3945,7 @@ function renderRadar() {
   var jp = window.fbLoadJournal
     ? window.fbLoadJournal().catch(function () { return null; })
     : Promise.resolve(null);
-  Promise.all([window.fbLoadRadar(), jp]).then(function (both) {
+  return Promise.all([window.fbLoadRadar(), jp]).then(function (both) {
     var data = both[0];
     radarJournal = both[1];
     if (!data || !data.signals || !data.signals.length) {
@@ -4365,6 +4480,7 @@ window.loadFeedHealth = async function () {
 // A deterministic cross-feed triage layer. It makes no provider calls of its
 // own: the page combines the same documents the individual tabs already read.
 var commandCenterData = null;
+var commandPrefsAvailable = false;
 var commandFilter = 'all';
 var commandLoadToken = 0;
 var commandCenterInputs = null;
@@ -4414,12 +4530,15 @@ function normalizeCommandPreferences(raw) {
 }
 
 function saveCommandPreferences(message) {
+  if (!commandPrefsAvailable) { setText('command-pref-status','Load preferences successfully before saving. Refresh Command Center to retry.'); return Promise.resolve(); }
+  var uid = window._firebaseUid;
   var status = document.getElementById('command-pref-status');
   if (status) status.textContent = 'Saving preferences…';
   if (!window.fbSaveCommandPrefs) return Promise.resolve();
   var revision = ++commandPreferenceRevision;
   var snapshot = JSON.parse(JSON.stringify(commandPreferences));
   commandPreferenceSaveChain = commandPreferenceSaveChain.catch(function () {}).then(function () {
+    if (uid !== window._firebaseUid) throw new Error('Account changed');
     return window.fbSaveCommandPrefs(snapshot);
   }).then(function () {
     if (status && revision === commandPreferenceRevision) status.textContent = message || 'Preferences synced';
@@ -4684,9 +4803,9 @@ function commandItemHtml(item, rank, featured) {
   var sourceClass = esc(item.source).replace(/[^A-Za-z0-9_-]/g, '');
   var encodedId = encodeURIComponent(item.id).replace(/'/g, '%27');
   var review = commandReviewItem(item.id);
-  var quickState = item.source === 'Reliability' ? 'reviewed' : 'acted';
+  var quickState = ['Reliability','Briefing','News'].indexOf(item.source) >= 0 ? 'reviewed' : 'acted';
   var quickLabel = quickState === 'reviewed' ? 'Reviewed' : 'Acted';
-  var body = '<div><div class="command-item-title">' + esc(item.title) + '</div>' +
+  var body = '<div><button class="command-item-title command-open-item" onclick="commandOpenItem(\'' + encodedId + '\')">' + esc(item.title) + '</button>' +
     '<div class="command-item-detail">' + esc(item.detail || 'Open source for detail.') + '</div></div>';
   var openBtn = /^https?:\/\//i.test(String(item.url || ''))
     ? '<button class="command-item-btn" onclick="event.stopPropagation();commandOpenUrl(\'' +
@@ -4703,11 +4822,11 @@ function commandItemHtml(item, rank, featured) {
     esc((item.scoreBreakdown || []).join(' · ')) + ' · final ' + (item.pinned ? 'pinned' : Math.round(item.score)) +
     (featured ? ' · Morning 5 also favors source diversity' : '') + '</div></details>';
   if (featured) {
-    return '<div class="command-five-item" role="button" tabindex="0" onclick="commandGo(\'' + esc(item.page) + '\')">' +
+    return '<div class="command-five-item">' +
       '<div class="command-rank">' + (rank + 1) + '</div>' + body + actions + explanation + '</div>';
   }
   var cls = item.kind === 'system' ? ' system' : (item.urgency === 'act' ? ' act' : '');
-  return '<div class="command-queue-item' + cls + '" role="button" tabindex="0" onclick="commandGo(\'' + esc(item.page) + '\')">' +
+  return '<div class="command-queue-item' + cls + '">' +
     '<div class="command-queue-top"><span class="command-confidence">' + esc(item.urgency) + ' / ' + esc(item.confidence) + ' confidence</span>' + actions + '</div>' + body + explanation + '</div>';
 }
 function paintCommandCenter() {
@@ -4732,7 +4851,7 @@ function paintCommandCenter() {
     : '<div class="command-empty">Nothing in this queue.</div>';
   setText('command-queue-meta', rows.length + ' of ' + commandCenterData.items.length + ' items' +
     (commandCenterData.counts.hidden ? ' / ' + commandCenterData.counts.hidden + ' hidden' : ''));
-  setText('command-sub', 'Prioritized at ' + new Date(commandCenterData.generatedAt).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', hour12:false}) + ' PHT / tap any item to open its source.');
+  setText('command-sub', 'Prioritized at ' + new Date(commandCenterData.generatedAt).toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', hour12:false}) + ' PHT / select a title to open its source.');
   renderCommandReview();
 }
 
@@ -4780,19 +4899,26 @@ function setCommandFilter(filter, button) {
 function renderCommandCenter() {
   var five = document.getElementById('command-five');
   var queue = document.getElementById('command-queue');
-  if (!five || !queue || !window.CommandCenterCore) return;
+  if (!five || !queue) return;
+  if (!window.CommandCenterCore || !window.CommandReviewCore) {
+    five.innerHTML = '<div class="command-empty" role="alert">Command Center could not load its application files. <button onclick="location.reload()">Reload app</button></div>';
+    queue.textContent = 'Your source tabs remain available. If reloading does not help, the published app needs repair.'; return;
+  }
   var token = ++commandLoadToken;
   five.innerHTML = '<div class="command-empty">Building today\'s Morning 5…</div>';
   queue.innerHTML = '<div class="command-empty">Loading current feed snapshots…</div>';
-  var read = function (loader) {
-    return loader ? Promise.resolve(loader()).catch(function () { return null; }) : Promise.resolve(null);
-  };
-  Promise.all([
+  var read = function(loader) { return window.AppReliability.readSource(loader ? function() { return loader(true); } : null,null); };
+  return Promise.all([
     read(window.fbLoadRadar), read(window.fbLoadMiro), read(window.fbLoadSports),
     read(window.fbLoadDecisions), read(window.fbLoadFeedHealth), read(window.fbLoadCommandPrefs),
     read(window.fbLoadNews)
   ]).then(function (data) {
     if (token !== commandLoadToken) return;
+    var names = ['Radar','Markets','Sports','Decisions','Feed health','Preferences','News'];
+    var failed = data.map(function(result,i) { return result.ok ? '' : names[i]; }).filter(Boolean);
+    setText('command-load-status',failed.length ? 'Partial results — unavailable: ' + failed.join(', ') + '. Refresh to retry.' : 'All sources loaded.');
+    commandPrefsAvailable = data[5].ok;
+    data = data.map(function(result) { return result.value; });
     window._feedHealthData = data[4] || window._feedHealthData || null;
     commandPreferences = normalizeCommandPreferences(data[5]);
     commandCenterInputs = {
@@ -5699,7 +5825,7 @@ function decisionRow(e) {
   var outcomeCls = effOutcome === 'win' ? 'rel-high' : (effOutcome === 'loss' ? 'rel-low' : 'rel-med');
   var linked = e.linkedSignal ? decisionPill(e.linkedSignal.status || 'radar', radarStatusClass(e.linkedSignal.status)) : '';
   var beat = e.beatBenchmark == null ? '' : decisionPill(e.beatBenchmark ? 'beat benchmark' : 'lagged benchmark', e.beatBenchmark ? 'rel-high' : 'rel-low');
-  return '<div class="decision-row' + (closed ? ' closed' : '') + '">' +
+  return '<div class="decision-row' + (closed ? ' closed' : '') + '" data-command-id="decision-' + esc(e.id || e.asset) + '">' +
     '<div class="decision-top"><div><div class="decision-asset">' + esc(e.asset || 'Untitled') + '</div>' +
       '<div class="decision-meta">' +
         decisionPill(e.source || 'manual') +
@@ -5793,7 +5919,7 @@ function renderDecisions() {
   if (!out) return;
   if (!window.fbLoadDecisions) { out.innerHTML = '<div class="empty-state">DECISION JOURNAL UNAVAILABLE</div>'; return; }
   out.innerHTML = '<div class="empty-state">LOADING DECISIONS...</div>';
-  window.fbLoadDecisions().then(function (entries) {
+  return window.fbLoadDecisions().then(function (entries) {
     decisionEntries = entries || [];
     // Resolve reference prices + today's radar before rendering. Non-fatal:
     // if the radar is unreachable the tab renders exactly as it did before.
@@ -6044,7 +6170,7 @@ function miroCard(m) {
   var imp = m.impliedYes;
   var barW = imp == null ? 0 : Math.max(2, Math.min(100, imp * 100));
   var hasPanel = m.haircutProb != null;
-  var html = '<div class="card radar-card" style="position:relative">';
+  var html = '<div class="card radar-card" data-command-id="market-' + esc(m.slug || m.label) + '" style="position:relative">';
   html += '<div class="card-accent" style="background:var(--blue)"></div>';
   // header: theme chip + research verdict badge (only once the gate exists)
   var verdict = miroVerdict(m);
@@ -6290,7 +6416,7 @@ function renderMiro() {
   if (!window.fbLoadMiro) { out.innerHTML = '<div class="empty-state">MARKETS UNAVAILABLE</div>'; return; }
   out.innerHTML = '<div class="empty-state">LOADING MARKETS...</div>';
   var journalPromise = window.fbLoadMiroJournal ? window.fbLoadMiroJournal() : Promise.resolve(null);
-  Promise.all([window.fbLoadMiro(), journalPromise]).then(function (result) {
+  return Promise.all([window.fbLoadMiro(), journalPromise]).then(function (result) {
     var data = result[0], journal = result[1];
     if (!data || !data.markets || !data.markets.length) {
       if (sub) sub.textContent = 'No data yet';
@@ -7577,7 +7703,7 @@ function renderGroundingLine(data, anchor) {
   if (!anchor || !anchor.parentNode) return;
   var el = document.getElementById('grounding-line');
   var g = data && data.grounding;
-  if (!g || !g.mode) { if (el) el.style.display = 'none'; return; }
+  if (!g || !g.mode) g = {mode:'unknown'};
   if (!el) {
     el = document.createElement('div');
     el.id = 'grounding-line';
@@ -7585,17 +7711,20 @@ function renderGroundingLine(data, anchor) {
     anchor.parentNode.insertBefore(el, anchor.nextSibling);
   }
   el.style.display = '';
-  if (g.mode === 'grounded') {
+  if (g.mode === 'unknown') {
+    el.className = 'qa-line warn';
+    el.textContent = 'Source verification unknown — this briefing has no verification metadata. Check original sources before relying on it.';
+  } else if (g.mode === 'grounded') {
     var linked = Number(g.grounded || 0);
     var total = linked + Number(g.ungrounded || 0);
-    var parts = ['Insurance grounded in ' + (g.snapshot || 'news snapshot'),
+    var parts = ['Insurance sources matched to ' + (g.snapshot || 'news snapshot'),
       linked + '/' + total + ' stories linked',
       (g.feedsOk || 0) + '/' + (g.feedsTotal || 0) + ' feeds'];
     if (g.unmatchedUrls) {
       parts.push(g.unmatchedUrls + ' unverified link' + (g.unmatchedUrls === 1 ? '' : 's') + ' withheld');
     }
     el.className = 'qa-line ' + (g.unmatchedUrls ? 'warn' : 'ok');
-    el.textContent = parts.join(' / ') + '.';
+    el.textContent = parts.join(' / ') + '. URL matching does not verify every claim.';
   } else {
     el.className = 'qa-line warn';
     el.textContent = 'Insurance NOT grounded (' + (g.reason || 'unavailable') +
@@ -7633,7 +7762,7 @@ function renderBriefConsole(data, schemaErrors) {
     });
   }
 
-  var priorityItems = stats.stories.filter(function(item){ return item.score === 'high' || item.score === 'med'; }).slice(0, 6);
+  var priorityItems = window.AppReliability.rankedStories(stats.stories).slice(0, 6);
   var priorityEl = document.getElementById('priority-list');
   if (priorityEl) {
     priorityEl.innerHTML = priorityItems.length ? priorityItems.map(function(item, idx) {
@@ -7818,7 +7947,7 @@ async function generateWithOpenAI() {
   }
 }
 
-function renderBriefing() {
+function renderBriefing(options) {
   var raw = document.getElementById('raw-input').value.trim();
   if (!raw) { showToast('Paste JSON first','warn'); return; }
   var data = parseInput(raw);
@@ -7880,16 +8009,16 @@ function renderBriefing() {
     if (!stories.length) return;
 
     var secHTML = '<div class="sec-hdr"><div class="sec-pip" style="background:'+meta.pip+'"></div><div class="sec-name">'+meta.label+'</div></div>';
-    stories.forEach(function(st) {
+    stories.forEach(function(st, storyIndex) {
       var score = scoreRelevance(st);
       counts[score]++;
       var bc = {high:'rel-high',med:'rel-med',low:'rel-low',none:'rel-none-b'}[score];
-      secHTML += '<div class="card card-2col" data-rel="'+score+'" data-section="'+esc(id)+'"><div class="card-accent" style="background:'+meta.pip+'"></div>';
+      secHTML += '<div class="card card-2col" data-command-id="briefing-'+esc(id)+'-'+storyIndex+'" data-rel="'+score+'" data-section="'+esc(id)+'"><div class="card-accent" style="background:'+meta.pip+'"></div>';
       // Column 1: the story + its source.
       secHTML += '<div class="card-main">';
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
-      if (st.source) secHTML += srcHTML(st);
+      secHTML += srcHTML(st);
       secHTML += '</div>';
       // Column 2: Bob's relevance note.
       secHTML += '<div class="card-aside">';
@@ -7929,14 +8058,20 @@ function renderBriefing() {
   }, 50);
 
   // Auto-save to Firebase
-  autoSave(data);
+  if (!(options && options.readOnly)) autoSave(data);
+  intelligenceSearchState.loaded = false;
 }
 
 function setTick(vi,mi,val,mov) {
-  if (val) { var e=document.getElementById(vi); if(e) e.textContent=val; }
+  var split = window.AppReliability.metric(val);
+  var e = document.getElementById(vi); if(e) e.textContent = split.value;
+  var details = document.getElementById(vi + '-detail');
+  if (!details && e) { details = document.createElement('details'); details.id = vi + '-detail'; details.className = 'metric-detail'; e.parentNode.appendChild(details); }
+  if (details) { details.hidden = !split.detail && !mov; details.innerHTML = '<summary>As of / details</summary><div>' + esc([split.detail,mov].filter(Boolean).join(' · ')) + '</div>'; }
   if (mov) {
     var me=document.getElementById(mi); if (!me) return;
-    me.textContent=mov;
+    mov = String(mov);
+    me.textContent = mov.split('(')[0].trim().slice(0,42);
     var d=mov.toLowerCase().includes('down')||mov.includes('-')?'down':mov.toLowerCase().includes('up')||mov.includes('+')?'up':'flat';
     me.className='tick-move tick-'+d;
   }
@@ -7953,7 +8088,8 @@ function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace
 // The http(s) test is defence in depth: verifyGrounding already refuses any url
 // it did not supply, but this is the last stop before a string becomes an href.
 function srcHTML(st) {
-  var label = '📍 ' + esc(st.source);
+  var verified = st.grounded === true;
+  var label = '📍 ' + esc(st.source || 'Source unavailable') + ' · ' + (verified ? 'Source matched' : 'Unverified source');
   var url = String(st && st.url || '');
   if (!/^https?:\/\//i.test(url)) return '<span class="src">' + label + '</span>';
   return '<a class="src" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(url) + '">' + label + ' ↗</a>';
@@ -7974,6 +8110,7 @@ function clearBriefing() {
 }
 
 function resetTicker() {
+  document.querySelectorAll('.metric-detail').forEach(function(el) { el.remove(); });
   ['t-psei','t-usdphp','t-asx','t-sp','t-weather'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent='—'; });
   ['t-psei-m','t-usdphp-m','t-asx-m','t-sp-m','t-weather-m'].forEach(function(id){ var e=document.getElementById(id); if(e){e.textContent='—';e.className='tick-move tick-flat';} });
 }
@@ -8032,10 +8169,11 @@ function setWeatherTick(weather) {
   var summary = weather.summary || weather.condition || weather.forecast || 'Forecast';
   var temp = weather.temp_c || weather.temperature_c || weather.temp || '';
   var rain = weather.rain_chance || weather.rain || weather.precipitation || '';
-  valEl.innerHTML = temp
-    ? '<span class="wx-temp">' + esc(temp) + '</span><span class="wx-cond">' + esc(summary) + '</span>'
-    : '<span class="wx-cond">' + esc(summary) + '</span>';
-  moveEl.textContent = rain ? ('Rain ' + rain) : (weather.advisory || weather.impact || 'Today');
+  valEl.textContent = temp || 'Forecast';
+  moveEl.textContent = rain ? 'Rain: ' + String(rain).split(';')[0].slice(0,38) : 'View forecast';
+  var detail = document.getElementById('weather-detail');
+  if (!detail) { detail = document.createElement('details'); detail.id = 'weather-detail'; detail.className = 'metric-detail'; valEl.parentNode.appendChild(detail); }
+  detail.innerHTML = '<summary>Forecast details</summary><div>' + esc([summary,rain,weather.advisory || weather.impact].filter(Boolean).join(' · ')) + '</div>';
   moveEl.className = 'tick-move tick-flat';
 }
 
@@ -8145,7 +8283,7 @@ function loadBriefing(key) {
   _currentData = h.data;
   var fakeRaw = JSON.stringify(h.data);
   document.getElementById('raw-input').value = fakeRaw;
-  renderBriefing();
+  renderBriefing({readOnly:true});
   switchPage('today', document.querySelector('.ntab[data-page="today"]'));
 }
 
@@ -9540,7 +9678,7 @@ function autoLoadToday() {
     // Auto-render today's briefing
     _currentData = match.data;
     document.getElementById('raw-input').value = JSON.stringify(match.data);
-    renderBriefing();
+    renderBriefing({readOnly:true});
 
     // Show auto-load banner
     var banner = document.getElementById('auto-load-banner');

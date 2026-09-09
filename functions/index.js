@@ -13,6 +13,7 @@ const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding} = require("./briefing-evidence");
+const {authorize, guardedGeneration} = require("./generation-guard");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
   isMaterialChange, notificationCopy,
@@ -23,6 +24,32 @@ initializeApp();
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const OPENAI_WEBHOOK_SECRET = defineSecret("OPENAI_WEBHOOK_SECRET");
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
+const GENERATION_OWNERS = (process.env.GENERATION_OWNER_EMAILS || "bobbynacario@gmail.com").split(",").map(s => s.trim().toLowerCase());
+function protectGeneration(feature, handler) {
+  return async request => {
+    try {
+      authorize(request.auth, GENERATION_OWNERS);
+      const data = request.data || {};
+      if (feature === "briefing" && data.model && data.model !== DEFAULT_MODEL) {
+        throw new HttpsError("invalid-argument", "The requested model is not enabled.");
+      }
+      if (feature === "research" && (typeof data.topic !== "string" || data.topic.trim().length < 8 || data.topic.length > 4000)) {
+        throw new HttpsError("invalid-argument", "Enter a research topic between 8 and 4,000 characters.");
+      }
+      if (feature === "briefing" && String(data.date || "").length > 100) throw new HttpsError("invalid-argument", "Invalid date label.");
+      return await guardedGeneration({db:getFirestore(), uid:request.auth.uid, feature,
+        period:feature === "briefing" ? phtDateKey() : phtDateKey().slice(0,7),
+        cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : DEEP_RESEARCH_CAP,
+        requestId:data.requestId,
+        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : {topic:data.topic.trim(),premium:!!data.premium}
+      }, () => handler(request));
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      const codes = ["unauthenticated","permission-denied","invalid-argument","resource-exhausted","failed-precondition"];
+      throw new HttpsError(codes.includes(error.code) ? error.code : "internal", codes.includes(error.code) ? error.message : "Generation could not complete. Check existing results before trying again.");
+    }
+  };
+}
 
 // Deep-research generation config (all override-able via env)
 const DEEP_MODEL_DEFAULT = process.env.DEEP_MODEL_DEFAULT || "o4-mini-deep-research";
@@ -257,7 +284,7 @@ exports.generateBobDailyBriefing = onCall(
     memory: "512MiB",
     secrets: [OPENAI_API_KEY],
   },
-  async (request) => {
+  protectGeneration("briefing", async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in before generating a briefing.");
     }
@@ -369,7 +396,7 @@ exports.generateBobDailyBriefing = onCall(
       raw: JSON.stringify(briefing, null, 2),
       briefing,
     };
-  }
+  })
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -420,7 +447,7 @@ exports.generateDeepResearchReport = onCall(
     memory: "256MiB",
     secrets: [OPENAI_API_KEY],
   },
-  async (request) => {
+  protectGeneration("research", async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in before generating a report.");
     }
@@ -496,7 +523,7 @@ exports.generateDeepResearchReport = onCall(
 
     // Placeholder report doc + usage increment
     const now = Date.now();
-    const docRef = db.collection(REPORTS_COLL).doc("rpt-" + now);
+    const docRef = db.collection(REPORTS_COLL).doc();
     await docRef.set({
       title: topic.length > 90 ? topic.slice(0, 87) + "…" : topic,
       dateLabel: "",
@@ -511,10 +538,15 @@ exports.generateDeepResearchReport = onCall(
       saved: now,
       uid,
     });
-    await metaRef.set({month, count: count + 1, updated: now}, {merge: true});
+    const savedCount = await db.runTransaction(async tx => {
+      const latest = await tx.get(metaRef);
+      const current = latest.exists && latest.data().month === month ? latest.data().count || 0 : 0;
+      tx.set(metaRef, {month, count:current + 1, updated:now}, {merge:true});
+      return current + 1;
+    });
 
-    return {docId: docRef.id, openaiId, model, remaining: DEEP_RESEARCH_CAP - (count + 1)};
-  }
+    return {docId: docRef.id, openaiId, model, remaining: Math.max(0, DEEP_RESEARCH_CAP - savedCount)};
+  })
 );
 
 async function retrieveOpenAIResponse(openaiId) {

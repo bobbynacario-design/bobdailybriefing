@@ -35,3 +35,6 @@ sports/run-history.json
 
 # local re-tagger backup of original briefing JSON (never commit user content)
 radar/retag-backup.json
+
+# Generated release and local test preview
+_site/

@@ -12,6 +12,9 @@ on:
       - sw.js
       - assets/**
       - reports/**
+      - scripts/**
+      - package.json
+      - lib/**
       - lib/command-center-core.js
       - lib/command-review-core.js
       - lib/intelligence-search-core.js
@@ -30,26 +33,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
   publish:
+    needs: verify
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Build static Pages artifact
-        shell: bash
-        run: |
-          mkdir -p _site
-          cp index.html sports.html sports-public.json offline.html manifest.webmanifest sw.js .nojekyll _site/
-          cp -R assets reports _site/
-          mkdir -p _site/lib
-          cp lib/command-center-core.js lib/command-review-core.js lib/intelligence-search-core.js lib/evidence-sets-core.js lib/entity-timeline-core.js _site/lib/
-          test -f _site/lib/command-center-core.js
-          test -f _site/lib/command-review-core.js
-          test -f _site/lib/intelligence-search-core.js
-          test -f _site/lib/evidence-sets-core.js
-          test -f _site/lib/entity-timeline-core.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build and verify release artifact
+        run: npm run check:site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

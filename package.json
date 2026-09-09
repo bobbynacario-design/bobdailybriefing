@@ -8,11 +8,14 @@
   },
   "scripts": {
     "install:all": "npm --prefix functions ci && npm --prefix radar ci && npm --prefix miro ci && npm --prefix sports ci && npm --prefix news ci",
-    "test": "npm run test:lib && npm --prefix functions test && npm --prefix radar test && npm --prefix miro test && npm --prefix sports test && npm --prefix news test && npm run check:app",
+    "test": "npm run test:lib && npm --prefix functions test && npm --prefix radar test && npm --prefix miro test && npm --prefix sports test && npm --prefix news test && npm run test:ui && npm run check:app && npm run check:site",
     "test:lib": "node --test lib/*.test.js",
     "check:app": "node scripts/check-app-smoke.js",
     "check:functions": "npm --prefix functions run check",
     "audit": "npm --prefix functions audit --omit=dev --audit-level=high && npm --prefix radar audit --omit=dev --audit-level=high && npm --prefix miro audit --omit=dev --audit-level=high && npm --prefix sports audit --omit=dev --audit-level=high && npm --prefix news audit --omit=dev --audit-level=high",
-    "deploy:functions": "npm --prefix functions run deploy"
+    "deploy:functions": "npm --prefix functions run deploy",
+    "build": "node scripts/build-site.js",
+    "check:site": "npm run build && node scripts/check-site.js",
+    "test:ui": "node --test scripts/app-runtime.test.js"
   }
 }
