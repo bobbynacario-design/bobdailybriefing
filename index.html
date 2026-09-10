@@ -1801,6 +1801,13 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 @media(max-width:768px){.nav-center{display:flex}.nav-brand{font-size:13px}.nav{padding:.5rem}.nav-group>summary{padding:.55rem .45rem;font-size:12px}.nav-right #sync-status{font-size:10px}.ticker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.tick{width:auto!important}.tick:last-child{grid-column:1/-1}.page{padding-bottom:2rem}.nav-right .nav-btn{font-size:11px}}
 .command-five-item,.command-queue-item{cursor:default}.command-item-title{font-size:15px}.command-item-detail{font-size:13px;color:var(--txt2)}.command-item-btn{font-size:11px;padding:.4rem .55rem}.command-explain{font-size:11px}.command-five-item>.command-item-actions{max-width:260px}summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(max-width:620px){.hero::after{display:none}.command-five-item>.command-item-actions{grid-column:2/-1;justify-content:flex-start;margin-left:0;max-width:none}.command-queue-top{align-items:flex-start;flex-direction:column}.command-queue-top .command-item-actions{margin-left:0;justify-content:flex-start}}
+.working-question{padding:1.2rem;border-bottom:1px solid var(--rim);display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.working-question h3,.working-question p,.working-question .evidence-item-actions{grid-column:1/-1;margin:0}
+.working-question p{font-size:13px;line-height:1.6;color:var(--txt2)}
+.working-question label{display:flex;flex-direction:column;gap:.45rem;font-size:13px;color:var(--txt2);min-width:0}
+.working-question input,.working-question textarea,.working-question select{box-sizing:border-box;width:100%;padding:.7rem;background:var(--bg);color:var(--txt);border:1px solid var(--rim);border-radius:7px;font:inherit}
+.working-question textarea{min-height:100px;resize:vertical;line-height:1.5}.working-question .evidence-item-actions{flex-wrap:wrap}
+@media(max-width:650px){.working-question{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -1955,9 +1962,9 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 
 <div class="page" id="page-evidence">
   <div class="hero" style="margin-bottom:1.25rem">
-    <div class="hero-eyebrow">Reusable source-backed working sets</div>
-    <div class="hero-date" style="font-size:22px">▣ Evidence</div>
-    <div class="hero-sub">Collect signals and records without losing where they came from.</div>
+    <div class="hero-eyebrow">From reading to useful research</div>
+    <div class="hero-date" style="font-size:22px">▣ Questions & Evidence</div>
+    <div class="hero-sub">Track a working question, collect evidence, and turn your findings into a research note.</div>
     <div class="hero-divider"></div>
   </div>
   <div class="command-summary">
@@ -3332,6 +3339,7 @@ function deleteEvidenceSet(encoded) {
   if (!set || !confirm('Delete evidence set "' + set.name + '" and its ' + set.items.length + ' saved item' + (set.items.length === 1 ? '' : 's') + '?')) return;
   var result = window.EvidenceSetsCore.deleteSet(evidenceSetState.data,id);
   if (!result.changed) { showToast(result.error,'warn'); return; }
+  if (evidenceSetState.questionDrafts) delete evidenceSetState.questionDrafts[id];
   evidenceSetState.data = result.state;
   evidenceSetState.selectedId = result.state.sets[0] && result.state.sets[0].id || '';
   paintEvidencePage();
@@ -3367,7 +3375,8 @@ function paintEvidencePage() {
   setText('evidence-note-count',allItems.filter(function (item) { return !!item.note; }).length);
   list.innerHTML = sets.length ? sets.map(function (set) {
     var encoded = evidenceEncode(set.id);
-    return '<button class="evidence-set-row' + (set.id === evidenceSetState.selectedId ? ' active' : '') + '" onclick="selectEvidenceSet(\'' + encoded + '\')"><span><span class="evidence-set-name">' + esc(set.name) + '</span><span class="evidence-set-meta">Updated ' + esc(evidenceDate(set.updatedAt)) + '</span></span><span class="evidence-count">' + set.items.length + '</span></button>';
+    var questionMeta = set.question ? (set.question.status === 'closed' ? 'Closed' : 'Active') + (set.question.deadline ? ' · Due ' + set.question.deadline : '') + ' · ' : '';
+    return '<button class="evidence-set-row' + (set.id === evidenceSetState.selectedId ? ' active' : '') + '" onclick="selectEvidenceSet(\'' + encoded + '\')"><span><span class="evidence-set-name">' + esc(set.name) + '</span><span class="evidence-set-meta">' + esc(questionMeta) + 'Updated ' + esc(evidenceDate(set.updatedAt)) + '</span></span><span class="evidence-count">' + set.items.length + '</span></button>';
   }).join('') : '<div class="command-empty">No evidence sets yet. Create one here or save an item from Search or Command Center.</div>';
   var selected = evidenceSelectedSet();
   if (!selected) { detail.innerHTML = '<div class="command-empty">Select or create an evidence set.</div>'; return; }
@@ -3377,6 +3386,7 @@ function paintEvidencePage() {
     return '<article class="evidence-item"><div class="evidence-item-head"><div><div class="evidence-item-title">' + esc(item.title) + '</div><div class="evidence-item-detail">' + esc(item.detail || 'Saved source item.') + '</div><div class="evidence-item-provenance">' + esc(item.source) + ' · captured ' + esc(evidenceDate(item.capturedAt)) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions"><button class="command-item-btn" onclick="openEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open source</button><button class="command-item-btn" onclick="removeEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Remove</button></div></div><textarea class="evidence-note" maxlength="500" placeholder="Add your note — why this matters, what to verify, or how it connects…" onblur="updateEvidenceNote(\'' + setEncoded + '\',\'' + keyEncoded + '\',this.value)">' + esc(item.note) + '</textarea></article>';
   }).join('') : '<div class="command-empty">This set is empty. Save results from Search or items from Command Center.</div>';
   detail.innerHTML = '<div class="evidence-detail-head"><input class="evidence-rename" maxlength="80" value="' + esc(selected.name) + '" onchange="renameEvidenceSet(\'' + setEncoded + '\',this.value)" aria-label="Evidence set name"><div class="evidence-item-actions"><button class="tool-chip" onclick="openIntelligenceSearch()">Search to add</button><button class="tool-chip" onclick="deleteEvidenceSet(\'' + setEncoded + '\')">Delete set</button></div></div><div class="evidence-item-list">' + itemsHtml + '</div>';
+  renderWorkingQuestion(selected);
 }
 function openEvidencePicker(item) {
   if (!item || !item.title) return;
