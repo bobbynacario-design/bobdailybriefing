@@ -114,6 +114,36 @@ Morning 5 web-push setup and verification are documented in
 The review-state model and metric definitions are documented in
 [`docs/phase-2-review-loop.md`](docs/phase-2-review-loop.md).
 
+The prompt itself lives in one place — `lib/briefing-prompt-core.js`, shared by the
+server generator and the app’s copy-prompt button, so what Bob can read is what
+actually runs. The generated briefing is shaped by four things beyond it:
+
+- **Grounding** — the insurance section is built only from the day's fetched
+  news snapshot, and returned URLs are verified against what was supplied
+  (`functions/briefing-evidence.js`).
+- **Standing context** — Bob's open decision-journal calls with their
+  invalidation lines, confirmed/forming Radar setups, and event markets past the
+  research gate are put in front of the model as private state
+  (`functions/briefing-context.js`). Stories that bear on a named call are said
+  to do so; connections are never manufactured, and the briefing never
+  recommends an entry, exit or size. Missing feeds degrade section by section
+  and never block generation.
+- **Verified figures** — PSEi and USD/PHP come from the `radar-ph` snapshot;
+  ASX 200 and the S&P 500 from Yahoo; the Metro Manila forecast from open-meteo.
+  The model is given the real numbers and forbidden from producing its own, then
+  the server overwrites the fields anyway and **blanks any figure no source could
+  confirm** (`functions/market-facts.js`). Every value carries its as-of date and
+  source, shown under the ticker’s “As of / details”. Prose — the peso driver, the
+  weather impact note — stays the model’s.
+- **Watch follow-up** — the previous briefing's `watch` line is carried into
+  today's prompt and graded `advanced`, `stalled`, `resolved`, `dead` or
+  `no_news` in `watch_followup`, rendered as the LAST WATCH card. Same-day
+  regenerations are skipped so the model never grades its own line.
+
+Section quotas are a budget, not a floor: at most 14 stories overall and 4 per
+section, spent on insurance and interruptions first. Sections may be empty, and
+a quiet day is expected to produce a shorter briefing rather than a padded one.
+
 Notes:
 
 - ChatGPT Pro is a ChatGPT subscription, not the API endpoint.

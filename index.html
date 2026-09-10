@@ -23,6 +23,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/app-reliability.js"></script>
 <script src="./lib/ui-shell.js"></script>
 <script src="./lib/command-center-core.js"></script>
+<script src="./lib/briefing-prompt-core.js"></script>
 <script src="./lib/command-review-core.js"></script>
 <script src="./lib/intelligence-search-core.js"></script>
 <script src="./lib/evidence-sets-core.js"></script>
@@ -1382,6 +1383,15 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
 .watch-stripe{position:absolute;top:0;left:0;width:4px;height:100%;background:var(--red)}
 .watch-body{font-size:13px;color:var(--txt2);line-height:1.8;padding-left:.25rem}
+.wm-row{margin-top:.55rem;padding-top:.5rem;border-top:1px solid var(--rim);display:flex;gap:.45rem;align-items:baseline;flex-wrap:wrap}
+.wm-horizon{font-family:var(--mono);font-size:9px;letter-spacing:.09em;font-weight:700;color:var(--gold);border:1px solid var(--rim2);border-radius:3px;padding:.1rem .3rem;flex:none}
+.wm-text{font-size:11.5px;color:var(--txt3);line-height:1.6}
+.wf-card{background:var(--bg2);border-color:var(--rim)}
+.wf-prior{font-size:12px;color:var(--txt3);font-style:italic;line-height:1.7;margin-bottom:.5rem;border-left:2px solid var(--rim2);padding-left:.7rem}
+.wf-badge{margin-left:auto;font-size:10px;letter-spacing:.08em;font-weight:700;padding:.15rem .45rem;border-radius:4px;border:1px solid var(--rim2);color:var(--txt3)}
+.wf-good{color:var(--green);border-color:var(--green);background:var(--green-dim)}
+.wf-flat{color:var(--txt2)}
+.wf-dim{opacity:.7}
 
 /* ── SECTION TABS (within page) ── */
 .section-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
@@ -7903,7 +7913,10 @@ function parseInput(raw) {
 }
 
 function normalise(d) {
-  var r = {date:d.date||'', markets:d.markets||null, peso:d.peso||d.fx||null, weather:d.weather||null, watch:d.watch||'', watch_source:d.watch_source||'', grounding:d.grounding||null, sections:{}};
+  // watch_followup and context are carried for the same reason url/grounded are:
+  // normalise() drops anything it does not name, so a field left out here is
+  // silently deleted on save and the archive loses it for good.
+  var r = {date:d.date||'', markets:d.markets||null, peso:d.peso||d.fx||null, weather:d.weather||null, watch:d.watch||'', watch_source:d.watch_source||'', watch_followup:d.watch_followup||null, grounding:d.grounding||null, context:d.context||null, sections:{}};
   var secs = Array.isArray(d.sections) ? d.sections : Object.keys(d.sections).map(function(k){ return {id:k,stories:d.sections[k]}; });
   secs.forEach(function(sec) {
     r.sections[sec.id] = (sec.stories||[]).map(function(st) {
@@ -7917,7 +7930,12 @@ function normalise(d) {
         url:st.url||'',
         grounded:st.grounded===true,
         relevance:st.relevant===false?'':(st.relevance||''),
-        relevance_level:st.relevance_level||''
+        relevance_level:st.relevance_level||'',
+        // The insurance and interruptions sections carry a named thing to check
+        // and a timeframe. Like url and grounded above, they only survive the
+        // save because they are named here.
+        watch_metric:st.watch_metric||'',
+        horizon:st.horizon||''
       };
     });
   });
@@ -7955,6 +7973,65 @@ async function generateWithOpenAI() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'OPENAI GENERATE'; }
   }
+}
+
+// ── WATCH METRIC ─────────────────────────────────────────────────────────
+// The named, checkable thing behind an insurance or interruptions story, and
+// when it matters by. These exist because the old prompt asked for "a specific
+// Bob-facing insight: claim angle, data to monitor, affected industries, or
+// consulting opportunity" — four alternatives, so the model always took the
+// cheapest and produced "watch for claims impact".
+//
+// Rendered as its own line rather than folded into the → Bob text, because the
+// point is that it is checkable: it should be visibly a thing with a publisher
+// and a date, not more prose. Absent on older archived briefings and on the
+// sections that do not carry it, so it renders nothing at all when empty.
+var HORIZONS = {days: 'DAYS', weeks: 'WEEKS', months: 'MONTHS'};
+
+function watchMetricHtml(st) {
+  var metric = String((st && st.watch_metric) || '').trim();
+  var horizon = HORIZONS[String((st && st.horizon) || '').toLowerCase().trim()] || '';
+  if (!metric && !horizon) return '';
+  return '<div class="wm-row">' +
+    (horizon ? '<span class="wm-horizon">' + horizon + '</span>' : '') +
+    (metric ? '<span class="wm-text">' + esc(metric) + '</span>' : '') +
+  '</div>';
+}
+
+// ── LAST WATCH ───────────────────────────────────────────────────────────
+// The other half of "one thing to watch". That field was write-only for its
+// whole life: it was generated every morning and never read back, so it could
+// have been wrong for a fortnight without anyone noticing. The server now feeds
+// yesterday's line into today's prompt and asks for a grade, and this renders
+// the grade — otherwise the loop still doesn't close, it just closes somewhere
+// Bob can't see.
+//
+// no_news is styled as neutral, not as a failure. "Nothing moved and I could
+// not verify anything" is an honest answer to a forecast question, and making
+// it look like an error is how you teach a model to prefer a confident wrong one.
+var WATCH_STATUS = {
+  advanced: {label: 'ADVANCED', tone: 'good'},
+  resolved: {label: 'RESOLVED', tone: 'good'},
+  stalled:  {label: 'STALLED',  tone: 'flat'},
+  no_news:  {label: 'NO NEWS',  tone: 'flat'},
+  dead:     {label: 'DEAD',     tone: 'dim'}
+};
+
+function watchFollowupHtml(fu) {
+  if (!fu || typeof fu !== 'object') return '';
+  var prior = String(fu.prior || '').trim();
+  var note = String(fu.note || '').trim();
+  if (!prior && !note) return '';
+  var meta = WATCH_STATUS[String(fu.status || '').toLowerCase().trim()] ||
+    {label: 'UNGRADED', tone: 'dim'};
+  return '<div data-group="today" style="margin-bottom:1.75rem">' +
+    '<div class="sec-hdr"><div class="sec-pip" style="background:var(--txt3)"></div>' +
+      '<div class="sec-name">LAST WATCH</div>' +
+      '<span class="wf-badge wf-' + meta.tone + '">' + meta.label + '</span></div>' +
+    '<div class="watch-card wf-card">' +
+      (prior ? '<div class="wf-prior">' + esc(prior) + '</div>' : '') +
+      (note ? '<div class="watch-body">' + esc(note) + '</div>' : '') +
+    '</div></div>';
 }
 
 function renderBriefing(options) {
@@ -8034,13 +8111,17 @@ function renderBriefing(options) {
       secHTML += '<div class="card-aside">';
       if (score!=='none') secHTML += '<div class="rel-text"><strong>→ Bob:</strong> '+esc(st.relevance)+'</div>';
       else secHTML += '<div class="rel-none-txt">No direct relevance today</div>';
+      secHTML += watchMetricHtml(st);
       secHTML += '</div></div>';
     });
 
     todayHTML += '<div data-group="'+esc(meta.page)+'" style="margin-bottom:1.75rem;animation:fadeIn .4s ease">'+secHTML+'</div>';
   });
 
-  // Watch section
+  // Watch section. The follow-up on yesterday's item comes FIRST: it is the
+  // answer to a question already asked, and reading today's new call before
+  // finding out what happened to the last one gets the order backwards.
+  todayHTML += watchFollowupHtml(data.watch_followup);
   if (data.watch) {
     var wHTML = '<div data-group="today" style="margin-bottom:1.75rem"><div class="sec-hdr"><div class="sec-pip" style="background:#E85C5C"></div><div class="sec-name">ONE THING TO WATCH</div></div><div class="watch-card"><div class="watch-stripe"></div><div class="watch-body">'+esc(data.watch)+'</div>'+(data.watch_source?'<div style="margin-top:.6rem"><span class="src">📍 '+esc(data.watch_source)+'</span></div>':'')+'</div></div>';
     todayHTML += wHTML;
@@ -8074,7 +8155,11 @@ function renderBriefing(options) {
 
 function setTick(vi,mi,val,mov) {
   var split = window.AppReliability.metric(val);
-  var e = document.getElementById(vi); if(e) e.textContent = split.value;
+  // An empty value means the server could not verify that figure and blanked it
+  // rather than let an invented one through (functions/market-facts.js). Show
+  // the em dash the ticker resets to, so it reads as "not available" instead of
+  // as a cell that failed to render.
+  var e = document.getElementById(vi); if(e) e.textContent = split.value || '—';
   var details = document.getElementById(vi + '-detail');
   if (!details && e) { details = document.createElement('details'); details.id = vi + '-detail'; details.className = 'metric-detail'; e.parentNode.appendChild(details); }
   if (details) { details.hidden = !split.detail && !mov; details.innerHTML = '<summary>As of / details</summary><div>' + esc([split.detail,mov].filter(Boolean).join(' · ')) + '</div>'; }
@@ -9499,41 +9584,21 @@ function renderTrends(days, btnEl) {
   }
 }
 
-// ── GEMINI PROMPT TEMPLATE ──
-function getGeminiPromptLegacy() {
-  var today = new Date();
-  var dateStr = today.toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
-  return 'You are an intelligence briefing analyst preparing a daily briefing for Bob, a forensic BI consultant who works with Australian insurance companies and Philippine consulting firms.\n\nGenerate today\'s briefing (' + dateStr + ') as a single JSON object with this EXACT schema:\n\n```json\n{\n  "date": "' + dateStr + '",\n  "markets": {\n    "psei": "6,450.23",\n    "psei_move": "+0.8% Up",\n    "asx": "8,102.50",\n    "asx_move": "-0.3% Down",\n    "sp500": "5,890.12",\n    "sp500_move": "+0.5% Up"\n  },\n  "sections": {\n    "global": [\n      {\n        "headline": "Story headline here",\n        "body": "2-3 sentence summary of the story and its implications.",\n        "source": "Reuters / Bloomberg / etc",\n        "relevance": "How this relates to Bob\'s work in forensic BI, insurance, or consulting. Write \'No direct relevance\' if none.",\n        "relevance_level": "high"\n      }\n    ],\n    "ph": [\n      {\n        "headline": "Philippine story headline",\n        "body": "Summary.",\n        "source": "Inquirer / Rappler / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "med"\n      }\n    ],\n    "ai": [\n      {\n        "headline": "AI/tech story",\n        "body": "Summary.",\n        "source": "TechCrunch / Wired / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "low"\n      }\n    ],\n    "markets": [\n      {\n        "headline": "Markets/economy story",\n        "body": "Summary.",\n        "source": "Financial Times / WSJ / etc",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "none"\n      }\n    ],\n    "ev": [\n      {\n        "headline": "EV industry story",\n        "body": "Summary.",\n        "source": "Source",\n        "relevance": "Relevance explanation.",\n        "relevance_level": "low"\n      }\n    ]\n  },\n  "watch": "One key development to monitor over the coming days. 2-3 sentences.",\n  "watch_source": "Source name"\n}\n```\n\nIMPORTANT RULES:\n- Output ONLY the JSON object, no markdown fences, no explanation before or after\n- Include 3-5 stories per section (global, ph, ai, markets, ev)\n- "relevance_level" MUST be one of: "high", "med", "low", "none"\n  - "high" = directly relevant to insurance, forensic BI, claims, consulting, audit, CPA, underwriting, BSP, ASX, AUD\n  - "med" = relevant to broader economy, markets, trade, inflation, supply chain, technology trends\n  - "low" = tangentially interesting but not directly actionable\n  - "none" = no direct relevance to Bob\'s work\n- "relevance" field should explain WHY it matters to Bob (or say "No direct relevance")\n- Market values should be current/realistic for today\n- Stories should be real, current news from today or yesterday\n- Each story body should be 2-3 sentences, informative and concise';
-}
-
+// ── BRIEFING PROMPT ──
+// The canonical prompt lives in lib/briefing-prompt-core.js and is shared with
+// the server generator. There used to be two copies here — this one behind the
+// copy button and a getGeminiPromptLegacy() behind nothing at all — and both
+// had drifted from what actually runs: the legacy copy still had no insurance
+// section, no interruptions section, no peso and no weather.
+//
+// No evidence, standing context or verified figures are passed, because all
+// three are server-side reads. What Bob copies is therefore exactly the prompt
+// the server sends on a morning when every feed is down — a real prompt that
+// works when pasted elsewhere, rather than an approximation of one.
 function getGeminiPrompt() {
-  var dateStr = getTodayBriefingDateLabel();
-  return [
-    'You are an intelligence briefing analyst preparing a daily briefing for Bob, a forensic BI consultant working with Australian insurance companies and Philippine consulting firms.',
-    '',
-    "Generate today's briefing (" + dateStr + ") as strict JSON only. Include top-level date, markets, peso, weather, sections, watch, and watch_source.",
-    '',
-    'Required top-level context:',
-    '- markets: psei, psei_move, asx, asx_move, sp500, sp500_move',
-    '- peso: usdphp, usdphp_move, driver',
-    '- weather: location, summary, temp_c, rain_chance, impact',
-    '',
-    'Required sections with 3-5 real current stories each:',
-    '- global',
-    '- ph',
-    '- insurance',
-    '- interruptions',
-    '- ai',
-    '- markets',
-    '- ev',
-    '',
-    'For every story include headline, body, source, relevance, and relevance_level.',
-    'The insurance section must focus on claims, underwriting, catastrophe exposure, reinsurance, regulatory movement, claims inflation, audit, and forensic BI implications.',
-    'The interruptions section must focus on business interruption, supply chains, transport/ports, power outages, weather events, cyber outages, plant closures, and affected industries.',
-    'Every insurance and interruption item must include a Bob-facing insight: likely claims angle, BI exposure, data to monitor, or consulting opportunity.',
-    'relevance_level must be high, med, low, or none.',
-    'Output JSON only, no markdown fences.'
-  ].join('\\n');
+  return window.BriefingPromptCore.buildBriefingPrompt({
+    dateLabel: getTodayBriefingDateLabel()
+  });
 }
 
 function togglePrompt() {

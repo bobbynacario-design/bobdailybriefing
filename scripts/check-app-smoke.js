@@ -36,6 +36,7 @@ assert.ok(html.includes('type="module"'), 'Firebase application script must rema
 assert.ok(html.includes('manifest.webmanifest'), 'PWA manifest link is required');
 assert.ok(html.includes('./lib/command-center-core.js'), 'Command Center core must load before the app script');
 assert.ok(html.includes('./lib/command-review-core.js'), 'Command review core must load before the app script');
+assert.ok(html.includes('./lib/briefing-prompt-core.js'), 'Shared briefing prompt core must load before the app script');
 assert.ok(html.includes('./lib/intelligence-search-core.js'), 'Unified search core must load before the app script');
 assert.ok(html.includes('./lib/evidence-sets-core.js'), 'Evidence sets core must load before the app script');
 assert.ok(html.includes('./lib/entity-timeline-core.js'), 'Entity timeline core must load before the app script');

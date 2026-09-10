@@ -13,6 +13,11 @@ const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding} = require("./briefing-evidence");
+const {buildStandingContext, priorWatch} = require("./briefing-context");
+const {buildBriefingPrompt} = require("./briefing-prompt-core");
+const {
+  parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
+} = require("./market-facts");
 const {authorize, guardedGeneration} = require("./generation-guard");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
@@ -66,10 +71,14 @@ const COMMAND_URL = "https://bobbynacario-design.github.io/bobdailybriefing/#com
 // ── LLM usage telemetry (CJS twin of lib/llm-usage.js) ──
 // Writes token usage to the shared ledger briefings-bob/llm-usage (no uid).
 // Never throws — telemetry must not break generation.
-function phtDateKey() {
+// Optional `at` (ms or Date) so a stored document can be placed on the PHT day
+// it was actually written, not the day it is being read. Archived briefings are
+// keyed by a slugified date LABEL ("Thursday--September-11--2026"), which is not
+// parseable as a date, so `saved` is the only reliable clock they carry.
+function phtDateKey(at) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date());
+  }).format(at == null ? new Date() : new Date(at));
 }
 function _num(v) {
   const n = Number(v);
@@ -127,108 +136,10 @@ async function recordUsage(db, feature, model, usage, dateKey) {
   }
 }
 
-// Rules that only apply when we have a fetched-news block to ground on. Returns
-// [] when there is nothing to ground with, so the prompt is byte-identical to
-// the pre-grounding version and the fallback path stays the known-good one.
-//
-// The insurance section becomes CLOSED — only the supplied stories — because
-// that is the whole point: a section whose every item can be re-opened from the
-// app. Interruptions stays OPEN, because the feed is Australian insurance trade
-// press and a Philippine port closure or a regional supply-chain failure will
-// not be in it; forcing that section closed would trade real coverage for a
-// tidier rule.
-function groundingRules(evidence) {
-  if (!evidence || evidence.unavailable || !evidence.block) return [];
-  return [
-    "",
-    "GROUNDING — this overrides the instructions above where they conflict:",
-    "- A list of real, already-fetched Australian insurance stories appears at the end of this prompt.",
-    "- Build the insurance section ONLY from that list. Do not web-search for it and do not add stories from your own knowledge.",
-    "- Choose the 3-5 stories most relevant to Bob. If fewer than 3 are genuinely relevant, return fewer. Never pad.",
-    "- For each chosen story: copy its headline as the headline, copy its publisher as the source, and copy its url EXACTLY as written.",
-    "- Never invent, guess, shorten or tidy a url. A url that is not in the list is worse than no url at all.",
-    "- body remains your own 2-3 sentence summary, and relevance remains the Bob-facing insight. Those are yours to write; the headline, publisher and url are not.",
-    "- The interruptions section may also draw on the list where a story fits, using the same exact url. For anything else in that section, web-search as usual and leave url empty.",
-    "- Leave url empty in every other section.",
-  ];
-}
-
-function evidenceBlock(evidence) {
-  if (!evidence || evidence.unavailable || !evidence.block) return [];
-  return ["", evidence.block];
-}
-
-function buildBriefingPrompt(dateLabel, evidence) {
-  const date = dateLabel || new Date().toLocaleDateString("en-US", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
-    timeZone: "Asia/Manila",
-  });
-
-  return [
-    "You are an intelligence briefing analyst preparing a daily briefing for Bob.",
-    "Bob is a forensic BI consultant who works with Australian insurance companies and Philippine consulting firms.",
-    "",
-    "Generate today's briefing (" + date + ") as a single JSON object with this exact schema:",
-    "{",
-    '  "date": "' + date + '",',
-    '  "markets": {',
-    '    "psei": "6,450.23",',
-    '    "psei_move": "+0.8% Up",',
-    '    "asx": "8,102.50",',
-    '    "asx_move": "-0.3% Down",',
-    '    "sp500": "5,890.12",',
-    '    "sp500_move": "+0.5% Up"',
-    "  },",
-    '  "peso": {',
-    '    "usdphp": "58.42",',
-    '    "usdphp_move": "+0.18% Peso weaker",',
-    '    "driver": "Short explanation of the peso move"',
-    "  },",
-    '  "weather": {',
-    '    "location": "Metro Manila",',
-    '    "summary": "Scattered thunderstorms",',
-    '    "temp_c": "27-32C",',
-    '    "rain_chance": "70%",',
-    '    "impact": "Claims/interruption relevance for the day"',
-    "  },",
-    '  "sections": {',
-    '    "global": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "high"}],',
-    '    "ph": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "med", "market_category": "macro", "market_subject": ""}],',
-    '    "insurance": [{"headline": "", "body": "", "source": "", "url": "", "relevance": "", "relevance_level": "high"}],',
-    '    "interruptions": [{"headline": "", "body": "", "source": "", "url": "", "relevance": "", "relevance_level": "high"}],',
-    '    "ai": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "low"}],',
-    '    "markets": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "none", "market_category": "none", "market_subject": ""}],',
-    '    "ev": [{"headline": "", "body": "", "source": "", "relevance": "", "relevance_level": "low"}]',
-    "  },",
-    '  "watch": "One key development to monitor over the coming days.",',
-    '  "watch_source": "Source name"',
-    "}",
-    "",
-    "Rules:",
-    "- Output only valid JSON. No markdown fences. No prose before or after.",
-    "- Include 3-5 real, current stories per section: global, ph, insurance, interruptions, ai, markets, ev.",
-    "- The insurance section must be rich in Australian insurance, reinsurance, claims inflation, underwriting, catastrophe exposure, regulatory, audit, and forensic BI implications.",
-    "- The interruptions section must focus on business interruption, supply chain disruption, transport/port/power outages, weather events, strikes, cyber outages, plant closures, and events that could affect insured losses or consulting work.",
-    "- Every insurance and interruptions story must include a specific Bob-facing insight: likely claim/BI angle, data to monitor, affected industries, or consulting opportunity.",
-    "- Include USD/PHP in the peso object, with whether the peso strengthened or weakened and a short driver.",
-    "- Include today's Metro Manila weather forecast and an insurance/interruption impact note.",
-    "- Use current or very recent news from today or yesterday where possible.",
-    "- relevance_level must be one of: high, med, low, none.",
-    "- high means directly relevant to insurance, forensic BI, claims, consulting, audit, CPA, underwriting, BSP, ASX, AUD, reinsurance, or business interruption.",
-    "- med means relevant to broader economy, markets, trade, inflation, supply chain, regulation, or technology trends.",
-    "- low means tangentially useful.",
-    "- none means no direct relevance to Bob's work.",
-    "- The relevance field must explain why it matters to Bob, or say No direct relevance.",
-    "- For the ph and markets sections ONLY, tag each story with market_category, one of: specific, macro, none.",
-    "  - specific = about a particular Philippine stock-exchange-listed company or its shares (e.g. SM, Ayala, BDO, Jollibee, PLDT, Meralco, ICTSI, San Miguel). Put the company name in market_subject.",
-    "  - macro = the Philippine market/economy broadly: PSEi, the peso, BSP, interest rates, inflation, GDP, trade, remittances, fiscal/policy, or a whole sector. Put the theme in market_subject (e.g. 'BSP rates', 'peso', 'PSEi').",
-    "  - none = not related to the Philippine stock market or economy. Leave market_subject empty.",
-    "  - Omit market_category for all other sections (global, insurance, interruptions, ai, ev).",
-    "- Each story body should be 2-3 concise sentences.",
-    "- Market values should be current and realistic.",
-  ].concat(groundingRules(evidence)).concat(evidenceBlock(evidence)).join("\n");
-}
-
+// The prompt itself now lives in lib/briefing-prompt-core.js, synced here as a
+// CJS twin by sync-shared-core.js. It was duplicated across this file and two
+// functions in index.html, and the three had drifted far enough apart that the
+// prompt Bob could read in the app was not the prompt that ran. See that file.
 function extractText(responseJson) {
   if (typeof responseJson.output_text === "string" && responseJson.output_text.trim()) {
     return responseJson.output_text.trim();
@@ -277,6 +188,117 @@ async function loadNewsEvidence(db) {
   }
 }
 
+// Load Bob's own open state and his last watch item. Like loadNewsEvidence this
+// NEVER throws: standing context makes a briefing sharper, but a Firestore
+// hiccup on the decisions query must not be able to stop the day's briefing
+// being generated at all. Each read is caught individually so one missing feed
+// costs only its own section — a failed radar pointer should not also silence
+// the open calls, which are the part that matters most.
+//
+// The 100-decision window matches userCommandInputs(); buildStandingContext then
+// filters to live calls and keeps the newest ten.
+async function loadStandingContext(db, uid) {
+  if (!uid) return {standing: null, watch: null, reason: "no-uid"};
+  try {
+    const [radar, markets, decisionsSnap, briefingSnap] = await Promise.all([
+      pointedDocument(db, "radar-latest", "radar-").catch(() => null),
+      pointedDocument(db, "miro-latest", "miro-").catch(() => null),
+      db.collection(JOURNAL_COLL).where("uid", "==", uid)
+        .orderBy("saved", "desc").limit(100).get().catch(() => null),
+      db.collection(BRIEFINGS_COLL).where("uid", "==", uid)
+        .orderBy("saved", "desc").limit(5).get().catch(() => null),
+    ]);
+
+    const decisions = decisionsSnap ?
+      decisionsSnap.docs.map((doc) => Object.assign({id: doc.id}, doc.data())) : [];
+
+    // briefings-bob also holds preference and snapshot documents. Those either
+    // carry no uid or no `data` payload, so they parse to null here and are
+    // dropped by priorWatch rather than needing a separate filter.
+    const archive = briefingSnap ? briefingSnap.docs.map((doc) => {
+      const value = doc.data() || {};
+      let briefing = null;
+      try {
+        briefing = JSON.parse(value.data);
+      } catch (error) {
+        briefing = null;
+      }
+      return {dateKey: phtDateKey(value.saved), briefing};
+    }) : [];
+
+    return {
+      standing: buildStandingContext({decisions, radar, markets}),
+      watch: priorWatch(archive, phtDateKey()),
+      reason: null,
+    };
+  } catch (error) {
+    logger.warn("standing context unavailable", {message: error.message});
+    return {standing: null, watch: null, reason: "error"};
+  }
+}
+
+// Metro Manila. radar/ph-snapshot.js already fetches PSEi and USD/PHP into
+// briefings-bob/radar-ph, so only the two remaining indices and the forecast
+// need a call of their own.
+const MANILA = {latitude: 14.5995, longitude: 120.9842};
+const FACTS_TIMEOUT_MS = 8000;
+
+// One bounded GET returning parsed JSON, or null. Never throws: a figure that
+// cannot be fetched becomes a blank in the briefing, which is a worse briefing
+// but still a briefing. Nothing here is allowed to fail generation.
+async function fetchJson(url, label) {
+  try {
+    const response = await fetch(url, {
+      headers: {"User-Agent": "Mozilla/5.0 (bobdailybriefing)"},
+      signal: AbortSignal.timeout(FACTS_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      logger.warn("market fact fetch failed", {label, status: response.status});
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    logger.warn("market fact fetch error", {label, message: error.message});
+    return null;
+  }
+}
+
+function yahooChartUrl(symbol) {
+  return "https://query1.finance.yahoo.com/v8/finance/chart/" +
+    encodeURIComponent(symbol) + "?interval=1d&range=5d";
+}
+
+function openMeteoUrl() {
+  return "https://api.open-meteo.com/v1/forecast" +
+    "?latitude=" + MANILA.latitude + "&longitude=" + MANILA.longitude +
+    "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code" +
+    "&timezone=Asia%2FManila&forecast_days=1";
+}
+
+// The real numbers for the top of the briefing. Every source is independent and
+// individually caught, so a Yahoo outage costs the ASX and S&P figures and
+// nothing else — PSEi, the peso and the forecast still arrive.
+async function loadMarketFacts(db) {
+  try {
+    const [ph, asxJson, spJson, weatherJson] = await Promise.all([
+      db.collection(BRIEFINGS_COLL).doc("radar-ph").get()
+        .then((snap) => (snap.exists ? snap.data() : null)).catch(() => null),
+      fetchJson(yahooChartUrl("^AXJO"), "ASX 200"),
+      fetchJson(yahooChartUrl("^GSPC"), "S&P 500"),
+      fetchJson(openMeteoUrl(), "Metro Manila forecast"),
+    ]);
+    return buildFacts({
+      ph,
+      asx: parseYahooChart(asxJson),
+      sp500: parseYahooChart(spJson),
+      weather: parseOpenMeteo(weatherJson),
+    });
+  } catch (error) {
+    logger.warn("market facts unavailable", {message: error.message});
+    return null;
+  }
+}
+
 exports.generateBobDailyBriefing = onCall(
   {
     region: "asia-southeast1",
@@ -290,9 +312,15 @@ exports.generateBobDailyBriefing = onCall(
     }
 
     const db = getFirestore();
-    const {evidence, reason: groundingReason} = await loadNewsEvidence(db);
-    const prompt = buildBriefingPrompt(
-      String((request.data && request.data.date) || "").trim(), evidence);
+    const [{evidence, reason: groundingReason}, context, facts] = await Promise.all([
+      loadNewsEvidence(db),
+      loadStandingContext(db, request.auth.uid),
+      loadMarketFacts(db),
+    ]);
+    const prompt = buildBriefingPrompt({
+      dateLabel: String((request.data && request.data.date) || "").trim(),
+      evidence, context, facts,
+    });
     const model = String((request.data && request.data.model) || DEFAULT_MODEL);
 
     const body = {
@@ -381,6 +409,44 @@ exports.generateBobDailyBriefing = onCall(
       unmatchedUrls: verified.stats.unmatched,
       bySection: verified.stats.bySection,
     } : {mode: "ungrounded", reason: groundingReason || "unavailable"};
+
+    // What the model could actually see of Bob's own state, recorded next to
+    // the grounding provenance for the same reason: a briefing that failed to
+    // mention an open call should be readable as "it had none to see" rather
+    // than leaving him to guess whether the feature ran.
+    briefing.context = {
+      standing: context && context.standing ? context.standing.stats :
+        {decisions: 0, radar: 0, markets: 0},
+      priorWatch: context && context.watch ? {
+        dateKey: context.watch.dateKey || "",
+        dateLabel: context.watch.dateLabel || "",
+      } : null,
+      reason: (context && context.reason) || null,
+    };
+    // A follow-up is only meaningful about a watch item that was actually
+    // supplied. Anything returned without one is invention, not a grade.
+    if (!(context && context.watch)) briefing.watch_followup = null;
+
+    // Overwrite the model's figures with the fetched ones, and blank any field
+    // no source could confirm. Same reasoning as verifyGrounding: being told to
+    // copy a value is a request, not a guarantee, and an unverified number in
+    // the ticker looks exactly like a verified one.
+    const applied = applyFacts(briefing, facts);
+    briefing = applied.briefing;
+    briefing.facts = facts ? {
+      mode: "verified",
+      applied: applied.stats.applied,
+      corrected: applied.stats.corrected,
+      blanked: applied.stats.blanked,
+      changedFields: applied.stats.fields,
+      missing: facts.missing,
+    } : {mode: "unverified", reason: "unavailable"};
+
+    if (applied.stats.corrected) {
+      logger.warn("briefing figures disagreed with fetched values", {
+        corrected: applied.stats.corrected, fields: applied.stats.fields,
+      });
+    }
 
     if (verified.stats.unmatched) {
       logger.warn("briefing cited urls that were not supplied", {
