@@ -914,7 +914,9 @@ function buildTeamProfiles(kind, standings, momentum, matches, injuries) {
       momentumLabel: form.label || '',
       recentForm: form.recentForm || '',
       // Both forward lanes are basketball now, so the margin is always points.
-      margin: form.averagePointDiff,
+      // A standings team with no finished game in the window has no momentum row
+      // at all, and Firestore rejects the whole document over one undefined.
+      margin: form.averagePointDiff == null ? null : form.averagePointDiff,
       next: next,
       latest: latest,
       availabilityCount: teamInjuries.length,

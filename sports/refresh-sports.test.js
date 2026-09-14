@@ -443,6 +443,26 @@ test('builds PBA postseason rounds and team detail profiles only from official m
   assert.equal(profiles[0].next.away, 'TNT Tropang 5G');
 });
 
+// buildNbaMomentum keys off FINISHED games, so out of season a standings team
+// can have no momentum row at all. Every profile field is null-guarded for that
+// except margin, which shipped `undefined` straight into the Firestore write and
+// took the whole sports document down with it - all four lanes, not just NBA.
+test('a standings team with no momentum row still writes a Firestore-safe profile', function () {
+  var profiles = buildTeamProfiles('nba', [
+    { team:'Played FC', position:1, wins:1, losses:0, pct:1 },
+    { team:'Idle FC', position:2, wins:0, losses:0, pct:0 }
+  ], [
+    { team:'Played FC', score:70, label:'WATCH', recentForm:'W', averagePointDiff:4.5 }
+  ], [], []);
+  var idle = profiles.find(function (row) { return row.team === 'Idle FC'; });
+  assert.equal(idle.margin, null);
+  assert.equal(idle.momentumScore, null);
+  profiles.forEach(function (profile) {
+    assert.deepEqual(Object.keys(profile).filter(function (key) { return profile[key] === undefined; }), [],
+      profile.team + ' carries an undefined field, which Firestore rejects');
+  });
+});
+
 test('builds a concise refresh delta from results, fixtures and standings movement', function () {
   var previous = {
     lastSuccessfulAt:'2026-07-20T00:00:00Z',
