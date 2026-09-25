@@ -17,7 +17,9 @@ Private daily intelligence briefing desk for Bob.
   briefing remains directly below the daily practice. Once today’s quest is done
   (or tucked away with “Tuck away · briefing first”), returning to Today shows it
   as a one-line strip with your note, so the briefing comes first; it reopens on
-  request and starts fresh the next day.
+  request and starts fresh the next day. A Monday-to-Sunday dot row counts this
+  week’s small wins (no streaks), and “Copy all reflections” puts every stored
+  entry on the clipboard as plain text, falling back to a selectable box.
 
 - **Command Center** — a zero-extra-cost cross-feed “Morning 5” and attention
   queue. It ranks current briefing items, Radar setups, Markets changes, open
