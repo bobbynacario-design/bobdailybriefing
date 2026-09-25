@@ -4,6 +4,15 @@ Private daily intelligence briefing desk for Bob.
 
 ## Features
 
+- **Daily Boost** — Today opens with a rotating perspective and a small, actionable
+  quest. Choose a two-minute step or ten-minute exploration, switch quests, mark a
+  small win, and capture a reflection. Fourteen curated prompts rotate by PHT date;
+  they work independently of live feeds and require no model calls. Reflections
+  and completion are stored on this device per signed-in account for up to 90
+  dated entries, with the seven most recent prior entries shown. They do not sync
+  between devices. Progress is gentle, with no streak penalties. The intelligence
+  briefing remains directly below the daily practice.
+
 - **Command Center** — a zero-extra-cost cross-feed “Morning 5” and attention
   queue. It ranks current briefing items, Radar setups, Markets changes, open
   decision reviews, followed sports fixtures, and feed-health warnings while
