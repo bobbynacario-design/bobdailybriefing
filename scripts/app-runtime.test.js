@@ -103,3 +103,27 @@ test('a card citation carries headline, source, the briefing date and a web link
   assert.equal(context.briefingCitation({headline:'H',source:'S'},'Late edition'),'“H” — S, Late edition.');
   assert.equal(context.briefingCitation({headline:'H'},''),'“H”.');
 });
+test('stories are marked new or by how many briefings in a row they have run', () => {
+  const {context}=environment(['runWords','runUrl','sameStory','briefingWhen','briefingStories','briefingStoryRuns']);
+  const day=(date,sections)=>({key:date,saved:Date.parse(date),data:{date,sections}});
+  const current={date:'Friday, September 25, 2026',sections:{
+    interruptions:[{headline:'Botany port strike enters third day',url:'https://lloydslist.com/day3'}],
+    insurance:[{headline:'Insurer lifts BI reserves after flood',url:'https://insurancenews.com.au/reserves?utm=x'},{headline:'APRA consults on claims handling'}],
+    watch:[{headline:'Port strike halts Botany terminal'}]
+  }};
+  const history=[
+    day('Thursday, September 24, 2026',{interruptions:[{headline:'Port strike halts Botany terminal'}],insurance:[{headline:'Flood reserves rise at two insurers',url:'https://insurancenews.com.au/reserves'}]}),
+    day('Wednesday, September 23, 2026',{interruptions:[{headline:'Stevedores plan Botany port strike'}]}),
+    day('Monday, September 21, 2026',{insurance:[{headline:'APRA consults on claims handling'}]}),
+    day('Friday, September 25, 2026',{insurance:[{headline:'Same-day earlier version',url:'https://x.example/a'}]}),
+    day('Saturday, September 26, 2026',{insurance:[{headline:'APRA consults on claims handling'}]})
+  ];
+  const runs=context.briefingStoryRuns(current,history);
+  assert.equal(runs['interruptions:0'].days,3,'reworded headline matched on wording, two briefings back');
+  assert.deepEqual([...runs['interruptions:0'].seen],['Thursday, September 24, 2026','Wednesday, September 23, 2026']);
+  assert.equal(runs['insurance:0'].days,2,'matched by link although the headline changed');
+  assert.equal(runs['insurance:1'].days,1,'missing from the previous briefing is new, even if it ran earlier');
+  assert.equal(runs['watch:0'],undefined,'the watch item is not a story card');
+  assert.deepEqual({...context.briefingStoryRuns(current,[])},{},'nothing to compare: nothing marked');
+  assert.equal(context.sameStory({headline:'Claims inflation rises'},{headline:'Claims backlog grows'}),false,'one shared word is not the same story');
+});

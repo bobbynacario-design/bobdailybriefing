@@ -65,6 +65,12 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   week’s small wins (no streaks), and “Copy all reflections” puts every stored
   entry on the clipboard as plain text, falling back to a selectable box.
 
+- **New since yesterday** — each briefing card is marked **New** (not in the
+  previous briefing) or **Day N** (its Nth briefing in a row), compared with the
+  archive by link or by headline wording (two content words and 60% of the
+  shorter headline shared, since running stories are reworded daily). Nothing is
+  marked when there is no earlier briefing to compare with.
+
 - **Command Center** — a zero-extra-cost cross-feed “Morning 5” and attention
   queue. It ranks current briefing items, Radar setups, Markets changes, open
   decision reviews, followed sports fixtures, and feed-health warnings while
