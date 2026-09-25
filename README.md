@@ -15,11 +15,16 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   Sundays (PHT) bring a Weekly look-back instead: the notes from the six days
   before, one of which can be carried forward, and that note rides along on the
   spark card from Monday to Saturday. The look-back sits outside the rotation
-  and can also be chosen from the library on another day. “Turn a headline
-  into a question” is briefing-linked: its quests name the top story of the
-  briefing shown on Today (highest relevance first, labelled with its date when
-  it is not today’s), with a button that jumps to that card. The story is fixed
-  on the day’s entry once the quest is started.
+  and can also be chosen from the library on another day. Ten evidence sparks
+  are briefing-linked (Turn a headline into a question, Look for the exception,
+  Test one assumption, Find the missing voice, Build a question ladder,
+  Separate seeing from assuming, Give disagreement a fair hearing, and the claims
+  sparks Read it as the insured would, Test the “but for” story and Look for the
+  missing document): their quests name the top story of the briefing shown on
+  Today (highest relevance first; the claims sparks prefer insurance and
+  interruptions stories; labelled with its date when it is not today’s), with a
+  button that jumps to that card. The story is fixed on the day’s entry once the
+  quest is started, and with no briefing loaded each spark keeps its own words.
   They work independently of live feeds and require no model calls. Reflections
   and completion sync across devices through the signed-in account
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing

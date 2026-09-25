@@ -7732,10 +7732,13 @@ function getAllStories(data) {
   return out;
 }
 
-// Daily Boost's briefing-linked spark quotes the top story of the briefing shown
-// on Today (highest relevance first), and says whether it is today's by PHT date.
-window.dailyBoostBriefingItem = function() {
+// Daily Boost's briefing-linked sparks quote the top story of the briefing shown
+// on Today (highest relevance first), and say whether it is today's by PHT date.
+// prefer: section ids to choose from when any of them has a story.
+window.dailyBoostBriefingItem = function(prefer) {
   var stories = getAllStories(_currentData).filter(function(item) { return item.story && item.story.headline; }), top = null;
+  var preferred = Array.isArray(prefer) && prefer.length ? stories.filter(function(item) { return prefer.indexOf(item.section) !== -1; }) : [];
+  if (preferred.length) stories = preferred;
   ['high','med','low','none'].some(function(score) { top = stories.find(function(item) { return item.score === score; }); return !!top; });
   if (!top) return null;
   var key = window.DailyBoostCore ? window.DailyBoostCore.dateKey() : '', parts = key.split('-'), text = String(_currentData.date || '').toLowerCase();
