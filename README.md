@@ -1,6 +1,7 @@
-# Bob Daily Briefing
+# Daybook
 
-Private daily intelligence briefing desk for Bob.
+Private daily briefing desk: briefing, markets, decisions and a daily spark.
+(The repository and Pages URL keep the original `bobdailybriefing` name.)
 
 ## Features
 
