@@ -97,6 +97,22 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   week’s small wins (no streaks), and “Copy all reflections” puts every stored
   entry on the clipboard as plain text, falling back to a selectable box.
 
+- **Your week, read back** — a panel on Today (open by itself on Sundays).
+  **Read my week back** calls `generateWeeklyMirror`, which reads the last seven
+  PHT days server-side — Daily Boost notes, quests, noted/opened/voted stories,
+  reminders and experiments, plus journal decisions logged or closed that week
+  (process only: no prices or sizes) — and asks the model for a strict-JSON read:
+  the week in a line, up to three recurring themes with their days, what gave or
+  took energy, where what he said and did part ways, where his attention went,
+  how he decided, a follow-up on the previous read’s question and try, one small
+  thing he has not done yet, and one question to sit with
+  (`functions/weekly-mirror.js`). The rules are evidence-only (every point cites a
+  day; a quiet week is called thin), no diagnosis or flattery, and no trading
+  advice. An empty week makes no model call. Up to three reads a day
+  (`MIRROR_DAILY_CAP`); the latest twelve are kept on
+  `briefings-bob/weekly-mirror-<uid>` and shown by `lib/weekly-mirror.js`. Cost is
+  metered as `weekly-mirror` in the Help tab.
+
 - **New since yesterday** — each briefing card is marked **New** (not in the
   previous briefing) or **Day N** (its Nth briefing in a row), compared with the
   archive by link or by headline wording (two content words and 60% of the
