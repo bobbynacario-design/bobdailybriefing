@@ -72,7 +72,7 @@ function isMaterialChange(previousSignature, items) {
 function notificationCopy(items, test) {
   items = Array.isArray(items) ? items : [];
   const lead = items[0];
-  const title = test ? "Test · Bob's Morning 5" : "Bob's Morning 5 is ready";
+  const title = test ? "Test · Morning 5" : "Your Morning 5 is ready";
   if (!lead) return {title, body: "No priority items currently clear your delivery thresholds."};
   const remaining = Math.max(0, items.length - 1);
   return {

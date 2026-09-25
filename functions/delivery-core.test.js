@@ -44,7 +44,8 @@ test("material change tracks membership, order, urgency, and score bands", () =>
 
 test("notification copy leads with the highest ranked source", () => {
   assert.deepEqual(notificationCopy([{source: "Radar", title: "NVDA confirmed"}, {source: "Markets", title: "Rates"}], false), {
-    title: "Bob's Morning 5 is ready",
+    title: "Your Morning 5 is ready",
     body: "Radar: NVDA confirmed · +1 more",
   });
+  assert.equal(notificationCopy([], true).title, "Test · Morning 5");
 });
