@@ -14,7 +14,10 @@ Private daily intelligence briefing desk for Bob.
   and completion are stored on this device per signed-in account for up to 90
   dated entries, with the seven most recent prior entries shown. They do not sync
   between devices. Progress is gentle, with no streak penalties. The intelligence
-  briefing remains directly below the daily practice.
+  briefing remains directly below the daily practice. Once today’s quest is done
+  (or tucked away with “Tuck away · briefing first”), returning to Today shows it
+  as a one-line strip with your note, so the briefing comes first; it reopens on
+  request and starts fresh the next day.
 
 - **Command Center** — a zero-extra-cost cross-feed “Morning 5” and attention
   queue. It ranks current briefing items, Radar setups, Markets changes, open
