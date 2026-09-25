@@ -577,11 +577,40 @@ window.fbSaveDailyBoost = async function(uid, entries, stale) {
     if (uid !== getUid()) throw new Error('Account changed');
     var remote = snap.exists() ? snap.data().entries || {} : {};
     var merged = window.DailyBoostCore.merge(entries,remote).records;
+    // Days leaving the 90-day window go to a yearly archive in the same
+    // transaction, so none is dropped without being kept. A merge write needs
+    // no read, which matters: a missing doc reads as denied under the rules.
+    var retired = window.DailyBoostCore.retire(Object.assign({}, remote, entries), merged);
+    Object.keys(retired).forEach(function(year) {
+      tx.set(doc(db, COLL, 'daily-boost-archive-' + uid + '-' + year), {uid:uid, kind:'daily-boost-archive', year:year, entries:retired[year], updatedAt:new Date().toISOString()}, {merge:true});
+    });
     // Replace the entries map atomically; retention is recomputed against the
     // latest document, never applied from another device's stale snapshot.
     tx.set(ref, {uid:uid,entries:merged,updatedAt:new Date().toISOString()});
     return merged;
   });
+};
+
+// Every archived Daily Boost day for this account (one doc per year).
+window.fbLoadDailyBoostArchive = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  var entries = {};
+  try {
+    var snap = await getDocs(query(collection(db, COLL), where('uid','==',uid), where('kind','==','daily-boost-archive')));
+    snap.forEach(function(d) { Object.assign(entries, d.data().entries || {}); });
+  } catch (e) {
+    // Should the query ever need an index, read the recent years by id instead
+    // (a year with no archive yet reads as denied and is simply skipped).
+    var year = new Date().getFullYear();
+    for (var y = year - 4; y <= year; y++) {
+      try {
+        var one = await getDoc(doc(db, COLL, 'daily-boost-archive-' + uid + '-' + y));
+        if (one.exists()) Object.assign(entries, one.data().entries || {});
+      } catch (missing) {}
+    }
+  }
+  if (uid !== getUid()) throw new Error('Account changed');
+  return entries;
 };
 
 var briefingMessagingPromise = null;

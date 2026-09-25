@@ -142,3 +142,24 @@ test('stories are marked new or by how many briefings in a row they have run', (
   assert.deepEqual({...context.briefingStoryRuns(current,[])},{},'nothing to compare: nothing marked');
   assert.equal(context.sameStory({headline:'Claims inflation rises'},{headline:'Claims backlog grows'}),false,'one shared word is not the same story');
 });
+test('a save that pushes a day out of the window archives it in the same transaction', async()=>{
+  const writes=[];
+  const remote={};
+  for (let i=0;i<90;i++) { const day=new Date(Date.UTC(2026,5,20+i)).toISOString().slice(0,10); remote[day]={spark:1,note:'Day '+i,updatedAt:10,opened:[{headline:'x',url:'https://x.example'}]}; }
+  const context={Date,db:{},COLL:'briefings-bob',getUid:()=> 'alice',doc:(db,coll,id)=>({id}),
+    runTransaction:async(db,work)=>work({get:async()=>({exists:()=>true,data:()=>({entries:remote})}),set:(ref,body,options)=>writes.push({id:ref.id,body,options})})};
+  context.window=context; vm.createContext(context);
+  vm.runInContext(readFileSync(new URL('../lib/daily-boost.js',import.meta.url),'utf8'),context);
+  const start=html.indexOf('window.fbSaveDailyBoost = async function(');
+  vm.runInContext(html.slice(start,html.indexOf('\n};',start)+3),context);
+  await context.fbSaveDailyBoost('alice',{'2026-09-18':{spark:2,note:'A new day',updatedAt:20}},[]);
+  assert.deepEqual(writes.map(w=>w.id),['daily-boost-archive-alice-2026','daily-boost-alice'],'archive first, then the day doc');
+  const archive=writes[0];
+  assert.deepEqual({...archive.options},{merge:true},'a merge write, which needs no read of a doc that may not exist');
+  assert.equal(archive.body.uid,'alice'); assert.equal(archive.body.kind,'daily-boost-archive');
+  assert.deepEqual(Object.keys(archive.body.entries),['2026-06-20']);
+  assert.equal(archive.body.entries['2026-06-20'].note,'Day 0');
+  assert.equal(archive.body.entries['2026-06-20'].opened,undefined);
+  assert.equal(Object.keys(writes[1].body.entries).length,90);
+  assert.ok(!writes[1].body.entries['2026-06-20']);
+});

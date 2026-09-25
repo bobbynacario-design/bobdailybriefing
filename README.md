@@ -72,7 +72,12 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   and completion sync across devices through the signed-in account
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing
   rules), keeping up to 90 dated entries with the seven most recent prior entries
-  shown. Each device keeps a working copy; the account copy is merged in on
+  shown. Older days are not lost: the save that pushes a day out of that window
+  first copies it (note, spark, stories, reminders, experiment, carried note;
+  not reading history or sync bookkeeping) into a yearly archive,
+  `daily-boost-archive-<uid>-<year>`, in the same transaction. The archive loads
+  after sign-in, so Ctrl+K search, opening a result and Copy all reflections
+  reach every day; the discoveries list shows how many are archived. Each device keeps a working copy; the account copy is merged in on
   sign-in and on return, independent fields and list items merge, and changed days are
   written 1.5 s after an edit or at once when the page is left. Progress is
   gentle, with no streak penalties. The intelligence briefing remains directly
