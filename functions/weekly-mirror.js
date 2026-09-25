@@ -69,15 +69,43 @@ function storyList(list, limit) {
     .map((item) => quote(item.headline, 140) + (text(item.source) ? " (" + text(item.source).slice(0, 60) + ")" : ""));
 }
 
+// "Note this" on a briefing card starts a line `On “Headline” (Source): ` in the
+// day's note. A line left at that is a story he noted without comment — not his
+// words, and not a note — so it is told apart from what he actually wrote.
+const STUB = /^On “(.+)”(?: \(([^()]*)\))?:\s*(.*)$/;
+function splitNote(note) {
+  const own = [], comments = [], bare = [];
+  text(note).split(/\n+/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const match = trimmed.match(STUB);
+    if (!match) own.push(trimmed);
+    else if (match[3].trim()) comments.push({headline: match[1], source: match[2] || "", text: match[3].trim()});
+    else bare.push({headline: match[1], source: match[2] || ""});
+  });
+  return {own: own.join(" "), comments, bare};
+}
+
 // What one day looked like. Returns null for a day with nothing recorded.
-function dayBlock(key, entry, core) {
+// `today` marks the day the read is taken on, which is not over yet.
+function dayBlock(key, entry, core, today) {
   if (!entry) return null;
   const lines = [];
-  const note = text(entry.note);
+  const note = splitNote(entry.note);
   const opened = arr(entry.opened).filter((item) => item && text(item.headline));
   const votes = arr(entry.feedback).filter((item) => item && text(item.headline) && (item.vote === 1 || item.vote === -1));
   const reminders = arr(entry.reminders).filter((item) => item && text(item.metric));
-  const active = note || entry.done || arr(entry.stories).length || opened.length || votes.length ||
+  // A story he commented on is listed with his comment, not again here.
+  const seen = {};
+  note.comments.forEach((item) => { seen[text(item.headline).toLowerCase()] = true; });
+  const noted = arr(entry.stories).concat(note.bare).filter((item) => {
+    const id = text(item && item.headline).toLowerCase();
+    if (!id || seen[id]) return false;
+    seen[id] = true;
+    return true;
+  });
+  const wrote = note.own || note.comments.length;
+  const active = wrote || entry.done || noted.length || opened.length || votes.length ||
     reminders.length || text(entry.trialPlan) || text(entry.trialOutcome);
   if (!active) return null;
 
@@ -85,19 +113,21 @@ function dayBlock(key, entry, core) {
   const theme = core && core.themes ? core.themes[entry.spark] : "";
   const how = entry.picked === "library" ? "picked from the library" : entry.picked === "swap" ? "swapped to it" :
     entry.picked === "intention" ? "chosen for " + (INTENTIONS[entry.intention] || "an intention") : "";
-  let head = dayLabel(key);
+  let head = dayLabel(key) + (today ? " (" + today + ")" : "");
   if (title) head += " — spark " + quote(title, 80) + (theme ? " (" + (THEME_LABELS[theme] || theme) + ")" : "");
-  head += entry.done ? "; quest done (" + (entry.energy === "stretch" ? "10-minute" : "2-minute") + ")" : "; quest not done";
+  head += entry.done ? "; quest done (" + (entry.energy === "stretch" ? "10-minute" : "2-minute") + ")" : today ? "; quest not done yet" : "; quest not done";
   if (how) head += "; " + how;
   else if (entry.intention && INTENTIONS[entry.intention]) head += "; intention: " + INTENTIONS[entry.intention];
   lines.push(head);
-  if (note) lines.push("  Note: " + quote(note, NOTE_CHARS));
+  if (note.own) lines.push("  Note: " + quote(note.own, NOTE_CHARS));
+  note.comments.slice(0, LIST_MAX).forEach((item) => {
+    lines.push("  On the story " + quote(item.headline, 140) + " he wrote: " + quote(item.text, 400));
+  });
   if (text(entry.trialPlan)) {
-    lines.push("  Experiment planned: " + quote(entry.trialPlan) + (entry.trialDone ? " — marked done" : ""));
+    lines.push("  Experiment planned: " + quote(entry.trialPlan) + (entry.trialDone ? " — marked done" : today ? " — not done yet" : ""));
   }
   if (text(entry.trialOutcome)) lines.push("  Experiment outcome: " + quote(entry.trialOutcome, 400));
-  const noted = storyList(entry.stories);
-  if (noted.length) lines.push("  Stories he noted: " + noted.join("; "));
+  if (noted.length) lines.push("  Stories he noted without comment: " + storyList(noted).join("; "));
   if (opened.length) lines.push("  Opened " + opened.length + " briefing " + (opened.length === 1 ? "story" : "stories") + ": " + storyList(opened).join("; "));
   const more = votes.filter((item) => item.vote === 1), less = votes.filter((item) => item.vote === -1);
   const section = (item) => text(item.section) ? " [" + text(item.section).slice(0, 20) + "]" : "";
@@ -108,8 +138,14 @@ function dayBlock(key, entry, core) {
   }
   return {
     lines,
-    stats: {note: note ? 1 : 0, done: entry.done ? 1 : 0, opened: opened.length, votes: votes.length, noted: arr(entry.stories).length},
+    stats: {note: wrote ? 1 : 0, done: entry.done ? 1 : 0, opened: opened.length, votes: votes.length, noted: noted.length + note.comments.length},
   };
+}
+
+// "8:05 AM" in Manila, for saying how far into today the read was taken.
+function manilaTime(now) {
+  if (!Number.isFinite(now)) return "";
+  return new Intl.DateTimeFormat("en-US", {timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit"}).format(new Date(now));
 }
 
 // A journal entry as a line about process: what, which way, how sure, and the
@@ -159,16 +195,21 @@ function previousMirror(mirrors, todayKey) {
 }
 
 // Everything the model is told about the week, or null when there is nothing to
-// read back (no model call is made for an empty week).
-function buildMirrorInput({entries, decisions, mirrors, todayKey, core}) {
+// read back (no model call is made for an empty week). `now` (ms) says how far
+// into today the read is taken: today is still going, so an unfinished quest on
+// it is not a miss — the first real read held a 6:45 AM "not done" against him.
+function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now}) {
   if (!DAY.test(text(todayKey))) return null;
   const win = mirrorWindow(todayKey);
   const records = core && typeof core.clean === "function" ? core.clean(entries && typeof entries === "object" ? entries : {}) : (entries || {});
   const stats = {days: 0, notes: 0, done: 0, opened: 0, votes: 0, noted: 0, decisions: 0};
+  const at = manilaTime(now);
+  const todayNote = "today, still in progress" + (at ? " — read at " + at + " Manila" : "");
   const dayLines = [];
   win.days.forEach((key) => {
-    const block = dayBlock(key, records[key], core);
-    if (!block) { dayLines.push(dayLabel(key) + " — nothing recorded"); return; }
+    const today = key === todayKey ? todayNote : "";
+    const block = dayBlock(key, records[key], core, today);
+    if (!block) { dayLines.push(dayLabel(key) + (today ? " (" + today + ") — nothing recorded yet" : " — nothing recorded")); return; }
     stats.days++;
     stats.notes += block.stats.note; stats.done += block.stats.done; stats.opened += block.stats.opened;
     stats.votes += block.stats.votes; stats.noted += block.stats.noted;
@@ -209,10 +250,18 @@ function buildMirrorPrompt(input) {
     "- Evidence only. Every observation must point at something in the record below, by day (\"On Thursday you wrote…\").",
     "  Quote his own words briefly where they carry the point. Never invent a feeling, event, person or fact he did not record.",
     "- A day marked \"nothing recorded\" means nothing was recorded, not that nothing happened. Gaps are worth naming only as a pattern.",
+    "- The last day is today and is still in progress when this is read. An unfinished quest or experiment on it is not a miss,",
+    "  and nothing recorded yet today is not a gap. Never use today's unfinished items as evidence in any field.",
+    "- \"Note\" lines are his own words. \"On the story … he wrote\" lines are his comments on a briefing story. Stories he noted",
+    "  without comment show interest only — do not read feelings or intentions into them.",
     "- If the week is thin (fewer than three days with a note, or no notes at all), say so plainly in week_in_a_line, keep every",
     "  field short, leave fields empty rather than stretching, and set confidence to \"thin\".",
-    "- themes: up to three things that kept coming up, each with the days it appeared. Not a summary of each day.",
-    "- energy: what seemed to give him energy and what seemed to drain it — only where his own words or actions show it.",
+    "- themes: things that came up on two or more different days, each with the days it appeared — not a summary of each day.",
+    "  If nothing recurs (always the case when only one day has anything recorded), return at most one theme: what stood out,",
+    "  with its one day.",
+    "- energy: only where his own words say it (\"loved\", \"dreading\", \"tired of\") or an explicit choice shows it (picking the",
+    "  10-minute quest, choosing an intention). Never infer either list from something not done or a day not recorded.",
+    "  Empty lists are the expected answer in most weeks.",
     "- said_vs_did: where what he said he wants (notes, intentions, experiments planned) and what he did (quests, experiments done,",
     "  what he read) line up or part ways. Specific and fair, never moralising. Empty if the record does not show either side.",
     "- reading: what his noting, opening and voting say about where his attention goes. Empty if he did none.",

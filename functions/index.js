@@ -533,7 +533,7 @@ exports.generateWeeklyMirror = onCall(
     const uid = request.auth.uid;
     const todayKey = phtDateKey();
     const sources = await loadMirrorSources(db, uid);
-    const input = buildMirrorInput(Object.assign({todayKey, core: DailyBoostCore}, sources));
+    const input = buildMirrorInput(Object.assign({todayKey, core: DailyBoostCore, now: Date.now()}, sources));
     // Nothing recorded this week: say so without paying for a model call.
     if (!input) return {mirror: null, reason: "empty"};
 

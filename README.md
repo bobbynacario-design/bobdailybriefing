@@ -108,7 +108,11 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   thing he has not done yet, and one question to sit with
   (`functions/weekly-mirror.js`). The rules are evidence-only (every point cites a
   day; a quiet week is called thin), no diagnosis or flattery, and no trading
-  advice. An empty week makes no model call. Up to three reads a day
+  advice. Today is marked as still in progress, with the read time, so its
+  unfinished quest is never held against him; “Note this” lines left without a
+  comment count as noted stories, not as his words; energy comes only from his
+  own words or explicit choices; and a theme needs two or more days (the app
+  labels single-day themes “What stood out”). An empty week makes no model call. Up to three reads a day
   (`MIRROR_DAILY_CAP`); the latest twelve are kept on
   `briefings-bob/weekly-mirror-<uid>` and shown by `lib/weekly-mirror.js`. Cost is
   metered as `weekly-mirror` in the Help tab.

@@ -1,7 +1,7 @@
 /* Daybook service worker.
    App-shell requests are network-first so deploys update cleanly; cache is the
    offline fallback. Firebase and Google auth traffic always bypasses the cache. */
-var CACHE_NAME = 'bob-briefing-shell-v81';
+var CACHE_NAME = 'bob-briefing-shell-v82';
 
 var briefingMessaging = null;
 try {

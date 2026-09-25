@@ -59,7 +59,54 @@ test("reading, votes, reminders and experiments are carried", () => {
   assert.match(input.text, /Wanted less like: "Rates hold again" \[markets\]/);
   assert.match(input.text, /Set reminders to check: "Botany berth reopening" \(due 2026-10-01\)/);
   assert.match(input.text, /Experiment planned: "Call one former client"/);
-  assert.match(input.text, /Stories he noted: "Flood claims backlog grows" \(Insurance News\)/);
+  assert.match(input.text, /Stories he noted without comment: "Flood claims backlog grows" \(Insurance News\)/);
+});
+
+// ── the four fixes from the first real read (Sat 26 Sep, 6:45 AM) ──
+
+test("today is marked in progress with the read time, so its open quest is not a miss", () => {
+  const entries = Object.assign(week(), {"2026-09-26": {spark: 21, done: false, picked: "swap", note: "I need to be consistent.", trialPlan: "Walk at lunch"}});
+  const now = Date.parse("2026-09-25T22:45:00Z"); // 6:45 AM Saturday in Manila
+  const input = buildMirrorInput({entries, decisions: [], mirrors: {}, todayKey: TODAY, core, now});
+  const saturday = input.text.split("\n").find((line) => line.startsWith("Sat 26 Sep"));
+  assert.match(saturday, /^Sat 26 Sep \(today, still in progress — read at 6:45 AM Manila\) — spark/);
+  assert.match(saturday, /; quest not done yet; swapped to it$/);
+  assert.match(input.text, /Experiment planned: "Walk at lunch" — not done yet/);
+  const wednesday = input.text.split("\n").find((line) => line.startsWith("Wed 23 Sep"));
+  assert.match(wednesday, /; quest not done$/, "an earlier day is over, so not done means not done");
+  const quiet = buildMirrorInput({entries: week(), decisions: [], mirrors: {}, todayKey: TODAY, core, now});
+  assert.match(quiet.text, /Sat 26 Sep \(today, still in progress — read at 6:45 AM Manila\) — nothing recorded yet/);
+  assert.match(buildMirrorInput({entries: week(), todayKey: TODAY, core}).text, /Sat 26 Sep \(today, still in progress\) — nothing recorded yet/, "no time when none is given");
+});
+
+test("Note this stubs are stories he noted, not his words, and a comment on one is kept as his", () => {
+  const note = "On “US and China extend trade truce” (Yahoo Finance):\n\nOn “OpenAI agent breached Medicare portal” (CNBC): \n\nOn “Flood claims backlog grows” (Insurance News): This is the BI angle nobody prices.\nMy own line here.";
+  const entries = {"2026-09-25": {spark: 1, done: true, note, stories: [{headline: "OpenAI agent breached Medicare portal", source: "CNBC"}]}};
+  const input = buildMirrorInput({entries, decisions: [], mirrors: {}, todayKey: TODAY, core});
+  assert.match(input.text, /  Note: "My own line here\."/);
+  assert.doesNotMatch(input.text, /Note: "On “/, "stubs are not presented as his words");
+  assert.match(input.text, /  On the story "Flood claims backlog grows" he wrote: "This is the BI angle nobody prices\."/);
+  assert.match(input.text, /Stories he noted without comment: "OpenAI agent breached Medicare portal" \(CNBC\); "US and China extend trade truce" \(Yahoo Finance\)$/m,
+    "bare stubs join the noted stories, once each");
+  assert.doesNotMatch(input.text, /without comment: .*Flood claims/, "a story he commented on is not listed again as without comment");
+  assert.equal(input.stats.notes, 1);
+  assert.equal(input.stats.noted, 3);
+
+  const stubsOnly = buildMirrorInput({entries: {"2026-09-25": {spark: 1, done: true, note: "On “A story” (Src): "}}, decisions: [], todayKey: TODAY, core});
+  assert.equal(stubsOnly.stats.notes, 0, "only stubs: no note counted");
+  assert.doesNotMatch(stubsOnly.text, /  Note:/);
+  assert.match(stubsOnly.text, /Stories he noted without comment: "A story" \(Src\)/);
+});
+
+test("the prompt keeps today out of evidence, energy to his words, and themes to what recurs", () => {
+  const prompt = buildMirrorPrompt(buildMirrorInput({entries: week(), decisions: [], mirrors: {}, todayKey: TODAY, core}));
+  assert.match(prompt, /The last day is today and is still in progress when this is read\. An unfinished quest or experiment on it is not a miss/);
+  assert.match(prompt, /Never use today's unfinished items as evidence in any field/);
+  assert.match(prompt, /Never infer either list from something not done or a day not recorded/);
+  assert.match(prompt, /Empty lists are the expected answer in most weeks/);
+  assert.match(prompt, /themes: things that came up on two or more different days/);
+  assert.match(prompt, /return at most one theme: what stood out/);
+  assert.match(prompt, /Stories he noted\s+without comment show interest only/);
 });
 
 test("an empty week makes no input, so no model call is made", () => {
