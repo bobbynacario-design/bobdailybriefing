@@ -7,8 +7,10 @@ Private daily intelligence briefing desk for Bob.
 - **Daily Boost** — Today opens with a rotating perspective and a small, actionable
   quest. Choose a two-minute step or ten-minute exploration, switch quests, mark a
   small win, and capture a reflection. Browse or search 42 curated sparks across
-  seven themes, each with a short and deeper quest. Prompts rotate by PHT date;
-  they work independently of live feeds and require no model calls. Reflections
+  seven themes, each with a short and deeper quest. Prompts rotate by PHT date
+  through a theme-interleaved order, so consecutive days (and each “Try another
+  quest”) land on a different theme, and sparks used in the last 14 days are
+  skipped. They work independently of live feeds and require no model calls. Reflections
   and completion are stored on this device per signed-in account for up to 90
   dated entries, with the seven most recent prior entries shown. They do not sync
   between devices. Progress is gentle, with no streak penalties. The intelligence
