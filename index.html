@@ -34,7 +34,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, orderBy, limit, startAfter, where, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, deleteDoc, deleteField, collection, getDocs, query, orderBy, limit, startAfter, where, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 import { getMessaging, getToken, onMessage, isSupported as isMessagingSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
@@ -546,6 +546,32 @@ window.fbSaveEvidenceSets = async function(evidenceSets) {
   if (uid !== getUid()) throw new Error('Account changed');
   evidenceBase = evidenceSets; // Base for the next queued local snapshot.
   return merged;
+};
+
+// Daily Boost reflections: one doc per account, entries keyed by PHT day.
+// lib/daily-boost.js merges them with the device copy, newest edit per day wins.
+window.fbLoadDailyBoost = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  var ref = doc(db, COLL, 'daily-boost-' + uid), snap;
+  try { snap = await getDoc(ref); }
+  catch(e) {
+    // The shared read rule inspects resource.data, so a doc that does not exist
+    // yet can read as permission-denied. Creating our own doc is allowed.
+    if (!e || e.code !== 'permission-denied') throw e;
+    await setDoc(ref, {uid: uid}, {merge: true});
+    snap = await getDoc(ref);
+  }
+  if (uid !== getUid()) throw new Error('Account changed');
+  return snap.exists() ? (snap.data().entries || {}) : {};
+};
+
+window.fbSaveDailyBoost = async function(uid, entries, stale) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  var body = {uid: uid, entries: {}, updatedAt: new Date().toISOString()};
+  Object.keys(entries || {}).forEach(function(day) { body.entries[day] = entries[day]; });
+  (stale || []).forEach(function(day) { body.entries[day] = deleteField(); });
+  // Merge writes only the days that changed, so another device's days survive.
+  await setDoc(doc(db, COLL, 'daily-boost-' + uid), body, {merge: true});
 };
 
 var briefingMessagingPromise = null;

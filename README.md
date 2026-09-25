@@ -13,10 +13,14 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   theme-interleaved order, so consecutive days (and each “Try another quest”)
   land on a different theme, and sparks used in the last 14 days are skipped.
   They work independently of live feeds and require no model calls. Reflections
-  and completion are stored on this device per signed-in account for up to 90
-  dated entries, with the seven most recent prior entries shown. They do not sync
-  between devices. Progress is gentle, with no streak penalties. The intelligence
-  briefing remains directly below the daily practice. Once today’s quest is done
+  and completion sync across devices through the signed-in account
+  (`briefings-bob/daily-boost-<uid>`, private to that account under the existing
+  rules), keeping up to 90 dated entries with the seven most recent prior entries
+  shown. Each device keeps a working copy; the account copy is merged in on
+  sign-in and on return, the newest edit of each day wins, and changed days are
+  written 1.5 s after an edit or at once when the page is left. Progress is
+  gentle, with no streak penalties. The intelligence briefing remains directly
+  below the daily practice. Once today’s quest is done
   (or tucked away with “Tuck away · briefing first”), returning to Today shows it
   as a one-line strip with your note, so the briefing comes first; it reopens on
   request and starts fresh the next day. A Monday-to-Sunday dot row counts this
