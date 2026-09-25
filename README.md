@@ -14,8 +14,11 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   Favourites carry forward into new daily entries and sync with the account.
 - **Safer reflection sync** — atomic account transactions merge edits by field
   and individual story/reminder, including removal markers. Conflicting note text
-  is retained in “Recovered reflection versions” (up to eight alternatives per
-  day), rather than silently discarded. Legacy entries migrate on sync. Watch
+  is retained in “Recovered reflection versions” (up to three per day, kept two
+  weeks, each with Use this version, which keeps the replaced note, and Dismiss,
+  which sticks across devices), rather than silently discarded. A note builds on
+  the version the device last synced, so typing between syncs, or while a save is
+  in flight, is never mistaken for a conflict; saves send a snapshot. Legacy entries migrate on sync. Watch
   reminders accept an explicit date of today and expose an editable review date.
 
 - **Daily Boost** — Today opens with a rotating perspective and a small, actionable
