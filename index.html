@@ -7820,6 +7820,12 @@ function renderGroundingLine(data, anchor) {
     el.textContent = 'Insurance NOT grounded (' + (g.reason || 'unavailable') +
       ') - sources are model-supplied and may not be linkable.';
   }
+  // Story links in the other sections, checked against the pages the web search returned.
+  var l = data && data.links;
+  if (l && typeof l.verified === 'number') {
+    el.textContent += ' Other story links: ' + l.verified + ' verified' +
+      (l.removed ? ', ' + l.removed + ' withheld (no matching page)' : '') + '.';
+  }
 }
 
 function renderBriefConsole(data, schemaErrors) {
@@ -7986,7 +7992,7 @@ function normalise(d) {
   // watch_followup and context are carried for the same reason url/grounded are:
   // normalise() drops anything it does not name, so a field left out here is
   // silently deleted on save and the archive loses it for good.
-  var r = {date:d.date||'', markets:d.markets||null, peso:d.peso||d.fx||null, weather:d.weather||null, watch:d.watch||'', watch_source:d.watch_source||'', watch_followup:d.watch_followup||null, grounding:d.grounding||null, context:d.context||null, sections:{}};
+  var r = {date:d.date||'', markets:d.markets||null, peso:d.peso||d.fx||null, weather:d.weather||null, watch:d.watch||'', watch_source:d.watch_source||'', watch_followup:d.watch_followup||null, grounding:d.grounding||null, links:d.links||null, context:d.context||null, sections:{}};
   var secs = Array.isArray(d.sections) ? d.sections : Object.keys(d.sections).map(function(k){ return {id:k,stories:d.sections[k]}; });
   secs.forEach(function(sec) {
     r.sections[sec.id] = (sec.stories||[]).map(function(st) {
@@ -7999,6 +8005,7 @@ function normalise(d) {
         // paste path to unlinkable sources.
         url:st.url||'',
         grounded:st.grounded===true,
+        groundedBy:st.groundedBy==='feed'||st.groundedBy==='search'?st.groundedBy:'',
         relevance:st.relevant===false?'':(st.relevance||''),
         relevance_level:st.relevance_level||'',
         // The insurance and interruptions sections carry a named thing to check
@@ -8255,7 +8262,8 @@ function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace
 // it did not supply, but this is the last stop before a string becomes an href.
 function srcHTML(st) {
   var verified = st.grounded === true;
-  var label = '📍 ' + esc(st.source || 'Source unavailable') + ' · ' + (verified ? 'Source matched' : 'Unverified source');
+  // feed = matched the fetched news list; search = a page the search tool really returned.
+  var label = '📍 ' + esc(st.source || 'Source unavailable') + ' · ' + (verified ? (st.groundedBy === 'search' ? 'Link verified' : 'Source matched') : 'Unverified source');
   var url = String(st && st.url || '');
   if (!/^https?:\/\//i.test(url)) return '<span class="src">' + label + '</span>';
   return '<a class="src" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(url) + '">' + label + ' ↗</a>';

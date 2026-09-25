@@ -12,7 +12,7 @@ const OpenAI = require("openai");
 const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
-const {buildEvidence, verifyGrounding} = require("./briefing-evidence");
+const {buildEvidence, verifyGrounding, searchUrls} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch} = require("./briefing-context");
 const {buildBriefingPrompt} = require("./briefing-prompt-core");
 const {
@@ -347,6 +347,9 @@ exports.generateBobDailyBriefing = onCall(
         },
       ],
       tool_choice: "auto",
+      // The full list of pages the search tool returned, so each story's url can
+      // be checked against what was really fetched (verifyGrounding).
+      include: ["web_search_call.action.sources"],
     };
 
     let response;
@@ -392,8 +395,17 @@ exports.generateBobDailyBriefing = onCall(
     // Check the returned citations against what was actually supplied, and
     // record the outcome on the briefing so the app can show provenance —
     // including when grounding did not happen, and why.
-    const verified = verifyGrounding(briefing, evidence);
+    const searched = searchUrls(json);
+    const verified = verifyGrounding(briefing, evidence, undefined, searched);
     briefing = verified.briefing;
+    // Links outside the feed: how many pages the search returned, and how many
+    // story links matched one (kept) or did not (removed).
+    briefing.links = {
+      searched: verified.stats.links.searched,
+      verified: verified.stats.links.verified,
+      removed: verified.stats.links.removed,
+      bySection: verified.stats.links.bySection,
+    };
     briefing.grounding = evidence ? {
       mode: "grounded",
       snapshot: "news-" + evidence.date,
@@ -451,6 +463,11 @@ exports.generateBobDailyBriefing = onCall(
     if (verified.stats.unmatched) {
       logger.warn("briefing cited urls that were not supplied", {
         count: verified.stats.unmatched, snapshot: evidence && evidence.date,
+      });
+    }
+    if (verified.stats.links.removed) {
+      logger.warn("briefing story links did not match any searched page", {
+        removed: verified.stats.links.removed, searched: verified.stats.links.searched,
       });
     }
 

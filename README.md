@@ -152,6 +152,13 @@ actually runs. The generated briefing is shaped by four things beyond it:
 - **Grounding** — the insurance section is built only from the day's fetched
   news snapshot, and returned URLs are verified against what was supplied
   (`functions/briefing-evidence.js`).
+- **Source links** — every story asks for the url of the article it came from.
+  The generator requests the full list of pages its web search returned
+  (`include: web_search_call.action.sources`) and keeps a story link only if it
+  matches that list or the news snapshot; anything else is removed and counted
+  in `briefing.links`. Insurance stays closed to the snapshot on a grounded day.
+  Kept links open from the card's source chip ("Source matched" for the news
+  feed, "Link verified" for a search result).
 - **Standing context** — Bob's open decision-journal calls with their
   invalidation lines, confirmed/forming Radar setups, and event markets past the
   research gate are put in front of the model as private state

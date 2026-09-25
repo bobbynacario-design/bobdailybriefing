@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {buildEvidence, verifyGrounding, urlKey} = require("./briefing-evidence");
+const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing-evidence");
 
 const NOW = Date.parse("2026-08-29T01:00:00.000Z");
 
@@ -196,4 +196,80 @@ test("urlKey normalizes the ways a url is usually restated", () => {
   assert.equal(urlKey("https://insurancenews.com.au/a/b?utm=1#frag"), canonical);
   assert.equal(urlKey(""), "");
   assert.equal(urlKey(null), "");
+});
+
+// ── searchUrls + search-checked links ──
+
+function reply() {
+  return {output: [
+    {type: "web_search_call", action: {type: "search", sources: [
+      {type: "url", url: "https://www.reuters.com/world/port-closed/"},
+      {type: "url", url: "https://www.bworldonline.com/bsp-holds?utm_source=x"},
+      {type: "api", name: "oai-finance"},
+      {type: "url", url: "https://reuters.com/world/port-closed"},
+    ]}},
+    {type: "message", content: [{type: "output_text", text: "{}", annotations: [
+      {type: "url_citation", url: "https://techcrunch.com/ai-model", title: "T", start_index: 0, end_index: 1},
+      {type: "file_citation", file_id: "f"},
+    ]}]},
+    null, "junk",
+  ]};
+}
+
+test("searchUrls collects every searched page and citation once, and nothing that is not a web page", () => {
+  assert.deepEqual(searchUrls(reply()), [
+    "https://www.reuters.com/world/port-closed/",
+    "https://www.bworldonline.com/bsp-holds?utm_source=x",
+    "https://techcrunch.com/ai-model",
+  ]);
+  assert.deepEqual(searchUrls(null), []);
+  assert.deepEqual(searchUrls({output: "nope"}), []);
+});
+
+test("with searched pages, open sections keep matching links and lose the rest", () => {
+  const briefing = {sections: {
+    global: [{headline: "A", url: "https://reuters.com/world/port-closed"}, {headline: "B", url: "https://made-up.example/story"}, {headline: "C"}],
+    ph: [{headline: "D", url: "http://bworldonline.com/bsp-holds/"}],
+    insurance: [], interruptions: [],
+  }};
+  const out = verifyGrounding(briefing, null, undefined, searchUrls(reply()));
+  const [a, b, c] = out.briefing.sections.global;
+  assert.equal(a.url, "https://www.reuters.com/world/port-closed/", "canonicalized to the searched string");
+  assert.equal(a.grounded, true); assert.equal(a.groundedBy, "search");
+  assert.equal(b.url, undefined); assert.equal(b.grounded, false);
+  assert.deepEqual(c, {headline: "C"}, "a story without a link is left exactly as it came");
+  assert.equal(out.briefing.sections.ph[0].url, "https://www.bworldonline.com/bsp-holds?utm_source=x");
+  assert.equal(out.stats.links.searched, 3);
+  assert.equal(out.stats.links.verified, 2);
+  assert.equal(out.stats.links.removed, 1);
+  assert.deepEqual(out.stats.links.bySection.global, {verified: 1, removed: 1});
+});
+
+test("on a grounded day insurance stays closed to the list, while interruptions may use a searched page", () => {
+  const evidence = evidenceFor(["https://news.example/real"]);
+  const briefing = {sections: {
+    insurance: [{headline: "I", url: "https://reuters.com/world/port-closed"}, {headline: "J", url: "https://news.example/real"}],
+    interruptions: [{headline: "P", url: "https://reuters.com/world/port-closed"}],
+  }};
+  const out = verifyGrounding(briefing, evidence, undefined, searchUrls(reply()));
+  assert.equal(out.briefing.sections.insurance[0].url, undefined, "a search result is not the supplied list");
+  assert.equal(out.briefing.sections.insurance[1].groundedBy, "feed");
+  assert.equal(out.briefing.sections.interruptions[0].groundedBy, "search");
+  assert.equal(out.stats.grounded, 1, "feed grounding counts only feed matches");
+  assert.equal(out.stats.bySection.insurance.unmatched, 1);
+  assert.equal(out.stats.links.verified, 1);
+});
+
+test("on an ungrounded day insurance links are checked against the search instead", () => {
+  const briefing = {sections: {insurance: [{headline: "I", url: "https://reuters.com/world/port-closed"}]}};
+  const out = verifyGrounding(briefing, {unavailable: "stale"}, undefined, searchUrls(reply()));
+  assert.equal(out.briefing.sections.insurance[0].groundedBy, "search");
+  assert.equal(verifyGrounding({sections: {insurance: [{headline: "I", url: "https://reuters.com/world/port-closed"}]}}, {unavailable: "stale"}).briefing.sections.insurance[0].url, undefined, "without searched pages nothing is trusted");
+});
+
+test("a feed url used in an open section is accepted as a feed link", () => {
+  const evidence = evidenceFor(["https://news.example/real"]);
+  const out = verifyGrounding({sections: {global: [{headline: "G", url: "https://news.example/real?ref=x"}]}}, evidence, undefined, []);
+  assert.equal(out.briefing.sections.global[0].url, "https://news.example/real");
+  assert.equal(out.briefing.sections.global[0].groundedBy, "feed");
 });

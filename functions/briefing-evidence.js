@@ -168,6 +168,47 @@ function allowedKeys(evidence) {
   return keys;
 }
 
+// The URLs the hosted web_search tool actually returned in one Responses API
+// reply: every consulted source (requested with
+// include: ["web_search_call.action.sources"]) plus any inline url_citation.
+// This is what makes a link outside the grounded sections checkable at all:
+// the model's own url field is a claim, this list is what it really fetched.
+// Only http(s) pages count — the tool also labels real-time feeds such as
+// oai-finance, which are not pages anyone can open.
+function searchUrls(response) {
+  const seen = Object.create(null);
+  const out = [];
+  function add(value) {
+    const url = text(value);
+    const key = urlKey(url);
+    if (!/^https?:\/\//i.test(url) || !key || seen[key]) return;
+    seen[key] = true;
+    out.push(url);
+  }
+  arr(response && response.output).forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    if (item.type === "web_search_call") {
+      arr(item.action && item.action.sources).forEach((source) => add(source && source.url));
+    }
+    if (item.type === "message") {
+      arr(item.content).forEach((part) => arr(part && part.annotations).forEach((note) => {
+        if (note && note.type === "url_citation") add(note.url);
+      }));
+    }
+  });
+  return out;
+}
+
+function searchKeysFor(searched) {
+  if (!Array.isArray(searched)) return null;
+  const keys = Object.create(null);
+  searched.forEach((url) => {
+    const key = urlKey(url);
+    if (key && !keys[key]) keys[key] = text(url);
+  });
+  return keys;
+}
+
 // Check the returned briefing against what was supplied.
 //
 // Non-destructive by design: a story whose URL was not in the list keeps its
@@ -176,12 +217,32 @@ function allowedKeys(evidence) {
 // source is withdrawn, never the content. `url` is normalized back to the exact
 // string from the evidence list, so a returned URL that differs only by a
 // tracking parameter still resolves to the canonical one.
-function verifyGrounding(briefing, evidence, sectionNames) {
+//
+// searched (optional) is searchUrls() for the same reply. Without it only the
+// named sections are checked, as before. With it, every section's links are:
+//   - insurance on a grounded day is closed, so it still accepts only the list;
+//   - interruptions accepts the list or a search result;
+//   - every other section accepts a search result (or a list url).
+// A search match is marked groundedBy "search" and counted under stats.links,
+// so the feed-grounding numbers keep meaning what they meant.
+function verifyGrounding(briefing, evidence, sectionNames, searched) {
   const sections = arr(sectionNames).length ? arr(sectionNames) : ["insurance", "interruptions"];
   const keys = allowedKeys(evidence);
+  const searchKeys = searchKeysFor(searched);
+  const closed = evidence && !evidence.unavailable && arr(evidence.items).length ? {insurance: true} : {};
   const stats = {grounded: 0, ungrounded: 0, unmatched: 0, bySection: {}};
+  if (searchKeys) stats.links = {searched: Object.keys(searchKeys).length, verified: 0, removed: 0, bySection: {}};
 
   if (!briefing || !briefing.sections) return {briefing: briefing, stats: stats};
+
+  function searchMatch(name, claimed) {
+    return searchKeys && !closed[name] ? searchKeys[urlKey(claimed)] || "" : "";
+  }
+  function countLink(name, field) {
+    const per = stats.links.bySection[name] || (stats.links.bySection[name] = {verified: 0, removed: 0});
+    per[field]++;
+    stats.links[field]++;
+  }
 
   sections.forEach((name) => {
     const stories = arr(briefing.sections[name]);
@@ -195,11 +256,19 @@ function verifyGrounding(briefing, evidence, sectionNames) {
         return;
       }
       const match = keys[urlKey(claimed)];
+      const found = match ? "" : searchMatch(name, claimed);
       if (match) {
         story.url = match.url; // canonical string, not the model's rendering of it
         story.source = story.source || match.source;
         story.grounded = true;
+        story.groundedBy = "feed";
         perSection.grounded++;
+      } else if (found) {
+        // Not from the list, but a page the search tool really returned.
+        story.url = found;
+        story.grounded = true;
+        story.groundedBy = "search";
+        countLink(name, "verified");
       } else {
         // A URL that was never supplied. Keep the story, remove the citation.
         delete story.url;
@@ -214,12 +283,38 @@ function verifyGrounding(briefing, evidence, sectionNames) {
     stats.unmatched += perSection.unmatched;
   });
 
+  // The open sections: a link stays only if the list or the search returned it.
+  // A story with no url is left exactly as it came.
+  if (searchKeys) {
+    Object.keys(briefing.sections).forEach((name) => {
+      if (sections.indexOf(name) >= 0) return;
+      arr(briefing.sections[name]).forEach((story) => {
+        if (!story || typeof story !== "object") return;
+        const claimed = text(story.url);
+        if (!claimed) return;
+        const match = keys[urlKey(claimed)];
+        const found = match ? match.url : searchMatch(name, claimed);
+        if (found) {
+          story.url = found;
+          story.grounded = true;
+          story.groundedBy = match ? "feed" : "search";
+          countLink(name, "verified");
+        } else {
+          delete story.url;
+          story.grounded = false;
+          countLink(name, "removed");
+        }
+      });
+    });
+  }
+
   return {briefing: briefing, stats: stats};
 }
 
 module.exports = {
   buildEvidence,
   verifyGrounding,
+  searchUrls,
   urlKey,
   MAX_EVIDENCE_ITEMS,
   MAX_DOC_AGE_DAYS,
