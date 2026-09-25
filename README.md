@@ -36,7 +36,9 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   on every device (up to 20 a day, kept two weeks, trimmed on the account copy
   too). The Sunday look-back adds **Stories from your week**: everything opened,
   noted or taken to a linked spark over the week, once each, with its link and
-  **✎ Write about it**.
+  **✎ Write about it**. A small line under the spark title says why it is there
+  (today’s rotation, Sunday look-back, picked from the library, or swapped to) and
+  what it is paired with (e.g. “paired with today’s top insurance story”).
   They work independently of live feeds and require no model calls. Reflections
   and completion sync across devices through the signed-in account
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing
