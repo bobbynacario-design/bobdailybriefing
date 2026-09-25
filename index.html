@@ -10076,9 +10076,19 @@ function renderTrends(days, btnEl) {
 // three are server-side reads. What Bob copies is therefore exactly the prompt
 // the server sends on a morning when every feed is down — a real prompt that
 // works when pasted elsewhere, rather than an approximation of one.
+//
+// His "more / less like this" votes are the exception: they sync to this device
+// already, so the copied prompt carries the same READER FEEDBACK block, and an
+// outside AI learns from what he ticked just as the in-app generator does.
+function getBriefingFeedback() {
+  var core = window.BriefingPromptCore, entries = window.dailyBoostFeedbackEntries ? window.dailyBoostFeedbackEntries() : {};
+  if (!core.buildReaderFeedback || !window.DailyBoostCore) return null;
+  return core.buildReaderFeedback(entries, window.DailyBoostCore.dateKey());
+}
 function getGeminiPrompt() {
   return window.BriefingPromptCore.buildBriefingPrompt({
-    dateLabel: getTodayBriefingDateLabel()
+    dateLabel: getTodayBriefingDateLabel(),
+    feedback: getBriefingFeedback()
   });
 }
 
@@ -10095,8 +10105,9 @@ function togglePrompt() {
 
 function copyPrompt() {
   var text = getGeminiPrompt();
+  var message = text.indexOf('READER FEEDBACK —') >= 0 ? 'AI prompt copied, with your recent story votes' : 'AI prompt copied to clipboard';
   navigator.clipboard.writeText(text).then(function() {
-    showToast('AI prompt copied to clipboard','ok');
+    showToast(message,'ok');
   }).catch(function() {
     var ta = document.createElement('textarea');
     ta.value = text;
@@ -10106,7 +10117,7 @@ function copyPrompt() {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    showToast('AI prompt copied to clipboard','ok');
+    showToast(message,'ok');
   });
 }
 

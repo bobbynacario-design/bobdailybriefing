@@ -118,6 +118,24 @@ test('a card citation carries headline, source, the briefing date and a web link
   assert.equal(context.briefingCitation({headline:'H',source:'S'},'Late edition'),'“H” — S, Late edition.');
   assert.equal(context.briefingCitation({headline:'H'},''),'“H”.');
 });
+// The copied prompt is the one an outside AI sees, so it has to carry Bob's
+// story votes the same way the server generator does, and nothing when there are none.
+test('the copied AI prompt carries the reader feedback from synced votes', () => {
+  let entries={};
+  const {context}=environment(['getBriefingFeedback','getGeminiPrompt'],{getTodayBriefingDateLabel:()=> 'Friday, September 25, 2026',
+    DailyBoostCore:{dateKey:()=> '2026-09-25'},dailyBoostFeedbackEntries:()=>entries});
+  vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),context);
+  assert.doesNotMatch(context.getGeminiPrompt(),/READER FEEDBACK/);
+  entries={'2026-09-24':{feedback:[{headline:'Insurer lifts BI reserves again',source:'Insurance News',section:'insurance',vote:1},{headline:'Rates hold again',section:'markets',vote:-1}]},
+    '2026-09-25':{feedback:[{headline:'Rates hold again',section:'markets',vote:0}]}};
+  const prompt=context.getGeminiPrompt();
+  assert.match(prompt,/READER FEEDBACK:\n- A READER FEEDBACK block near the end of this prompt/);
+  assert.match(prompt,/More like this:\n- \[insurance\] Insurer lifts BI reserves again \(Insurance News\)/);
+  assert.doesNotMatch(prompt,/Less like this/,'a vote taken back is no vote');
+  assert.equal(prompt,context.BriefingPromptCore.buildBriefingPrompt({dateLabel:'Friday, September 25, 2026',feedback:context.BriefingPromptCore.buildReaderFeedback(entries,'2026-09-25')}));
+  delete context.dailyBoostFeedbackEntries;
+  assert.doesNotMatch(context.getGeminiPrompt(),/READER FEEDBACK/,'no Daily Boost, no block');
+});
 test('stories are marked new or by how many briefings in a row they have run', () => {
   const {context}=environment(['runWords','runUrl','sameStory','briefingWhen','briefingStories','briefingStoryRuns']);
   const day=(date,sections)=>({key:date,saved:Date.parse(date),data:{date,sections}});

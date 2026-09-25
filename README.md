@@ -244,10 +244,13 @@ actually runs. The generated briefing is shaped by four things beyond it:
   this (the newest vote on a story counts; the same button takes it back). Votes
   sync on the Daily Boost days, and the generator turns the last 30 days into a
   READER FEEDBACK block of up to ten examples each way plus a per-section tally
-  (`functions/briefing-context.js`), with rules that it steers priority only,
-  never overrides grounding, the budget or relevance levels, and is never
-  reported back. The verification line shows “Tuned by your feedback: N more, M
-  less.”
+  (`buildReaderFeedback` in `lib/briefing-prompt-core.js`), with rules that it
+  steers priority only, never overrides grounding, the budget or relevance
+  levels, and is never reported back. The verification line shows “Tuned by
+  your feedback: N more, M less.” **Copy AI prompt** carries the same block,
+  built on the device from the synced votes, so a briefing generated in an
+  outside AI and pasted back is steered by them too (votes on a pasted briefing
+  are saved like any other).
 - **Standing context** — Bob's open decision-journal calls with their
   invalidation lines, confirmed/forming Radar setups, and event markets past the
   research gate are put in front of the model as private state
