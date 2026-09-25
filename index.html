@@ -7921,7 +7921,7 @@ function copyActionQueue() {
   var lines = ['Action queue - ' + (_currentData.date || 'Daily Briefing'), ''];
   items.forEach(function(item, idx) {
     lines.push((idx + 1) + '. [' + item.score.toUpperCase() + '] ' + item.story.headline);
-    if (item.story.relevance) lines.push('   Bob: ' + item.story.relevance);
+    if (item.story.relevance) lines.push('   Why it matters: ' + item.story.relevance);
     if (item.story.source) lines.push('   Source: ' + item.story.source);
   });
   navigator.clipboard.writeText(lines.join('\n')).then(function(){
@@ -8012,7 +8012,7 @@ async function generateWithOpenAI() {
 // consulting opportunity" — four alternatives, so the model always took the
 // cheapest and produced "watch for claims impact".
 //
-// Rendered as its own line rather than folded into the → Bob text, because the
+// Rendered as its own line rather than folded into the → Why it matters text, because the
 // point is that it is checkable: it should be visibly a thing with a publisher
 // and a date, not more prose. Absent on older archived briefings and on the
 // sections that do not carry it, so it renders nothing at all when empty.
@@ -8139,7 +8139,7 @@ function renderBriefing(options) {
       secHTML += '</div>';
       // Column 2: Bob's relevance note.
       secHTML += '<div class="card-aside">';
-      if (score!=='none') secHTML += '<div class="rel-text"><strong>→ Bob:</strong> '+esc(st.relevance)+'</div>';
+      if (score!=='none') secHTML += '<div class="rel-text"><strong>→ Why it matters:</strong> '+esc(st.relevance)+'</div>';
       else secHTML += '<div class="rel-none-txt">No direct relevance today</div>';
       secHTML += watchMetricHtml(st);
       secHTML += '</div></div>';
@@ -9123,7 +9123,7 @@ function exportPDF() {
         var hlLines=doc.splitTextToSize(pdfSafe(st.headline),CW-4);
         var bdLines=doc.splitTextToSize(pdfSafe(st.body),CW-4);
         var relTxt=pdfSafe(st.relevance);
-        var relLines=relTxt?doc.splitTextToSize('Bob: '+relTxt,CW-4):[];
+        var relLines=relTxt?doc.splitTextToSize('Why it matters: '+relTxt,CW-4):[];
         var cardH=hlLines.length*5+3+bdLines.length*4+2+(st.source?4:0)+(relLines.length?relLines.length*3.5+3:0)+8;
         chk(cardH);
         doc.setFillColor(250,250,250); doc.setDrawColor(220,220,220);
@@ -9297,7 +9297,7 @@ function copyAsText() {
       lines.push('### ' + st.headline + ' [' + score.toUpperCase() + ']');
       lines.push(st.body);
       if (st.source) lines.push('Source: ' + st.source);
-      if (st.relevance && score !== 'none') lines.push('> Bob: ' + st.relevance);
+      if (st.relevance && score !== 'none') lines.push('> Why it matters: ' + st.relevance);
       lines.push('');
     });
   });
