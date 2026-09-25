@@ -69,7 +69,12 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   previous briefing) or **Day N** (its Nth briefing in a row), compared with the
   archive by link or by headline wording (two content words and 60% of the
   shorter headline shared, since running stories are reworded daily). Nothing is
-  marked when there is no earlier briefing to compare with.
+  marked when there is no earlier briefing to compare with. A **reading
+  progress** line at the top of the briefing counts stories read (“4 of 11 read ·
+  1 high-relevance left”) with a meter and **Next unread** (highest relevance
+  first). A story counts as read when its source was opened, it was noted, or it
+  was **Mark read** by hand (which also works for stories with no link, and can be
+  undone); cards show ✓ Opened, ✓ Noted or ✓ Read, synced with Daily Boost.
 
 - **Command Center** — a zero-extra-cost cross-feed “Morning 5” and attention
   queue. It ranks current briefing items, Radar setups, Markets changes, open
