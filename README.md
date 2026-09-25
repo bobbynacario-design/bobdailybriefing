@@ -23,6 +23,10 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   reminders accept an explicit date of today, and their Due date can be changed
   in place.
 
+- **Help** — the Help tab opens with a plain-language Today section (the spark,
+  reading the briefing, reminders and experiments, sync/search/archive, keys)
+  before the Radar, Journal, Markets and Sports guides.
+
 - **Daily Boost** — Today opens with a rotating perspective and a small, actionable
   quest. Choose a two-minute step or ten-minute exploration, switch quests, mark a
   small win, and capture a reflection. Browse or search 50 curated sparks across
