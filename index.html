@@ -59,10 +59,11 @@ const PAGE_SIZE = 30;
 function setSyncStatus(status, msg) {
   var el = document.getElementById('sync-status');
   if (!el) return;
-  var colors = {syncing:'#C9A84C',ok:'#2DB87A',error:'#E85C5C',offline:'rgba(255,255,255,.3)'};
+  // Theme colours, so the status stays readable in light mode too.
+  var colors = {syncing:'var(--gold)',ok:'var(--green)',error:'var(--red)',offline:'var(--txt3)'};
   var icons  = {syncing:'⟳',ok:'✓',error:'✗',offline:'○'};
   el.textContent = (icons[status]||'○')+' '+msg;
-  el.style.color = colors[status]||'rgba(255,255,255,.3)';
+  el.style.color = colors[status]||'var(--txt3)';
 }
 
 // Get current authenticated UID
@@ -792,18 +793,27 @@ window._fbReady = true;
   --blue:#3498DB;--blue-dim:rgba(52,152,219,0.12);
   --purple:#9B6FE8;--purple-dim:rgba(155,111,232,0.12);
   --teal:#1EC8C8;
+  --amber:#F0A832;
   --serif:'Playfair Display',Georgia,serif;
   --mono:'DM Mono','Courier New',monospace;
   --sans:'DM Sans',system-ui,sans-serif;
   --txt:#fff;--txt2:#BAC2CF;--txt3:#98A3B5;
 }
+/* Light theme. Every text colour here clears WCAG AA (4.5:1) on all four
+   backgrounds and on its own tinted chip (--*-dim over --bg4); the accents
+   are the dark-theme hues deepened only as far as that needs. --gold2 is a
+   hover state, so it goes darker than --gold rather than lighter. */
 body.light{
   --bg:#F0EDE6;--bg2:#FFFFFF;--bg3:#F5F2EC;--bg4:#E8E4DB;
-  --rim:rgba(0,0,0,0.08);--rim2:rgba(0,0,0,0.14);--rim3:rgba(0,0,0,0.22);
-  --gold:#8B6914;--gold2:#A07820;--gold-dim:rgba(139,105,20,0.1);
-  --green:#1A7A40;--green-dim:rgba(26,122,64,0.1);
-  --red:#C0392B;--red-dim:rgba(192,57,43,0.1);
-  --txt:#1A1A1A;--txt2:#4E5766;--txt3:#556070;
+  --rim:rgba(0,0,0,0.09);--rim2:rgba(0,0,0,0.16);--rim3:rgba(0,0,0,0.25);
+  --gold:#725610;--gold2:#5E470E;--gold-dim:rgba(114,86,16,0.1);
+  --green:#166637;--green-dim:rgba(22,102,55,0.1);
+  --red:#A03326;--red-dim:rgba(160,51,38,0.1);
+  --blue:#225C91;--blue-dim:rgba(34,92,145,0.1);
+  --purple:#6845AD;--purple-dim:rgba(104,69,173,0.1);
+  --teal:#0C6464;
+  --amber:#7F4F00;
+  --txt:#1A1A1A;--txt2:#3F4754;--txt3:#556070;
 }
 html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh}
 body{background:linear-gradient(180deg,rgba(201,168,76,.035),transparent 220px),var(--bg)}
@@ -836,9 +846,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 /* ── TOAST ── */
 .toast{position:fixed;top:1rem;right:1rem;z-index:9999;font-family:var(--mono);font-size:12px;padding:.65rem 1.1rem;border-radius:8px;color:#fff;opacity:0;transform:translateY(-10px);transition:all .3s ease;pointer-events:none;max-width:380px}
 .toast.show{opacity:1;transform:translateY(0)}
-.toast.ok{background:#2DB87A;border:1px solid rgba(45,184,122,.4)}
-.toast.error{background:#E85C5C;border:1px solid rgba(232,92,92,.4)}
-.toast.info{background:#3498DB;border:1px solid rgba(52,152,219,.4)}
+/* White text needs a deep fill: these clear 5:1 in both themes. */
+.toast.ok{background:#1B7F4E;border:1px solid rgba(45,184,122,.4)}
+.toast.error{background:#B83A2E;border:1px solid rgba(232,92,92,.4)}
+.toast.info{background:#1F6FB2;border:1px solid rgba(52,152,219,.4)}
 .toast.warn{background:#F0A832;border:1px solid rgba(240,168,50,.4);color:#1A1A1A}
 .update-banner{position:fixed;left:50%;bottom:1rem;transform:translate(-50%,120%);z-index:9998;background:var(--bg2);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:.65rem .8rem;display:flex;align-items:center;gap:.75rem;box-shadow:0 18px 60px rgba(0,0,0,.35);transition:transform .25s ease}
 .update-banner.show{transform:translate(-50%,0)}
@@ -918,7 +929,7 @@ body.light .hero::after{opacity:.42}
 .coverage-count{font-family:var(--mono);font-size:10px;color:var(--txt3);text-align:right}
 .qa-line{font-size:12px;color:var(--txt2);line-height:1.55;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--rim)}
 .qa-line.ok{color:var(--green)}
-.qa-line.warn{color:#F0A832}
+.qa-line.warn{color:var(--amber)}
 body.compact .card{padding:.8rem 1rem;margin-bottom:.5rem}
 body.compact .card-body{line-height:1.55;margin-bottom:.45rem}
 body.compact .card-footer{display:none}
@@ -931,7 +942,7 @@ body.compact .hero{padding:1rem 1.35rem}
 .paste-label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--txt3);margin-bottom:.5rem;text-transform:uppercase}
 .paste-zone textarea{width:100%;min-height:90px;background:transparent;border:none;outline:none;font-family:var(--mono);font-size:12px;color:var(--txt2);resize:vertical;line-height:1.7}
 .paste-zone textarea::placeholder{color:rgba(255,255,255,.15)}
-body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
+body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.55)}
 .paste-actions{display:flex;align-items:center;justify-content:space-between;margin-top:.75rem;flex-wrap:wrap;gap:.5rem}
 .paste-hint{font-family:var(--mono);font-size:10px;color:var(--txt3)}
 .btn-row{display:flex;gap:.5rem}
@@ -947,7 +958,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .score-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--txt3);text-transform:uppercase}
 .score-chip{font-family:var(--mono);font-size:10px;padding:2px 9px;border-radius:20px}
 .sc-high{background:var(--green-dim);color:var(--green);border:1px solid rgba(45,184,122,.25)}
-.sc-med{background:rgba(240,168,50,.1);color:#F0A832;border:1px solid rgba(240,168,50,.25)}
+.sc-med{background:rgba(240,168,50,.1);color:var(--amber);border:1px solid rgba(240,168,50,.25)}
 .sc-low{background:var(--purple-dim);color:var(--purple);border:1px solid rgba(155,111,232,.25)}
 .sc-none{background:var(--rim);color:var(--txt3);border:1px solid var(--rim)}
 .reader-tools{display:none;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.65rem .8rem;flex-wrap:wrap}
@@ -979,7 +990,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.2)}
 .card-hl{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt);line-height:1.35;flex:1}
 .rel-badge{font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;margin-top:3px;letter-spacing:.05em;text-transform:uppercase}
 .rel-high{background:var(--green-dim);color:var(--green);border:1px solid rgba(45,184,122,.3)}
-.rel-med{background:rgba(240,168,50,.1);color:#F0A832;border:1px solid rgba(240,168,50,.3)}
+.rel-med{background:rgba(240,168,50,.1);color:var(--amber);border:1px solid rgba(240,168,50,.3)}
 .rel-low{background:var(--purple-dim);color:var(--purple);border:1px solid rgba(155,111,232,.3)}
 .rel-none-b{background:var(--rim);color:var(--txt3);border:1px solid var(--rim)}
 .card-body{font-size:13px;color:var(--txt2);line-height:1.75;margin-bottom:.7rem}
@@ -1100,8 +1111,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .sports-match:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--blue)}
 .sports-match.live:before{background:var(--green)}
 .sports-match.finished:before{background:var(--gold)}
-.sports-match.pending:before{background:#F0A832}
-.sports-match.pending .sports-match-meta{color:#F0A832}
+.sports-match.pending:before{background:var(--amber)}
+.sports-match.pending .sports-match-meta{color:var(--amber)}
 .sports-match-meta{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.45rem}
 .sports-teams{display:grid;grid-template-columns:minmax(120px,1fr) 72px minmax(120px,1fr);gap:.55rem;align-items:center;max-width:680px;margin:0 auto}
 .sports-team{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--txt);line-height:1.25;min-width:0}
@@ -1116,7 +1127,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .sports-projection-split{display:block;margin-top:.15rem;color:var(--txt2)}
 .sports-lowconf{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em}
 .sports-projection-tag{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--green);border:1px solid rgba(45,184,122,.28);background:var(--green-dim);border-radius:20px;padding:2px 8px;white-space:nowrap;flex:0 0 auto;margin-top:1px}
-.sports-projection-tag.watch{color:#F0A832;background:rgba(240,168,50,.1);border-color:rgba(240,168,50,.28)}
+.sports-projection-tag.watch{color:var(--amber);background:rgba(240,168,50,.1);border-color:rgba(240,168,50,.28)}
 .sports-projection-tag.close{color:var(--txt3);background:var(--bg2);border-color:var(--rim2)}
 .sports-prob-bar{display:flex;height:7px;border-radius:5px;overflow:hidden;background:var(--bg2);margin-top:.55rem;min-width:100%}
 .sports-prob-bar .seg{height:100%}
@@ -1135,7 +1146,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .sports-momentum-card{background:var(--bg3);border:1px solid var(--rim);border-radius:10px;padding:.85rem .9rem;position:relative;overflow:hidden}
 .sports-momentum-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--gold)}
 .sports-momentum-card.rising:before{background:var(--green)}
-.sports-momentum-card.watch:before{background:#F0A832}
+.sports-momentum-card.watch:before{background:var(--amber)}
 .sports-momentum-card.fading:before{background:var(--red)}
 .sports-momentum-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.65rem;margin-bottom:.55rem}
 .sports-momentum-team{font-family:var(--serif);font-size:17px;font-weight:700;line-height:1.25;color:var(--txt)}
@@ -1150,10 +1161,10 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .sports-audit-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.4}
 .sports-empty{font-size:12px;line-height:1.7;color:var(--txt3);font-style:italic}
 .sports-health{font-family:var(--mono);font-size:11px;line-height:1.6;border:1px solid var(--rim2);border-left:3px solid var(--green);background:rgba(45,212,160,.08);padding:.7rem .85rem;margin-bottom:1rem}
-.sports-health.warn{border-left-color:#F0A832;background:rgba(240,168,50,.1);color:var(--txt)}
+.sports-health.warn{border-left-color:var(--amber);background:rgba(240,168,50,.1);color:var(--txt)}
 .sports-health.error{border-left-color:var(--red);background:var(--red-dim);color:var(--txt)}
 .sports-rest{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.35rem;display:flex;justify-content:space-between;gap:.75rem}
-.sports-rest b{color:#F0A832;font-weight:600}
+.sports-rest b{color:var(--amber);font-weight:600}
 .sports-series{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.7rem}
 .sports-series-round{border-left:2px solid var(--gold);padding-left:.65rem;min-width:0}
 .sports-series-round h4{font-family:var(--mono);font-size:10px;text-transform:uppercase;color:var(--gold);margin:0 0 .5rem}
@@ -1185,7 +1196,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .sports-bm:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue)}
 .sports-bm.live:before{background:var(--green)}
 .sports-bm.finished:before{background:var(--gold)}
-.sports-bm.pending:before{background:#F0A832}
+.sports-bm.pending:before{background:var(--amber)}
 .sports-bm.tbd-col{font-family:var(--mono);font-size:10px;color:var(--txt3);font-style:italic;text-align:center;padding:.7rem .5rem}
 .sports-bm.tbd-col:before{background:var(--rim2)}
 .sports-bm-meta{display:flex;justify-content:space-between;gap:.4rem;font-family:var(--mono);font-size:8px;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem}
@@ -1219,7 +1230,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .journal-note b{color:var(--txt)}
 .journal-caveats{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rim);font-family:var(--mono);font-size:10px;line-height:1.7;color:var(--txt3)}
 .jmut{color:var(--txt3)}
-.jamb{color:#F0A832;cursor:help}
+.jamb{color:var(--amber);cursor:help}
 @media(max-width:768px){.jbar-label{width:74px}.jbar-meta{min-width:0}.jbar-row{flex-wrap:wrap}.jbar-row .jbar-meta{width:100%;text-align:left;margin-top:.3rem}.jbar-row .trend-bar-wrap{flex:1 1 120px}}
 
 /* ── HELP ── */
@@ -1229,7 +1240,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .radar-decision-actions{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;justify-content:flex-end}
 .radar-decision-btn{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;padding:.32rem .55rem;border-radius:6px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;white-space:nowrap}
 .radar-decision-btn:hover{border-color:var(--rim2);color:var(--txt)}
-.radar-decision-btn.watch{color:#F0A832;border-color:rgba(240,168,50,.25);background:rgba(240,168,50,.08)}
+.radar-decision-btn.watch{color:var(--amber);border-color:rgba(240,168,50,.25);background:rgba(240,168,50,.08)}
 .radar-decision-btn.skip{color:var(--red);border-color:rgba(232,92,92,.25);background:var(--red-dim)}
 .radar-decision-btn.took{color:var(--green);border-color:rgba(45,184,122,.25);background:var(--green-dim)}
 .radar-decision-btn.note{color:var(--txt3)}
@@ -1282,7 +1293,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .dec-chip{font-family:var(--mono);font-size:9.5px;letter-spacing:.03em;padding:.24rem .45rem;border-radius:5px;border:1px solid var(--rim2);color:var(--txt2);white-space:nowrap}
 .dec-chip.good{color:var(--green);border-color:rgba(45,184,122,.3);background:var(--green-dim)}
 .dec-chip.bad{color:var(--red);border-color:rgba(232,92,92,.3);background:var(--red-dim)}
-.dec-chip.warn{color:#F0A832;border-color:rgba(240,168,50,.3);background:rgba(240,168,50,.08)}
+.dec-chip.warn{color:var(--amber);border-color:rgba(240,168,50,.3);background:rgba(240,168,50,.08)}
 .dec-live-econ{margin-top:.5rem;padding-top:.45rem;border-top:1px solid var(--rim);font-family:var(--mono);font-size:11.5px;color:var(--txt2);display:flex;gap:.9rem;flex-wrap:wrap}
 .dec-live-cat{margin-top:.45rem;font-size:11.5px;line-height:1.55;color:var(--txt3)}
 .dec-live-drift{margin-top:.5rem;padding:.45rem .55rem;border-radius:7px;font-size:11.5px;line-height:1.5;background:var(--red-dim);border:1px solid rgba(232,92,92,.28);color:var(--txt2)}
@@ -1317,8 +1328,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 
 /* ── PSE (PH snapshot) ── */
 .pse-caveat{font-size:12px;line-height:1.6;color:var(--txt2);background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:10px;padding:.7rem .9rem;margin-bottom:1.1rem}
-.pse-stale{font-size:12.5px;line-height:1.6;color:var(--txt);background:rgba(240,168,50,.12);border:1px solid rgba(240,168,50,.5);border-left:3px solid #F0A832;border-radius:10px;padding:.7rem .9rem;margin-bottom:.8rem;font-weight:500}
-.pse-sub-stale{color:#F0A832;font-weight:600}
+.pse-stale{font-size:12.5px;line-height:1.6;color:var(--txt);background:rgba(240,168,50,.12);border:1px solid rgba(240,168,50,.5);border-left:3px solid var(--amber);border-radius:10px;padding:.7rem .9rem;margin-bottom:.8rem;font-weight:500}
+.pse-sub-stale{color:var(--amber);font-weight:600}
 .pse-index{margin-bottom:.4rem}
 .pse-idx-top{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem}
 .pse-idx-name{font-size:18px;font-weight:600;color:var(--txt)}
@@ -1352,7 +1363,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .ph-subj{font-family:var(--mono);font-size:10px;color:var(--gold);background:var(--gold-dim);padding:2px 6px;border-radius:4px;flex-shrink:0}
 .miro-grounding{margin:0 0 1rem;padding:.6rem .75rem;border-radius:9px;font-size:12.5px;line-height:1.6;
   background:rgba(240,168,50,.08);border:1px solid rgba(240,168,50,.3);color:var(--txt2)}
-.miro-grounding b{color:#F0A832}
+.miro-grounding b{color:var(--amber)}
 .miro-controls{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:-.45rem 0 1rem}
 .miro-llm-btn{display:inline-flex;align-items:center;gap:.45rem;border:1px solid var(--rim2);border-radius:8px;background:var(--bg2);color:var(--txt2);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:.55rem .8rem;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
 .miro-llm-btn:hover{border-color:var(--gold);color:var(--txt)}
@@ -1425,7 +1436,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .hist-chips{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.5rem}
 .hist-chip{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:20px;background:var(--bg3);color:var(--txt3);border:1px solid var(--rim)}
 .hist-chip.high{background:var(--green-dim);color:var(--green);border-color:rgba(45,184,122,.25)}
-.hist-chip.med{background:rgba(240,168,50,.1);color:#F0A832;border-color:rgba(240,168,50,.25)}
+.hist-chip.med{background:rgba(240,168,50,.1);color:var(--amber);border-color:rgba(240,168,50,.25)}
 .hist-delete{position:absolute;top:.75rem;right:.75rem;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--txt3);cursor:pointer;font-size:14px;padding:2px 6px;transition:all .15s;opacity:0}
 .hist-card:hover .hist-delete{opacity:1}
 .hist-delete:hover{color:var(--red);border-color:var(--red);background:var(--red-dim)}
@@ -1445,7 +1456,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 /* Reports keep the delete control visible (History hides it until hover) */
 #research-out .hist-delete{opacity:.7;border-color:var(--rim2)}
 #research-out .hist-card:hover .hist-delete{opacity:1}
-.report-badge.gen{background:rgba(240,168,50,.12);color:#F0A832;border-color:rgba(240,168,50,.3)}
+.report-badge.gen{background:rgba(240,168,50,.12);color:var(--amber);border-color:rgba(240,168,50,.3)}
 .report-badge.err{background:var(--red-dim);color:var(--red);border-color:rgba(232,92,92,.3)}
 .research-preset-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem}
 .gen-opt{display:flex;align-items:center;gap:.45rem;font-family:var(--mono);font-size:11px;color:var(--txt2);margin:.35rem 0 .1rem;cursor:pointer}
@@ -1599,7 +1610,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .radar-band.bad{color:var(--red)}
 .radar-calib-warn{margin-top:.6rem;padding:.6rem .75rem;border-radius:9px;font-size:12.5px;line-height:1.6;
   background:rgba(240,168,50,.08);border:1px solid rgba(240,168,50,.3);color:var(--txt2)}
-.radar-calib-warn b{color:#F0A832}
+.radar-calib-warn b{color:var(--amber)}
 .jwc-list{display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem}
 .jwc-row{display:grid;grid-template-columns:minmax(90px,1.1fr) minmax(150px,1.6fr) minmax(120px,1.2fr) auto;
   gap:.6rem;align-items:center;font-family:var(--mono);font-size:10px;padding:.5rem .6rem;
@@ -1655,7 +1666,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
   padding:1rem 1.1rem;margin-bottom:1.25rem}
 .drift-head{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;flex-wrap:wrap;
   margin-bottom:.7rem}
-.drift-title{font-family:var(--mono);font-size:12px;color:#F0A832;letter-spacing:.06em;text-transform:uppercase}
+.drift-title{font-family:var(--mono);font-size:12px;color:var(--amber);letter-spacing:.06em;text-transform:uppercase}
 .drift-meta{font-family:var(--mono);font-size:9.5px;color:var(--txt3);letter-spacing:.04em}
 .drift-item{padding:.6rem 0;border-top:1px solid var(--rim)}
 .drift-item-top{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
@@ -1671,14 +1682,14 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .feed-pill{display:inline-flex;align-items:center;gap:.32rem;padding:.2rem .45rem;border-radius:5px;
   border:1px solid var(--rim2);color:var(--txt2);cursor:default;white-space:nowrap}
 .feed-pill.bad{color:var(--red);border-color:rgba(232,92,92,.35);background:var(--red-dim)}
-.feed-pill.warn{color:#F0A832;border-color:rgba(240,168,50,.35);background:rgba(240,168,50,.08)}
+.feed-pill.warn{color:var(--amber);border-color:rgba(240,168,50,.35);background:rgba(240,168,50,.08)}
 .feed-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex:0 0 auto}
-.feed-pill.warn .feed-dot{background:#F0A832}
+.feed-pill.warn .feed-dot{background:var(--amber)}
 .feed-pill.bad .feed-dot{background:var(--red)}
 .feed-pill.mut .feed-dot{background:var(--txt3)}
 .feed-age{color:var(--txt3)}
 .feed-health-why{flex-basis:100%;color:var(--txt2);line-height:1.6;padding-top:.15rem}
-.feed-health-why b{color:#F0A832}
+.feed-health-why b{color:var(--amber)}
 @media(max-width:768px){.feed-health{padding:.4rem .85rem;font-size:9.5px}}
 
 /* ── COMMAND CENTER ── */
@@ -1825,6 +1836,15 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .nav-center>.ntab>.ntab-icon:empty{display:none}
 .nav-group-panel{position:absolute;top:calc(100% + 7px);left:0;width:max-content;min-width:212px;max-width:min(300px,82vw);padding:.35rem;display:flex;flex-direction:column;gap:.1rem;background:var(--bg2);border:1px solid var(--rim2);border-radius:11px;box-shadow:0 18px 42px rgba(0,0,0,.55);z-index:120;animation:navMenuIn .14s ease}
 body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
+/* Light-theme finish. Dark text on a light ground renders thinner than the
+   reverse, so the small mono labels step up a weight; white cards get a soft
+   warm shadow to lift off the beige page; overlays and dialogs drop the
+   near-black scrim and heavy shadow that only suit the dark theme. */
+body.light .card,body.light .hero,body.light .daily-boost{box-shadow:0 1px 2px rgba(60,48,20,.05),0 3px 10px rgba(60,48,20,.04)}
+body.light .intel-search-overlay{background:rgba(40,34,22,.32)}
+body.light .tab-badge{color:var(--gold2)}
+body.light .intel-search-dialog{box-shadow:0 24px 60px rgba(40,34,22,.2)}
+body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.light .boost-keys,body.light .tool-chip,body.light .filter-chip,body.light .card-act,body.light .src,body.light .rel-badge,body.light .tab-badge,body.light .sec-name,body.light .hero-sub,body.light .hero-timestamp{font-weight:500}
 .nav-group-panel.flip{left:auto;right:0}
 @keyframes navMenuIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 .nav-group-panel .ntab{position:relative;display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:.55rem;text-align:left;font-size:11px;letter-spacing:.07em;padding:.55rem .6rem;border-radius:7px}
@@ -2091,7 +2111,7 @@ body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
   <div class="ticker">
     <div class="tick"><div class="tick-label">PSEi</div><div class="tick-val" id="t-psei">—</div><div class="tick-move tick-flat" id="t-psei-m">—</div><div class="tick-bar" style="background:#3498DB"></div></div>
     <div class="tick"><div class="tick-label">USD/PHP</div><div class="tick-val" id="t-usdphp">—</div><div class="tick-move tick-flat" id="t-usdphp-m">—</div><div class="tick-bar" style="background:#C9A84C"></div></div>
-    <div class="tick"><div class="tick-label">ASX 200</div><div class="tick-val" id="t-asx">—</div><div class="tick-move tick-flat" id="t-asx-m">—</div><div class="tick-bar" style="background:#F0A832"></div></div>
+    <div class="tick"><div class="tick-label">ASX 200</div><div class="tick-val" id="t-asx">—</div><div class="tick-move tick-flat" id="t-asx-m">—</div><div class="tick-bar" style="background:var(--amber)"></div></div>
     <div class="tick"><div class="tick-label">S&P 500</div><div class="tick-val" id="t-sp">—</div><div class="tick-move tick-flat" id="t-sp-m">—</div><div class="tick-bar" style="background:#2DB87A"></div></div>
     <div class="tick"><div class="tick-label">Manila Weather</div><div class="tick-val" id="t-weather">—</div><div class="tick-move tick-flat" id="t-weather-m">—</div><div class="tick-bar" style="background:#1EC8C8"></div></div>
   </div>
@@ -2565,7 +2585,7 @@ body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
         <li><b>Score + status badge</b> — the quick read:
           <ul>
             <li><span class="help-pill" style="color:var(--gold)">confirmed</span> — strong, signals lined up.</li>
-            <li><span class="help-pill" style="color:#F0A832">forming</span> — building, not there yet.</li>
+            <li><span class="help-pill" style="color:var(--amber)">forming</span> — building, not there yet.</li>
             <li><span class="help-pill" style="color:var(--red)">invalidated</span> — broke down / lagging. Don't chase.</li>
           </ul>
         </li>
@@ -2591,7 +2611,7 @@ body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
         <li><b>Asset type</b> — <span class="help-pill">All</span> / <span class="help-pill">Stocks</span> / <span class="help-pill">Crypto</span> / <span class="help-pill">Commodities</span>. Each pill shows how many names sit in it. <i>Commodities</i> = metal/energy/broad-commodity ETFs (GLD, USO, GDX…); energy <i>stocks</i> like XOM stay under Stocks.</li>
-        <li><b>Status</b> — the second row filters by <span class="help-pill" style="color:var(--gold)">confirmed</span> / <span class="help-pill" style="color:#F0A832">forming</span> / <span class="help-pill" style="color:var(--red)">invalidated</span>, counted <i>within</i> the asset type you picked. It hides itself when there's only one status to show.</li>
+        <li><b>Status</b> — the second row filters by <span class="help-pill" style="color:var(--gold)">confirmed</span> / <span class="help-pill" style="color:var(--amber)">forming</span> / <span class="help-pill" style="color:var(--red)">invalidated</span>, counted <i>within</i> the asset type you picked. It hides itself when there's only one status to show.</li>
       </ul>
       <p class="help-key">Use it as a shortlist and framing tool, never as buy signals. Check the regime line up top for the market backdrop, filter to the slice you care about, then scan the top confirmed/forming names and their catalysts. It tells you <i>what's strong and why</i> — never <i>"buy this."</i></p>
     </div>
@@ -2630,7 +2650,7 @@ body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
         <li><b>PBA</b> — official fixtures, venues, results, standings, recent point differential, and conference leaders.</li>
         <li><b>Competition Bracket</b> — uses provider-published NBA round/series data and activates for PBA when official match stages become quarterfinals, semifinals, or finals.</li>
         <li><b>Team Detail</b> — select a team to see record, momentum, average margin or set differential, next/latest match, and current availability count.</li>
-        <li><b>Team Momentum</b> — <span class="help-pill">Score</span> combines recent wins, form margin or set differential, and current standings. <span class="help-pill" style="color:var(--green)">RISING</span> is strongest, <span class="help-pill" style="color:#F0A832">WATCH</span> needs confirmation, and <span class="help-pill" style="color:var(--red)">FADING</span> is weakening.</li>
+        <li><b>Team Momentum</b> — <span class="help-pill">Score</span> combines recent wins, form margin or set differential, and current standings. <span class="help-pill" style="color:var(--green)">RISING</span> is strongest, <span class="help-pill" style="color:var(--amber)">WATCH</span> needs confirmation, and <span class="help-pill" style="color:var(--red)">FADING</span> is weakening.</li>
         <li><b>Watchlist</b> — configurable NBA and PBA teams with their current record and recent form.</li>
       </ul>
       <p class="help-key">Best use: start with the freshness banner, scan RISING and WATCH teams, then check the actual fixtures, rest, availability, and recent results. Momentum is context, not a prediction or betting recommendation.</p>
@@ -2676,7 +2696,7 @@ var SEC_META = {
   insurance:{pip:'#78D0A4', label:'INSURANCE SIGNALS', page:'today'},
   interruptions:{pip:'#E85C5C', label:'INTERRUPTIONS WATCH', page:'today'},
   ai:      {pip:'#9B6FE8', label:'AI & TECHNOLOGY',   page:'ai'},
-  markets: {pip:'#F0A832', label:'MARKETS & ECONOMY', page:'ai'},
+  markets: {pip:'var(--amber)', label:'MARKETS & ECONOMY', page:'ai'},
   ev:      {pip:'#1EC8C8', label:'EV INDUSTRY',       page:'ai'},
   watch:   {pip:'#E85C5C', label:'ONE THING TO WATCH',page:'today'}
 };
@@ -3575,7 +3595,7 @@ function radarStatusClass(status) {
 function radarAccent(status) {
   if (status === 'confirmed') return 'var(--gold)';
   if (status === 'invalidated') return 'var(--red)';
-  return '#F0A832';
+  return 'var(--amber)';
 }
 function radarLevel(v) {
   if (v === null || v === undefined) return '—';
@@ -3597,7 +3617,7 @@ function radarUpsideLabel(s) {
 function radarEventColor(type) {
   var map = {
     earnings:'var(--blue)', guidance:'var(--blue)',
-    analyst:'var(--purple)', regulatory:'#F0A832', legal:'#F0A832',
+    analyst:'var(--purple)', regulatory:'var(--amber)', legal:'var(--amber)',
     macro:'var(--teal)', product:'var(--green)', partnership:'var(--green)',
     supply:'var(--green)'
   };
@@ -4144,7 +4164,7 @@ function renderJournal() {
 
     html += '<div class="journal-section">Excess return by status</div>';
     html += jExcessBar('Confirmed', j.byStatus.confirmed, 'var(--gold)');
-    html += jExcessBar('Forming', j.byStatus.forming, '#F0A832');
+    html += jExcessBar('Forming', j.byStatus.forming, 'var(--amber)');
     html += jExcessBar('Invalidated', j.byStatus.invalidated, 'var(--red)');
 
     html += '<div class="journal-section">Excess return by score</div>';
@@ -9725,7 +9745,7 @@ function renderTrends(days, btnEl) {
   html += '</div>';
 
   html += '<div class="trend-card"><div class="trend-card-title">Relevance Distribution · '+totalStories+' stories</div><div class="trend-rel-grid">';
-  [{key:'high',label:'High',color:'var(--green)'},{key:'med',label:'Medium',color:'#F0A832'},{key:'low',label:'Low',color:'var(--purple)'},{key:'none',label:'None',color:'var(--txt3)'}].forEach(function(rm){
+  [{key:'high',label:'High',color:'var(--green)'},{key:'med',label:'Medium',color:'var(--amber)'},{key:'low',label:'Low',color:'var(--purple)'},{key:'none',label:'None',color:'var(--txt3)'}].forEach(function(rm){
     var pct = totalStories>0?Math.round((relCounts[rm.key]/totalStories)*100):0;
     html += '<div class="trend-rel-box"><div class="trend-rel-num" style="color:'+rm.color+'">'+relCounts[rm.key]+'</div><div class="trend-rel-label">'+rm.label+'</div><div class="trend-rel-pct">'+pct+'%</div></div>';
   });
