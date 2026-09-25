@@ -8,7 +8,8 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 - **Personal daily practice** — choose motivation, clarity, curiosity, calm, or
   a challenge to select a fitting spark. Save favourites and filter the library
   to revisit them. One experiment per day captures an action, review date, and
-  outcome; the experiments panel remains visible when the spark is tucked away.
+  outcome; the experiments panel (open experiments plus those reviewed in the
+  last two weeks) remains visible when the spark is tucked away.
   Review dates are in-app prompts, not additional push notifications. Experiments
   follow the existing 90-entry retention and appear in the reflection export.
   Favourites carry forward into new daily entries and sync with the account.
@@ -19,7 +20,8 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   which sticks across devices), rather than silently discarded. A note builds on
   the version the device last synced, so typing between syncs, or while a save is
   in flight, is never mistaken for a conflict; saves send a snapshot. Legacy entries migrate on sync. Watch
-  reminders accept an explicit date of today and expose an editable review date.
+  reminders accept an explicit date of today, and their Due date can be changed
+  in place.
 
 - **Daily Boost** — Today opens with a rotating perspective and a small, actionable
   quest. Choose a two-minute step or ten-minute exploration, switch quests, mark a
