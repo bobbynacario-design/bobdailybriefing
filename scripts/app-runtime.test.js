@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8').replace(/\r\n/g,'\n');
+test('Daily Boost account writes merge against the transaction snapshot', async()=>{
+  let written;
+  const day='2026-09-25';
+  const remote={[day]:{spark:1,note:'Laptop reflection',updatedAt:200,fieldClocks:{note:200}},'2026-09-24':{spark:2,note:'Yesterday',updatedAt:100}};
+  const context={Date,db:{},COLL:'briefings-bob',getUid:()=> 'alice',doc:()=>({}),runTransaction:async(db,work)=>work({get:async()=>({exists:()=>true,data:()=>({entries:remote})}),set:(ref,body)=>{written=body;}})};
+  context.window=context; vm.createContext(context);
+  vm.runInContext(readFileSync(new URL('../lib/daily-boost.js',import.meta.url),'utf8'),context);
+  const start=html.indexOf('window.fbSaveDailyBoost = async function(');
+  vm.runInContext(html.slice(start,html.indexOf('\n};',start)+3),context);
+  const result=await context.fbSaveDailyBoost('alice',{[day]:{spark:1,note:'Older reflection',updatedAt:300,fieldClocks:{note:100},reminders:[{headline:'Release',metric:'Check',due:day}]}},['2026-09-24']);
+  assert.equal(written.entries[day].note,'Laptop reflection');
+  assert.equal(written.entries[day].reminders.length,1);
+  assert.equal(written.entries['2026-09-24'].note,'Yesterday','stale deletion requests cannot delete the latest snapshot');
+  assert.equal(result[day].note,'Laptop reflection');
+});
 // Execute actual application handlers in a tiny DOM/data adapter. These tests
 // cover behavior; artifact presence is checked separately by check-site.js.
 function handler(name) {

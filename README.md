@@ -5,6 +5,19 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 
 ## Features
 
+- **Personal daily practice** — choose motivation, clarity, curiosity, calm, or
+  a challenge to select a fitting spark. Save favourites and filter the library
+  to revisit them. One experiment per day captures an action, review date, and
+  outcome; the experiments panel remains visible when the spark is tucked away.
+  Review dates are in-app prompts, not additional push notifications. Experiments
+  follow the existing 90-entry retention and appear in the reflection export.
+  Favourites carry forward into new daily entries and sync with the account.
+- **Safer reflection sync** — atomic account transactions merge edits by field
+  and individual story/reminder, including removal markers. Conflicting note text
+  is retained in “Recovered reflection versions” (up to eight alternatives per
+  day), rather than silently discarded. Legacy entries migrate on sync. Watch
+  reminders accept an explicit date of today and expose an editable review date.
+
 - **Daily Boost** — Today opens with a rotating perspective and a small, actionable
   quest. Choose a two-minute step or ten-minute exploration, switch quests, mark a
   small win, and capture a reflection. Browse or search 50 curated sparks across
@@ -55,7 +68,7 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing
   rules), keeping up to 90 dated entries with the seven most recent prior entries
   shown. Each device keeps a working copy; the account copy is merged in on
-  sign-in and on return, the newest edit of each day wins, and changed days are
+  sign-in and on return, independent fields and list items merge, and changed days are
   written 1.5 s after an edit or at once when the page is left. Progress is
   gentle, with no streak penalties. The intelligence briefing remains directly
   below the daily practice. Once today’s quest is done

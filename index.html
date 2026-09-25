@@ -553,7 +553,7 @@ window.fbSaveEvidenceSets = async function(evidenceSets) {
 };
 
 // Daily Boost reflections: one doc per account, entries keyed by PHT day.
-// lib/daily-boost.js merges them with the device copy, newest edit per day wins.
+// lib/daily-boost.js merges individual edits and preserves alternate note text.
 window.fbLoadDailyBoost = async function(uid) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
   var ref = doc(db, COLL, 'daily-boost-' + uid), snap;
@@ -571,11 +571,17 @@ window.fbLoadDailyBoost = async function(uid) {
 
 window.fbSaveDailyBoost = async function(uid, entries, stale) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
-  var body = {uid: uid, entries: {}, updatedAt: new Date().toISOString()};
-  Object.keys(entries || {}).forEach(function(day) { body.entries[day] = entries[day]; });
-  (stale || []).forEach(function(day) { body.entries[day] = deleteField(); });
-  // Merge writes only the days that changed, so another device's days survive.
-  await setDoc(doc(db, COLL, 'daily-boost-' + uid), body, {merge: true});
+  var ref = doc(db, COLL, 'daily-boost-' + uid);
+  return runTransaction(db, async function(tx) {
+    var snap = await tx.get(ref);
+    if (uid !== getUid()) throw new Error('Account changed');
+    var remote = snap.exists() ? snap.data().entries || {} : {};
+    var merged = window.DailyBoostCore.merge(entries,remote).records;
+    // Replace the entries map atomically; retention is recomputed against the
+    // latest document, never applied from another device's stale snapshot.
+    tx.set(ref, {uid:uid,entries:merged,updatedAt:new Date().toISOString()});
+    return merged;
+  });
 };
 
 var briefingMessagingPromise = null;
@@ -2110,16 +2116,20 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   <section class="daily-boost" id="boost-panel" aria-labelledby="boost-heading">
     <div class="boost-compact"><div><div class="boost-kicker" id="boost-compact-kicker">Today’s spark</div><strong id="boost-compact-title"></strong><p id="boost-compact-note"></p></div><button class="tool-chip" id="boost-open" aria-keyshortcuts="T">Open today’s spark</button></div>
     <div class="boost-intro"><div><div class="hero-eyebrow">A little momentum. A new perspective.</div><h1 id="boost-heading">Make today a little more interesting.</h1><p>You don’t have to keep up with everything. Find one idea worth taking into your day.</p></div><button class="tool-chip" id="boost-tuck" aria-keyshortcuts="T" title="Collapse today’s spark so the briefing comes first. It reopens tomorrow.">Tuck away · briefing first ↓</button></div>
+    <div class="boost-library-controls"><label for="boost-intention">What do you need today?<select id="boost-intention"><option value="">Surprise me</option><option value="motivation">Motivation</option><option value="clarity">Clarity</option><option value="curiosity">Curiosity</option><option value="calm">Calm</option><option value="challenge">A challenge</option></select></label><button class="tool-chip" id="boost-favourite" aria-pressed="false">☆ Save this spark</button></div><p id="boost-intention-hint" class="boost-kicker"></p>
     <div class="boost-grid">
       <div class="boost-perspective"><div class="boost-kicker" id="boost-date">Your daily spark</div><h2 id="boost-title" tabindex="-1">Notice the overlooked</h2><p class="boost-why" id="boost-why"></p><p id="boost-thought">A useful idea often starts with something ordinary that everyone has stopped questioning.</p><p class="boost-carried" id="boost-carried" hidden></p><span class="boost-kicker">Notice → Explore → Try → Reflect</span></div>
       <div class="boost-practice"><div class="boost-kicker">One small quest</div><div class="boost-energy" role="group" aria-label="Choose your energy"><button class="tool-chip" id="boost-gentle" aria-pressed="true">Keep it light · 2 min</button><button class="tool-chip" id="boost-stretch" aria-pressed="false">Go deeper · 10 min</button></div><h3 id="boost-duration">2-minute small step</h3><p id="boost-quest">Notice one recurring frustration today. Write down who experiences it and what makes it annoying.</p><button class="tool-chip" id="boost-briefing-jump" hidden>Find it in the briefing ↓</button><div class="boost-actions"><button class="btn-sec" id="boost-done" aria-pressed="false" aria-keyshortcuts="D">I did it</button><button class="tool-chip" id="boost-swap">Try another quest</button></div><p class="boost-feedback" id="boost-feedback" role="status">One small step is enough. You set the pace.</p><p class="boost-keys" aria-hidden="true">Keys: <kbd>N</kbd> note · <kbd>D</kbd> done · <kbd>T</kbd> tuck away</p><div class="boost-week"><span class="boost-kicker">This week</span><span id="boost-week" role="img" aria-label="This week"></span><span class="boost-kicker" id="boost-week-label"></span></div></div>
     </div>
     <div class="boost-lookback" id="boost-lookback" hidden><h3>Your week in notes</h3><p class="boost-kicker" id="boost-lookback-count"></p><div id="boost-lookback-list"></div><div id="boost-lookback-stories" hidden><h4 class="boost-week-stories-title">Stories from your week</h4><div id="boost-lookback-story-list"></div></div></div>
-    <details class="boost-history" id="boost-library"><summary id="boost-library-summary">Browse all sparks · Find your inspiration</summary><div class="boost-library-controls"><label>Theme<select id="boost-theme"><option value="">All themes</option><option>Curiosity</option><option>Perspective</option><option>Creativity</option><option>Momentum</option><option>Confidence</option><option value="Reset">Rest &amp; reset</option><option>Connection</option><option value="Craft">Work craft</option><option value="Review">Weekly look-back</option></select></label><label>Search sparks<input id="boost-search" type="search" placeholder="Try beginner, figure, or quiet…"></label></div><p id="boost-library-count" role="status"></p><div id="boost-library-list"></div></details>
+    <details class="boost-history" id="boost-library"><summary id="boost-library-summary">Browse all sparks · Find your inspiration</summary><div class="boost-library-controls"><label>Theme<select id="boost-theme"><option value="">All themes</option><option>Curiosity</option><option>Perspective</option><option>Creativity</option><option>Momentum</option><option>Confidence</option><option value="Reset">Rest &amp; reset</option><option>Connection</option><option value="Craft">Work craft</option><option value="Review">Weekly look-back</option></select></label><label>Search sparks<input id="boost-search" type="search" placeholder="Try beginner, figure, or quiet…"></label></div><label><input id="boost-favourites-only" type="checkbox"> Favourites only</label><p id="boost-library-count" role="status"></p><div id="boost-library-list"></div></details>
     <div class="boost-reflect"><label for="boost-note">What clicked for you?</label><p>A new question, a tiny win, or something you want to try. One sentence is plenty.</p><textarea id="boost-note" aria-keyshortcuts="N" maxlength="1200" rows="2" placeholder="Today I noticed…"></textarea><div id="boost-noted" hidden aria-label="Stories noted today"></div><div id="boost-status" class="boost-kicker" role="status">Sign in to save your small wins.</div></div>
+    <details class="boost-history"><summary>Try an idea · one experiment for today</summary><div class="boost-library-controls"><label for="boost-trial-plan">What will you try?<input id="boost-trial-plan" maxlength="400" placeholder="One small, specific action…"></label><label for="boost-trial-due">When will you revisit it?<input id="boost-trial-due" type="date"></label></div><button id="boost-trial-save" class="tool-chip">Save experiment</button><p id="boost-trial-status" role="status"></p></details>
+    <details id="boost-conflicts-wrap" class="boost-history" hidden><summary>Recovered reflection versions</summary><p>Edits from another device are preserved here. Copy any wording you want to keep into your reflection.</p><div id="boost-conflicts"></div></details>
     <details class="boost-history" id="boost-history-panel"><summary id="boost-history-title">Your recent discoveries</summary><div id="boost-history"></div><div class="boost-copy"><button class="tool-chip" id="boost-copy">Copy all reflections</button><span class="boost-kicker" id="boost-copy-status" role="status"></span></div><textarea id="boost-export" rows="6" readonly hidden aria-label="All reflections as text"></textarea></details>
   </section>
 
+  <section class="watch-reminders boost-reflect" id="boost-experiments-panel" hidden aria-labelledby="boost-experiments-heading"><h2 id="boost-experiments-heading">Your experiments</h2><p>Try something small. Come back and capture what happened.</p><div id="boost-experiments"></div></section>
   <section class="watch-reminders" id="boost-reminders" hidden aria-labelledby="boost-reminders-title"><div class="watch-head"><h2 id="boost-reminders-title">⏰ To check</h2><p class="boost-kicker" id="boost-reminders-sub"></p></div><div id="boost-reminder-list"></div><details id="boost-reminder-upcoming-wrap" hidden><summary id="boost-reminder-upcoming-title"></summary><div id="boost-reminder-upcoming"></div></details></section>
 
   <div class="hero" id="daily-intelligence" tabindex="-1">
