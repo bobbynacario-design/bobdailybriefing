@@ -39,6 +39,10 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   **✎ Write about it**. A small line under the spark title says why it is there
   (today’s rotation, Sunday look-back, picked from the library, or swapped to) and
   what it is paired with (e.g. “paired with today’s top insurance story”).
+  Quick keys on Today: **N** jumps to the note, **D** marks the quest done (or
+  undoes it), **T** tucks the card away or reopens it. They are ignored while
+  typing, with Ctrl/Cmd/Alt held, off Today, or behind an overlay; the hint shows
+  only on devices with a keyboard and mouse.
   They work independently of live feeds and require no model calls. Reflections
   and completion sync across devices through the signed-in account
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing
