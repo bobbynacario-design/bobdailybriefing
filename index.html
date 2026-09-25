@@ -785,8 +785,12 @@ window._fbReady = true;
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
+  color-scheme:dark;
   --bg:#080A0E;--bg2:#0F1218;--bg3:#161B24;--bg4:#1E2430;
-  --rim:rgba(255,255,255,0.06);--rim2:rgba(255,255,255,0.12);--rim3:rgba(255,255,255,0.2);
+  --rim:rgba(255,255,255,0.075);--rim2:rgba(255,255,255,0.13);--rim3:rgba(255,255,255,0.22);
+  /* Edges of controls (buttons, chips, fields): visible enough (~1.8:1) to read
+     as something to press or type in; cards and dividers keep the quieter --rim. */
+  --line:rgba(255,255,255,0.2);--line-hover:rgba(255,255,255,0.34);
   --gold:#C9A84C;--gold2:#E8C97A;--gold-dim:rgba(201,168,76,0.12);
   --green:#2DB87A;--green-dim:rgba(45,184,122,0.12);
   --red:#E85C5C;--red-dim:rgba(232,92,92,0.12);
@@ -797,7 +801,8 @@ window._fbReady = true;
   --serif:'Playfair Display',Georgia,serif;
   --mono:'DM Mono','Courier New',monospace;
   --sans:'DM Sans',system-ui,sans-serif;
-  --txt:#fff;--txt2:#BAC2CF;--txt3:#98A3B5;
+  /* Off-white rather than #fff: as legible (16:1 on cards) with less glare on near-black. */
+  --txt:#EEF1F5;--txt2:#BAC2CF;--txt3:#98A3B5;
 }
 /* Light theme. Every text colour here clears WCAG AA (4.5:1) on all four
    backgrounds and on its own tinted chip (--*-dim over --bg4); the accents
@@ -806,6 +811,7 @@ window._fbReady = true;
 body.light{
   --bg:#F0EDE6;--bg2:#FFFFFF;--bg3:#F5F2EC;--bg4:#E8E4DB;
   --rim:rgba(0,0,0,0.09);--rim2:rgba(0,0,0,0.16);--rim3:rgba(0,0,0,0.25);
+  --line:rgba(0,0,0,0.22);--line-hover:rgba(0,0,0,0.38);
   --gold:#725610;--gold2:#5E470E;--gold-dim:rgba(114,86,16,0.1);
   --green:#166637;--green-dim:rgba(22,102,55,0.1);
   --red:#A03326;--red-dim:rgba(160,51,38,0.1);
@@ -941,7 +947,7 @@ body.compact .hero{padding:1rem 1.35rem}
 .paste-zone{background:var(--bg2);border:1px dashed rgba(201,168,76,.4);border-radius:14px;padding:1.25rem;margin-bottom:1.5rem}
 .paste-label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--txt3);margin-bottom:.5rem;text-transform:uppercase}
 .paste-zone textarea{width:100%;min-height:90px;background:transparent;border:none;outline:none;font-family:var(--mono);font-size:12px;color:var(--txt2);resize:vertical;line-height:1.7}
-.paste-zone textarea::placeholder{color:rgba(255,255,255,.15)}
+.paste-zone textarea::placeholder{color:rgba(255,255,255,.45)}
 body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.55)}
 .paste-actions{display:flex;align-items:center;justify-content:space-between;margin-top:.75rem;flex-wrap:wrap;gap:.5rem}
 .paste-hint{font-family:var(--mono);font-size:10px;color:var(--txt3)}
@@ -1885,7 +1891,19 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 #boost-lookback-stories{margin-top:1.1rem;padding-top:.9rem;border-top:1px dashed var(--rim2)}#boost-lookback-stories[hidden]{display:none}.boost-week-stories-title{font-family:var(--serif);font-size:17px;font-weight:500;margin:0 0 .6rem}.boost-week-story{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.2rem .8rem;padding:.55rem 0;border-bottom:1px solid var(--rim)}.boost-week-story .boost-kicker{grid-column:1/-1}.boost-week-story-title{font-size:14px;line-height:1.5;color:var(--txt);text-decoration:none;overflow-wrap:anywhere}a.boost-week-story-title:hover{color:var(--gold)}
 #boost-noted{display:flex;flex-wrap:wrap;gap:.4rem;margin:.1rem 0 .6rem}#boost-noted[hidden]{display:none}.boost-noted-item{display:inline-flex;align-items:center;max-width:100%;border:1px solid var(--rim);border-radius:6px;background:var(--bg);font-size:12px}.boost-noted-item button,.boost-noted-item a{background:none;border:0;padding:.3rem .45rem;color:var(--txt2);font:inherit;cursor:pointer;text-decoration:none}.boost-noted-item button:hover,.boost-noted-item a:hover{color:var(--txt)}.boost-noted-title{max-width:min(56vw,380px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .boost-perspective .boost-carried{margin:1.1rem 0 0;padding:.6rem .8rem;border-left:2px solid var(--gold);border-radius:0 6px 6px 0;background:var(--bg2);color:var(--txt);font-size:13px;line-height:1.6;overflow-wrap:anywhere}.boost-lookback{margin-top:1.2rem;padding:1rem clamp(1rem,2.5vw,1.4rem);border:1px solid var(--rim);border-radius:12px;background:var(--bg)}.boost-lookback h3{font-family:var(--serif);font-size:20px;font-weight:500;margin:0 0 .3rem}#boost-lookback-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.8rem;margin-top:.8rem}#boost-lookback-list article{display:flex;flex-direction:column;padding:.9rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg2)}#boost-lookback-list h4{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--txt3);margin:0 0 .4rem}#boost-lookback-list p{flex:1;margin:0 0 .7rem;font-size:14px;line-height:1.6;color:var(--txt2);white-space:pre-wrap;overflow-wrap:anywhere}#boost-lookback-list button{align-self:flex-start}
-@media(max-width:700px){.boost-compact{flex-direction:column;align-items:flex-start;gap:.6rem}}</style>
+@media(max-width:700px){.boost-compact{flex-direction:column;align-items:flex-start;gap:.6rem}}
+/* Control edges (both themes): buttons, chips and fields take --line so they
+   read as controls; hover brightens the edge instead of dimming it. State
+   variants (.active, .watch, ...) are more specific and keep their colours. */
+.tool-chip,.filter-chip,.btn-sec,.secgroup-chip,.radar-pill,.sports-module-tab,.sports-seg,.sports-tourn-chip,.radar-decision-btn,.trend-period-btn,.command-filter,.command-weight button,.command-item-btn,.command-review-state,.intel-search-close,.card-act,.nav-btn,.working-question input,.working-question textarea,.working-question select,.boost-reflect textarea,.boost-library-controls input,.boost-library-controls select{border-color:var(--line)}
+.tool-chip:hover,.filter-chip:hover,.btn-sec:hover,.secgroup-chip:hover,.radar-pill:hover,.sports-module-tab:hover,.sports-seg:hover,.sports-tourn-chip:hover,.radar-decision-btn:hover,.trend-period-btn:hover,.command-filter:hover,.command-weight button:hover,.command-item-btn:hover,.command-review-state:hover,.intel-search-close:hover,.card-act:hover,.nav-btn:hover{border-color:var(--line-hover)}
+/* Active chips: a gold edge that holds up in both themes (the dark-gold .25
+   tint alone is nearly invisible on white). */
+.filter-chip.active,.tool-chip.active,.secgroup-chip.active,.trend-period-btn.active,.command-filter.active{border-color:rgba(201,168,76,.45)}
+body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup-chip.active,body.light .trend-period-btn.active,body.light .command-filter.active{border-color:rgba(114,86,16,.45)}
+/* A faint top highlight gives dark cards an edge of light, like a raised surface. */
+.card,.hero,.daily-boost{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+</style>
 </head>
 <body>
 
@@ -2953,15 +2971,24 @@ function tickClock() {
 tickClock(); setInterval(tickClock,1000);
 
 // ── THEME ──
+// The browser's own pieces follow the theme too: scrollbars, form controls and
+// dropdown lists (color-scheme on the root), and the phone/PWA title bar.
+function applyThemeChrome(light) {
+  document.documentElement.style.colorScheme = light ? 'light' : 'dark';
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', light ? '#F0EDE6' : '#080A0E');
+}
 function toggleTheme() {
   var light = document.body.classList.toggle('light');
   document.getElementById('theme-btn').textContent = light ? '☀️' : '🌙';
   localStorage.setItem('briefing_theme', light?'light':'dark');
+  applyThemeChrome(light);
 }
 if (localStorage.getItem('briefing_theme')==='light') {
   document.body.classList.add('light');
   document.getElementById('theme-btn').textContent = '☀️';
 }
+applyThemeChrome(document.body.classList.contains('light'));
 
 // ── PAGE SWITCHING ──
 function switchPage(id, el) {
