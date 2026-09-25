@@ -6,7 +6,8 @@ Private daily intelligence briefing desk for Bob.
 
 - **Daily Boost** — Today opens with a rotating perspective and a small, actionable
   quest. Choose a two-minute step or ten-minute exploration, switch quests, mark a
-  small win, and capture a reflection. Fourteen curated prompts rotate by PHT date;
+  small win, and capture a reflection. Browse or search 42 curated sparks across
+  seven themes, each with a short and deeper quest. Prompts rotate by PHT date;
   they work independently of live feeds and require no model calls. Reflections
   and completion are stored on this device per signed-in account for up to 90
   dated entries, with the seven most recent prior entries shown. They do not sync
