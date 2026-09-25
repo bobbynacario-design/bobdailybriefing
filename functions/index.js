@@ -21,7 +21,7 @@ const {
 const {authorize, guardedGeneration} = require("./generation-guard");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
-  isMaterialChange, notificationCopy, todaysSparkTitle,
+  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, reminderIds, hasNewReminders,
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
 
@@ -68,6 +68,7 @@ const COMMAND_PREF_PREFIX = "command-prefs-";
 const BRIEFINGS_COLL = "briefings-bob";
 const JOURNAL_COLL = "journal-bob";
 const COMMAND_URL = "https://bobbynacario-design.github.io/bobdailybriefing/#command";
+const TODAY_URL = "https://bobbynacario-design.github.io/bobdailybriefing/#today";
 
 // ── LLM usage telemetry (CJS twin of lib/llm-usage.js) ──
 // Writes token usage to the shared ledger briefings-bob/llm-usage (no uid).
@@ -886,15 +887,17 @@ function withAudit(state, entry) {
   return state;
 }
 
-// Today's spark title for the push, from the account's synced Daily Boost doc.
-// Best effort: a failed read just leaves the spark line off the notification.
-async function todaysSpark(db, uid, now) {
+// Today's spark and due watch-metric reminders, from one read of the account's
+// synced Daily Boost doc. Best effort: a failed read leaves both off the push.
+async function dailyBoostFor(db, uid, now) {
+  const dayKey = phtDateKey(now);
   try {
     const doc = await db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get();
-    return todaysSparkTitle(DailyBoostCore, doc.exists ? doc.data().entries : {}, phtDateKey(now));
+    const entries = doc.exists ? doc.data().entries : {};
+    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey), reminders: dueReminders(DailyBoostCore, entries, dayKey)};
   } catch (error) {
-    logger.warn("Daily spark lookup failed", {message: error.message});
-    return "";
+    logger.warn("Daily Boost lookup failed", {message: error.message});
+    return {spark: "", reminders: []};
   }
 }
 
@@ -918,18 +921,23 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const command = buildCommandCenter(inputs, now);
   const items = selectDeliverable(command.morningFive, config);
   const signature = digestSignature(items);
-  if (!options.test && !isMaterialChange(state.lastSignature, items)) return {status: "unchanged"};
-  if (!items.length && !options.test) return {status: "below-threshold"};
+  const boost = await dailyBoostFor(db, prefs.uid, now);
+  const changed = isMaterialChange(state.lastSignature, items);
+  // A reminder coming due is worth a push even on a morning the Morning 5 has
+  // not changed; one already announced is not.
+  const remindersNew = hasNewReminders(boost.reminders, state.lastReminderIds);
+  if (!options.test && !changed && !remindersNew) return {status: items.length ? "unchanged" : "below-threshold"};
+  const remindersOnly = !options.test && !changed;
 
-  const copy = notificationCopy(items, !!options.test, await todaysSpark(db, prefs.uid, now));
+  const copy = notificationCopy(items, !!options.test, {spark: boost.spark, reminders: boost.reminders, remindersOnly});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
-      type: options.test ? "morning-digest-test" : "morning-digest",
+      type: options.test ? "morning-digest-test" : remindersOnly ? "watch-reminders" : "morning-digest",
       title: copy.title,
       body: copy.body,
-      url: COMMAND_URL,
-      signature: signature || "test-empty",
+      url: remindersOnly ? TODAY_URL : COMMAND_URL,
+      signature: remindersOnly ? "watch-reminders" : (signature || "test-empty"),
     },
     webpush: {headers: {Urgency: "high"}},
   });
@@ -942,14 +950,16 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   await updateDeliveryState(db, prefDoc.ref, (next) => {
     next.tokens = validTokens;
     if (!options.test && response.successCount) {
-      next.lastSignature = signature;
+      if (!remindersOnly) next.lastSignature = signature;
+      next.lastReminderIds = reminderIds(boost.reminders);
       next.lastSentAt = new Date(now).toISOString();
     }
     return withAudit(next, auditEntry(type, {
       itemCount: items.length,
       successCount: response.successCount,
       failureCount: response.failureCount,
-      lead: items[0] ? items[0].source + ": " + items[0].title : "No items above threshold",
+      lead: remindersOnly ? "To check: " + boost.reminders[0].metric : (items[0] ? items[0].source + ": " + items[0].title : "No items above threshold"),
+      reminders: boost.reminders.length,
     }));
   });
   return {status: type, successCount: response.successCount, failureCount: response.failureCount};

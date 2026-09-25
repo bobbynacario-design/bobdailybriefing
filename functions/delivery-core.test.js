@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
-  isMaterialChange, notificationCopy, todaysSparkTitle,
+  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, reminderIds, hasNewReminders,
 } = require("./delivery-core");
 
 test("normalizes delivery defaults and clamps source thresholds", () => {
@@ -73,4 +73,48 @@ test("today's spark is the one on the day's entry, else the app's own default", 
   assert.equal(todaysSparkTitle(core, "junk", "2026-09-28"), core.sparkTitle(fresh));
   assert.equal(todaysSparkTitle(core, {}, "not-a-day"), "");
   assert.equal(todaysSparkTitle(null, {}, "2026-09-28"), "");
+});
+
+test("due reminders come from the synced days: unchecked, due by today, most overdue first", () => {
+  const entries = {
+    "2026-09-20": {spark: 1, reminders: [
+      {metric: "Fair Work hearing list", headline: "Port strike", due: "2026-09-23", done: false},
+      {metric: "Checked already", due: "2026-09-22", done: true},
+    ]},
+    "2026-09-24": {spark: 2, reminders: [
+      {metric: "APRA quarterly claims data", headline: "Insurer lifts BI reserves", due: "2026-09-25"},
+      {metric: "Not yet", due: "2026-10-12"},
+      {metric: "", due: "2026-09-21"},
+    ]},
+  };
+  const due = dueReminders(DailyBoostCore, entries, "2026-09-25");
+  assert.deepEqual(due.map((item) => item.metric), ["Fair Work hearing list", "APRA quarterly claims data"]);
+  assert.deepEqual(dueReminders(DailyBoostCore, null, "2026-09-25"), []);
+  assert.deepEqual(dueReminders(null, entries, "2026-09-25"), []);
+});
+
+test("a reminder is announced once: checking one off re-sends nothing, a snoozed one comes back", () => {
+  const two = [{metric: "A", due: "2026-09-23"}, {metric: "B", due: "2026-09-25"}];
+  const sent = reminderIds(two);
+  assert.equal(hasNewReminders(two, []), true);
+  assert.equal(hasNewReminders(two, sent), false);
+  assert.equal(hasNewReminders([two[1]], sent), false, "A checked off: B was already announced");
+  assert.equal(hasNewReminders([{metric: "A", due: "2026-09-30"}], sent), true, "A snoozed to a new day is news again");
+  assert.equal(hasNewReminders([], sent), false);
+});
+
+test("reminders ride in the Morning 5, or get a push of their own when nothing else changed", () => {
+  const items = [{source: "Radar", title: "NVDA confirmed"}];
+  const reminders = [{metric: "Fair Work hearing list"}, {metric: "APRA quarterly claims data"}];
+  assert.deepEqual(notificationCopy(items, false, {spark: "Look back on your week", reminders}), {
+    title: "Your Morning 5 is ready",
+    body: "Radar: NVDA confirmed\n⏰ To check: Fair Work hearing list · +1 more\nToday’s spark: Look back on your week",
+  });
+  assert.deepEqual(notificationCopy(items, false, {reminders: [reminders[1]], remindersOnly: true}), {
+    title: "⏰ To check today",
+    body: "APRA quarterly claims data",
+  });
+  assert.equal(notificationCopy(items, false, {reminders: [], remindersOnly: true}).title, "Your Morning 5 is ready", "no reminders, no reminders-only copy");
+  assert.equal(notificationCopy([], true, {reminders}).body,
+    "No priority items currently clear your delivery thresholds.\n⏰ To check: Fair Work hearing list · +1 more");
 });

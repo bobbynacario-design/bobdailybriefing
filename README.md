@@ -81,6 +81,11 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   appear in a **⏰ To check** panel above the briefing with ✓ Checked, ✎ Note what
   you found (starts today’s note) and Snooze a week; upcoming ones fold beneath.
   Reminders live on the day they were set, sync, and appear in copied reflections.
+  Due reminders also reach the Morning 5 push: a “⏰ To check: …” line in the
+  regular notification, or, on a morning the Morning 5 has not changed, a push
+  of their own (“⏰ To check today”, opening Today). Each reminder is announced
+  once, so checking one off never re-sends the rest; a snoozed one returns when
+  it is due again. Quiet hours still apply.
 
 - **Command Center** — a zero-extra-cost cross-feed “Morning 5” and attention
   queue. It ranks current briefing items, Radar setups, Markets changes, open

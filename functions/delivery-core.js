@@ -69,18 +69,54 @@ function isMaterialChange(previousSignature, items) {
   return !!next && next !== String(previousSignature || "");
 }
 
-// spark (optional): today's Daily Boost spark title, as a second line.
-function notificationCopy(items, test, spark) {
+// extra (optional): {spark, reminders, remindersOnly}, or just the spark title.
+//   spark         today's Daily Boost spark, as a last line
+//   reminders     due watch-metric reminders (dueReminders), as a "To check" line
+//   remindersOnly the Morning 5 had nothing new but reminders came due, so the
+//                 notification is about them alone
+function notificationCopy(items, test, extra) {
+  extra = typeof extra === "string" ? {spark: extra} : (extra || {});
   items = Array.isArray(items) ? items : [];
+  const reminders = Array.isArray(extra.reminders) ? extra.reminders : [];
+  const sparkLine = extra.spark ? "\nToday’s spark: " + extra.spark : "";
+  const toCheck = reminders.length ? reminders[0].metric + (reminders.length > 1 ? " · +" + (reminders.length - 1) + " more" : "") : "";
+  if (extra.remindersOnly && toCheck) {
+    return {title: test ? "Test · To check today" : "⏰ To check today", body: toCheck + sparkLine};
+  }
   const lead = items[0];
   const title = test ? "Test · Morning 5" : "Your Morning 5 is ready";
-  const sparkLine = spark ? "\nToday’s spark: " + spark : "";
-  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + sparkLine};
+  const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
+  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + reminderLine + sparkLine};
   const remaining = Math.max(0, items.length - 1);
   return {
     title,
-    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + sparkLine,
+    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + reminderLine + sparkLine,
   };
+}
+
+// Daily Boost watch-metric reminders due for the push: not checked, due today
+// or earlier, most overdue first. Read with the shared core's clean(), so the
+// server sees exactly the reminders the app shows.
+function dueReminders(core, entries, dayKey) {
+  if (!core || typeof core.clean !== "function" || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return [];
+  const records = core.clean(entries && typeof entries === "object" ? entries : {});
+  const out = [];
+  Object.keys(records).forEach((key) => (records[key].reminders || []).forEach((item) => {
+    if (!item.done && item.due <= dayKey) out.push({metric: item.metric, due: item.due, headline: item.headline});
+  }));
+  return out.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
+}
+
+// Which reminders a push announced. A reminder is news until it has been in a
+// push once, so checking one off never re-sends the rest; a snoozed one has a
+// new due day, so it is news again when it comes back.
+function reminderIds(list) {
+  return (Array.isArray(list) ? list : []).map((item) => item.due + "|" + item.metric).slice(0, 20);
+}
+
+function hasNewReminders(list, notified) {
+  const seen = new Set(Array.isArray(notified) ? notified : []);
+  return reminderIds(list).some((id) => !seen.has(id));
 }
 
 // Today's Daily Boost spark for the notification: the one already on the day's
@@ -104,4 +140,7 @@ module.exports = {
   isMaterialChange,
   notificationCopy,
   todaysSparkTitle,
+  dueReminders,
+  reminderIds,
+  hasNewReminders,
 };
