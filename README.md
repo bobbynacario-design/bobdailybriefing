@@ -28,7 +28,10 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   Each briefing card has **✎ Note this**: it opens today’s reflection with
   “On <headline> (<source>): ” filled in and keeps the story, with its link, on
   the day (up to six). Noted stories show under the reflection as chips that jump
-  back to the card, open the source, or come off the list.
+  back to the card, open the source, or come off the list. **⧉ Copy citation**
+  copies “Headline” — Source, 25 September 2026. https://… (briefing date,
+  day-month-year; the link only when the story has a web link) for reports,
+  RFIs and emails.
   They work independently of live feeds and require no model calls. Reflections
   and completion sync across devices through the signed-in account
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing

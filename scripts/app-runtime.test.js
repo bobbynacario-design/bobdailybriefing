@@ -94,3 +94,12 @@ test('secondary text palette meets 4.5:1 against each standard surface', () => {
     }
   }
 });
+test('a card citation carries headline, source, the briefing date and a web link only', () => {
+  const {context}=environment(['briefingCitation']);
+  assert.equal(context.briefingCitation({headline:'Port strike halts Botany terminal',source:'Lloyd’s List',url:'https://lloydslist.com/port'},'Friday, September 25, 2026'),
+    '“Port strike halts Botany terminal” — Lloyd’s List, 25 September 2026. https://lloydslist.com/port');
+  assert.equal(context.briefingCitation({headline:' H ',source:'',url:'javascript:alert(1)'},'2026-09-05'),'“H” — 5 September 2026.');
+  assert.equal(context.briefingCitation({headline:'H',source:'S'},'Friday, 25 September 2026'),'“H” — S, 25 September 2026.');
+  assert.equal(context.briefingCitation({headline:'H',source:'S'},'Late edition'),'“H” — S, Late edition.');
+  assert.equal(context.briefingCitation({headline:'H'},''),'“H”.');
+});

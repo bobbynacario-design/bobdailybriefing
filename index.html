@@ -8188,7 +8188,7 @@ function renderBriefing(options) {
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
       secHTML += srcHTML(st);
-      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button></div>';
+      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button><button type="button" class="card-act" data-card-act="cite" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Copy headline, source, date and link">⧉ Copy citation</button></div>';
       secHTML += '</div>';
       // Column 2: Bob's relevance note.
       secHTML += '<div class="card-aside">';
@@ -8275,6 +8275,39 @@ function srcHTML(st) {
   return '<a class="src" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(url) + '">' + label + ' ↗</a>';
 }
 
+// A citation to paste into a report, RFI or email:
+//   “Headline” — Source, 25 September 2026. https://…
+// The date is the briefing's own, day-month-year; a label that will not parse
+// is used as written, minus the weekday. Only a web link is ever included.
+function briefingCitation(st, dateLabel) {
+  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var raw = String(dateLabel || '').replace(/^[A-Za-z]+,\s*/, '').trim(), when = raw;
+  var iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw), parsed = iso ? null : new Date(raw);
+  if (iso) when = Number(iso[3]) + ' ' + months[Number(iso[2]) - 1] + ' ' + iso[1];
+  else if (raw && !isNaN(parsed.getTime())) when = parsed.getDate() + ' ' + months[parsed.getMonth()] + ' ' + parsed.getFullYear();
+  var url = /^https?:\/\//i.test(String(st && st.url || '')) ? String(st.url) : '';
+  var tail = [String(st && st.source || '').trim(), when].filter(Boolean).join(', ');
+  return '“' + String(st && st.headline || '').trim() + '”' + (tail ? ' — ' + tail : '') + '.' + (url ? ' ' + url : '');
+}
+
+function copyCardText(text, button) {
+  function done() {
+    showToast('Citation copied', 'ok');
+    var label = button.textContent; button.textContent = '✓ Copied';
+    setTimeout(function() { button.textContent = label; }, 1500);
+  }
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    if (ok) done(); else showToast('Could not copy. Citation: ' + text, 'warn');
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+  else fallback();
+}
+
 // Briefing card actions, delegated because cards are rebuilt on every render.
 // The story is looked up from the data behind the card, never from its text.
 document.addEventListener('click', function(event) {
@@ -8285,6 +8318,8 @@ document.addEventListener('click', function(event) {
   var url = /^https?:\/\//i.test(String(st.url || '')) ? String(st.url) : '';
   if (button.dataset.cardAct === 'note') {
     if (!window.noteBriefingStory || !window.noteBriefingStory({headline:st.headline, source:st.source || '', url:url})) showToast('Sign in to keep notes on a story', 'warn');
+  } else if (button.dataset.cardAct === 'cite') {
+    copyCardText(briefingCitation(st, _currentData.date), button);
   }
 });
 
