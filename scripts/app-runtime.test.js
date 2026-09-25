@@ -163,3 +163,9 @@ test('a save that pushes a day out of the window archives it in the same transac
   assert.equal(Object.keys(writes[1].body.entries).length,90);
   assert.ok(!writes[1].body.entries['2026-06-20']);
 });
+test('a card saved to Evidence points at the saved briefing, or the key autoSave would give it', () => {
+  const {context}=environment(['currentBriefingKey'],{_currentData:{date:'Friday, September 25, 2026'},_briefingHistory:[]});
+  assert.equal(context.currentBriefingKey(),'Friday--September-25--2026');
+  context._briefingHistory=[{key:'stored-key',data:{date:'Friday, September 25, 2026'}}];
+  assert.equal(context.currentBriefingKey(),'stored-key');
+});

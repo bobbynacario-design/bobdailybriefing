@@ -3615,14 +3615,14 @@ function paintEvidencePage() {
     var encoded = evidenceEncode(set.id);
     var questionMeta = set.question ? (set.question.status === 'closed' ? 'Closed' : 'Active') + (set.question.deadline ? ' · Due ' + set.question.deadline : '') + ' · ' : '';
     return '<button class="evidence-set-row' + (set.id === evidenceSetState.selectedId ? ' active' : '') + '" onclick="selectEvidenceSet(\'' + encoded + '\')"><span><span class="evidence-set-name">' + esc(set.name) + '</span><span class="evidence-set-meta">' + esc(questionMeta) + 'Updated ' + esc(evidenceDate(set.updatedAt)) + '</span></span><span class="evidence-count">' + set.items.length + '</span></button>';
-  }).join('') : '<div class="command-empty">No evidence sets yet. Create one here or save an item from Search or Command Center.</div>';
+  }).join('') : '<div class="command-empty">No evidence sets yet. Create one here, or save an item from a briefing card, Search or Command Center.</div>';
   var selected = evidenceSelectedSet();
   if (!selected) { detail.innerHTML = '<div class="command-empty">Select or create an evidence set.</div>'; return; }
   var setEncoded = evidenceEncode(selected.id);
   var itemsHtml = selected.items.length ? selected.items.map(function (item) {
     var keyEncoded = evidenceEncode(item.key);
-    return '<article class="evidence-item"><div class="evidence-item-head"><div><div class="evidence-item-title">' + esc(item.title) + '</div><div class="evidence-item-detail">' + esc(item.detail || 'Saved source item.') + '</div><div class="evidence-item-provenance">' + esc(item.source) + ' · captured ' + esc(evidenceDate(item.capturedAt)) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions"><button class="command-item-btn" onclick="openEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open source</button><button class="command-item-btn" onclick="removeEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Remove</button></div></div><textarea class="evidence-note" maxlength="500" placeholder="Add your note — why this matters, what to verify, or how it connects…" onblur="updateEvidenceNote(\'' + setEncoded + '\',\'' + keyEncoded + '\',this.value)">' + esc(item.note) + '</textarea></article>';
-  }).join('') : '<div class="command-empty">This set is empty. Save results from Search or items from Command Center.</div>';
+    return '<article class="evidence-item"><div class="evidence-item-head"><div><div class="evidence-item-title">' + esc(item.title) + '</div><div class="evidence-item-detail">' + esc(item.detail || 'Saved source item.') + '</div><div class="evidence-item-provenance">' + esc(item.source) + ' · captured ' + esc(evidenceDate(item.capturedAt)) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions">' + (item.url ? '<a class="command-item-btn" href="' + esc(item.url) + '" target="_blank" rel="noopener noreferrer">Source ↗</a>' : '') + '<button class="command-item-btn" onclick="openEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open source</button><button class="command-item-btn" onclick="removeEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Remove</button></div></div><textarea class="evidence-note" maxlength="500" placeholder="Add your note — why this matters, what to verify, or how it connects…" onblur="updateEvidenceNote(\'' + setEncoded + '\',\'' + keyEncoded + '\',this.value)">' + esc(item.note) + '</textarea></article>';
+  }).join('') : '<div class="command-empty">This set is empty. Save stories from a briefing card, results from Search or items from Command Center.</div>';
   detail.innerHTML = '<div class="evidence-detail-head"><input class="evidence-rename" maxlength="80" value="' + esc(selected.name) + '" onchange="renameEvidenceSet(\'' + setEncoded + '\',this.value)" aria-label="Evidence set name"><div class="evidence-item-actions"><button class="tool-chip" onclick="openIntelligenceSearch()">Search to add</button><button class="tool-chip" onclick="deleteEvidenceSet(\'' + setEncoded + '\')">Delete set</button></div></div><div class="evidence-item-list">' + itemsHtml + '</div>';
   renderWorkingQuestion(selected);
 }
@@ -8358,7 +8358,7 @@ function renderBriefing(options) {
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
       secHTML += srcHTML(st);
-      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button><button type="button" class="card-act" data-card-act="cite" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Copy headline, source, date and link">⧉ Copy citation</button><button type="button" class="card-act" data-card-act="read" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Count this story as read">Mark read</button>'+(String(st.watch_metric || '').trim() ? '<button type="button" class="card-act" data-card-act="remind" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Bring this watch metric back on Today when it is due">⏰ Remind me</button>' : '')+'</div>';
+      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button><button type="button" class="card-act" data-card-act="cite" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Copy headline, source, date and link">⧉ Copy citation</button><button type="button" class="card-act" data-card-act="read" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Count this story as read">Mark read</button><button type="button" class="card-act" data-card-act="evidence" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Save this story, with its link, to an evidence set">＋ Evidence</button>'+(String(st.watch_metric || '').trim() ? '<button type="button" class="card-act" data-card-act="remind" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Bring this watch metric back on Today when it is due">⏰ Remind me</button>' : '')+'</div>';
       secHTML += '</div>';
       // Column 2: Bob's relevance note.
       secHTML += '<div class="card-aside">';
@@ -8550,6 +8550,14 @@ function applyStoryRuns() {
 }
 window.applyStoryRuns = applyStoryRuns;
 
+// The archive key of the briefing on Today: its saved entry when there is one,
+// else the key autoSave gives it (the date with punctuation made dashes).
+function currentBriefingKey() {
+  var date = String(_currentData && _currentData.date || '');
+  var saved = (window._briefingHistory || []).find(function(entry) { return entry && entry.data && entry.data.date === date; });
+  return saved ? saved.key : (date || new Date().toISOString().split('T')[0]).replace(/[^a-zA-Z0-9]/g, '-');
+}
+
 // The story behind a briefing card, found through its action buttons' data.
 function cardStory(card) {
   var button = card && card.querySelector('[data-card-act]');
@@ -8635,6 +8643,12 @@ document.addEventListener('click', function(event) {
     else showToast(set ? 'Reminder set for ' + set.label + ': ' + set.metric : 'Reminder cancelled', 'ok');
   } else if (button.dataset.cardAct === 'read') {
     if (!window.markBriefingStoryRead || !window.markBriefingStoryRead({headline:st.headline, source:st.source || '', url:url})) showToast('Sign in to keep track of what you have read', 'warn');
+  } else if (button.dataset.cardAct === 'evidence') {
+    // Same id and ref as a briefing result from Search, so saving the story from
+    // either place gives one item that reopens this briefing.
+    var key = currentBriefingKey(), meta = SEC_META[button.dataset.sec];
+    openEvidencePicker({id:'briefing:' + key + ':' + button.dataset.sec + ':' + button.dataset.idx, source:'Briefing', title:st.headline,
+      detail:st.relevance || st.body || '', meta:[_currentData.date, meta && meta.label, st.source].filter(Boolean).join(' · '), page:'today', ref:key, url:url});
   } else if (button.dataset.cardAct === 'cite') {
     copyCardText(briefingCitation(st, _currentData.date), button);
   }

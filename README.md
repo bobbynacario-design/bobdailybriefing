@@ -53,7 +53,9 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   back to the card, open the source, or come off the list. **⧉ Copy citation**
   copies “Headline” — Source, 25 September 2026. https://… (briefing date,
   day-month-year; the link only when the story has a web link) for reports,
-  RFIs and emails. Opening a card's source link (click or middle-click) keeps the
+  RFIs and emails. **＋ Evidence** saves the story, with its link, to an Evidence
+  set (the same item a Search result would make, reopening this briefing); saved
+  items show **Source ↗**, and research notes print the link. Opening a card's source link (click or middle-click) keeps the
   story on the day, and any card opened in the last seven days shows **✓ Opened**
   on every device (up to 20 a day, kept two weeks, trimmed on the account copy
   too). The Sunday look-back adds **Stories from your week**: everything opened,
