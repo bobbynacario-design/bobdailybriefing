@@ -24,6 +24,7 @@ const {
   isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, reminderIds, hasNewReminders,
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
+const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 
 initializeApp();
 
@@ -43,11 +44,12 @@ function protectGeneration(feature, handler) {
         throw new HttpsError("invalid-argument", "Enter a research topic between 8 and 4,000 characters.");
       }
       if (feature === "briefing" && String(data.date || "").length > 100) throw new HttpsError("invalid-argument", "Invalid date label.");
+      const daily = feature === "briefing" || feature === "mirror";
       return await guardedGeneration({db:getFirestore(), uid:request.auth.uid, feature,
-        period:feature === "briefing" ? phtDateKey() : phtDateKey().slice(0,7),
-        cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : DEEP_RESEARCH_CAP,
+        period:daily ? phtDateKey() : phtDateKey().slice(0,7),
+        cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : DEEP_RESEARCH_CAP,
         requestId:data.requestId,
-        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : {topic:data.topic.trim(),premium:!!data.premium}
+        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : {topic:data.topic.trim(),premium:!!data.premium}
       }, () => handler(request));
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -61,6 +63,8 @@ function protectGeneration(feature, handler) {
 const DEEP_MODEL_DEFAULT = process.env.DEEP_MODEL_DEFAULT || "o4-mini-deep-research";
 const DEEP_MODEL_PREMIUM = process.env.DEEP_MODEL_PREMIUM || "o3-deep-research";
 const DEEP_RESEARCH_CAP = parseInt(process.env.DEEP_RESEARCH_CAP || "20", 10);
+// Weekly mirror reads a day: enough to regenerate after writing more, not a loop.
+const MIRROR_DAILY_CAP = parseInt(process.env.MIRROR_DAILY_CAP || "3", 10);
 const REPORTS_COLL = "reports-bob";
 const REPORTS_META = "reports-bob-meta";
 const WEBHOOK_EVENTS_COLL = "openai-webhook-events";
@@ -497,6 +501,96 @@ exports.generateBobDailyBriefing = onCall(
       raw: JSON.stringify(briefing, null, 2),
       briefing,
     };
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Weekly mirror — "Your week, read back" (functions/weekly-mirror.js)
+// ─────────────────────────────────────────────────────────────
+// Everything the mirror reads, each read caught on its own: a failed journal
+// query costs the decisions paragraph, not the whole read-back.
+async function loadMirrorSources(db, uid) {
+  const [boost, journal, stored] = await Promise.all([
+    db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get()
+      .then((snap) => (snap.exists ? snap.data().entries || {} : {})).catch(() => ({})),
+    db.collection(JOURNAL_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(100).get()
+      .then((snap) => snap.docs.map((doc) => doc.data())).catch(() => []),
+    db.collection(BRIEFINGS_COLL).doc("weekly-mirror-" + uid).get()
+      .then((snap) => (snap.exists ? snap.data().mirrors || {} : {})).catch(() => ({})),
+  ]);
+  return {entries: boost, decisions: journal, mirrors: stored};
+}
+
+exports.generateWeeklyMirror = onCall(
+  {
+    region: "asia-southeast1",
+    timeoutSeconds: 180,
+    memory: "256MiB",
+    secrets: [OPENAI_API_KEY],
+  },
+  protectGeneration("mirror", async (request) => {
+    const db = getFirestore();
+    const uid = request.auth.uid;
+    const todayKey = phtDateKey();
+    const sources = await loadMirrorSources(db, uid);
+    const input = buildMirrorInput(Object.assign({todayKey, core: DailyBoostCore}, sources));
+    // Nothing recorded this week: say so without paying for a model call.
+    if (!input) return {mirror: null, reason: "empty"};
+
+    const model = DEFAULT_MODEL;
+    let response;
+    try {
+      response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
+        body: JSON.stringify({
+          model,
+          input: [{role: "system", content: MIRROR_SYSTEM}, {role: "user", content: buildMirrorPrompt(input)}],
+          text: {format: {type: "json_schema", name: "weekly_mirror", schema: MIRROR_SCHEMA, strict: true}},
+        }),
+        signal: AbortSignal.timeout(150000),
+      });
+    } catch (err) {
+      logger.error("OpenAI network error (mirror)", err);
+      throw new HttpsError("unavailable", "OpenAI request failed before receiving a response.");
+    }
+    const responseText = await response.text();
+    let json;
+    try {
+      json = JSON.parse(responseText);
+    } catch (err) {
+      json = {error: {message: responseText || "Non-JSON OpenAI response"}};
+    }
+    if (!response.ok) {
+      const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
+      logger.error("OpenAI API error (mirror)", {status: response.status, message: msg});
+      throw new HttpsError("internal", msg);
+    }
+    await recordUsage(db, "weekly-mirror", model, extractUsage(json), todayKey);
+
+    let mirror;
+    try {
+      mirror = cleanMirror(parseBriefing(extractText(json)));
+    } catch (err) {
+      mirror = null;
+    }
+    if (!mirror) {
+      logger.error("mirror JSON unusable");
+      throw new HttpsError("internal", "The read-back came back unusable. Try again in a minute.");
+    }
+    mirror.weekKey = todayKey;
+    mirror.range = {from: input.window.from, to: input.window.to};
+    mirror.stats = input.stats;
+    mirror.followedUp = input.previous;
+    mirror.model = model;
+    mirror.generatedAt = new Date().toISOString();
+
+    // Latest twelve reads, one per day (a second read today replaces the first).
+    // Written with the uid field, so the shared rules let the app read it back.
+    await db.collection(BRIEFINGS_COLL).doc("weekly-mirror-" + uid).set({
+      uid, kind: "weekly-mirror", mirrors: keepRecent(sources.mirrors, todayKey, mirror), updatedAt: mirror.generatedAt,
+    });
+    return {mirror};
   })
 );
 

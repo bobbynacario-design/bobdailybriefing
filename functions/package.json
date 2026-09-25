@@ -5,7 +5,7 @@
     "pretest": "npm run sync:shared-core",
     "test": "node --test *.test.js",
     "precheck": "npm run sync:shared-core",
-    "check": "node --check index.js && node --check delivery-core.js && node --check daily-boost.js && node --check research-result.js && node --check webhook-event.js && node --check briefing-evidence.js && node --check briefing-context.js && node --check market-facts.js && node --check briefing-prompt-core.js",
+    "check": "node --check index.js && node --check delivery-core.js && node --check daily-boost.js && node --check research-result.js && node --check webhook-event.js && node --check briefing-evidence.js && node --check briefing-context.js && node --check market-facts.js && node --check briefing-prompt-core.js && node --check weekly-mirror.js",
     "predeploy": "npm run sync:shared-core",
     "deploy": "firebase deploy --only functions:bobdailybriefing --project pokerhq-a67e4",
     "sync:shared-core": "node sync-shared-core.js"
