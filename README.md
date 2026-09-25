@@ -12,6 +12,10 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   each with a short and deeper quest. Prompts rotate by PHT date through a
   theme-interleaved order, so consecutive days (and each “Try another quest”)
   land on a different theme, and sparks used in the last 14 days are skipped.
+  Sundays (PHT) bring a Weekly look-back instead: the notes from the six days
+  before, one of which can be carried forward, and that note rides along on the
+  spark card from Monday to Saturday. The look-back sits outside the rotation
+  and can also be chosen from the library on another day.
   They work independently of live feeds and require no model calls. Reflections
   and completion sync across devices through the signed-in account
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing
