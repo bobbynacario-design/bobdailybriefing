@@ -199,4 +199,58 @@ function priorWatch(briefings, todayKey) {
   return found;
 }
 
-module.exports = {buildStandingContext, priorWatch, isTracked};
+// ── Reader feedback ──
+//
+// Bob marks briefing stories "more like this" or "less like this" on Today
+// (lib/daily-boost.js keeps them on his synced Daily Boost days). Recent votes
+// become a short block of examples plus a per-section tally, so the model can
+// generalise the kind of story he finds useful without another model call.
+// Only the latest vote on each story counts, and a vote taken back (0) is none.
+const FEEDBACK_DAYS = 30;
+const FEEDBACK_EXAMPLES = 10;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function feedbackKey(item) {
+  const url = String(item.url || "").trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+  return url ? "u:" + url : "h:" + String(item.headline || "").trim().toLowerCase();
+}
+
+function shiftKey(dayKey, days) {
+  return new Date(Date.parse(dayKey + "T00:00:00Z") + days * 86400000).toISOString().slice(0, 10);
+}
+
+// entries: the Daily Boost doc's entries map. todayKey: PHT day key.
+// Returns {block, stats:{up, down, days}} or null when there is nothing to say.
+function buildReaderFeedback(entries, todayKey) {
+  if (!entries || typeof entries !== "object" || !DAY.test(String(todayKey || ""))) return null;
+  const since = shiftKey(todayKey, -FEEDBACK_DAYS);
+  const latest = new Map();
+  Object.keys(entries).filter((key) => DAY.test(key) && key > since && key <= todayKey).sort().forEach((key) => {
+    const list = entries[key] && Array.isArray(entries[key].feedback) ? entries[key].feedback : [];
+    list.forEach((item) => {
+      if (!item || typeof item.headline !== "string" || !item.headline.trim() || ![1, -1, 0].includes(item.vote)) return;
+      const id = feedbackKey(item);
+      latest.delete(id); // re-insert so iteration order is "most recently voted last"
+      latest.set(id, {headline: item.headline.trim().slice(0, 160), source: String(item.source || "").slice(0, 60), section: String(item.section || "").slice(0, 20), vote: item.vote, day: key});
+    });
+  });
+  const votes = Array.from(latest.values()).filter((item) => item.vote !== 0).reverse();
+  const up = votes.filter((item) => item.vote === 1), down = votes.filter((item) => item.vote === -1);
+  if (!up.length && !down.length) return null;
+  const line = (item) => "- " + (item.section ? "[" + item.section + "] " : "") + item.headline + (item.source ? " (" + item.source + ")" : "");
+  const tally = (list) => {
+    const counts = {};
+    list.forEach((item) => { if (item.section) counts[item.section] = (counts[item.section] || 0) + 1; });
+    return Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b)).map((name) => name + " " + counts[name]).join(", ");
+  };
+  const lines = ["READER FEEDBACK — Bob's reactions to recent briefing stories (last " + FEEDBACK_DAYS + " days):"];
+  if (up.length) lines.push("More like this:", ...up.slice(0, FEEDBACK_EXAMPLES).map(line));
+  if (down.length) lines.push("Less like this:", ...down.slice(0, FEEDBACK_EXAMPLES).map(line));
+  const more = tally(up), less = tally(down);
+  const bySection = [more && "more useful — " + more, less && "less useful — " + less].filter(Boolean);
+  if (bySection.length) lines.push("By section: " + bySection.join("; ") + ".");
+  const days = new Set(votes.map((item) => item.day)).size;
+  return {block: lines.join("\n"), stats: {up: up.length, down: down.length, days}};
+}
+
+module.exports = {buildStandingContext, priorWatch, isTracked, buildReaderFeedback};

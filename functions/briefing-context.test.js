@@ -193,3 +193,49 @@ test("bounds an overlong watch line", () => {
   assert.ok(out.text.length <= 600);
   assert.match(out.text, /…$/);
 });
+
+// ── reader feedback ──
+const {buildReaderFeedback} = require("./briefing-context");
+
+test("reader feedback lists the latest vote per story, most recent first, within 30 days", () => {
+  const entries = {
+    "2026-09-24": {feedback: [
+      {headline: "Insurer lifts BI reserves", source: "insuranceNEWS", section: "insurance", url: "https://x.example/a", vote: 1},
+      {headline: "AI chip export curbs widen", source: "Reuters", section: "ai", vote: -1},
+      {headline: "Rates hold again", section: "markets", vote: -1},
+    ]},
+    "2026-09-25": {feedback: [
+      {headline: "AI chip export curbs widen", source: "Reuters", section: "ai", vote: 0},
+      {headline: "Port strike halts Botany", section: "interruptions", vote: 1},
+      {headline: "Insurer lifts BI reserves again", url: "http://www.x.example/a/?utm=1", section: "insurance", vote: 1},
+    ]},
+    "2026-08-20": {feedback: [{headline: "Too old", vote: 1}]},
+    "2026-09-26": {feedback: [{headline: "Tomorrow", vote: 1}]},
+    "junk": {feedback: [{headline: "Bad key", vote: 1}]},
+  };
+  const out = buildReaderFeedback(entries, "2026-09-25");
+  assert.deepEqual(out.stats, {up: 2, down: 1, days: 2});
+  assert.equal(out.block, [
+    "READER FEEDBACK — Bob's reactions to recent briefing stories (last 30 days):",
+    "More like this:",
+    "- [insurance] Insurer lifts BI reserves again",
+    "- [interruptions] Port strike halts Botany",
+    "Less like this:",
+    "- [markets] Rates hold again",
+    "By section: more useful — insurance 1, interruptions 1; less useful — markets 1.",
+  ].join("\n"));
+});
+
+test("reader feedback is null when there is nothing to say", () => {
+  assert.equal(buildReaderFeedback({}, "2026-09-25"), null);
+  assert.equal(buildReaderFeedback({"2026-09-25": {feedback: [{headline: "Taken back", vote: 0}]}}, "2026-09-25"), null);
+  assert.equal(buildReaderFeedback(null, "2026-09-25"), null);
+  assert.equal(buildReaderFeedback({"2026-09-25": {feedback: [{headline: "x", vote: 1}]}}, "not-a-day"), null);
+});
+
+test("reader feedback caps its examples at ten each way", () => {
+  const feedback = Array.from({length: 14}, (_, i) => ({headline: "Story " + i, section: "global", vote: 1}));
+  const out = buildReaderFeedback({"2026-09-25": {feedback}}, "2026-09-25");
+  assert.equal(out.block.split("\n").filter((line) => line.startsWith("- ")).length, 10);
+  assert.equal(out.stats.up, 14);
+});

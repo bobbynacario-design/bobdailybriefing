@@ -1928,6 +1928,7 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .card-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.55rem}.card-act{font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:.25rem .55rem;border:1px solid var(--rim);border-radius:6px;background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}.card-act:hover{color:var(--txt);border-color:var(--rim2)}.card-act:focus-visible{outline:2px solid var(--gold);outline-offset:2px}body.compact .card-actions{display:none}.run-badge{flex-shrink:0;margin-top:3px;margin-left:auto;padding:2px 7px;border:1px solid var(--line);border-radius:20px;font-family:var(--mono);font-size:9px;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;color:var(--txt3)}.run-badge.is-new{color:var(--blue);background:var(--blue-dim);border-color:transparent}
 .watch-reminders{margin:0 0 1.6rem;padding:1rem clamp(1rem,2.5vw,1.4rem);border:1px solid var(--rim);border-left:3px solid var(--amber);border-radius:12px;background:var(--bg2)}.watch-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem 1rem;margin-bottom:.6rem}.watch-head h2{font-family:var(--serif);font-size:19px;font-weight:500;margin:0}.watch-head .boost-kicker{margin:0}.watch-reminder{padding:.7rem 0;border-top:1px solid var(--rim)}.watch-reminder:first-child{border-top:0}.watch-reminder-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.2rem .8rem}.watch-reminder-head strong{font-size:14px;font-weight:600;color:var(--txt)}.watch-reminder.is-overdue .watch-reminder-head .boost-kicker{color:var(--amber)}.watch-reminder-from{margin:.25rem 0 .5rem;font-size:13px;line-height:1.5;color:var(--txt2);overflow-wrap:anywhere}.watch-reminder-from a{color:var(--gold);text-decoration:none}.watch-reminder-actions{display:flex;flex-wrap:wrap;gap:.4rem}#boost-reminder-upcoming-wrap{margin-top:.6rem;font-size:12px;color:var(--txt2)}#boost-reminder-upcoming-wrap summary{cursor:pointer;font-family:var(--mono);font-size:11px}#boost-reminder-upcoming-wrap[hidden],.watch-reminders[hidden]{display:none}.card-act[data-card-act="remind"][aria-pressed="true"]{color:var(--amber);border-color:var(--amber)}
 .read-progress{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem .9rem;margin:0 0 1.1rem;padding:.6rem .9rem;border:1px solid var(--rim);border-radius:10px;background:var(--bg2);font-family:var(--mono);font-size:11px;color:var(--txt2)}.read-progress.is-done{color:var(--green)}.read-meter{flex:1;min-width:90px;height:4px;border-radius:4px;background:var(--rim2);overflow:hidden}.read-meter span{display:block;height:100%;background:var(--green);transition:width .3s}.card-act[aria-pressed="true"]{color:var(--green);border-color:var(--green)}.card-act[hidden]{display:none}
+.card-vote{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.7rem;font-family:var(--mono);font-size:10px;color:var(--txt3)}.card-act[data-card-act="more"][aria-pressed="true"]{color:var(--green);border-color:var(--green)}.card-act[data-card-act="less"][aria-pressed="true"]{color:var(--red);border-color:var(--red)}
 .card-opened{align-self:center;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--green)}
 #boost-conflicts article{padding:.6rem 0;border-bottom:1px solid var(--rim)}#boost-conflicts p{white-space:pre-wrap;overflow-wrap:anywhere;margin:.35rem 0 .5rem;color:var(--txt)}.boost-version-actions{display:flex;flex-wrap:wrap;gap:.4rem}
 .boost-intent{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem .7rem;margin:-.7rem 0 1.3rem;font-size:13px;color:var(--txt2)}.boost-intent select{font:inherit;font-size:13px;padding:.35rem .6rem;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--txt);cursor:pointer}.boost-intent .boost-kicker{margin:0}.boost-perspective-top{display:flex;align-items:center;justify-content:space-between;gap:.6rem}.boost-fav[aria-pressed="true"]{color:var(--gold);border-color:var(--gold)}
@@ -7995,6 +7996,9 @@ function renderGroundingLine(data, anchor) {
     el.textContent = 'Insurance NOT grounded (' + (g.reason || 'unavailable') +
       ') - sources are model-supplied and may not be linkable.';
   }
+  // Whether Bob's own votes shaped this briefing.
+  var f = data && data.context && data.context.feedback;
+  if (f && (f.up || f.down)) el.textContent += ' Tuned by your feedback: ' + f.up + ' more, ' + f.down + ' less.';
   // Story links in the other sections, checked against the pages the web search returned.
   var l = data && data.links;
   if (l && typeof l.verified === 'number') {
@@ -8365,6 +8369,8 @@ function renderBriefing(options) {
       if (score!=='none') secHTML += '<div class="rel-text"><strong>→ Why it matters:</strong> '+esc(st.relevance)+'</div>';
       else secHTML += '<div class="rel-none-txt">No direct relevance today</div>';
       secHTML += watchMetricHtml(st);
+      // Rating the relevance: votes steer what future briefings favour.
+      secHTML += '<div class="card-vote"><span>Useful?</span><button type="button" class="card-act" data-card-act="more" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Future briefings favour stories like this">▲ More like this</button><button type="button" class="card-act" data-card-act="less" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Future briefings give stories like this less room">▼ Less like this</button></div>';
       secHTML += '</div></div>';
     });
 
@@ -8576,6 +8582,11 @@ function applyOpenedTicks() {
     var label = state === 'opened' ? '✓ Opened' : state === 'noted' ? '✓ Noted' : '';
     if (label && !tick) { tick = document.createElement('span'); tick.className = 'card-opened'; row.appendChild(tick); }
     if (tick) { if (label) tick.textContent = label; else tick.remove(); }
+    var card = row.closest('.card'), vote = st && window.dailyBoostVoteFor ? window.dailyBoostVoteFor({headline:st.headline, url:st.url}) : 0;
+    ['more','less'].forEach(function(kind) {
+      var button = card && card.querySelector('[data-card-act="' + kind + '"]');
+      if (button) button.setAttribute('aria-pressed', String(vote === (kind === 'more' ? 1 : -1)));
+    });
     var remind = row.querySelector('[data-card-act="remind"]');
     if (remind && st) {
       var reminder = window.dailyBoostReminderFor ? window.dailyBoostReminderFor({headline:st.headline, url:st.url}) : null;
@@ -8643,6 +8654,9 @@ document.addEventListener('click', function(event) {
     else showToast(set ? 'Reminder set for ' + set.label + ': ' + set.metric : 'Reminder cancelled', 'ok');
   } else if (button.dataset.cardAct === 'read') {
     if (!window.markBriefingStoryRead || !window.markBriefingStoryRead({headline:st.headline, source:st.source || '', url:url})) showToast('Sign in to keep track of what you have read', 'warn');
+  } else if (button.dataset.cardAct === 'more' || button.dataset.cardAct === 'less') {
+    var vote = window.voteBriefingStory ? window.voteBriefingStory({headline:st.headline, source:st.source || '', section:button.dataset.sec, url:url}, button.dataset.cardAct === 'more' ? 1 : -1) : false;
+    if (vote === false) showToast('Sign in to rate stories', 'warn');
   } else if (button.dataset.cardAct === 'evidence') {
     // Same id and ref as a briefing result from Search, so saving the story from
     // either place gives one item that reopens this briefing.

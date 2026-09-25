@@ -169,3 +169,10 @@ test('a card saved to Evidence points at the saved briefing, or the key autoSave
   context._briefingHistory=[{key:'stored-key',data:{date:'Friday, September 25, 2026'}}];
   assert.equal(context.currentBriefingKey(),'stored-key');
 });
+test('the verification line says when the reader\'s feedback shaped the briefing', () => {
+  const {context,element}=environment(['renderGroundingLine']);
+  context.renderGroundingLine({grounding:{mode:'grounded',grounded:2,ungrounded:0},context:{feedback:{up:4,down:2,days:3}}},{parentNode:{}});
+  assert.match(element('grounding-line').textContent,/Tuned by your feedback: 4 more, 2 less\./);
+  context.renderGroundingLine({grounding:{mode:'grounded',grounded:2,ungrounded:0},context:{feedback:null}},{parentNode:{}});
+  assert.doesNotMatch(element('grounding-line').textContent,/Tuned by your feedback/);
+});

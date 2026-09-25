@@ -13,7 +13,7 @@ const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls} = require("./briefing-evidence");
-const {buildStandingContext, priorWatch} = require("./briefing-context");
+const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
 const {buildBriefingPrompt} = require("./briefing-prompt-core");
 const {
   parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
@@ -199,6 +199,19 @@ async function loadNewsEvidence(db) {
 //
 // The 100-decision window matches userCommandInputs(); buildStandingContext then
 // filters to live calls and keeps the newest ten.
+// Bob's recent "more like this / less like this" votes, from his synced Daily
+// Boost doc. Best effort: without them the briefing is built as before.
+async function loadReaderFeedback(db, uid) {
+  if (!uid) return null;
+  try {
+    const doc = await db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get();
+    return buildReaderFeedback(doc.exists ? doc.data().entries : {}, phtDateKey());
+  } catch (error) {
+    logger.warn("reader feedback unavailable", {message: error.message});
+    return null;
+  }
+}
+
 async function loadStandingContext(db, uid) {
   if (!uid) return {standing: null, watch: null, reason: "no-uid"};
   try {
@@ -314,14 +327,15 @@ exports.generateBobDailyBriefing = onCall(
     }
 
     const db = getFirestore();
-    const [{evidence, reason: groundingReason}, context, facts] = await Promise.all([
+    const [{evidence, reason: groundingReason}, context, facts, feedback] = await Promise.all([
       loadNewsEvidence(db),
       loadStandingContext(db, request.auth.uid),
       loadMarketFacts(db),
+      loadReaderFeedback(db, request.auth.uid),
     ]);
     const prompt = buildBriefingPrompt({
       dateLabel: String((request.data && request.data.date) || "").trim(),
-      evidence, context, facts,
+      evidence, context, facts, feedback,
     });
     const model = String((request.data && request.data.model) || DEFAULT_MODEL);
 
@@ -436,6 +450,8 @@ exports.generateBobDailyBriefing = onCall(
         dateLabel: context.watch.dateLabel || "",
       } : null,
       reason: (context && context.reason) || null,
+      // How much of Bob's feedback shaped this briefing (null when none).
+      feedback: feedback ? feedback.stats : null,
     };
     // A follow-up is only meaningful about a watch item that was actually
     // supplied. Anything returned without one is invention, not a grade.

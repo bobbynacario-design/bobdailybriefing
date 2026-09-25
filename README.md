@@ -240,6 +240,14 @@ actually runs. The generated briefing is shaped by four things beyond it:
   in `briefing.links`. Insurance stays closed to the snapshot on a grounded day.
   Kept links open from the card's source chip ("Source matched" for the news
   feed, "Link verified" for a search result).
+- **Reader feedback** — each briefing card has ▲ More like this / ▼ Less like
+  this (the newest vote on a story counts; the same button takes it back). Votes
+  sync on the Daily Boost days, and the generator turns the last 30 days into a
+  READER FEEDBACK block of up to ten examples each way plus a per-section tally
+  (`functions/briefing-context.js`), with rules that it steers priority only,
+  never overrides grounding, the budget or relevance levels, and is never
+  reported back. The verification line shows “Tuned by your feedback: N more, M
+  less.”
 - **Standing context** — Bob's open decision-journal calls with their
   invalidation lines, confirmed/forming Radar setups, and event markets past the
   research gate are put in front of the model as private state
