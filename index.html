@@ -1859,6 +1859,8 @@ body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
 .daily-boost:not(.is-compact) .boost-compact,.daily-boost.is-compact>:not(.boost-compact){display:none}.daily-boost.is-compact{padding:.9rem clamp(1rem,3vw,1.4rem);margin-bottom:1.6rem}.boost-compact{display:flex;align-items:center;justify-content:space-between;gap:1rem}.boost-compact strong{display:block;font-family:var(--serif);font-size:19px;font-weight:500;color:var(--txt);margin:.15rem 0}.boost-compact p{margin:0;font-size:13px;line-height:1.5;color:var(--txt2);overflow-wrap:anywhere}.boost-compact button{white-space:nowrap}
 .boost-week{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-top:1rem;padding-top:.9rem;border-top:1px dashed var(--rim2)}#boost-week{display:inline-flex;gap:6px}.boost-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--rim3);box-sizing:border-box}.boost-dot.is-won{background:var(--gold);border-color:var(--gold)}.boost-dot.is-today{outline:1px solid var(--gold);outline-offset:2px}.boost-dot.is-ahead{opacity:.35}
 .boost-copy{display:flex;flex-wrap:wrap;align-items:center;gap:.7rem;margin-top:1rem}#boost-export{width:100%;box-sizing:border-box;margin-top:.7rem;background:var(--bg);color:var(--txt);border:1px solid var(--rim);border-radius:8px;padding:.7rem;font-family:var(--mono);font-size:12px;line-height:1.6}#boost-export[hidden]{display:none}
+.card-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.55rem}.card-act{font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:.25rem .55rem;border:1px solid var(--rim);border-radius:6px;background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}.card-act:hover{color:var(--txt);border-color:var(--rim2)}.card-act:focus-visible{outline:2px solid var(--gold);outline-offset:2px}body.compact .card-actions{display:none}
+#boost-noted{display:flex;flex-wrap:wrap;gap:.4rem;margin:.1rem 0 .6rem}#boost-noted[hidden]{display:none}.boost-noted-item{display:inline-flex;align-items:center;max-width:100%;border:1px solid var(--rim);border-radius:6px;background:var(--bg);font-size:12px}.boost-noted-item button,.boost-noted-item a{background:none;border:0;padding:.3rem .45rem;color:var(--txt2);font:inherit;cursor:pointer;text-decoration:none}.boost-noted-item button:hover,.boost-noted-item a:hover{color:var(--txt)}.boost-noted-title{max-width:min(56vw,380px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .boost-perspective .boost-carried{margin:1.1rem 0 0;padding:.6rem .8rem;border-left:2px solid var(--gold);border-radius:0 6px 6px 0;background:var(--bg2);color:var(--txt);font-size:13px;line-height:1.6;overflow-wrap:anywhere}.boost-lookback{margin-top:1.2rem;padding:1rem clamp(1rem,2.5vw,1.4rem);border:1px solid var(--rim);border-radius:12px;background:var(--bg)}.boost-lookback h3{font-family:var(--serif);font-size:20px;font-weight:500;margin:0 0 .3rem}#boost-lookback-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.8rem;margin-top:.8rem}#boost-lookback-list article{display:flex;flex-direction:column;padding:.9rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg2)}#boost-lookback-list h4{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--txt3);margin:0 0 .4rem}#boost-lookback-list p{flex:1;margin:0 0 .7rem;font-size:14px;line-height:1.6;color:var(--txt2);white-space:pre-wrap;overflow-wrap:anywhere}#boost-lookback-list button{align-self:flex-start}
 @media(max-width:700px){.boost-compact{flex-direction:column;align-items:flex-start;gap:.6rem}}</style>
 </head>
@@ -2067,7 +2069,7 @@ body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
     </div>
     <div class="boost-lookback" id="boost-lookback" hidden><h3>Your week in notes</h3><p class="boost-kicker" id="boost-lookback-count"></p><div id="boost-lookback-list"></div></div>
     <details class="boost-history" id="boost-library"><summary id="boost-library-summary">Browse all sparks · Find your inspiration</summary><div class="boost-library-controls"><label>Theme<select id="boost-theme"><option value="">All themes</option><option>Curiosity</option><option>Perspective</option><option>Creativity</option><option>Momentum</option><option>Confidence</option><option value="Reset">Rest &amp; reset</option><option>Connection</option><option value="Craft">Work craft</option><option value="Review">Weekly look-back</option></select></label><label>Search sparks<input id="boost-search" type="search" placeholder="Try beginner, figure, or quiet…"></label></div><p id="boost-library-count" role="status"></p><div id="boost-library-list"></div></details>
-    <div class="boost-reflect"><label for="boost-note">What clicked for you?</label><p>A new question, a tiny win, or something you want to try. One sentence is plenty.</p><textarea id="boost-note" maxlength="1200" rows="2" placeholder="Today I noticed…"></textarea><div id="boost-status" class="boost-kicker" role="status">Sign in to save your small wins.</div></div>
+    <div class="boost-reflect"><label for="boost-note">What clicked for you?</label><p>A new question, a tiny win, or something you want to try. One sentence is plenty.</p><textarea id="boost-note" maxlength="1200" rows="2" placeholder="Today I noticed…"></textarea><div id="boost-noted" hidden aria-label="Stories noted today"></div><div id="boost-status" class="boost-kicker" role="status">Sign in to save your small wins.</div></div>
     <details class="boost-history"><summary id="boost-history-title">Your recent discoveries</summary><div id="boost-history"></div><div class="boost-copy"><button class="tool-chip" id="boost-copy">Copy all reflections</button><span class="boost-kicker" id="boost-copy-status" role="status"></span></div><textarea id="boost-export" rows="6" readonly hidden aria-label="All reflections as text"></textarea></details>
   </section>
 
@@ -8186,6 +8188,7 @@ function renderBriefing(options) {
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
       secHTML += srcHTML(st);
+      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button></div>';
       secHTML += '</div>';
       // Column 2: Bob's relevance note.
       secHTML += '<div class="card-aside">';
@@ -8271,6 +8274,19 @@ function srcHTML(st) {
   if (!/^https?:\/\//i.test(url)) return '<span class="src">' + label + '</span>';
   return '<a class="src" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(url) + '">' + label + ' ↗</a>';
 }
+
+// Briefing card actions, delegated because cards are rebuilt on every render.
+// The story is looked up from the data behind the card, never from its text.
+document.addEventListener('click', function(event) {
+  var button = event.target && event.target.closest ? event.target.closest('[data-card-act]') : null;
+  if (!button) return;
+  var st = _currentData && _currentData.sections && (_currentData.sections[button.dataset.sec] || [])[Number(button.dataset.idx)];
+  if (!st) return;
+  var url = /^https?:\/\//i.test(String(st.url || '')) ? String(st.url) : '';
+  if (button.dataset.cardAct === 'note') {
+    if (!window.noteBriefingStory || !window.noteBriefingStory({headline:st.headline, source:st.source || '', url:url})) showToast('Sign in to keep notes on a story', 'warn');
+  }
+});
 
 function clearBriefing() {
   document.getElementById('raw-input').value='';

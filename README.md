@@ -25,6 +25,10 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   interruptions stories; labelled with its date when it is not today’s), with a
   button that jumps to that card. The story is fixed on the day’s entry once the
   quest is started, and with no briefing loaded each spark keeps its own words.
+  Each briefing card has **✎ Note this**: it opens today’s reflection with
+  “On <headline> (<source>): ” filled in and keeps the story, with its link, on
+  the day (up to six). Noted stories show under the reflection as chips that jump
+  back to the card, open the source, or come off the list.
   They work independently of live feeds and require no model calls. Reflections
   and completion sync across devices through the signed-in account
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing
