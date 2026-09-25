@@ -29,7 +29,10 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 
 - **Daily Boost** — Today opens with a rotating perspective and a small, actionable
   quest. Choose a two-minute step or ten-minute exploration, switch quests, mark a
-  small win, and capture a reflection. Browse or search 50 curated sparks across
+  small win, and capture a reflection. The reflection saves as it is typed; the
+  line beside the box reads “Saving…”, then “✓ Saved 9:41 PM · on all your
+  devices” (or “on this device”) and fades, and **Done ✓** (Ctrl/Cmd+Enter)
+  sends a pending edit at once and closes the keyboard. Browse or search 50 curated sparks across
   eight themes, including Work craft (forensic, claims and reporting habits),
   each with a short and deeper quest. Prompts rotate by PHT date through a
   theme-interleaved order, so consecutive days (and each “Try another quest”)
