@@ -1859,6 +1859,7 @@ body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
 .daily-boost:not(.is-compact) .boost-compact,.daily-boost.is-compact>:not(.boost-compact){display:none}.daily-boost.is-compact{padding:.9rem clamp(1rem,3vw,1.4rem);margin-bottom:1.6rem}.boost-compact{display:flex;align-items:center;justify-content:space-between;gap:1rem}.boost-compact strong{display:block;font-family:var(--serif);font-size:19px;font-weight:500;color:var(--txt);margin:.15rem 0}.boost-compact p{margin:0;font-size:13px;line-height:1.5;color:var(--txt2);overflow-wrap:anywhere}.boost-compact button{white-space:nowrap}
 .boost-week{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-top:1rem;padding-top:.9rem;border-top:1px dashed var(--rim2)}#boost-week{display:inline-flex;gap:6px}.boost-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--rim3);box-sizing:border-box}.boost-dot.is-won{background:var(--gold);border-color:var(--gold)}.boost-dot.is-today{outline:1px solid var(--gold);outline-offset:2px}.boost-dot.is-ahead{opacity:.35}
 .boost-copy{display:flex;flex-wrap:wrap;align-items:center;gap:.7rem;margin-top:1rem}#boost-export{width:100%;box-sizing:border-box;margin-top:.7rem;background:var(--bg);color:var(--txt);border:1px solid var(--rim);border-radius:8px;padding:.7rem;font-family:var(--mono);font-size:12px;line-height:1.6}#boost-export[hidden]{display:none}
+.boost-history article.is-found{border-left:2px solid var(--gold);padding-left:.7rem;background:var(--gold-dim)}.boost-history article.is-found:focus{outline:none}
 .boost-perspective .boost-why{margin:-.35rem 0 .7rem;font-family:var(--mono);font-size:10px;line-height:1.6;letter-spacing:.03em;color:var(--txt3)}.boost-practice .boost-keys{margin:.35rem 0 0;font-family:var(--mono);font-size:10px;color:var(--txt3)}.boost-keys kbd{font-family:var(--mono);font-size:10px;padding:0 .3rem;border:1px solid var(--rim2);border-radius:4px;background:var(--bg)}@media (hover:none),(pointer:coarse){.boost-practice .boost-keys{display:none}}
 .card-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.55rem}.card-act{font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:.25rem .55rem;border:1px solid var(--rim);border-radius:6px;background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}.card-act:hover{color:var(--txt);border-color:var(--rim2)}.card-act:focus-visible{outline:2px solid var(--gold);outline-offset:2px}body.compact .card-actions{display:none}.card-opened{align-self:center;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--green)}
 #boost-lookback-stories{margin-top:1.1rem;padding-top:.9rem;border-top:1px dashed var(--rim2)}#boost-lookback-stories[hidden]{display:none}.boost-week-stories-title{font-family:var(--serif);font-size:17px;font-weight:500;margin:0 0 .6rem}.boost-week-story{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.2rem .8rem;padding:.55rem 0;border-bottom:1px solid var(--rim)}.boost-week-story .boost-kicker{grid-column:1/-1}.boost-week-story-title{font-size:14px;line-height:1.5;color:var(--txt);text-decoration:none;overflow-wrap:anywhere}a.boost-week-story-title:hover{color:var(--gold)}
@@ -2072,7 +2073,7 @@ body.light .nav-group-panel{box-shadow:0 14px 34px rgba(0,0,0,.16)}
     <div class="boost-lookback" id="boost-lookback" hidden><h3>Your week in notes</h3><p class="boost-kicker" id="boost-lookback-count"></p><div id="boost-lookback-list"></div><div id="boost-lookback-stories" hidden><h4 class="boost-week-stories-title">Stories from your week</h4><div id="boost-lookback-story-list"></div></div></div>
     <details class="boost-history" id="boost-library"><summary id="boost-library-summary">Browse all sparks · Find your inspiration</summary><div class="boost-library-controls"><label>Theme<select id="boost-theme"><option value="">All themes</option><option>Curiosity</option><option>Perspective</option><option>Creativity</option><option>Momentum</option><option>Confidence</option><option value="Reset">Rest &amp; reset</option><option>Connection</option><option value="Craft">Work craft</option><option value="Review">Weekly look-back</option></select></label><label>Search sparks<input id="boost-search" type="search" placeholder="Try beginner, figure, or quiet…"></label></div><p id="boost-library-count" role="status"></p><div id="boost-library-list"></div></details>
     <div class="boost-reflect"><label for="boost-note">What clicked for you?</label><p>A new question, a tiny win, or something you want to try. One sentence is plenty.</p><textarea id="boost-note" aria-keyshortcuts="N" maxlength="1200" rows="2" placeholder="Today I noticed…"></textarea><div id="boost-noted" hidden aria-label="Stories noted today"></div><div id="boost-status" class="boost-kicker" role="status">Sign in to save your small wins.</div></div>
-    <details class="boost-history"><summary id="boost-history-title">Your recent discoveries</summary><div id="boost-history"></div><div class="boost-copy"><button class="tool-chip" id="boost-copy">Copy all reflections</button><span class="boost-kicker" id="boost-copy-status" role="status"></span></div><textarea id="boost-export" rows="6" readonly hidden aria-label="All reflections as text"></textarea></details>
+    <details class="boost-history" id="boost-history-panel"><summary id="boost-history-title">Your recent discoveries</summary><div id="boost-history"></div><div class="boost-copy"><button class="tool-chip" id="boost-copy">Copy all reflections</button><span class="boost-kicker" id="boost-copy-status" role="status"></span></div><textarea id="boost-export" rows="6" readonly hidden aria-label="All reflections as text"></textarea></details>
   </section>
 
   <div class="hero" id="daily-intelligence" tabindex="-1">
@@ -3095,12 +3096,15 @@ function runIntelligenceSearch(query) {
   if (query.length < 2) {
     intelligenceSearchState.results = [];
     status.textContent = intelligenceSearchState.loaded ? intelligenceSearchState.index.length + ' items indexed' : 'Unified intelligence search';
-    out.innerHTML = '<div class="intel-search-empty">Type at least two characters to search briefing history, research, decisions, Radar, Markets, and Sports.</div>';
+    out.innerHTML = '<div class="intel-search-empty">Type at least two characters to search briefing history, research, decisions, Radar, Markets, Sports, and your reflections.</div>';
     return;
   }
-  intelligenceSearchState.results = window.IntelligenceSearchCore.search(intelligenceSearchState.index, query, {limit:40});
+  // Reflections are indexed fresh on every search, so a note written a minute ago is findable.
+  var reflections = window.IntelligenceSearchCore.buildIndex({reflections: window.dailyBoostSearchEntries ? window.dailyBoostSearchEntries() : []});
+  var index = intelligenceSearchState.index.concat(reflections);
+  intelligenceSearchState.results = window.IntelligenceSearchCore.search(index, query, {limit:40});
   intelligenceSearchState.active = 0;
-  status.textContent = intelligenceSearchState.results.length + ' result' + (intelligenceSearchState.results.length === 1 ? '' : 's') + ' for “' + query + '” · ' + intelligenceSearchState.index.length + ' items indexed';
+  status.textContent = intelligenceSearchState.results.length + ' result' + (intelligenceSearchState.results.length === 1 ? '' : 's') + ' for “' + query + '” · ' + index.length + ' items indexed';
   paintIntelligenceSearchResults();
 }
 
@@ -3151,9 +3155,15 @@ function openNewsRecord(ref) {
   window.open(ref, '_blank', 'noopener,noreferrer');
   return true;
 }
+// A reflection opens its own day on Today (from search or an evidence set).
+function openReflectionDay(day) {
+  switchPage('today', document.querySelector('.ntab[data-page="today"]'));
+  if (window.openDailyBoostDay) window.openDailyBoostDay(day);
+}
 function openIndexedIntelligenceItem(item) {
   if (!item) return;
   if (item.source === 'News' && openNewsRecord(item.ref)) return;
+  if (item.source === 'Reflections') { openReflectionDay(item.ref); return; }
   if (item.source === 'Briefing') {
     var archived = intelligenceSearchState.briefings.find(function (entry) { return entry.key === item.ref; });
     if (archived && !(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
@@ -3531,6 +3541,7 @@ async function openEvidenceItem(setEncoded,keyEncoded) {
     return;
   }
   if (item.source === 'News' && openNewsRecord(item.ref)) return;
+  if (item.source === 'Reflections') { openReflectionDay(item.ref); return; }
   var page = item.page || (item.source === 'Briefing' ? 'today' : 'evidence');
   switchPage(page,document.querySelector('.ntab[data-page="' + page + '"]'));
 }
