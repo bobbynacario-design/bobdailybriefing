@@ -75,6 +75,12 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   first). A story counts as read when its source was opened, it was noted, or it
   was **Mark read** by hand (which also works for stories with no link, and can be
   undone); cards show ✓ Opened, ✓ Noted or ✓ Read, synced with Daily Boost.
+  Insurance and interruptions cards that name a watch metric have **⏰ Remind
+  me**: the reminder is due on a date named in the metric (“due 12 Oct”), else
+  by its horizon (days 3, weeks 14, months 30 days). Due and overdue reminders
+  appear in a **⏰ To check** panel above the briefing with ✓ Checked, ✎ Note what
+  you found (starts today’s note) and Snooze a week; upcoming ones fold beneath.
+  Reminders live on the day they were set, sync, and appear in copied reflections.
 
 - **Command Center** — a zero-extra-cost cross-feed “Morning 5” and attention
   queue. It ranks current briefing items, Radar setups, Markets changes, open
