@@ -21,8 +21,9 @@ const {
 const {authorize, guardedGeneration} = require("./generation-guard");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
-  isMaterialChange, notificationCopy,
+  isMaterialChange, notificationCopy, todaysSparkTitle,
 } = require("./delivery-core");
+const DailyBoostCore = require("./daily-boost");
 
 initializeApp();
 
@@ -885,6 +886,18 @@ function withAudit(state, entry) {
   return state;
 }
 
+// Today's spark title for the push, from the account's synced Daily Boost doc.
+// Best effort: a failed read just leaves the spark line off the notification.
+async function todaysSpark(db, uid, now) {
+  try {
+    const doc = await db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get();
+    return todaysSparkTitle(DailyBoostCore, doc.exists ? doc.data().entries : {}, phtDateKey(now));
+  } catch (error) {
+    logger.warn("Daily spark lookup failed", {message: error.message});
+    return "";
+  }
+}
+
 async function deliverMorningFiveForUser(db, prefDoc, options) {
   options = options || {};
   const prefs = prefDoc.data();
@@ -908,7 +921,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   if (!options.test && !isMaterialChange(state.lastSignature, items)) return {status: "unchanged"};
   if (!items.length && !options.test) return {status: "below-threshold"};
 
-  const copy = notificationCopy(items, !!options.test);
+  const copy = notificationCopy(items, !!options.test, await todaysSpark(db, prefs.uid, now));
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {

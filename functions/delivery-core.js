@@ -69,16 +69,29 @@ function isMaterialChange(previousSignature, items) {
   return !!next && next !== String(previousSignature || "");
 }
 
-function notificationCopy(items, test) {
+// spark (optional): today's Daily Boost spark title, as a second line.
+function notificationCopy(items, test, spark) {
   items = Array.isArray(items) ? items : [];
   const lead = items[0];
   const title = test ? "Test · Morning 5" : "Your Morning 5 is ready";
-  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds."};
+  const sparkLine = spark ? "\nToday’s spark: " + spark : "";
+  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + sparkLine};
   const remaining = Math.max(0, items.length - 1);
   return {
     title,
-    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : ""),
+    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + sparkLine,
   };
+}
+
+// Today's Daily Boost spark for the notification: the one already on the day's
+// entry (opened, picked or swapped to), else the default the app would show,
+// worked out by the same shared code (lib/daily-boost.js) from the same
+// synced history. Anything unusable gives "" and the line is simply left off.
+function todaysSparkTitle(core, entries, dayKey) {
+  if (!core || typeof core.clean !== "function" || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return "";
+  const records = core.clean(entries && typeof entries === "object" ? entries : {});
+  const spark = records[dayKey] ? records[dayKey].spark : core.sparkFor(dayKey, records);
+  return core.sparkTitle(spark) || "";
 }
 
 module.exports = {
@@ -90,4 +103,5 @@ module.exports = {
   digestSignature,
   isMaterialChange,
   notificationCopy,
+  todaysSparkTitle,
 };

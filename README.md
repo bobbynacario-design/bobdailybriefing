@@ -46,7 +46,10 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   **Ctrl+K** alongside briefings, research and decisions: by the note’s words or
   the headlines of the stories that day was about, indexed fresh on each search.
   A result opens that day: today goes to the note, an earlier day is pinned to the
-  top of “Your recent discoveries”, opened and highlighted.
+  top of “Your recent discoveries”, opened and highlighted. The Morning 5 push
+  adds a second line, “Today’s spark: …”: the spark already on today’s entry,
+  else the default the app would show, worked out on the server from the synced
+  history with the same code (lib/daily-boost.js, synced into functions/).
   They work independently of live feeds and require no model calls. Reflections
   and completion sync across devices through the signed-in account
   (`briefings-bob/daily-boost-<uid>`, private to that account under the existing
