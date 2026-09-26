@@ -221,3 +221,19 @@ test('normalise keeps a cleaned aha, so it is saved with the briefing', () => {
   assert.equal(data.aha.extra,undefined);
   assert.equal(context.normalise({date:'d',sections:{global:[]}}).aha,null,'an older briefing without one');
 });
+// The PDF parses section pip colours; markets uses var(--amber), which parsed
+// as NaN and failed every export with a markets story.
+test('every section colour resolves to numbers for the PDF', () => {
+  const {context}=environment(['pdfRgb'],{document:{body:{},getElementById:()=>({})},getComputedStyle:()=>({getPropertyValue:name=>name==='--amber'?' #7F4F00':''})});
+  const start=html.indexOf('var SEC_META = {');
+  vm.runInContext(html.slice(start,html.indexOf('};',start)+2),context);
+  vm.runInContext('this.SEC_META_ = SEC_META;',context);
+  Object.entries(context.SEC_META_).forEach(([id,meta])=>{
+    const rgb=[...context.pdfRgb(meta.pip)];
+    assert.equal(rgb.length,3,id);
+    rgb.forEach(v=>assert.ok(Number.isInteger(v)&&v>=0&&v<=255,id+' '+meta.pip+' → '+rgb));
+  });
+  assert.deepEqual([...context.pdfRgb('var(--amber)')],[127,79,0]);
+  assert.deepEqual([...context.pdfRgb('#fff')],[255,255,255]);
+  assert.deepEqual([...context.pdfRgb('var(--unknown)')],[201,168,76],'an unresolved colour falls back to gold, never NaN');
+});

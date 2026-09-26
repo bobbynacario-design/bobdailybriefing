@@ -9547,6 +9547,18 @@ function generateDigest() {
 }
 
 // ── UNICODE HELPERS FOR PDF ──
+// jsPDF needs numbers. A section pip may be a CSS variable (markets uses
+// var(--amber) so it follows the theme), and parsing that as hex gave NaN,
+// which failed the whole export on any briefing with a markets story.
+function pdfRgb(color) {
+  var value = String(color || '').trim();
+  var ref = value.match(/^var\((--[\w-]+)\)$/);
+  if (ref && typeof getComputedStyle === 'function' && document.body) value = getComputedStyle(document.body).getPropertyValue(ref[1]).trim();
+  var hex = value.replace('#', '');
+  if (/^[0-9a-f]{3}$/i.test(hex)) hex = hex.split('').map(function(c) { return c + c; }).join('');
+  return /^[0-9a-f]{6}$/i.test(hex) ? hex.match(/.{2}/g).map(function(h) { return parseInt(h, 16); }) : [201, 168, 76];
+}
+
 function pdfSafe(s) {
   // Replace common Unicode symbols with ASCII equivalents for PDF
   return (s||'')
@@ -9649,7 +9661,7 @@ function exportPDF() {
       if (!stories.length) return;
       var meta=SEC_META[id];
       chk(12);
-      var pip=meta.pip.replace('#','').match(/.{2}/g).map(function(h){return parseInt(h,16);});
+      var pip=pdfRgb(meta.pip);
       doc.setFillColor(pip[0],pip[1],pip[2]); doc.rect(ML,y,CW,.5,'F'); y+=3;
       doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(80,80,80);
       doc.text(meta.label, ML, y); y+=6;
