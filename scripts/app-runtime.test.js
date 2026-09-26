@@ -332,7 +332,7 @@ test('display settings: Auto follows the device, Light and Dark stick, text size
 // Go deeper: the dossier renders escaped, leaves out empty parts, links only its
 // checked sources, and gives Evidence a plain-text copy.
 test('the dossier renders escaped, skips empty parts, and copies to Evidence as text', () => {
-  const {context}=environment(['esc','uiIcon','dossierHtml','dossierSnapshot','dossierError']);
+  const {context}=environment(['esc','uiIcon','capFirst','dossierHtml','dossierSnapshot','dossierError']);
   const d={summary:'A claim <escalated>.',background:['Rain in March.'],numbers:[{figure:'A$3.98bn',what:'declared events',source:'ICA'}],bi_angle:'Loss of use.',exposed:['Strata insurers'],
     client_questions:['How are mould claims reserved?','Who owns the delay?','What about accommodation?'],would_change:'AFCA ruling next month.',sources:[{title:'insuranceNEWS',url:'https://insurancenews.com.au/strata'}],
     story:{headline:'Strata storm claim turns toxic',source:'insuranceNEWS'},model:'gpt-5.5',generatedAt:'2026-09-26T02:00:00Z'};
@@ -351,4 +351,7 @@ test('the dossier renders escaped, skips empty parts, and copies to Evidence as 
   assert.ok(text.includes('A claim <escalated>.') && !text.includes('&lt;'),'plain text, not escaped HTML');
   assert.ok(context.dossierError({code:'functions/resource-exhausted'}).includes('ten dossiers today'));
   assert.ok(context.dossierError({code:'functions/internal',message:'internal'}).includes('needs a functions deploy'));
+  const tags=context.dossierHtml({summary:'S',exposed:['Australian health insurers','government service providers','iPhone makers','eBay sellers','3PL operators']});
+  ['Australian health insurers','Government service providers','iPhone makers','eBay sellers','3PL operators'].forEach(t=>assert.ok(tags.includes('<span>'+t+'</span>'),t));
+  assert.equal(context.capFirst(''),'');
 });

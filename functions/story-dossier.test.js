@@ -25,7 +25,9 @@ test("the prompt carries the story and the rules that keep the dossier honest", 
   assert.match(prompt, /briefing of Saturday, September 26, 2026/);
   assert.match(prompt, /each found in a source\. Dates are not figures; put them in background\./);
   assert.match(prompt, /Never estimate or round a figure into existence/);
-  assert.match(prompt, /exposed: short phrases of six words or fewer/);
+  assert.match(prompt, /exposed: short phrases of six words or fewer, each starting with a capital/);
+  assert.match(prompt, /figures about this story itself/);
+  assert.match(prompt, /Leave out figures about the wider sector or market/);
   assert.match(prompt, /"summary": "2 sentences, at most 60 words/);
   assert.match(prompt, /client_questions: exactly 3, specific to this story/);
   assert.match(prompt, /each url copied exactly from a web search result/);

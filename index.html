@@ -8509,6 +8509,12 @@ function dossierError(error) {
   }
   return (error && error.message) || 'Could not build the dossier. Try again in a minute.';
 }
+// Tags read as a set when each starts with a capital, including dossiers saved
+// before the prompt asked for it. "iPhone makers" and "eBay sellers" are left alone.
+function capFirst(value) {
+  var s = String(value || '');
+  return /^[a-z](?![A-Z])/.test(s) ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
 function dossierHtml(d) {
   if (!d || !d.summary) return '';
   var list = function(items, fn) { return '<ul>' + items.map(function(item) { return '<li>' + fn(item) + '</li>'; }).join('') + '</ul>'; };
@@ -8521,7 +8527,7 @@ function dossierHtml(d) {
     part('The numbers', (d.numbers || []).length ? list(d.numbers, function(n) { return '<strong>' + esc(n.figure) + '</strong>' + (n.what ? ' — ' + esc(n.what) : '') + (n.source ? ' <span class="dossier-src">(' + esc(n.source) + ')</span>' : ''); }) : '');
   if (grid) html += '<div class="dossier-grid">' + grid + '</div>';
   html += part('The BI and claims angle', d.bi_angle ? '<p>' + esc(d.bi_angle) + '</p>' : '');
-  html += part('Who is exposed', (d.exposed || []).length ? '<div class="dossier-chips">' + d.exposed.map(function(x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '');
+  html += part('Who is exposed', (d.exposed || []).length ? '<div class="dossier-chips">' + d.exposed.map(function(x) { return '<span>' + esc(capFirst(x)) + '</span>'; }).join('') + '</div>' : '');
   html += part('Questions to ask a client', (d.client_questions || []).length ? '<ol>' + d.client_questions.map(function(q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ol>' : '');
   html += part('What would change this read', d.would_change ? '<p>' + esc(d.would_change) + '</p>' : '');
   html += part('Sources', (d.sources || []).length ? '<ul class="dossier-sources">' + d.sources.map(function(src) { return '<li><a href="' + esc(src.url) + '" target="_blank" rel="noopener noreferrer">' + esc(src.title || src.url) + ' ↗</a></li>'; }).join('') + '</ul>' : '');
