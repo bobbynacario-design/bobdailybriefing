@@ -22,7 +22,7 @@ const {
 const {authorize, guardedGeneration} = require("./generation-guard");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
-  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, reminderIds, hasNewReminders, weeklyReadDue,
+  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, hasNewReminders, weeklyReadDue,
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
@@ -1123,10 +1123,10 @@ async function dailyBoostFor(db, uid, now, lastWeeklyNudge) {
         .catch(() => []),
     ]);
     const entries = doc.exists ? doc.data().entries : {};
-    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey, lean), reminders: dueReminders(DailyBoostCore, entries, dayKey), weekly};
+    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey, lean), reminders: dueReminders(DailyBoostCore, entries, dayKey), experiment: dueExperiment(DailyBoostCore, entries, dayKey), weekly};
   } catch (error) {
     logger.warn("Daily Boost lookup failed", {message: error.message});
-    return {spark: "", reminders: [], weekly};
+    return {spark: "", reminders: [], experiment: null, weekly};
   }
 }
 
@@ -1161,14 +1161,14 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const remindersOnly = quiet && remindersNew;
   const weeklyOnly = quiet && !remindersNew && boost.weekly;
 
-  const copy = notificationCopy(items, !!options.test, {spark: boost.spark, reminders: boost.reminders, remindersOnly, weekly: boost.weekly, weeklyOnly});
+  const copy = notificationCopy(items, !!options.test, {spark: boost.spark, reminders: boost.reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
       type: options.test ? "morning-digest-test" : remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : "morning-digest",
       title: copy.title,
       body: copy.body,
-      url: remindersOnly || weeklyOnly ? TODAY_URL : COMMAND_URL,
+      url: remindersOnly || weeklyOnly || boost.experiment ? TODAY_URL + (boost.experiment ? "#boost-experiments-panel" : "") : COMMAND_URL,
       signature: remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : (signature || "test-empty"),
     },
     webpush: {headers: {Urgency: "high"}},

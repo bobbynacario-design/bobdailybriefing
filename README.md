@@ -7,7 +7,10 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 
 - **Your goals** — one to three goals on their own account doc
   (`briefings-bob/goals-<uid>`, so the Daily Boost transaction can never drop
-  them), each with a theme guessed from its words. The rotation leans towards
+  them), each with a theme guessed from its words, a concrete next move, and an
+  optional target date. A due move rises into **Start here**; completing it ticks
+  the goal for today, clears the move, and opens the editor to capture the next
+  one. The rotation leans towards
   goal themes on the same terms as More like this (`lean` in `sparkFor` /
   `nextSpark`; at most one day in four, never two days running), and the why line
   names the goal. **Moved a goal today?** ticks (`goalTicks` on the day, synced
@@ -15,7 +18,7 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   block and answers each goal, and the Morning 5 passes the same lean so its spark
   matches the app.
 - **Start here** — one card at the top of Today names the next step, in order
-  of what will not wait: a check due today, an experiment ready to review, the
+  of what will not wait: a check due today, a goal move due today, an experiment ready to review, the
   weekly read on Sundays (until there is one), today’s spark, then a line in the
   note; “All done for today” points to the briefing. **Not now** moves to the next
   for the visit, and “Then:” lists what else is waiting, so nothing is hidden.
@@ -45,14 +48,17 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   (ten open checks per day, thirty saved checks total); their findings remain
   available in exports and the weekly mirror.
 
-- **From insight to action** — weekly read-back suggestions have a review date
-  and **Try this** action that saves an experiment without replacing one already
+- **From insight to action** — weekly read-back suggestions have a review date,
+  **Open as decision** prepares an unsaved decision-journal draft, and **Try this**
+  saves an experiment without replacing one already
   saved today. Theme day citations open the matching daily entry; explicit ISO
   dates in the prose also link when inside that read's seven-day window. Missing
   entries are explained instead of guessed. The read-back waits for confirmed
   reflection sync, stops on save failure, and retains a fresh result when an older
   history request finishes later.
-- **Aha actions** — **Save insight** opens the Evidence picker with a snapshot of
+- **Aha actions** — **Open as decision** prepares an unsaved journal draft with
+  the interpretation, evidence, invalidator, and review date. The same action is
+  available on dossiers, saved Evidence, and weekly suggestions. **Save insight** opens the Evidence picker with a snapshot of
   the interpretation, sources and “Wrong if” condition. **Write my take** opens
   the daily reflection without truncating an existing note. **Check this later**
   puts the “Wrong if” condition in **⏰ To check** on the date you choose, linked to
@@ -64,8 +70,9 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   to revisit them. One experiment per day captures an action, review date, and
   outcome; the experiments panel (open experiments plus those reviewed in the
   last two weeks) remains visible when the spark is tucked away.
-  Review dates are in-app prompts, not additional push notifications. Experiments
-  follow the existing 90-entry retention and appear in the reflection export.
+  A due experiment is added to a Morning 5 notification that is already being
+  sent, and tapping it opens the experiment review panel; it never causes an
+  additional push. Experiments follow the existing 90-entry retention and appear in the reflection export.
   Favourites carry forward into new daily entries and sync with the account.
 - **Safer reflection sync** — atomic account transactions merge edits by field
   and individual story/reminder, including removal markers. Conflicting note text

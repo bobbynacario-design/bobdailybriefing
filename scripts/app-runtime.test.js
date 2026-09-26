@@ -38,12 +38,15 @@ function environment(names, extra={}) {
 }
 test('aha actions preserve sources and invalidation when saved or scheduled',()=>{
   const data={date:'2026-09-26',aha:{title:'A useful connection',insight:'A provisional reading',chain:['First observation'],wrong_if:'The delay is temporary',links:['Source headline']}};
-  let evidence, check, trial;
-  const {context,element}=environment(['ahaSnapshot','handleAhaAction'],{_currentData:data,getAllStories:()=>[{story:{headline:'Other headline',source:'X',url:'https://example.com/other'}},{story:{headline:'Source headline',source:'Publisher',url:'https://example.com/source'}}],currentBriefingKey:()=> '2026-09-26',openEvidencePicker:item=>evidence=item,
-    addDailyBoostCheck:item=>{check=item;return {ok:true,message:'Added to To check for Sat 3 Oct.'};},createDailyBoostExperiment:(...args)=>{trial=args;return {ok:true,message:'Saved'};}});
+  let evidence, check, trial, decision;
+  const {context,element}=environment(['ahaSnapshot','handleAhaAction'],{_currentData:data,DailyBoostCore:{dateKey:()=> '2026-09-26'},getAllStories:()=>[{story:{headline:'Other headline',source:'X',url:'https://example.com/other'}},{story:{headline:'Source headline',source:'Publisher',url:'https://example.com/source'}}],currentBriefingKey:()=> '2026-09-26',openEvidencePicker:item=>evidence=item,
+    addDailyBoostCheck:item=>{check=item;return {ok:true,message:'Added to To check for Sat 3 Oct.'};},createDailyBoostExperiment:(...args)=>{trial=args;return {ok:true,message:'Saved'};},openDecisionFromInsight:value=>{decision=value;}});
   context.handleAhaAction('save');
   assert.equal(evidence.id,'briefing:2026-09-26:aha');
   assert.match(evidence.detail,/Wrong if: The delay is temporary/); assert.match(evidence.detail,/https:\/\/example.com\/source/);
+  context.handleAhaAction('decision');
+  assert.equal(decision.title,'A useful connection'); assert.equal(decision.source,'briefing');
+  assert.equal(decision.invalidator,'The delay is temporary'); assert.match(decision.detail,/https:\/\/example.com\/source/);
   element('aha-review-date').value='2026-10-03'; context.handleAhaAction('confirm-check');
   // A dated check in To check, not the day's one experiment.
   assert.equal(trial,undefined);
@@ -52,6 +55,14 @@ test('aha actions preserve sources and invalidation when saved or scheduled',()=
   assert.equal(check.source,'Today’s aha · 2026-09-26');
   assert.match(element('aha-action-status').textContent,/To check/);
   assert.equal(element('aha-review').hidden,true);
+});
+test('an insight opens a reviewable decision form without saving it',()=>{
+  let page, draft, saved=0, scrolled=0;
+  const {context}=environment(['openDecisionFromInsight'],{document:{getElementById:()=>null,querySelector:()=>({})},switchPage:name=>{page=name;},openDecisionForm:value=>{draft=value;},manilaDateKey:()=> '2026-09-26',scrollTo:()=>{scrolled++;},fbSaveDecision:()=>{saved++;}});
+  context.openDecisionFromInsight({title:'A claims documentation gap',source:'briefing',detail:'Two sources point to a missing record.',invalidator:'The record is produced',reviewDate:'2026-10-03',label:'Today’s aha',url:'https://example.com/source'});
+  assert.equal(page,'decisions'); assert.equal(saved,0); assert.equal(scrolled,1);
+  assert.equal(draft.asset,'A claims documentation gap'); assert.equal(draft.reviewDate,'2026-10-03');
+  assert.equal(draft.invalidator,'The record is produced'); assert.equal(draft.linkedSignal.kind,'insight');
 });
 test('absent Command dependency produces a recovery action, not initial placeholders', () => {
   const {context,element}=environment(['renderCommandCenter']);

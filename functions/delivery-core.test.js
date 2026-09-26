@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
-  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, reminderIds, hasNewReminders,
+  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, hasNewReminders,
 } = require("./delivery-core");
 
 test("normalizes delivery defaults and clamps source thresholds", () => {
@@ -142,6 +142,20 @@ test("reminders ride in the Morning 5, or get a push of their own when nothing e
   assert.equal(notificationCopy(items, false, {reminders: [], remindersOnly: true}).title, "Your Morning 5 is ready", "no reminders, no reminders-only copy");
   assert.equal(notificationCopy([], true, {reminders}).body,
     "No priority items currently clear your delivery thresholds.\n⏰ To check: Fair Work hearing list · +1 more");
+});
+
+test("one due experiment rides on an existing Morning 5 and points at its review", () => {
+  const entries = {
+    "2026-09-20": {spark:1,trialPlan:"Ask one clearer question",trialDue:"2026-09-24",trialDone:false},
+    "2026-09-22": {spark:2,trialPlan:"Send the shorter request",trialDue:"2026-09-25",trialDone:false},
+    "2026-09-23": {spark:3,trialPlan:"Already reviewed",trialDue:"2026-09-24",trialDone:true},
+  };
+  const experiment = dueExperiment(DailyBoostCore, entries, "2026-09-25");
+  assert.deepEqual(experiment,{plan:"Ask one clearer question",due:"2026-09-24",day:"2026-09-20"});
+  assert.equal(notificationCopy([{source:"Radar",title:"NVDA confirmed"}],false,{experiment}).body,
+    "Radar: NVDA confirmed\nExperiment to review: Ask one clearer question");
+  assert.equal(dueExperiment(DailyBoostCore, entries,"2026-09-23"),null);
+  assert.equal(dueExperiment(null,entries,"2026-09-25"),null);
 });
 
 test("the push's spark leans towards his goals exactly as the app does", () => {

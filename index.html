@@ -395,6 +395,7 @@ window.fbSaveDecision = async function(entry) {
       reason: entry.reason || '',
       invalidator: entry.invalidator || '',
       linkedSignal: entry.linkedSignal || null,
+      reviewDate: entry.reviewDate || '',
       // Optional position economics. Null when Bob does not bother — the tab
       // still derives a % move from the radar close on the decision date.
       entryPrice: entry.entryPrice == null ? null : Number(entry.entryPrice),
@@ -2032,6 +2033,10 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup-chip.active,body.light .trend-period-btn.active,body.light .command-filter.active{border-color:rgba(114,86,16,.45)}
 /* A faint top highlight gives dark cards an edge of light, like a raised surface. */
 .card,.hero,.daily-boost{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+/* Goal moves use the room of a full row on desktop, then stack cleanly on phones. */
+.boost-goal-next{font-size:12px;line-height:1.55;color:var(--txt2);margin:.2rem 0 .45rem}
+.boost-goal-edit{grid-template-columns:minmax(180px,1.2fr) minmax(180px,1fr) auto auto}
+@media(max-width:700px){.boost-goal-edit{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -2290,7 +2295,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <section class="boost-past" id="boost-past" hidden aria-labelledby="boost-past-kicker"><div class="boost-kicker" id="boost-past-kicker">From your past</div><blockquote class="boost-past-text" id="boost-past-text"></blockquote><p class="boost-past-sub" id="boost-past-sub"></p><div class="boost-past-actions" id="boost-past-actions"><button type="button" class="tool-chip" id="boost-past-use">Use today</button><button type="button" class="tool-chip" id="boost-past-later" title="Bring it back in about two weeks">Later</button><button type="button" class="tool-chip" id="boost-past-dismiss" title="Don’t show this one again">Dismiss</button></div><p class="boost-kicker" id="boost-past-status" role="status"></p></section>
     <div class="boost-lookback" id="boost-lookback" hidden><h3>Your week in notes</h3><p class="boost-kicker" id="boost-lookback-count"></p><div id="boost-lookback-list"></div><div id="boost-lookback-stories" hidden><h4 class="boost-week-stories-title">Stories from your week</h4><div id="boost-lookback-story-list"></div></div></div>
     <details class="boost-history boost-mirror" id="boost-mirror-panel"><summary id="boost-mirror-summary">Your week, read back</summary><p class="boost-mirror-intro">Reads your last seven days — notes, quests, the stories you opened and voted on, experiments and decisions — and reflects back what keeps coming up, where what you said and did part ways, one new thing to try and one question to sit with. Nothing is sent until you tap the button.</p><div class="boost-mirror-actions"><button class="tool-chip" id="boost-mirror-run">Read my week back</button><select id="boost-mirror-week" aria-label="Earlier reads" hidden></select><span class="boost-kicker" id="boost-mirror-status" role="status"></span></div><div class="boost-mirror-body" id="boost-mirror-body" hidden aria-live="polite"></div></details>
-    <details class="boost-history boost-goals" id="boost-goals-panel"><summary id="boost-goals-summary">Your goals</summary><p class="boost-goals-intro">One to three things you are working towards. Your spark leans towards them now and then, your weekly read measures the week against them, and ticking <b>Moved a goal today?</b> under the quest counts the days you moved one.</p><div id="boost-goals-list"></div><div id="boost-goals-editor" hidden></div><div class="boost-goals-actions"><button type="button" class="tool-chip" id="boost-goals-edit">Set your goals</button><span class="boost-kicker" id="boost-goals-status" role="status"></span></div></details>
+    <details class="boost-history boost-goals" id="boost-goals-panel"><summary id="boost-goals-summary">Your goals</summary><p class="boost-goals-intro">One to three things you are working towards. Give each one a concrete next move and optional target date; when it is due, <b>Start here</b> brings it forward. Your spark leans towards the goal themes, your weekly read measures the week against them, and ticking <b>Moved a goal today?</b> under the quest counts the days you moved one.</p><div id="boost-goals-list"></div><div id="boost-goals-editor" hidden></div><div class="boost-goals-actions"><button type="button" class="tool-chip" id="boost-goals-edit">Set your goals</button><span class="boost-kicker" id="boost-goals-status" role="status"></span></div></details>
     <details class="boost-history" id="boost-library"><summary id="boost-library-summary">Browse all sparks · Find your inspiration</summary><div class="boost-library-controls"><label>Theme<select id="boost-theme"><option value="">All themes</option><option>Curiosity</option><option>Perspective</option><option>Creativity</option><option>Momentum</option><option>Confidence</option><option value="Reset">Rest &amp; reset</option><option>Connection</option><option value="Craft">Work craft</option><option value="Review">Weekly look-back</option></select></label><label>Search sparks<input id="boost-search" type="search" placeholder="Try beginner, figure, or quiet…"></label></div><label><input id="boost-favourites-only" type="checkbox"> Favourites only</label><p id="boost-library-count" role="status"></p><div id="boost-library-list"></div></details>
     <div class="boost-reflect"><label for="boost-note">What clicked for you?</label><p>A new question, a tiny win, or something you want to try. One sentence is plenty.</p><textarea id="boost-note" aria-keyshortcuts="N" maxlength="1200" rows="2" placeholder="Today I noticed…" aria-describedby="boost-note-state"></textarea><div class="boost-note-bar"><span id="boost-note-state" class="boost-note-state" aria-live="polite"></span><button type="button" class="tool-chip boost-note-done" id="boost-note-done" hidden aria-keyshortcuts="Control+Enter Meta+Enter" title="Your note saves as you type. Done sends it now and closes the keyboard (Ctrl+Enter).">Done ✓</button></div><div id="boost-noted" hidden aria-label="Stories noted today"></div><div id="boost-status" class="boost-kicker" role="status">Sign in to save your small wins.</div></div>
     <details id="boost-trial-editor" class="boost-history"><summary>Try an idea · one experiment for today</summary><div class="boost-library-controls"><label for="boost-trial-plan">What will you try?<input id="boost-trial-plan" maxlength="400" placeholder="One small, specific action…"></label><label for="boost-trial-due">When will you revisit it?<input id="boost-trial-due" type="date"></label></div><button id="boost-trial-save" class="tool-chip">Save experiment</button><p id="boost-trial-status" role="status"></p></details>
@@ -2610,8 +2615,8 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
     <div class="decision-grid">
       <div class="decision-field">
-        <label>Asset</label>
-        <input id="decision-asset" placeholder="NVDA, BTC, SOL">
+        <label>Asset or subject</label>
+        <input id="decision-asset" placeholder="NVDA, a client question, or an insight">
       </div>
       <div class="decision-field">
         <label>Source</label>
@@ -2619,6 +2624,9 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
           <option value="radar">Radar</option>
           <option value="miro">Markets</option>
           <option value="sports">Sports</option>
+          <option value="briefing">Briefing</option>
+          <option value="weekly">Weekly read</option>
+          <option value="evidence">Evidence</option>
           <option value="manual">Manual</option>
         </select>
       </div>
@@ -2663,6 +2671,10 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <div class="decision-field">
         <label>Closed on</label>
         <input id="decision-closed-date" placeholder="YYYY-MM-DD">
+      </div>
+      <div class="decision-field">
+        <label>Review on <span class="decision-opt">optional</span></label>
+        <input id="decision-review-date" type="date">
       </div>
       <div class="decision-field">
         <label>Status</label>
@@ -2774,7 +2786,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   <div class="help-body">
     <div class="help-card help-wide help-takeaway">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> Today — how the page works</div>
-      <p><b>Start here</b> at the top names the one thing to do next: a check that is due, an experiment ready to review, the weekly read on Sundays, today’s spark, then a line in your note. <b>Not now</b> shows the next one for this visit; nothing else is hidden.</p>
+      <p><b>Start here</b> at the top names the one thing to do next: a check that is due, a goal move whose target date has arrived, an experiment ready to review, the weekly read on Sundays, today’s spark, then a line in your note. <b>Not now</b> shows the next one for this visit; nothing else is hidden.</p>
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
       <p>Top to bottom: your <b>daily spark</b> (a small idea and a 2- or 10-minute quest), then <b>Your experiments</b> and <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> when something is due, then the <b>briefing</b>. Once the spark is done, or you tap <b>Tuck away · briefing first</b>, it shrinks to one line so the briefing comes first; it opens again tomorrow.</p>
       <p class="help-key">Nothing here is a streak to keep. A missed day is just a missed day.</p>
@@ -2787,7 +2799,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li><b>What do you need today?</b> — pick Motivation, Clarity, Curiosity, Calm or A challenge and the spark changes to fit.</li>
         <li><b>The small line under the title</b> says why this spark is here (rotation, your pick, a swap, the Sunday look-back) and, for some, which briefing story it is paired with.</li>
         <li><b>Briefing-linked sparks</b> (about one day in five) work on a real story: the top one, or for the claims sparks the top insurance or interruptions story. <b>Find it in the briefing ↓</b> jumps to it.</li>
-        <li><b>Your goals</b> — name one to three things you are working towards (each gets a theme; the app guesses one from your words). The spark leans towards those themes about one day in four, and says so (“For your goal …”); <b>Moved a goal today?</b> under the quest records the days you moved one, counted over two weeks in the goals panel; and your weekly read answers each goal. Clearing a goal archives it.</li>
+        <li><b>Your goals</b> — name one to three things you are working towards (each gets a theme; the app guesses one from your words). Add a concrete next move and optional target date. A due move appears in <b>Start here</b>; completing it records progress and immediately asks for the next move. The spark leans towards goal themes about one day in four, and your weekly read answers each goal. Clearing a goal archives it.</li>
         <li><b>☆ Save</b> keeps a spark as a favourite; the library can show favourites only.</li>
         <li><b>What clicked for you?</b> — one sentence is plenty. It saves as you type, so there is no save button: the line under the box shows <b>Saving…</b>, then <b>✓ Saved</b> with the time and whether it reached all your devices. <b>Done ✓</b> (or Ctrl+Enter) sends it straight away and closes the keyboard.</li>
       </ul>
@@ -2798,7 +2810,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <ul>
         <li><b>Go deeper</b> — on any story, a short dossier opens under the card: what happened, how it came about, the key numbers, the BI and claims angle, who is exposed, three questions to ask a client, what would change the read, and its sources (only pages the search really returned). It is kept, so opening it again costs nothing; <b>Save to Evidence</b> files it with its sources. Up to ten new ones a day.</li>
         <li><b>No reruns</b> — each briefing is shown your last three, so a story only comes back as <b>Update:</b> with what changed. The line under the briefing title says whether anything was re-run.</li>
-        <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> on the day you choose.</li>
+        <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Open as decision</b> prepares a decision-journal draft with the insight, evidence and invalidator, but never saves it for you. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> on the day you choose.</li>
         <li><span class="help-pill" style="color:var(--blue)">New</span> — not in the previous briefing. <span class="help-pill">Day 3</span> — its third briefing in a row (hover for the dates). Matched by link or wording, since running stories are reworded daily.</li>
         <li><b>The progress line</b> counts what you have read, with <b>Next unread ↓</b> taking you to the most relevant story left. A story counts as read when you open its source, note it, or tap <b>Mark read</b>.</li>
         <li><b>Source chip</b> — <span class="help-pill" style="color:var(--green)">Source matched</span> came from the fetched news feed; <span class="help-pill" style="color:var(--green)">Link verified</span> is a page the AI's search really returned; <span class="help-pill">Unverified source</span> has no checked link.</li>
@@ -2811,7 +2823,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <ul>
         <li><b>Reminders</b> fall due on a date named in the watch metric (“due 12 Oct”), otherwise in 3 days, 2 weeks or 30 days by the story's timeframe. Due ones appear in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> with <b>✓ Checked</b>, <b>✎ Note what you found</b>, <b>Snooze a week</b>, and a <b>Due</b> date you can change.</li>
         <li><b>In the Morning 5 push</b> a line reads “To check: …”; on a quiet morning, a reminder coming due gets a push of its own. Each is announced once.</li>
-        <li><b>Experiments</b> — under <b>Try an idea</b>, plan one small thing and when to revisit it; it comes back in <b>Your experiments</b> to record what happened.</li>
+        <li><b>Experiments</b> — under <b>Try an idea</b>, plan one small thing and when to revisit it; it comes back in <b>Your experiments</b> to record what happened. If a regular Morning 5 is already being sent when an experiment is due, it includes “Experiment to review: …” and opens the review panel. It never creates an extra push on its own.</li>
         <li><b>Sundays</b> bring <b>Look back on your week</b>: the week's notes and stories. <b>Carry forward</b> one note and it rides along on the spark until next Sunday.</li>
         <li><b>Your week, read back</b> — tap <b>Read my week back</b> (it opens by itself on Sundays) and an AI reads your last seven days: notes, quests, the stories you opened and voted on, experiments and decisions. It names what kept coming up, what gave or took energy, where what you said and did part ways, one small thing you have not tried, and a question to sit with. Each read follows up on the last one from at least five days before, so there has been time for something to change. Under its question, <b>Write my answer</b> saves your reply with that question, and the next read responds to what you wrote. It only sees what you recorded here, never gives trading advice, and your notes go to OpenAI only when you tap. Up to three reads a day; the last twelve are kept. On Sundays, until you have read it, the Morning 5 push says so (one push that day, even when nothing else changed) and the collapsed spark strip shows <b>Read my week back</b>.</li>
       </ul>
@@ -3803,6 +3815,14 @@ function removeEvidenceItem(setEncoded, keyEncoded) {
   paintEvidencePage();
   saveEvidenceSets('Evidence item removed');
 }
+function openEvidenceAsDecision(setEncoded, keyEncoded) {
+  var setId = evidenceDecode(setEncoded), key = evidenceDecode(keyEncoded);
+  var set = (evidenceSetState.data.sets || []).find(function(candidate) { return candidate.id === setId; });
+  var item = set && set.items.find(function(candidate) { return candidate.key === key; });
+  if (!item) { showToast('That evidence item is no longer available','warn'); return; }
+  openDecisionFromInsight({title:item.title, source:'evidence', detail:[item.detail,item.note ? 'Your note: ' + item.note : '',item.url ? 'Source: ' + item.url : ''].filter(Boolean).join('\n'),
+    invalidator:(String(item.detail || '').match(/(?:Wrong if|Would change the read):\s*([^\n]+)/i) || [,''])[1], label:'Evidence · ' + set.name, url:item.url || ''});
+}
 function paintEvidencePage() {
   var list = document.getElementById('evidence-set-list');
   var detail = document.getElementById('evidence-set-detail');
@@ -3823,7 +3843,7 @@ function paintEvidencePage() {
   var setEncoded = evidenceEncode(selected.id);
   var itemsHtml = selected.items.length ? selected.items.map(function (item) {
     var keyEncoded = evidenceEncode(item.key);
-    return '<article class="evidence-item"><div class="evidence-item-head"><div><div class="evidence-item-title">' + esc(item.title) + '</div>' + evidenceDetailHtml(item) + '<div class="evidence-item-provenance">' + esc(item.source) + ' · captured ' + esc(evidenceDate(item.capturedAt)) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions">' + (item.url ? '<a class="command-item-btn" href="' + esc(item.url) + '" target="_blank" rel="noopener noreferrer">Source ↗</a>' : '') + '<button class="command-item-btn" onclick="openEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open source</button><button class="command-item-btn" onclick="removeEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Remove</button></div></div><textarea class="evidence-note" maxlength="500" placeholder="Add your note — why this matters, what to verify, or how it connects…" onblur="updateEvidenceNote(\'' + setEncoded + '\',\'' + keyEncoded + '\',this.value)">' + esc(item.note) + '</textarea></article>';
+    return '<article class="evidence-item"><div class="evidence-item-head"><div><div class="evidence-item-title">' + esc(item.title) + '</div>' + evidenceDetailHtml(item) + '<div class="evidence-item-provenance">' + esc(item.source) + ' · captured ' + esc(evidenceDate(item.capturedAt)) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions">' + (item.url ? '<a class="command-item-btn" href="' + esc(item.url) + '" target="_blank" rel="noopener noreferrer">Source ↗</a>' : '') + '<button class="command-item-btn" onclick="openEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open source</button><button class="command-item-btn" onclick="openEvidenceAsDecision(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open as decision</button><button class="command-item-btn" onclick="removeEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Remove</button></div></div><textarea class="evidence-note" maxlength="500" placeholder="Add your note — why this matters, what to verify, or how it connects…" onblur="updateEvidenceNote(\'' + setEncoded + '\',\'' + keyEncoded + '\',this.value)">' + esc(item.note) + '</textarea></article>';
   }).join('') : '<div class="command-empty">This set is empty. Save stories from a briefing card, results from Search or items from Command Center.</div>';
   detail.innerHTML = '<div class="evidence-detail-head"><input class="evidence-rename" maxlength="80" value="' + esc(selected.name) + '" onchange="renameEvidenceSet(\'' + setEncoded + '\',this.value)" aria-label="Evidence set name"><div class="evidence-item-actions"><button class="tool-chip" onclick="openIntelligenceSearch()">Search to add</button><button class="tool-chip" onclick="deleteEvidenceSet(\'' + setEncoded + '\')">Delete set</button></div></div><div class="evidence-item-list">' + itemsHtml + '</div>';
   renderWorkingQuestion(selected);
@@ -5886,6 +5906,7 @@ function decisionBeatFromForm(v) {
 }
 function decisionLinkedText(linked) {
   if (!linked) return 'Manual entry';
+  if (linked.kind === 'insight') return 'Linked insight: ' + String(linked.label || linked.title || 'Saved context');
   var bits = [
     linked.date || 'latest',
     linked.theme || '',
@@ -5925,6 +5946,7 @@ function openDecisionForm(entry) {
   setDecisionField('decision-beat', decisionBeatValue(entry.beatBenchmark));
   setDecisionField('decision-reason', entry.reason || '');
   setDecisionField('decision-invalidator', entry.invalidator || '');
+  setDecisionField('decision-review-date', entry.reviewDate || '');
   setDecisionField('decision-mistake', entry.mistakeType || 'none');
   setDecisionField('decision-outcome-note', entry.outcomeNote || '');
   syncDecisionOutcomeFields();
@@ -5941,6 +5963,24 @@ function openDecisionFormManual() {
     createdDate: manilaDateKey()
   });
 }
+// Aha, dossier, Evidence, and weekly read-back actions all arrive here. The
+// journal form is filled for review; nothing is written until Save decision.
+function openDecisionFromInsight(input) {
+  input = input || {};
+  var title = String(input.title || 'Insight to review').trim().slice(0,160);
+  var source = ['briefing','weekly','evidence','manual'].indexOf(input.source) >= 0 ? input.source : 'manual';
+  var detail = String(input.detail || '').trim().slice(0,2400);
+  var btn = document.querySelector('.ntab[data-page="decisions"]');
+  switchPage('decisions', btn);
+  openDecisionForm({
+    asset:title, source:source, action:'watched', direction:'none', conviction:3,
+    status:'open', createdDate:manilaDateKey(), reviewDate:String(input.reviewDate || '').slice(0,10),
+    reason:detail, invalidator:String(input.invalidator || '').trim().slice(0,800),
+    linkedSignal:{kind:'insight', label:String(input.label || title).slice(0,240), url:/^https?:\/\//i.test(String(input.url || '')) ? String(input.url).slice(0,600) : ''}
+  });
+  window.scrollTo(0,0);
+}
+window.openDecisionFromInsight = openDecisionFromInsight;
 function findRadarSignal(symbol) {
   return (radarSignals || []).filter(function (x) { return x.symbol === symbol; })[0] || null;
 }
@@ -6020,16 +6060,18 @@ function syncDecisionOutcomeFields() {
   if (cd && closed && !cd.value) cd.value = manilaDateKey();
 }
 async function saveDecisionForm() {
-  var asset = getDecisionField('decision-asset').trim().toUpperCase();
-  if (!asset) { showToast('Add an asset or subject first', 'warn'); return; }
+  var rawAsset = getDecisionField('decision-asset').trim();
+  if (!rawAsset) { showToast('Add an asset or subject first', 'warn'); return; }
   if (!window.fbSaveDecision) { showToast('Decision journal is not ready', 'error'); return; }
   var status = getDecisionField('decision-status') || 'open';
+  var source = getDecisionField('decision-source') || 'manual';
+  var asset = ['radar','miro','sports'].indexOf(source) >= 0 ? rawAsset.toUpperCase() : rawAsset;
   var entry = {
     id: decisionEditingId,
     saved: decisionEditingSaved,
     createdDate: decisionEditingCreatedDate || manilaDateKey(),
     asset: asset,
-    source: getDecisionField('decision-source') || 'manual',
+    source: source,
     action: getDecisionField('decision-action') || 'watched',
     direction: getDecisionField('decision-direction') || 'none',
     conviction: Number(getDecisionField('decision-conviction') || 3),
@@ -6041,6 +6083,7 @@ async function saveDecisionForm() {
       : '',
     reason: getDecisionField('decision-reason').trim(),
     invalidator: getDecisionField('decision-invalidator').trim(),
+    reviewDate: getDecisionField('decision-review-date'),
     linkedSignal: decisionLinkedSignal,
     status: status,
     outcome: status === 'closed' ? (getDecisionField('decision-outcome') || null) : null,
@@ -6386,7 +6429,7 @@ function decisionRow(e) {
         decisionPill(e.action || 'watched', actionCls) +
         decisionPill(e.direction || 'none') +
         decisionPill('conviction ' + (e.conviction || 3)) +
-        linked + beat +
+        linked + beat + (e.reviewDate ? decisionPill('review ' + e.reviewDate, e.reviewDate <= manilaDateKey() && !closed ? 'rel-med' : '') : '') +
       '</div></div>' +
       '<div class="decision-mini">' + esc(e.createdDate || '') + '</div></div>' +
     '<div class="decision-body">' +
@@ -6490,7 +6533,7 @@ function renderDecisions() {
     var today = manilaDateKey();
     var todaysCalls = decisionEntries.filter(function (e) { return (e.createdDate || '') === today; });
     var needsReview = decisionEntries.filter(function (e) {
-      return (e.status || 'open') !== 'closed' && e.action === 'took' && (e.createdDate || '') !== today;
+      return (e.status || 'open') !== 'closed' && ((e.reviewDate && e.reviewDate <= today) || (e.action === 'took' && (e.createdDate || '') !== today));
     });
     var closed = decisionEntries.filter(function (e) { return (e.status || 'open') === 'closed'; });
     if (sub) sub.textContent = todaysCalls.length + ' today / ' + needsReview.length + ' needs review / ' + stats.closed + ' closed';
@@ -8679,6 +8722,7 @@ function dossierHtml(d) {
   html += part('Sources', (d.sources || []).length ? '<ul class="dossier-sources">' + d.sources.map(function(src) { return '<li><a href="' + esc(src.url) + '" target="_blank" rel="noopener noreferrer">' + esc(src.title || src.url) + ' ↗</a></li>'; }).join('') + '</ul>' : '');
   html += '<p class="dossier-note">An analytical read built from what the search found, not advice.</p>';
   return html + '<div class="dossier-actions"><button type="button" class="card-act" data-dossier-act="save">＋ Save to Evidence</button>' +
+    '<button type="button" class="card-act" data-dossier-act="decision">Open as decision</button>' +
     '<button type="button" class="card-act" data-dossier-act="rebuild" title="Search again and replace this dossier. Counts towards the ten a day.">Rebuild</button>' +
     '<button type="button" class="card-act" data-dossier-act="close">Close</button></div>';
 }
@@ -8704,6 +8748,11 @@ function renderDossier(panel, d, sec, idx) {
     var key = currentBriefingKey(), story = d.story || {};
     openEvidencePicker({id:'briefing:' + key + ':' + sec + ':' + idx + ':dossier', source:'Briefing', title:'Dossier: ' + (story.headline || ''),
       detail:dossierSnapshot(d), meta:[_currentData && _currentData.date, 'Go deeper', story.source].filter(Boolean).join(' · '), page:'today', ref:key, url:story.url || ''});
+  });
+  panel.querySelector('[data-dossier-act="decision"]').addEventListener('click', function() {
+    var story = d.story || {}, tomorrow = new Date(Date.parse(manilaDateKey() + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10);
+    openDecisionFromInsight({title:story.headline || 'Dossier insight', source:'briefing', detail:dossierSnapshot(d), invalidator:d.would_change || '',
+      reviewDate:tomorrow, label:'Go deeper · ' + ((_currentData && _currentData.date) || manilaDateKey()), url:story.url || ''});
   });
   var rebuild = panel.querySelector('[data-dossier-act="rebuild"]');
   rebuild.addEventListener('click', function() {
@@ -8772,7 +8821,7 @@ function ahaHtml(aha) {
   if ((aha.chain || []).length) html += '<ol class="aha-chain">' + aha.chain.map(function(step) { return '<li>' + esc(step) + '</li>'; }).join('') + '</ol>';
   if ((aha.links || []).length) html += '<div class="aha-links"><span>Built on</span>' + aha.links.map(function(link, index) { return '<button type="button" class="card-act" data-aha-link="' + index + '" title="Jump to this story">↓ ' + esc(link) + '</button>'; }).join('') + '</div>';
   if (aha.wrong_if) html += '<div class="aha-wrong"><strong>Wrong if:</strong> ' + esc(aha.wrong_if) + '</div>';
-  html += '<div class="card-actions"><button class="card-act" data-aha-act="save">Save insight</button><button class="card-act" data-aha-act="note">Write my take</button><button class="card-act" data-aha-act="check">Check this later</button></div><div id="aha-review" hidden><label>Check on <input id="aha-review-date" type="date"></label><button class="card-act" data-aha-act="confirm-check">Add to ' + uiIcon('clock') + ' To check</button></div><p id="aha-action-status" class="boost-kicker" role="status"></p>';
+  html += '<div class="card-actions"><button class="card-act" data-aha-act="save">Save insight</button><button class="card-act" data-aha-act="decision">Open as decision</button><button class="card-act" data-aha-act="note">Write my take</button><button class="card-act" data-aha-act="check">Check this later</button></div><div id="aha-review" hidden><label>Check on <input id="aha-review-date" type="date"></label><button class="card-act" data-aha-act="confirm-check">Add to ' + uiIcon('clock') + ' To check</button></div><p id="aha-action-status" class="boost-kicker" role="status"></p>';
   return html + '</div></div>';
 }
 function ahaSnapshot(data) {
@@ -8792,6 +8841,9 @@ function handleAhaAction(action) {
   if (action === 'save') {
     var key = currentBriefingKey();
     openEvidencePicker({id:'briefing:' + key + ':aha',source:'Briefing',title:aha.title,detail:ahaSnapshot(_currentData),meta:'Today’s aha · ' + _currentData.date,page:'today',ref:key});
+  } else if (action === 'decision') {
+    var review = new Date(Date.parse(window.DailyBoostCore.dateKey() + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10);
+    openDecisionFromInsight({title:aha.title, source:'briefing', detail:ahaSnapshot(_currentData), invalidator:aha.wrong_if || '', reviewDate:review, label:'Today’s aha · ' + _currentData.date});
   } else if (action === 'note') {
     var noted = window.noteDailyBoostInsight && window.noteDailyBoostInsight(aha.title);
     status.textContent = noted ? 'Your reflection is ready above.' : 'Open your reflection above to continue; sign in if needed.';

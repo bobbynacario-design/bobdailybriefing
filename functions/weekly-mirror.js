@@ -259,7 +259,8 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goa
     parts.push("", "HIS GOALS — what he says he is working towards (a tick means he marked that day as moving it):");
     active.forEach((goal, index) => {
       const days = win.days.filter((key) => records[key] && arr(records[key].goalTicks).indexOf(text(goal.id)) >= 0);
-      parts.push((index + 1) + ". " + quote(goal.text, 120) + " — " + (days.length ? "ticked on " + days.map(dayLabel).join(", ") + " (" + days.length + " of 7 days)" : "no ticks this week"));
+      const next = text(goal.nextMove) ? "; next move: " + quote(goal.nextMove, 200) + (DAY.test(text(goal.nextDue)) ? " due " + goal.nextDue : "") : "; no next move set";
+      parts.push((index + 1) + ". " + quote(goal.text, 120) + " — " + (days.length ? "ticked on " + days.map(dayLabel).join(", ") + " (" + days.length + " of 7 days)" : "no ticks this week") + next);
     });
   }
   const previous = previousMirror(mirrors, todayKey);
