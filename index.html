@@ -3941,6 +3941,28 @@ function createEvidenceSetFromPicker() {
   saveEvidenceSets('Evidence set and item saved');
   showToast('Evidence set created','ok');
 }
+// Where a saved briefing item lives. Its id is briefing:<key>:<section>:<index>,
+// with :dossier on a saved dossier (whose title is "Dossier: <headline>", which
+// no card carries), or briefing:<key>:aha. A story card is found by position,
+// the wildcard and the aha by their headline.
+function evidenceBriefingTarget(item) {
+  var parts = String(item && item.id || '').split(':'), dossier = parts[parts.length - 1] === 'dossier';
+  if (dossier) parts.pop();
+  var section = parts[2] || '', index = parts[3] || '';
+  var byPosition = section && section !== 'aha' && section !== 'wildcard' && /^\d+$/.test(index);
+  return {title:String(item && item.title || '').replace(/^Dossier:\s*/, ''), commandId:byPosition ? 'briefing-' + section + '-' + index : '',
+    section:section, index:index, dossier:dossier};
+}
+// Opens the dossier under its card, but only a saved one: this never starts a
+// new (paid) build. Without a saved copy the card stays highlighted.
+async function openSavedDossierOn(target) {
+  var st = !_currentData ? null : target.section === 'wildcard' ? _currentData.wildcard : ((_currentData.sections || {})[target.section] || [])[Number(target.index)];
+  var card = target.commandId ? document.querySelector('#today-out [data-command-id="' + target.commandId + '"]') : document.querySelector('#today-out .wildcard-card');
+  var button = card && card.querySelector('[data-card-act="deeper"]');
+  if (!st || !button || button.getAttribute('aria-expanded') === 'true') return;
+  var saved = await savedDossiers(), key = window.BriefingPromptCore.storyDossierKey(dossierStory(st, target.section));
+  if (saved[key]) toggleDossier(button, st, target.section, target.index);
+}
 async function openEvidenceItem(setEncoded,keyEncoded) {
   var set = evidenceSetState.data.sets.find(function (candidate) { return candidate.id === evidenceDecode(setEncoded); });
   var item = set && set.items.find(function (candidate) { return candidate.key === evidenceDecode(keyEncoded); });
@@ -3951,7 +3973,9 @@ async function openEvidenceItem(setEncoded,keyEncoded) {
     if (archived) {
       if (!(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
       loadBriefing(item.ref);
-      highlightSourceTitle(item.title,'today');
+      var target = evidenceBriefingTarget(item);
+      if (!highlightSourceTitle(target.title,'today',target.commandId)) { showToast('Opened that briefing, but this story is no longer in it.','info'); return; }
+      if (target.dossier) openSavedDossierOn(target);
       return;
     }
   }

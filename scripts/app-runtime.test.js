@@ -394,6 +394,21 @@ test('a saved dossier reads as a document in Evidence, even an old flattened cop
   assert.equal(context.evidenceDetailHtml({id:'briefing:2026-09-26:insurance:0',detail:'One <line>.'}),'<div class="evidence-item-detail">One &lt;line&gt;.</div>','an ordinary story is unchanged');
 });
 
+// Open source on a saved briefing item lands on its card: a story by position,
+// a dossier on its story's card (not a "Dossier: …" headline no card has).
+test('Open source finds the card a saved briefing item came from', () => {
+  const {context}=environment(['evidenceBriefingTarget']);
+  const plain=o=>JSON.parse(JSON.stringify(o));
+  assert.deepEqual(plain(context.evidenceBriefingTarget({id:'briefing:Saturday--September-26--2026:ai:0:dossier',title:'Dossier: Australia steps up response to AI'})),
+    {title:'Australia steps up response to AI',commandId:'briefing-ai-0',section:'ai',index:'0',dossier:true});
+  assert.deepEqual(plain(context.evidenceBriefingTarget({id:'briefing:Saturday--September-26--2026:insurance:2',title:'Strata storm claim'})),
+    {title:'Strata storm claim',commandId:'briefing-insurance-2',section:'insurance',index:'2',dossier:false});
+  const wild=context.evidenceBriefingTarget({id:'briefing:Sunday--September-27--2026:wildcard:0:dossier',title:'Dossier: Fog into water'});
+  assert.equal(wild.commandId,'','the wildcard card is found by headline'); assert.equal(wild.title,'Fog into water'); assert.equal(wild.dossier,true);
+  const aha=context.evidenceBriefingTarget({id:'briefing:Saturday--September-26--2026:aha',title:'Alert counts understate exposure'});
+  assert.equal(aha.commandId,''); assert.equal(aha.dossier,false); assert.equal(aha.title,'Alert counts understate exposure');
+});
+
 // Go deeper: the dossier renders escaped, leaves out empty parts, links only its
 // checked sources, and gives Evidence a plain-text copy.
 test('the dossier renders escaped, skips empty parts, and copies to Evidence as text', () => {
