@@ -4047,7 +4047,11 @@ function openCallAssets() {
     return e && (e.status || 'open') !== 'closed' && e.action !== 'skipped' && !decisionIsInsight(e) && /^[A-Za-z0-9.&\/ -]{2,30}$/.test(String(e.asset || ''));
   }).map(function(e) { return String(e.asset); });
 }
-function storyText(st) { return [st && st.headline, st && st.body, st && st.relevance, st && st.bridge].join(' '); }
+// What a story is about: its headline and summary. Never the relevance line or
+// the wildcard's bridge, which are the model's own commentary and can name an
+// organisation the story is not about (the prompt forbids it, but a prompt rule
+// is a request, not a guarantee), so a badge can only come from the story.
+function storyText(st) { return [st && st.headline, st && st.body].join(' '); }
 function accountBadgesHtml(st, calls) {
   var core = window.BriefingPromptCore;
   var names = core.accountsInText(storyText(st), activeAccounts());

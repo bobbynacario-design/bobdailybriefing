@@ -535,6 +535,10 @@ test('stories that name an account or an open call get badges; the rest get none
   const call=context.accountBadgesHtml({headline:'NVDA slides after earnings'},['NVDA']);
   assert.ok(call.includes('data-call="NVDA"') && call.includes('>Your call: NVDA</button>'));
   assert.equal(context.accountBadgesHtml({headline:'A quiet day in retail'},[]),'');
+  // An account named only in the model's commentary never makes a badge.
+  assert.equal(context.accountBadgesHtml({headline:'Court backs AIG over double cover dispute',body:'The Federal Court ruled for AIG.',relevance:'Allianz-style liability programs lose contribution recovery.'},[]),'',
+    'a badge comes from what the story is about, never from the relevance line');
+  assert.equal(context.accountBadgesHtml({headline:'Fog into drinking water',body:'A Chilean project.',bridge:'Worth asking what QBE would make of it.'},[]),'','nor from the wildcard bridge');
   const hits=context.accountHitsIn({sections:{insurance:[st,{headline:'QBE flags storm claims'}],global:[{headline:'Nothing relevant'}]}});
   assert.deepEqual([...hits.map(h=>h.name)],['QBE','SA Power Networks','Essential Energy'],'in list order');
   assert.deepEqual([...hits[1].headlines],['SAPN lifts pole replacement charges']);
