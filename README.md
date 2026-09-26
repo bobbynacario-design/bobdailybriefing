@@ -10,6 +10,13 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   weekly read on Sundays (until there is one), today’s spark, then a line in the
   note; “All done for today” points to the briefing. **Not now** moves to the next
   for the visit, and “Then:” lists what else is waiting, so nothing is hidden.
+- **From your past** — every third day (never on the Sunday look-back) a note
+  written at least two weeks ago (its own words; blank Note this / My take lines
+  do not count) or an experiment at least a week old marked Helped, Keep doing or
+  Adapt comes back: “Still useful?” **Use today** prefills today’s note or
+  experiment box (never replacing an experiment already saved), **Later** rests
+  it about two weeks, **Dismiss** retires it; anything shown rests a month. The
+  pick and choice sync on the day (`resurfaced`) and are archived.
 - **Learn from your daily practice** — under the quest, “Did this help?” offers
   Helpful, Not today and More like this, plus an optional sentence. The latest
   response each day stays tied to its spark, syncs, and appears in reflection
