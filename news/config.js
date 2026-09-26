@@ -104,7 +104,7 @@ var KEYWORDS = {
     // Whole phrases: matching is by substring, so "aer" alone would hit "aerial".
     'betterment', 'loss of use', 'linesworker', 'network charges', 'network tariff',
     'pole replacement', 'traffic control', 'traffic management', 'incident response',
-    'prime mover', 'heavy vehicle', 'freight rate', 'parts shortage', 'repair times', 'credit hire'
+    'prime mover', 'freight rate', 'parts shortage', 'repair times', 'credit hire'
   ],
   // Tier 2 — the regulatory and peril environment those engagements sit in.
   context: [
@@ -113,7 +113,7 @@ var KEYWORDS = {
     'storm', 'cyclone', 'hail', 'cyber', 'outage', 'recall', 'litigation',
     'class action', 'royal commission', 'inquiry', 'prudential', 'solvency',
     'reserving', 'fraud',
-    'australian energy regulator', 'aemc', 'determination', 'enterprise agreement',
+    'australian energy regulator', 'aemc', 'determination', 'enterprise agreement', 'heavy vehicle',
     'distribution network', 'power outage', 'blackout', 'diesel', 'fuel tax', 'haulage',
     'roadworks', 'road maintenance', 'payment terms'
   ],
