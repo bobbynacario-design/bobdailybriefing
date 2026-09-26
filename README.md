@@ -5,6 +5,19 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 
 ## Features
 
+- **From insight to action** — weekly read-back suggestions have a review date
+  and **Try this** action that saves an experiment without replacing one already
+  saved today. Theme day citations open the matching daily entry; explicit ISO
+  dates in the prose also link when inside that read's seven-day window. Missing
+  entries are explained instead of guessed. The read-back waits for confirmed
+  reflection sync, stops on save failure, and retains a fresh result when an older
+  history request finishes later.
+- **Aha actions** — **Save insight** opens the Evidence picker with a snapshot of
+  the interpretation, sources and “Wrong if” condition. **Write my take** opens
+  the daily reflection without truncating an existing note. **Check this later**
+  lets you choose a review date and creates an experiment with its source context.
+  These reviews appear in the app; they do not add push notifications.
+
 - **Personal daily practice** — choose motivation, clarity, curiosity, calm, or
   a challenge to select a fitting spark. Save favourites and filter the library
   to revisit them. One experiment per day captures an action, review date, and

@@ -7,7 +7,17 @@ const fake = `<script>
 window.addEventListener('DOMContentLoaded',function() {
   var date = new Date().toISOString().slice(0,10);
   var briefing = {date:date,grounding:null,markets:{psei:'6,105.99',psei_move:'+0.37% (previous close)',asx:'8,920.80',asx_move:'-1.00%',sp500:'7,673.52',sp500_move:'-0.58%'},peso:{usdphp:'62.625 (previous close, sample source)',usdphp_move:'+0.039 (sample movement)'},weather:{temp_c:'26–31°C',summary:'Cloudy with scattered thunderstorms. This is a local test fixture.',rain_chance:'70–80%; scattered rainfall'},sections:{global:[{headline:'Medium relevance context',body:'Background information for the daily briefing.',relevance:'Economic background',relevance_level:'med',source:'Fixture'}],insurance:[{headline:'Insurance outage investigation',body:'A provider-backed event with implications for business interruption review.',relevance:'Review the outage evidence and restoration timeline.',relevance_level:'high',source:'Fixture'},{headline:'Claims review update',body:'A second fixture to check reading order and source navigation.',relevance:'A relevant claims review.',relevance_level:'high',source:'Fixture',url:'https://example.com',grounded:true}]}};
-  var prefs = null, evidence = {version:1,sets:[]};
+  briefing.aha = {kind:'connection',title:'A delay can change what needs documenting',insight:'This preview illustrates how an insight connects to evidence and a small check.',chain:['Check the restoration timeline.','Compare the supporting record.'],links:['Claims review update'],wrong_if:'The original source reports no delay'};
+  var prefs = null, evidence = {version:1,sets:[]}, boost = {}, mirrors = {};
+  window.fbLoadDailyBoost = async function() { return boost; };
+  window.fbSaveDailyBoost = async function(uid, entries) { boost = window.DailyBoostCore.merge(entries,boost).records; return boost; };
+  window.fbLoadDailyBoostArchive = async function() { return {}; };
+  window.fbLoadWeeklyMirror = async function() { return mirrors; };
+  window.fbGenerateWeeklyMirror = async function() {
+    var key = window.DailyBoostCore.dateKey();
+    var result = {weekKey:key,generatedAt:new Date().toISOString(),stats:{days:1,notes:1},confidence:'thin',week_in_a_line:'A local preview of your weekly read-back.',themes:[{title:'A useful question',detail:'One recorded question to revisit.',days:[key]}],energy:{gave:[],drained:[]},try_next:{action:'Try one clearer question before starting a task.',why:'A preview suggestion.'},question:'What made the next step clearer?'};
+    mirrors[key] = result; return {mirror:result};
+  };
   window._firebaseUid = 'audit-fixture'; window._sessionUid = 'audit-fixture';
   window._fixtureWrites = 0;
   window.fbSaveBriefing = async function() { window._fixtureWrites++; };

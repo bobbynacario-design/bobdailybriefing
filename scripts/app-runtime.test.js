@@ -36,6 +36,16 @@ function environment(names, extra={}) {
   names.forEach(name=>vm.runInContext(handler(name),context));
   return {context,element};
 }
+test('aha actions preserve sources and invalidation when saved or scheduled',()=>{
+  const data={date:'2026-09-26',aha:{title:'A useful connection',insight:'A provisional reading',chain:['First observation'],wrong_if:'The delay is temporary',links:['Source headline']}};
+  let evidence, trial;
+  const {context,element}=environment(['ahaSnapshot','handleAhaAction'],{_currentData:data,getAllStories:()=>[{story:{headline:'Source headline',source:'Publisher',url:'https://example.com/source'}}],currentBriefingKey:()=> '2026-09-26',openEvidencePicker:item=>evidence=item,createDailyBoostExperiment:(...args)=>{trial=args;return {ok:true,message:'Saved'};}});
+  context.handleAhaAction('save');
+  assert.equal(evidence.id,'briefing:2026-09-26:aha');
+  assert.match(evidence.detail,/Wrong if: The delay is temporary/); assert.match(evidence.detail,/https:\/\/example.com\/source/);
+  element('aha-review-date').value='2026-10-03'; context.handleAhaAction('confirm-check');
+  assert.equal(trial[0],'Check whether: The delay is temporary'); assert.equal(trial[1],'2026-10-03'); assert.match(trial[2],/https:\/\/example.com\/source/);
+});
 test('absent Command dependency produces a recovery action, not initial placeholders', () => {
   const {context,element}=environment(['renderCommandCenter']);
   context.renderCommandCenter();

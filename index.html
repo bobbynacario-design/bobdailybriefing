@@ -8317,7 +8317,40 @@ function ahaHtml(aha) {
   if ((aha.chain || []).length) html += '<ol class="aha-chain">' + aha.chain.map(function(step) { return '<li>' + esc(step) + '</li>'; }).join('') + '</ol>';
   if ((aha.links || []).length) html += '<div class="aha-links"><span>Built on</span>' + aha.links.map(function(link, index) { return '<button type="button" class="card-act" data-aha-link="' + index + '" title="Jump to this story">↓ ' + esc(link) + '</button>'; }).join('') + '</div>';
   if (aha.wrong_if) html += '<div class="aha-wrong"><strong>Wrong if:</strong> ' + esc(aha.wrong_if) + '</div>';
+  html += '<div class="card-actions"><button class="card-act" data-aha-act="save">Save insight</button><button class="card-act" data-aha-act="note">Write my take</button><button class="card-act" data-aha-act="check">Check this later</button></div><div id="aha-review" hidden><label>Revisit on <input id="aha-review-date" type="date"></label><button class="card-act" data-aha-act="confirm-check">Save check</button></div><p id="aha-action-status" class="boost-kicker" role="status"></p>';
   return html + '</div></div>';
+}
+function ahaSnapshot(data) {
+  var aha = data.aha, stories = getAllStories(data).map(function(item) { return item.story; });
+  var lines = ['Analytical insight · ' + data.date, aha.title, aha.insight];
+  if (aha.wrong_if) lines.push('Wrong if: ' + aha.wrong_if);
+  (aha.links || []).forEach(function(headline) {
+    var story = stories.find(function(st) { return st.headline === headline; });
+    lines.push('Source: ' + headline + (story && story.source ? ' — ' + story.source : '') + (story && /^https?:\/\//i.test(story.url || '') ? ' — ' + story.url : ''));
+  });
+  (aha.chain || []).forEach(function(step,index) { lines.push((index+1) + '. ' + step); });
+  return lines.join('\n').slice(0,4000);
+}
+function handleAhaAction(action) {
+  if (!_currentData || !_currentData.aha) return;
+  var aha = _currentData.aha, status = document.getElementById('aha-action-status');
+  if (action === 'save') {
+    var key = currentBriefingKey();
+    openEvidencePicker({id:'briefing:' + key + ':aha',source:'Briefing',title:aha.title,detail:ahaSnapshot(_currentData),meta:'Today’s aha · ' + _currentData.date,page:'today',ref:key});
+  } else if (action === 'note') {
+    var noted = window.noteDailyBoostInsight && window.noteDailyBoostInsight(aha.title);
+    status.textContent = noted ? 'Your reflection is ready above.' : 'Open your reflection above to continue; sign in if needed.';
+  } else if (action === 'check') {
+    var today = window.DailyBoostCore.dateKey();
+    document.getElementById('aha-review').hidden = false;
+    var date = document.getElementById('aha-review-date'); date.min = today;
+    date.value = new Date(Date.parse(today + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10); date.focus();
+  } else if (action === 'confirm-check') {
+    var due = document.getElementById('aha-review-date').value;
+    var result = window.createDailyBoostExperiment && window.createDailyBoostExperiment(aha.wrong_if ? 'Check whether: ' + aha.wrong_if : 'Revisit: ' + aha.title,due,ahaSnapshot(_currentData));
+    status.textContent = result ? result.message : 'Sign in to save a check.';
+    if (result && result.ok) document.getElementById('aha-review').hidden = true;
+  }
 }
 
 function watchFollowupHtml(fu) {
@@ -8687,6 +8720,8 @@ document.addEventListener('auxclick', markCardOpened);
 
 // Today's aha: a "Built on" chip jumps to the story it names.
 document.addEventListener('click', function(event) {
+  var action = event.target && event.target.closest ? event.target.closest('[data-aha-act]') : null;
+  if (action) { handleAhaAction(action.dataset.ahaAct); return; }
   var chip = event.target && event.target.closest ? event.target.closest('[data-aha-link]') : null;
   if (!chip || !_currentData || !_currentData.aha) return;
   var headline = (_currentData.aha.links || [])[Number(chip.dataset.ahaLink)];
