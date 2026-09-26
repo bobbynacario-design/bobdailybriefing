@@ -898,7 +898,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
 /* ── NAV ── */
 .nav{background:var(--bg2);border-bottom:1px solid var(--rim);padding:.8rem 1.35rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:.65rem}
-.nav-brand{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--gold);white-space:nowrap}.nav-mark{display:inline-block;width:1.05em;height:1.05em;vertical-align:-.16em;margin-right:.4em;border-radius:22%}
+.nav-brand{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--gold);white-space:nowrap}.icon-sprite{position:absolute;width:0;height:0;overflow:hidden}.ico{width:1.2em;height:1.2em;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav-mark{display:inline-block;width:1.05em;height:1.05em;vertical-align:-.16em;margin-right:.4em;border-radius:22%}
 .nav-brand span{font-family:var(--mono);font-size:11px;color:var(--txt3);margin-left:.5rem;letter-spacing:.08em}
 .nav-center{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center}
 .ntab{font-family:var(--mono);font-size:12px;letter-spacing:.06em;padding:.55rem 1rem;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;text-transform:uppercase;white-space:nowrap}
@@ -1651,7 +1652,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
   .mobile-nav{display:flex;position:fixed;bottom:0;left:0;width:100%;overflow-x:auto;background:var(--bg2);border-top:1px solid var(--rim);z-index:200;padding:.5rem 0 calc(.5rem + env(safe-area-inset-bottom))}
   .mob-tab{flex:0 0 56px;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:.42rem .2rem;border:none;background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;transition:color .15s}
   .mob-tab.active{color:var(--gold)}
-  .mob-tab-icon{font-size:19px;line-height:1}
+  .mob-tab-icon{font-size:19px;line-height:1}.mob-tab-icon .ico{width:21px;height:21px;vertical-align:top}
   #mob-today{order:1}
   #mob-command{order:2}
   #mob-evidence{order:3}
@@ -1928,7 +1929,7 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .nav-group-panel.flip{left:auto;right:0}
 @keyframes navMenuIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 .nav-group-panel .ntab{position:relative;display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:.55rem;text-align:left;font-size:11px;letter-spacing:.07em;padding:.55rem .6rem;border-radius:7px}
-.nav-group-panel .ntab>.ntab-icon{font-size:13px;line-height:1;text-align:center}
+.nav-group-panel .ntab>.ntab-icon{font-size:13px;line-height:1;text-align:center}.ntab-icon .ico{width:16px;height:16px;vertical-align:-3px}
 .nav-group-panel .ntab>.ntab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav-group-panel .ntab.active::before{content:'';position:absolute;left:2px;top:22%;height:56%;width:2px;border-radius:2px;background:var(--gold)}
 .nav-right{gap:.5rem}.nav-clock{display:none}.mobile-nav{display:none!important}.nav-right .install-btn{display:none}
@@ -1990,6 +1991,23 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 </style>
 </head>
 <body>
+<!-- Section icons (see lib/ui-shell.js splitTabLabel and the mobile nav). -->
+<svg class="icon-sprite" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+  <symbol id="i-today" viewBox="0 0 24 24"><path d="M3.5 18c2.8-1.5 5.7-1.5 8.5 0 2.8-1.5 5.7-1.5 8.5 0v-6.5c-2.8-1.5-5.7-1.5-8.5 0-2.8-1.5-5.7-1.5-8.5 0z"/><path d="M12 11.5V18"/><path d="M8.6 8.4a3.4 3.4 0 0 1 6.8 0"/></symbol>
+  <symbol id="i-command" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></symbol>
+  <symbol id="i-evidence" viewBox="0 0 24 24"><rect x="4.5" y="3.5" width="11.5" height="14" rx="2"/><path d="M8 21h8.5a2 2 0 0 0 2-2V7.5"/><path d="M7.8 10.6l2 2 3.6-4.2"/></symbol>
+  <symbol id="i-timeline" viewBox="0 0 24 24"><path d="M6 3.5v17"/><circle cx="6" cy="7" r="1.9"/><circle cx="6" cy="12" r="1.9"/><circle cx="6" cy="17" r="1.9"/><path d="M10.5 7H20M10.5 12H17M10.5 17H19"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="4.5" rx="1.2"/><path d="M5 8.5v9.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5"/><path d="M10 12.5h4"/></symbol>
+  <symbol id="i-trends" viewBox="0 0 24 24"><path d="M4 4v16h16"/><path d="M7.5 15l3.5-4 3 3 5-6.5"/><path d="M15.5 7.5H19V11"/></symbol>
+  <symbol id="i-research" viewBox="0 0 24 24"><path d="M12.5 3.5H6.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h4"/><path d="M8 8h5.5M8 11.5h3"/><circle cx="16" cy="15" r="3.6"/><path d="M18.7 17.7L21 20"/></symbol>
+  <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.2"/><path d="M12 12l6-6"/><circle cx="15.2" cy="14.6" r="1.1"/></symbol>
+  <symbol id="i-journal" viewBox="0 0 24 24"><path d="M6.5 3.5h11a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5h-11z"/><path d="M6.5 3.5v17M4.5 7.5h2M4.5 12h2M4.5 16.5h2"/><path d="M11 3.5v6.5l2-1.5 2 1.5V3.5"/></symbol>
+  <symbol id="i-pse" viewBox="0 0 24 24"><path d="M6 4v16M12 6v13M18 3.5v15"/><rect x="4" y="8" width="4" height="6.5" rx="1"/><rect x="10" y="11" width="4" height="4.5" rx="1"/><rect x="16" y="6" width="4" height="8" rx="1"/></symbol>
+  <symbol id="i-miro" viewBox="0 0 24 24"><path d="M3.5 16.5a8.5 8.5 0 0 1 17 0"/><path d="M12 16.5l4.2-5.2"/><circle cx="12" cy="16.5" r="1.3"/><path d="M3.5 20h17"/></symbol>
+  <symbol id="i-sports" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5v17"/><path d="M6 6c3 2.6 3 9.4 0 12M18 6c-3 2.6-3 9.4 0 12"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.4a2.4 2.4 0 1 1 3.3 2.2c-.6.3-1 .8-1 1.5v.5"/><path d="M12 16.6v.1"/></symbol>
+  <symbol id="i-decisions" viewBox="0 0 24 24"><path d="M12 21v-7"/><path d="M12 14L6.5 8.5M12 14l5.5-5.5"/><path d="M6 4.5V9h4.5M18 4.5V9h-4.5"/></symbol>
+</defs></svg>
 
 <!-- AUTH GATE -->
 <div class="auth-overlay" id="auth-overlay">
@@ -2852,20 +2870,20 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
-  <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon">📰</span>TODAY</button>
-  <button class="mob-tab" id="mob-command" onclick="switchPageMobile('command',this)"><span class="mob-tab-icon">◎</span>CMD</button>
-  <button class="mob-tab" id="mob-evidence" onclick="switchPageMobile('evidence',this)"><span class="mob-tab-icon">▣</span>EVID</button>
-  <button class="mob-tab" id="mob-timeline" onclick="switchPageMobile('timeline',this)"><span class="mob-tab-icon">◷</span>TIME</button>
-  <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon">📁</span>HISTORY</button>
-  <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon">📈</span>TRENDS</button>
-  <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon">🔬</span>RSRCH</button>
-  <button class="mob-tab" id="mob-radar" onclick="switchPageMobile('radar',this)"><span class="mob-tab-icon">📡</span>RADAR</button>
-  <button class="mob-tab" id="mob-journal" onclick="switchPageMobile('journal',this)"><span class="mob-tab-icon">📓</span>JOURNAL</button>
-  <button class="mob-tab" id="mob-decisions" onclick="switchPageMobile('decisions',this)"><span class="mob-tab-icon">◇</span>CALLS</button>
-  <button class="mob-tab" id="mob-pse" onclick="switchPageMobile('pse',this)"><span class="mob-tab-icon">🇵🇭</span>PSE</button>
-  <button class="mob-tab" id="mob-miro" onclick="switchPageMobile('miro',this)"><span class="mob-tab-icon">🎲</span>MKTS</button>
-  <button class="mob-tab" id="mob-sports" onclick="switchPageMobile('sports',this)"><span class="mob-tab-icon">⚽</span>SPORT</button>
-  <button class="mob-tab" id="mob-help" onclick="switchPageMobile('help',this)"><span class="mob-tab-icon">❔</span>HELP</button>
+  <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-today"/></svg></span>TODAY</button>
+  <button class="mob-tab" id="mob-command" onclick="switchPageMobile('command',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-command"/></svg></span>CMD</button>
+  <button class="mob-tab" id="mob-evidence" onclick="switchPageMobile('evidence',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-evidence"/></svg></span>EVID</button>
+  <button class="mob-tab" id="mob-timeline" onclick="switchPageMobile('timeline',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-timeline"/></svg></span>TIME</button>
+  <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-history"/></svg></span>HISTORY</button>
+  <button class="mob-tab" id="mob-trends" onclick="switchPageMobile('trends',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-trends"/></svg></span>TRENDS</button>
+  <button class="mob-tab" id="mob-research" onclick="switchPageMobile('research',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-research"/></svg></span>RSRCH</button>
+  <button class="mob-tab" id="mob-radar" onclick="switchPageMobile('radar',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-radar"/></svg></span>RADAR</button>
+  <button class="mob-tab" id="mob-journal" onclick="switchPageMobile('journal',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-journal"/></svg></span>JOURNAL</button>
+  <button class="mob-tab" id="mob-decisions" onclick="switchPageMobile('decisions',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-decisions"/></svg></span>CALLS</button>
+  <button class="mob-tab" id="mob-pse" onclick="switchPageMobile('pse',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-pse"/></svg></span>PSE</button>
+  <button class="mob-tab" id="mob-miro" onclick="switchPageMobile('miro',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-miro"/></svg></span>MKTS</button>
+  <button class="mob-tab" id="mob-sports" onclick="switchPageMobile('sports',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-sports"/></svg></span>SPORT</button>
+  <button class="mob-tab" id="mob-help" onclick="switchPageMobile('help',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-help"/></svg></span>HELP</button>
 </div>
 
 <script>
