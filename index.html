@@ -2920,7 +2920,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-evidence"/></svg> Evidence — what you save</div>
       <ul>
-        <li><b>Your accounts</b> — the insurers you work for, the utilities, road authorities and telcos whose claims you assess, and the firms that instruct you. It starts as a list drawn from your recent files; <b>Edit</b> it (one per line: <b>Name | other names</b>) or go back to the starter list. Each shows how many stories named it in the last 30 days, with <b>Brief</b> and <b>Timeline</b>. The Morning 5 says which were in today's briefing.</li>
+        <li><b>Your accounts</b> — the insurers you work for, the utilities, road authorities and telcos whose claims you assess, and the firms that instruct you. It starts as a list drawn from your recent files; <b>Edit</b> it (one per line: <b>Name | other names</b>, and optionally <b>| utility</b>, <b>| insurer</b>, <b>| law</b> and so on to set its group; a new name is grouped by its words) or go back to the starter list. Each shows how many stories named it in the last 30 days, with <b>Brief</b> and <b>Timeline</b>. The Morning 5 says which were in today's briefing.</li>
         <li><b>Saved dossiers, ahas and meeting briefs</b> read as documents: the summary, then labelled parts (how it came about, the numbers, the BI angle, questions, sources as links). Long ones open folded; <b>Show all</b> opens the rest.</li>
         <li><b>Open source</b> takes you to where it came from: a story's card in its briefing (older briefings too), highlighted, with a saved dossier opened under it; a meeting brief back in its panel. <b>← Back to Evidence</b> returns you and puts today's briefing back. If that briefing was deleted, it says so, and the copy saved here is what remains.</li>
         <li><b>Source ↗</b> opens the original article. <b>Open as decision</b> starts a journal draft from the item; nothing is saved until you tap <b>Save decision</b>.</li>
@@ -3857,7 +3857,24 @@ function renderEvidencePage() {
 // that names one gets a badge on its card, the Morning 5 says which were in
 // today's briefing, and the briefing is told them so it looks for news on them.
 var _accounts = null, _accountsFor = null, _callsCache = null, _callsLoading = false;
-var ACCOUNT_KIND_LABELS = {insurer:'Insurers', utility:'Utilities', road:'Road authorities', telco:'Telcos', law:'Law firms', client:'Clients', other:'Others'};
+var ACCOUNT_KIND_LABELS = {insurer:'Insurers', broker:'Brokers & adjusters', utility:'Utilities', road:'Road authorities', telco:'Telcos', law:'Law firms', client:'Clients', other:'Others'};
+// Words he can put in the third field of a line to set its group.
+var ACCOUNT_KIND_WORDS = {insurer:'insurer', insurers:'insurer', insurance:'insurer', broker:'broker', brokers:'broker', adjuster:'broker', adjusters:'broker',
+  utility:'utility', utilities:'utility', road:'road', roads:'road', 'road authority':'road', 'road authorities':'road', telco:'telco', telcos:'telco',
+  law:'law', 'law firm':'law', 'law firms':'law', lawyers:'law', client:'client', clients:'client', other:'other', others:'other'};
+// A new name's group, guessed from its words; "other" when nothing fits.
+// A name he has already grouped keeps its group, and the third field wins.
+function guessAccountKind(a) {
+  var t = [a && a.name].concat((a && a.aliases) || []).join(' ');
+  if (/\b(brokers?|brokerage|gallagher|marsh|aon|willis|adjust\w*|sedgwick|crawford|mclarens)\b/i.test(t)) return 'broker';
+  if (/\b(power|energy|networks?|grid|electric\w*|water|gas|utilit\w*)\b/i.test(t)) return 'utility';
+  if (/\b(roads|main roads|transport for|department (of|for) (transport|infrastructure)|council|vicroads|motorways?|highways)\b/i.test(t)) return 'road';
+  if (/\b(telstra|optus|nbn|vodafone|tpg|telecom\w*|telco|fibre)\b/i.test(t)) return 'telco';
+  if (/\b(lawyers?|legal|solicitors?|law firm)\b/i.test(t)) return 'law';
+  if (/\b(insurance|insurer|assurance|underwriting|chubb|allianz|qbe|iag|suncorp|zurich|aig|hollard|youi|nrma|racv|racq|raa|rac|gio|aami|cgu|vero)\b/i.test(t)) return 'insurer';
+  return 'other';
+}
+function accountKind(a) { return a && a.kind && a.kind !== 'other' ? a.kind : guessAccountKind(a); }
 function activeAccounts() {
   return _accounts && _accounts.length ? _accounts : ((window.BriefingPromptCore && window.BriefingPromptCore.DEFAULT_ACCOUNTS) || []);
 }
@@ -3934,7 +3951,7 @@ function renderAccountsPanel() {
   // The accounts in the news lately get a row each; the rest fold away as
   // small buttons, so a long list does not push the meeting brief off screen.
   var live = accounts.filter(function(a) { return counts[a.name]; }).sort(function(a, b) { return counts[b.name] - counts[a.name]; });
-  accounts.forEach(function(a) { (groups[a.kind] = groups[a.kind] || []).push(a); });
+  accounts.forEach(function(a) { var kind = accountKind(a); (groups[kind] = groups[kind] || []).push(a); });
   var rows = live.length ? '<div class="acct-group-label">In your briefings, last 30 days</div>' + live.map(function(a) {
     var n = counts[a.name];
     return '<div class="acct-row"><span class="acct-name">' + esc(a.name) + '</span><span class="acct-count">' + n + (n === 1 ? ' story' : ' stories') + '</span>' +
@@ -3956,7 +3973,9 @@ function accountsFromText(value, previous) {
   (previous || []).forEach(function(a) { kinds[a.name.toLowerCase()] = a.kind; });
   return window.BriefingPromptCore.cleanAccounts(String(value || '').split(/\n+/).map(function(line) {
     var parts = line.split('|'), name = String(parts[0] || '').trim();
-    return {name: name, aliases: String(parts[1] || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean), kind: kinds[name.toLowerCase()] || 'other'};
+    var aliases = String(parts[1] || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+    var said = ACCOUNT_KIND_WORDS[String(parts[2] || '').trim().toLowerCase()], kept = kinds[name.toLowerCase()];
+    return {name: name, aliases: aliases, kind: said || (kept && kept !== 'other' ? kept : guessAccountKind({name: name, aliases: aliases}))};
   }));
 }
 function editAccounts() {
@@ -3964,7 +3983,7 @@ function editAccounts() {
   if (!editor) return;
   if (!window._firebaseUid) { if (status) status.textContent = 'Sign in to keep your own list.'; return; }
   editor.hidden = false;
-  editor.innerHTML = '<label class="acct-edit-label" for="accounts-text">One per line: <b>Name | other names, comma separated</b></label><textarea id="accounts-text" rows="10" spellcheck="false"></textarea>' +
+  editor.innerHTML = '<label class="acct-edit-label" for="accounts-text">One per line: <b>Name | other names, comma separated</b>. To set its group, add a third part: <b>Western Power | Horizon Power | utility</b> (insurer, broker, utility, road, telco, law, client).</label><textarea id="accounts-text" rows="10" spellcheck="false"></textarea>' +
     '<div class="meeting-form"><button type="button" class="tool-chip" onclick="saveAccounts()">Save list</button><button type="button" class="tool-chip" onclick="saveAccounts(true)">Use the starter list</button><button type="button" class="tool-chip" onclick="document.getElementById(\'accounts-editor\').hidden=true">Cancel</button></div>';
   document.getElementById('accounts-text').value = accountsToText(activeAccounts());
 }

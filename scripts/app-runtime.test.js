@@ -541,11 +541,19 @@ test('stories that name an account or an open call get badges; the rest get none
 });
 test('the accounts list edits as one line per account, keeping each kind',()=>{
   const core=promptCore();
-  const {context}=environment(['accountsToText','accountsFromText'],{BriefingPromptCore:core});
+  const {context}=environment(['accountsToText','accountsFromText','guessAccountKind','accountKind'],{BriefingPromptCore:core,
+    ACCOUNT_KIND_WORDS:{utility:'utility',utilities:'utility',law:'law',client:'client',insurer:'insurer',broker:'broker',other:'other'}});
   const text=context.accountsToText([{name:'QBE',aliases:['QBE Insurance'],kind:'insurer'},{name:'Optus',aliases:[],kind:'telco'}]);
   assert.equal(text,'QBE | QBE Insurance\nOptus');
   const back=context.accountsFromText('QBE | QBE Insurance, QBE AU\nOptus\n\nCebu Cold Chain Co | CCC',[{name:'QBE',aliases:[],kind:'insurer'},{name:'Optus',aliases:[],kind:'telco'}]);
   assert.deepEqual([...back.map(a=>a.name+'/'+a.kind+'/'+a.aliases.join(','))],['QBE/insurer/QBE Insurance,QBE AU','Optus/telco/','Cebu Cold Chain Co/other/CCC']);
+  // A new name is grouped by its words; the third part sets it; a grouped name keeps its group.
+  const more=context.accountsFromText('Western Power\nChubb\nGallagher | Arthur J. Gallagher\nDouglas Transport Pty Ltd\nKMF Haulage | | client\nAusgrid\nHall & Wilcox | | law',[{name:'Ausgrid',aliases:[],kind:'utility'}]);
+  assert.deepEqual([...more.map(a=>a.name+'/'+a.kind)],['Western Power/utility','Chubb/insurer','Gallagher/broker','Douglas Transport Pty Ltd/other','KMF Haulage/client','Ausgrid/utility','Hall & Wilcox/law'],
+    'a transport operator is not mistaken for a road authority');
+  assert.equal(context.accountKind({name:'Western Power',aliases:[],kind:'other'}),'utility','a name saved under Others shows in its group without re-saving');
+  assert.equal(context.accountKind({name:'Transport for NSW',aliases:[],kind:'road'}),'road');
+  assert.equal(context.guessAccountKind({name:'SA DIT',aliases:['Department for Infrastructure and Transport']}),'road','aliases count');
 });
 
 // Meeting brief: his own material on a topic, gathered from the search index,
