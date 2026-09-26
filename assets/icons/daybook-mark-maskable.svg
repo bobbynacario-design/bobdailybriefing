@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Daybook">
+  <!-- Full bleed: Android and iOS apply their own mask. The mark stays inside
+       the 80% safe circle (farthest point 192 of 205 from the centre). -->
+  <rect width="512" height="512" fill="#080A0E"/>
+  <circle cx="256" cy="226" r="80" fill="#F4B860"/>
+  <path d="M256 264C208 234 146 230 92 248V356C146 338 208 342 256 372Z" fill="#C9A84C"/>
+  <path d="M256 264C304 234 366 230 420 248V356C366 338 304 342 256 372Z" fill="#E2C57A"/>
+  <path d="M256 264V372" stroke="#080A0E" stroke-width="10"/>
+</svg>
