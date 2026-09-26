@@ -15,8 +15,9 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 - **Aha actions** — **Save insight** opens the Evidence picker with a snapshot of
   the interpretation, sources and “Wrong if” condition. **Write my take** opens
   the daily reflection without truncating an existing note. **Check this later**
-  lets you choose a review date and creates an experiment with its source context.
-  These reviews appear in the app; they do not add push notifications.
+  puts the “Wrong if” condition in **⏰ To check** on the date you choose, linked to
+  a story the read is built on, so it comes back that day and in the Morning 5
+  push, and never uses up the day’s one experiment (`addDailyBoostCheck`).
 
 - **Personal daily practice** — choose motivation, clarity, curiosity, calm, or
   a challenge to select a fitting spark. Save favourites and filter the library

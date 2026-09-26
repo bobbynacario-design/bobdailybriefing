@@ -2682,7 +2682,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="help-card">
       <div class="help-h">📰 Reading the briefing</div>
       <ul>
-        <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose.</li>
+        <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b>⏰ To check</b> on the day you choose.</li>
         <li><span class="help-pill" style="color:var(--blue)">New</span> — not in the previous briefing. <span class="help-pill">Day 3</span> — its third briefing in a row (hover for the dates). Matched by link or wording, since running stories are reworded daily.</li>
         <li><b>The progress line</b> counts what you have read, with <b>Next unread ↓</b> taking you to the most relevant story left. A story counts as read when you open its source, note it, or tap <b>Mark read</b>.</li>
         <li><b>Source chip</b> — <span class="help-pill" style="color:var(--green)">Source matched</span> came from the fetched news feed; <span class="help-pill" style="color:var(--green)">Link verified</span> is a page the AI's search really returned; <span class="help-pill">Unverified source</span> has no checked link.</li>
@@ -8317,7 +8317,7 @@ function ahaHtml(aha) {
   if ((aha.chain || []).length) html += '<ol class="aha-chain">' + aha.chain.map(function(step) { return '<li>' + esc(step) + '</li>'; }).join('') + '</ol>';
   if ((aha.links || []).length) html += '<div class="aha-links"><span>Built on</span>' + aha.links.map(function(link, index) { return '<button type="button" class="card-act" data-aha-link="' + index + '" title="Jump to this story">↓ ' + esc(link) + '</button>'; }).join('') + '</div>';
   if (aha.wrong_if) html += '<div class="aha-wrong"><strong>Wrong if:</strong> ' + esc(aha.wrong_if) + '</div>';
-  html += '<div class="card-actions"><button class="card-act" data-aha-act="save">Save insight</button><button class="card-act" data-aha-act="note">Write my take</button><button class="card-act" data-aha-act="check">Check this later</button></div><div id="aha-review" hidden><label>Revisit on <input id="aha-review-date" type="date"></label><button class="card-act" data-aha-act="confirm-check">Save check</button></div><p id="aha-action-status" class="boost-kicker" role="status"></p>';
+  html += '<div class="card-actions"><button class="card-act" data-aha-act="save">Save insight</button><button class="card-act" data-aha-act="note">Write my take</button><button class="card-act" data-aha-act="check">Check this later</button></div><div id="aha-review" hidden><label>Check on <input id="aha-review-date" type="date"></label><button class="card-act" data-aha-act="confirm-check">Add to ⏰ To check</button></div><p id="aha-action-status" class="boost-kicker" role="status"></p>';
   return html + '</div></div>';
 }
 function ahaSnapshot(data) {
@@ -8346,8 +8346,12 @@ function handleAhaAction(action) {
     var date = document.getElementById('aha-review-date'); date.min = today;
     date.value = new Date(Date.parse(today + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10); date.focus();
   } else if (action === 'confirm-check') {
+    // A dated check in ⏰ To check (it comes back that day and in the Morning 5),
+    // not an experiment: those are one a day, and this one should not use it up.
+    // Its source link is the first story the read is built on.
     var due = document.getElementById('aha-review-date').value;
-    var result = window.createDailyBoostExperiment && window.createDailyBoostExperiment(aha.wrong_if ? 'Check whether: ' + aha.wrong_if : 'Revisit: ' + aha.title,due,ahaSnapshot(_currentData));
+    var built = getAllStories(_currentData).map(function(item) { return item.story; }).filter(function(st) { return (aha.links || []).indexOf(st.headline) >= 0 && /^https?:\/\//i.test(st.url || ''); })[0];
+    var result = window.addDailyBoostCheck && window.addDailyBoostCheck({metric:aha.wrong_if ? 'Check whether: ' + aha.wrong_if : 'Revisit: ' + aha.title, headline:aha.title, source:'Today’s aha · ' + _currentData.date, url:built ? built.url : '', due:due});
     status.textContent = result ? result.message : 'Sign in to save a check.';
     if (result && result.ok) document.getElementById('aha-review').hidden = true;
   }
