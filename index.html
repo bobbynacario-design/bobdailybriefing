@@ -3068,7 +3068,7 @@ function clearPrivateSession() {
   setText('hero-date','Sign in to read your briefing');
   setText('hero-timestamp','');
   setText('grounding-line','');
-  var back = document.getElementById('return-command'); if (back) back.remove();
+  ['return-command','return-evidence'].forEach(function(id) { var back = document.getElementById(id); if (back) back.remove(); });
   ['command-review-today','command-review-week','auto-load-banner','priority-list','evidence-picker-list'].forEach(function(id) { setText(id,''); });
   document.querySelectorAll('.page input,.page textarea').forEach(function(el) { el.value = ''; });
   document.querySelectorAll('.page [id$="-out"],#command-five,#command-queue,#evidence-set-list,#evidence-set-detail,#intel-search-results').forEach(function(el) { el.textContent = 'Sign in to load your data.'; });
@@ -3953,6 +3953,18 @@ function evidenceBriefingTarget(item) {
   return {title:String(item && item.title || '').replace(/^Dossier:\s*/, ''), commandId:byPosition ? 'briefing-' + section + '-' + index : '',
     section:section, index:index, dossier:dossier};
 }
+// Opening a saved item can put an older briefing on Today. A button brings Bob
+// back to Evidence and puts back the briefing that was showing before.
+function offerReturnToEvidence(restoreKey) {
+  var back = document.getElementById('return-evidence');
+  if (!back) { back = document.createElement('button'); back.id = 'return-evidence'; back.type = 'button'; back.className = 'return-to-source'; document.body.appendChild(back); }
+  back.textContent = '← Back to Evidence';
+  back.onclick = function() {
+    back.remove();
+    if (restoreKey && (window._briefingHistory || []).some(function(entry) { return entry.key === restoreKey; })) loadBriefing(restoreKey);
+    switchPage('evidence', document.querySelector('.ntab[data-page="evidence"]'));
+  };
+}
 // Opens the dossier under its card, but only a saved one: this never starts a
 // new (paid) build. Without a saved copy the card stays highlighted.
 async function openSavedDossierOn(target) {
@@ -3972,12 +3984,16 @@ async function openEvidenceItem(setEncoded,keyEncoded) {
     if (!archived && window.fbLoadBriefingByKey) archived = await window.fbLoadBriefingByKey(item.ref);
     if (archived) {
       if (!(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
+      var before = _currentData ? currentBriefingKey() : '';
       loadBriefing(item.ref);
+      offerReturnToEvidence(before !== item.ref ? before : '');
       var target = evidenceBriefingTarget(item);
       if (!highlightSourceTitle(target.title,'today',target.commandId)) { showToast('Opened that briefing, but this story is no longer in it.','info'); return; }
       if (target.dossier) openSavedDossierOn(target);
       return;
     }
+    showToast('That briefing is no longer in your archive. The copy saved here is what remains.','info');
+    return;
   }
   if (item.source === 'Research') {
     if (!getReportById(item.ref) && window.fbLoadReports) window._reportFeed = await window.fbLoadReports();
