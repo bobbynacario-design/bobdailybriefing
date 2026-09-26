@@ -300,3 +300,32 @@ test('J and K move through the stories, O opens the source, M marks read, typing
   context._kbCard=null; press('k'); assert.equal(context._kbCard.name,'second','K starts from the bottom');
   press('o'); assert.equal(clicks.length,3);
 });
+// Display: Auto follows the device, a saved Light/Dark choice wins, text size
+// steps 90-125% and is written to the page zoom variable, all kept on the device.
+test('display settings: Auto follows the device, Light and Dark stick, text size steps within bounds', () => {
+  const store=new Map(), classes=new Set(), vars={}, attrs={};
+  const el=id=>({id,textContent:'',title:'',disabled:false,setAttribute:(a,v)=>{attrs[id+':'+a]=v;}});
+  const nodes={'theme-btn':el('theme-btn'),'text-size-label':el('text-size-label'),'text-smaller':el('text-smaller'),'text-larger':el('text-larger')};
+  const options=['auto','light','dark'].map(choice=>({getAttribute:()=>choice,setAttribute:(a,v)=>{attrs['opt-'+choice]=v;}}));
+  const system={matches:false};
+  const {context}=environment(['displayRead','displayWrite','themeChoice','textSize','applyDisplay','setTheme','stepTextSize','applyThemeChrome','toggleTheme'],{
+    THEME_KEY:'briefing_theme',SIZE_KEY:'briefing_text_size',TEXT_SIZES:[0.9,1,1.1,1.25],systemLight:system,
+    localStorage:{getItem:k=>store.has(k)?store.get(k):null,setItem:(k,v)=>store.set(k,String(v)),removeItem:k=>store.delete(k)}});
+  Object.assign(context.document,{body:{classList:{toggle:(c,on)=>{on?classes.add(c):classes.delete(c);},contains:c=>classes.has(c)}},
+    documentElement:{style:{setProperty:(k,v)=>{vars[k]=v;}}},querySelector:()=>null,querySelectorAll:()=>options,getElementById:id=>nodes[id]||null});
+  context.applyDisplay();
+  assert.equal(classes.has('light'),false,'Auto on a dark device'); assert.equal(nodes['theme-btn'].textContent,'🌓'); assert.equal(attrs['opt-auto'],'true');
+  system.matches=true; context.applyDisplay();
+  assert.equal(classes.has('light'),true,'Auto follows the device to light');
+  context.setTheme('dark'); assert.equal(classes.has('light'),false); assert.equal(store.get('briefing_theme'),'dark'); assert.equal(nodes['theme-btn'].textContent,'🌙');
+  context.setTheme('auto'); assert.equal(store.has('briefing_theme'),false,'Auto is the default, nothing stored');
+  store.set('briefing_theme','light'); context.applyDisplay(); assert.equal(nodes['theme-btn'].textContent,'☀️','a choice made with the old toggle is kept');
+  context.toggleTheme(); assert.equal(store.get('briefing_theme'),'dark','the old toggle still works');
+  assert.equal(vars['--reading-zoom'],'1');
+  context.stepTextSize(1); context.stepTextSize(1); context.stepTextSize(1);
+  assert.equal(vars['--reading-zoom'],'1.25'); assert.equal(nodes['text-size-label'].textContent,'125%'); assert.equal(nodes['text-larger'].disabled,true);
+  context.stepTextSize(-1); context.stepTextSize(-1); context.stepTextSize(-1); context.stepTextSize(-1);
+  assert.equal(vars['--reading-zoom'],'0.9'); assert.equal(nodes['text-smaller'].disabled,true);
+  context.stepTextSize(1); assert.equal(store.has('briefing_text_size'),false,'100% stores nothing');
+  store.set('briefing_text_size','3'); context.applyDisplay(); assert.equal(vars['--reading-zoom'],'1','an odd stored value falls back to 100%');
+});

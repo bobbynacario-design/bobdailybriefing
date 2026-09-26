@@ -910,6 +910,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .nav-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
 .install-btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;font-family:var(--mono);font-size:10px;padding:.35rem .8rem;border-radius:6px;border:1px solid rgba(201,168,76,.35);background:var(--gold-dim);color:var(--gold);cursor:pointer;transition:all .15s;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
 .install-btn:hover{background:var(--gold);color:var(--bg)}
+.page{zoom:var(--reading-zoom,1)}
+.display-menu{position:fixed;z-index:120;min-width:240px;padding:.8rem .9rem;border:1px solid var(--line);border-radius:12px;background:var(--bg2);box-shadow:0 12px 32px rgba(0,0,0,.28)}.display-menu[hidden]{display:none}.display-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin:.25rem 0 .55rem}.display-label{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}.display-seg{display:flex;align-items:center;gap:.3rem}.display-seg button{font-family:var(--mono);font-size:11px;padding:.3rem .55rem;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--txt2);cursor:pointer}.display-seg button:hover{color:var(--txt)}.display-seg button[aria-pressed="true"]{border-color:var(--gold);background:var(--gold-dim);color:var(--txt)}.display-seg button:disabled{opacity:.4;cursor:default}.display-size{min-width:3.2em;text-align:center;font-family:var(--mono);font-size:11px;color:var(--txt)}.display-note{margin:.2rem 0 0;font-size:11px;color:var(--txt3)}
 .theme-btn{background:transparent;border:1px solid var(--rim2);border-radius:6px;padding:.35rem .6rem;cursor:pointer;font-size:14px;transition:all .15s}
 .theme-btn:hover{border-color:var(--gold);background:var(--gold-dim)}
 
@@ -2029,7 +2031,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="nav-clock" id="nav-clock">--:--</div>
     <div id="sync-status">○ Loading...</div>
     <button class="lock-btn unlocked" id="lock-btn" onclick="lockSession()" title="Lock session">🔓</button>
-    <button class="theme-btn" id="theme-btn" aria-label="Toggle color theme" onclick="toggleTheme()">🌙</button>
+    <button class="theme-btn" id="theme-btn" aria-label="Display: theme and text size" aria-haspopup="true" aria-expanded="false" aria-controls="display-menu" onclick="toggleDisplayMenu()">🌓</button>
     <button class="nav-btn" id="intel-search-open" onclick="openIntelligenceSearch()" title="Search all intelligence (Ctrl+K)">⌕ Search</button>
     <button class="install-btn" id="install-app-btn" onclick="installBriefingApp()" title="Install Daybook as a desktop app">INSTALL APP</button>
 
@@ -2180,6 +2182,11 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   <div class="radar-disclaimer">Only matching stored records are shown. Missing dates are gaps in the archive, not evidence that nothing happened; no continuity or causality is inferred between entries.</div>
 </div>
 
+<div class="display-menu" id="display-menu" hidden role="group" aria-label="Display settings">
+  <div class="display-row"><span class="display-label">Theme</span><div class="display-seg" role="group" aria-label="Theme"><button type="button" data-theme-choice="auto" aria-pressed="false" title="Follow your device’s light or dark setting">Auto</button><button type="button" data-theme-choice="light" aria-pressed="false">Light</button><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div></div>
+  <div class="display-row"><span class="display-label">Text size</span><div class="display-seg" role="group" aria-label="Text size"><button type="button" id="text-smaller" aria-label="Smaller text" onclick="stepTextSize(-1)">A−</button><span class="display-size" id="text-size-label" aria-live="polite">100%</span><button type="button" id="text-larger" aria-label="Larger text" onclick="stepTextSize(1)">A+</button></div></div>
+  <p class="display-note">Kept on this device.</p>
+</div>
 <div class="page active" id="page-today">
 
   <section class="start-here" id="boost-start" hidden aria-live="polite" aria-label="Start here"><div class="start-here-text"><div class="boost-kicker" id="boost-start-kicker">Start here</div><div class="start-here-main" id="boost-start-main"></div><div class="start-here-then" id="boost-start-then"></div></div><div class="start-here-actions"><button type="button" class="btn-sec" id="boost-start-go">Start ↓</button><button type="button" class="tool-chip" id="boost-start-skip" title="Show the next thing instead, for this visit">Not now</button></div></section>
@@ -2734,6 +2741,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li><b>N</b> — jump to today's note. <b>D</b> — mark the quest done (or undo). <b>T</b> — tuck the spark away, or open it again.</li>
         <li><b>J</b> / <b>K</b> — next and previous story in the briefing. <b>O</b> — open its source. <b>M</b> — mark it read (or unread). <b>U</b> — jump to the next unread story.</li>
         <li><b>Ctrl+K</b> (<b>⌘K</b> on a Mac) — search everything.</li>
+        <li>The <b>🌓</b> button at the top opens <b>Display</b>: theme <b>Auto</b> (follows your device), <b>Light</b> or <b>Dark</b>, and text size <b>A−</b> / <b>A+</b> (90%–125%). Both are kept on this device.</li>
         <li>These keys do nothing while you are typing, with Ctrl/⌘/Alt held, or with search open.</li>
       </ul>
     </div>
@@ -3133,17 +3141,72 @@ function applyThemeChrome(light) {
   var meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', light ? '#F0EDE6' : '#080A0E');
 }
-function toggleTheme() {
-  var light = document.body.classList.toggle('light');
-  document.getElementById('theme-btn').textContent = light ? '☀️' : '🌙';
-  localStorage.setItem('briefing_theme', light?'light':'dark');
+// ── Display: theme and text size, kept on this device ──
+// Theme is Auto (follows the device's light or dark setting, and changes with
+// it), Light or Dark; a choice made with the old toggle is kept as it was. Text
+// size scales each page's content with CSS zoom, because the app's type is set
+// in px and a root font size would move nothing; the header stays as it is.
+var THEME_KEY = 'briefing_theme', SIZE_KEY = 'briefing_text_size', TEXT_SIZES = [0.9, 1, 1.1, 1.25];
+var systemLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+function displayRead(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function displayWrite(key, value) { try { if (value == null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch (e) {} }
+function themeChoice() { var value = displayRead(THEME_KEY); return value === 'light' || value === 'dark' ? value : 'auto'; }
+function textSize() { var value = Number(displayRead(SIZE_KEY)); return TEXT_SIZES.indexOf(value) >= 0 ? value : 1; }
+function applyDisplay() {
+  var choice = themeChoice(), light = choice === 'light' || (choice === 'auto' && !!(systemLight && systemLight.matches)), size = textSize();
+  document.body.classList.toggle('light', light);
   applyThemeChrome(light);
+  document.documentElement.style.setProperty('--reading-zoom', String(size));
+  var button = document.getElementById('theme-btn');
+  if (button) {
+    button.textContent = choice === 'auto' ? '🌓' : light ? '☀️' : '🌙';
+    button.title = 'Display · ' + (choice === 'auto' ? 'theme follows your device (' + (light ? 'light' : 'dark') + ' now)' : (light ? 'light' : 'dark') + ' theme') + ' · text ' + Math.round(size * 100) + '%';
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-theme-choice]'), function(option) { option.setAttribute('aria-pressed', String(option.getAttribute('data-theme-choice') === choice)); });
+  var label = document.getElementById('text-size-label'), smaller = document.getElementById('text-smaller'), larger = document.getElementById('text-larger');
+  if (label) label.textContent = Math.round(size * 100) + '%';
+  if (smaller) smaller.disabled = size === TEXT_SIZES[0];
+  if (larger) larger.disabled = size === TEXT_SIZES[TEXT_SIZES.length - 1];
 }
-if (localStorage.getItem('briefing_theme')==='light') {
-  document.body.classList.add('light');
-  document.getElementById('theme-btn').textContent = '☀️';
+function setTheme(choice) { displayWrite(THEME_KEY, choice === 'light' || choice === 'dark' ? choice : null); applyDisplay(); }
+function stepTextSize(direction) {
+  var at = TEXT_SIZES.indexOf(textSize()), next = TEXT_SIZES[Math.max(0, Math.min(TEXT_SIZES.length - 1, at + direction))];
+  displayWrite(SIZE_KEY, next === 1 ? null : String(next)); applyDisplay();
 }
-applyThemeChrome(document.body.classList.contains('light'));
+// Kept for anything still calling the old two-way toggle.
+function toggleTheme() { setTheme(document.body.classList.contains('light') ? 'dark' : 'light'); }
+function toggleDisplayMenu(force) {
+  var menu = document.getElementById('display-menu'), button = document.getElementById('theme-btn');
+  if (!menu || !button) return;
+  var open = typeof force === 'boolean' ? force : menu.hidden;
+  menu.hidden = !open; button.setAttribute('aria-expanded', String(open));
+  if (open) {
+    // Under the button, right-aligned to it where there is room, and never past
+    // either edge (on a phone the header wraps and the button sits on the left).
+    var box = button.getBoundingClientRect(), width = menu.offsetWidth || 240;
+    menu.style.top = Math.round(box.bottom + 8) + 'px';
+    menu.style.right = 'auto';
+    menu.style.left = Math.round(Math.max(16, Math.min(box.right - width, window.innerWidth - width - 16))) + 'px';
+    var current = menu.querySelector('[aria-pressed="true"]') || menu.querySelector('button');
+    if (current) current.focus();
+  }
+}
+document.addEventListener('click', function(event) {
+  var choice = event.target && event.target.closest ? event.target.closest('[data-theme-choice]') : null;
+  if (choice) { setTheme(choice.getAttribute('data-theme-choice')); return; }
+  var menu = document.getElementById('display-menu');
+  if (menu && !menu.hidden && !menu.contains(event.target) && !event.target.closest('#theme-btn')) toggleDisplayMenu(false);
+});
+document.addEventListener('keydown', function(event) {
+  var menu = document.getElementById('display-menu');
+  if (event.key === 'Escape' && menu && !menu.hidden) { toggleDisplayMenu(false); document.getElementById('theme-btn').focus(); }
+});
+if (systemLight) {
+  var onSystemTheme = function() { if (themeChoice() === 'auto') applyDisplay(); };
+  if (systemLight.addEventListener) systemLight.addEventListener('change', onSystemTheme);
+  else if (systemLight.addListener) systemLight.addListener(onSystemTheme);
+}
+applyDisplay();
 
 // ── PAGE SWITCHING ──
 function switchPage(id, el) {

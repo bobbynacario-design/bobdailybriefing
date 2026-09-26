@@ -316,6 +316,12 @@ actually runs. The generated briefing is shaped by four things beyond it:
   in `briefing.links`. Insurance stays closed to the snapshot on a grounded day.
   Kept links open from the card's source chip ("Source matched" for the news
   feed, "Link verified" for a search result).
+- **Display** — the 🌓 button opens a small menu: theme **Auto** (follows the
+  device’s light or dark setting, live), **Light** or **Dark**, and text size **A−** /
+  **A+** from 90% to 125%. Text size scales each page with CSS `zoom`
+  (`--reading-zoom`), because the type is set in px; the header and overlays stay
+  as they are. Both are kept in this device’s storage (`briefing_theme`,
+  `briefing_text_size`); a theme chosen with the old toggle is kept.
 - **Keyboard reading** — on a briefing, **J** / **K** move a gold ring to the next
   or previous story (the aha card first), **O** opens its source (and counts it
   opened), **M** marks it read or unread, **U** jumps to the next unread story.
