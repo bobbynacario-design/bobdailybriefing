@@ -264,6 +264,17 @@ actually runs. The generated briefing is shaped by four things beyond it:
   in `briefing.links`. Insurance stays closed to the snapshot on a grounded day.
   Kept links open from the card's source chip ("Source matched" for the news
   feed, "Link verified" for a search result).
+- **Today’s aha** — every briefing asks for one non-obvious read (`aha`): a
+  connection between two stories from different sections, a second-order effect
+  further downstream than any source goes, or a contrarian case that the
+  consensus reading is wrong — with a 2–4 step chain, the headlines it is built
+  on, and one checkable `wrong_if` signal. It must not restate a relevance line or
+  a first-order consequence, leans early rather than safe, never advises a trade,
+  and is null when nothing clears the bar. `cleanAha` in
+  `lib/briefing-prompt-core.js` (shared by the generator and the paste path)
+  bounds the fields and keeps only links that name a story in the briefing; the
+  app shows it as a card at the top, with chips that jump to those stories, and
+  in the Markdown and PDF exports.
 - **Reader feedback** — each briefing card has ▲ More like this / ▼ Less like
   this (the newest vote on a story counts; the same button takes it back). Votes
   sync on the Daily Boost days, and the generator turns the last 30 days into a

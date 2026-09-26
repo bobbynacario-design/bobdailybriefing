@@ -1470,6 +1470,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 @media(max-width:760px){.miro-brief-grid{grid-template-columns:1fr}.miro-signal{grid-template-columns:minmax(0,1fr) 72px}.miro-delta{grid-column:2}.miro-settings-body{display:block}.miro-controls{margin:.8rem 0 0}.miro-change{grid-template-columns:58px minmax(0,1fr)}}
 
 /* ── WATCH CARD ── */
+.aha-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.aha-card{background:var(--gold-dim);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:1.1rem 1.35rem}.aha-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.45rem}.aha-kind{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.aha-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.aha-title{font-family:var(--serif);font-size:21px;line-height:1.3;color:var(--txt);margin:.15rem 0 .5rem}.aha-insight{font-size:14px;line-height:1.65;color:var(--txt2)}.aha-chain{margin:.7rem 0 .2rem;padding-left:1.25rem;font-size:13px;line-height:1.6;color:var(--txt2)}.aha-chain li{margin:.2rem 0}.aha-links{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.75rem}.aha-links span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}.aha-links .card-act{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.aha-wrong{margin-top:.7rem;font-size:12px;line-height:1.6;color:var(--txt2)}.aha-wrong strong{color:var(--txt)}
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
 .watch-stripe{position:absolute;top:0;left:0;width:4px;height:100%;background:var(--red)}
 .watch-body{font-size:13px;color:var(--txt2);line-height:1.8;padding-left:.25rem}
@@ -2681,6 +2682,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="help-card">
       <div class="help-h">📰 Reading the briefing</div>
       <ul>
+        <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose.</li>
         <li><span class="help-pill" style="color:var(--blue)">New</span> — not in the previous briefing. <span class="help-pill">Day 3</span> — its third briefing in a row (hover for the dates). Matched by link or wording, since running stories are reworded daily.</li>
         <li><b>The progress line</b> counts what you have read, with <b>Next unread ↓</b> taking you to the most relevant story left. A story counts as read when you open its source, note it, or tap <b>Mark read</b>.</li>
         <li><b>Source chip</b> — <span class="help-pill" style="color:var(--green)">Source matched</span> came from the fetched news feed; <span class="help-pill" style="color:var(--green)">Link verified</span> is a page the AI's search really returned; <span class="help-pill">Unverified source</span> has no checked link.</li>
@@ -8155,13 +8157,13 @@ function applyRelevanceFilter() {
 
 function expandAllSections() {
   document.querySelectorAll('.sec-hdr').forEach(function(hdr){ hdr.classList.remove('collapsed'); });
-  document.querySelectorAll('.card,.watch-card').forEach(function(card){ card.style.display = ''; });
+  document.querySelectorAll('.card,.watch-card,.aha-card').forEach(function(card){ card.style.display = ''; });
   applyRelevanceFilter();
 }
 
 function collapseAllSections() {
   document.querySelectorAll('.sec-hdr').forEach(function(hdr){ hdr.classList.add('collapsed'); });
-  document.querySelectorAll('.card,.watch-card').forEach(function(card){ card.style.display = 'none'; });
+  document.querySelectorAll('.card,.watch-card,.aha-card').forEach(function(card){ card.style.display = 'none'; });
   setText('reader-meta', 'Sections collapsed');
 }
 
@@ -8221,6 +8223,9 @@ function normalise(d) {
       };
     });
   });
+  // The aha is cleaned against the stories it names (lib/briefing-prompt-core.js),
+  // so a briefing pasted from an outside AI is held to the same as a generated one.
+  r.aha = window.BriefingPromptCore && window.BriefingPromptCore.cleanAha ? window.BriefingPromptCore.cleanAha(d.aha, r.sections) : null;
   return r;
 }
 
@@ -8299,6 +8304,22 @@ var WATCH_STATUS = {
   dead:     {label: 'DEAD',     tone: 'dim'}
 };
 
+// ── Today's aha (asked for and cleaned by lib/briefing-prompt-core.js) ──
+// One non-obvious read built on today's stories, at the top of the briefing:
+// the claim, why it is not the obvious read, the steps, the stories it rests on
+// (each a chip that jumps to its card) and what would show it is wrong.
+var AHA_KIND_LABELS = {'connection':'Connection', 'second-order':'Second-order', 'contrarian':'Contrarian'};
+function ahaHtml(aha) {
+  if (!aha || !aha.title || !aha.insight) return '';
+  var html = '<div data-group="today" class="aha-group"><div class="sec-hdr"><div class="sec-pip" style="background:var(--gold)"></div><div class="sec-name">TODAY’S AHA</div></div>';
+  html += '<div class="aha-card"><div class="aha-top"><span class="aha-kind">' + esc(AHA_KIND_LABELS[aha.kind] || 'Read') + '</span><span class="aha-note">An analytical read, not reported news</span></div>';
+  html += '<div class="aha-title">' + esc(aha.title) + '</div><div class="aha-insight">' + esc(aha.insight) + '</div>';
+  if ((aha.chain || []).length) html += '<ol class="aha-chain">' + aha.chain.map(function(step) { return '<li>' + esc(step) + '</li>'; }).join('') + '</ol>';
+  if ((aha.links || []).length) html += '<div class="aha-links"><span>Built on</span>' + aha.links.map(function(link, index) { return '<button type="button" class="card-act" data-aha-link="' + index + '" title="Jump to this story">↓ ' + esc(link) + '</button>'; }).join('') + '</div>';
+  if (aha.wrong_if) html += '<div class="aha-wrong"><strong>Wrong if:</strong> ' + esc(aha.wrong_if) + '</div>';
+  return html + '</div></div>';
+}
+
 function watchFollowupHtml(fu) {
   if (!fu || typeof fu !== 'object') return '';
   var prior = String(fu.prior || '').trim();
@@ -8369,7 +8390,7 @@ function renderBriefing(options) {
 
   // Render all sections
   var counts = {high:0,med:0,low:0,none:0};
-  var todayHTML = '';
+  var todayHTML = ahaHtml(data.aha);
 
   Object.keys(SEC_META).forEach(function(id) {
     var meta = SEC_META[id];
@@ -8663,6 +8684,14 @@ function markCardOpened(event) {
 }
 document.addEventListener('click', markCardOpened);
 document.addEventListener('auxclick', markCardOpened);
+
+// Today's aha: a "Built on" chip jumps to the story it names.
+document.addEventListener('click', function(event) {
+  var chip = event.target && event.target.closest ? event.target.closest('[data-aha-link]') : null;
+  if (!chip || !_currentData || !_currentData.aha) return;
+  var headline = (_currentData.aha.links || [])[Number(chip.dataset.ahaLink)];
+  if (headline && !(window.highlightSourceTitle && window.highlightSourceTitle(headline, 'today'))) showToast('That story is not shown right now', 'warn');
+});
 
 // Briefing card actions, delegated because cards are rebuilt on every render.
 // The story is looked up from the data behind the card, never from its text.
@@ -9582,6 +9611,37 @@ function exportPDF() {
       y+=8;
     }
 
+    // Today's aha, first: the one read to take away. Each block is split at the
+    // font size it is drawn in, so the box height matches what is printed.
+    if (_currentData.aha) {
+      var a=_currentData.aha;
+      doc.setFont('helvetica','bold'); doc.setFontSize(11);
+      var aLines=doc.splitTextToSize(pdfSafe(a.title),CW-10);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+      var iLines=doc.splitTextToSize(pdfSafe(a.insight),CW-10);
+      doc.setFontSize(8);
+      var cLines=[]; (a.chain||[]).forEach(function(step,i){ cLines=cLines.concat(doc.splitTextToSize((i+1)+'. '+pdfSafe(step),CW-14)); });
+      var bLines=(a.links||[]).length?doc.splitTextToSize('Built on: '+pdfSafe(a.links.join('; ')),CW-10):[];
+      var wrLines=a.wrong_if?doc.splitTextToSize('Wrong if: '+pdfSafe(a.wrong_if),CW-10):[];
+      var aH=aLines.length*5.5+iLines.length*4+(cLines.length+bLines.length+wrLines.length)*3.8+14;
+      chk(aH+8);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(170,130,30);
+      doc.text("TODAY'S AHA"+(AHA_KIND_LABELS[a.kind]?'  -  '+AHA_KIND_LABELS[a.kind].toUpperCase():''), ML, y); y+=4;
+      doc.setFillColor(252,248,236); doc.setDrawColor(201,168,76);
+      doc.roundedRect(ML,y,CW,aH,2,2,'FD');
+      doc.setFillColor(201,168,76); doc.rect(ML,y,3,aH,'F');
+      var ay=y+6;
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(30,30,30);
+      aLines.forEach(function(l){doc.text(l,ML+6,ay);ay+=5.5;});
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(60,60,60);
+      iLines.forEach(function(l){doc.text(l,ML+6,ay);ay+=4;}); ay+=1.5;
+      doc.setFontSize(8);
+      cLines.forEach(function(l){doc.text(l,ML+8,ay);ay+=3.8;});
+      doc.setTextColor(110,110,110); bLines.forEach(function(l){doc.text(l,ML+6,ay);ay+=3.8;});
+      doc.setTextColor(140,112,30); wrLines.forEach(function(l){doc.text(l,ML+6,ay);ay+=3.8;});
+      y+=aH+6;
+    }
+
     // Sections
     var secOrder = ['global','ph','insurance','interruptions','ai','markets','ev'];
     secOrder.forEach(function(id) {
@@ -9717,7 +9777,7 @@ function attachCollapsible() {
     hdr.appendChild(toggle);
     hdr.addEventListener('click', function() {
       var parent = hdr.parentElement;
-      var stories = parent.querySelectorAll('.card, .watch-card');
+      var stories = parent.querySelectorAll('.card, .watch-card, .aha-card');
       var isCollapsed = hdr.classList.contains('collapsed');
       if (isCollapsed) {
         hdr.classList.remove('collapsed');
@@ -9757,6 +9817,16 @@ function copyAsText() {
     lines.push('## Manila Weather');
     lines.push([d.weather.summary || d.weather.condition || d.weather.forecast || '', d.weather.temp_c || d.weather.temperature_c || d.weather.temp || '', d.weather.rain_chance || d.weather.rain || ''].filter(Boolean).join(' | '));
     if (d.weather.impact) lines.push('Impact: ' + d.weather.impact);
+    lines.push('');
+  }
+
+  if (d.aha) {
+    lines.push('## TODAY’S AHA' + (AHA_KIND_LABELS[d.aha.kind] ? ' (' + AHA_KIND_LABELS[d.aha.kind] + ')' : ''));
+    lines.push('**' + d.aha.title + '**');
+    lines.push(d.aha.insight);
+    (d.aha.chain || []).forEach(function(step, index) { lines.push((index + 1) + '. ' + step); });
+    if ((d.aha.links || []).length) lines.push('Built on: ' + d.aha.links.join('; '));
+    if (d.aha.wrong_if) lines.push('Wrong if: ' + d.aha.wrong_if);
     lines.push('');
   }
 

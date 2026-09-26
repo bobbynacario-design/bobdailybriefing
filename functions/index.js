@@ -14,7 +14,7 @@ const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
-const {buildBriefingPrompt} = require("./briefing-prompt-core");
+const {buildBriefingPrompt, cleanAha} = require("./briefing-prompt-core");
 const {
   parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
 } = require("./market-facts");
@@ -492,6 +492,10 @@ exports.generateBobDailyBriefing = onCall(
         removed: verified.stats.links.removed, searched: verified.stats.links.searched,
       });
     }
+
+    // The aha is checked last, after grounding and link checks may have dropped
+    // stories, so its link chips only name stories the briefing still has.
+    briefing.aha = cleanAha(briefing.aha, briefing.sections);
 
     // Record token usage to the shared LLM cost ledger (no-throw).
     await recordUsage(db, "briefing", model, extractUsage(json), phtDateKey());

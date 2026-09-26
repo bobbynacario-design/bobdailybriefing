@@ -194,3 +194,30 @@ test('the verification line says when the reader\'s feedback shaped the briefing
   context.renderGroundingLine({grounding:{mode:'grounded',grounded:2,ungrounded:0},context:{feedback:null}},{parentNode:{}});
   assert.doesNotMatch(element('grounding-line').textContent,/Tuned by your feedback/);
 });
+// Today's aha: the card shows the read escaped, with its steps, link chips and
+// wrong-if; nothing at all when there is no aha; and normalise() keeps it,
+// cleaned against the briefing's own stories, so it survives the save.
+test('the aha card renders the read, and nothing when there is none', () => {
+  const {context}=environment(['esc','ahaHtml'],{AHA_KIND_LABELS:{'connection':'Connection','second-order':'Second-order','contrarian':'Contrarian'}});
+  const html=context.ahaHtml({kind:'connection',title:'Grid alerts are a <reinsurance> story',insight:'Two stories, one exposure.',chain:['Reserves are thin.','Retentions went up.'],links:['Visayas grid on yellow alert anew','Tower renews reinsurance program'],wrong_if:'NGCP margin above 300 MW.'});
+  assert.match(html,/TODAY’S AHA/);
+  assert.match(html,/<span class="aha-kind">Connection<\/span>/);
+  assert.match(html,/Grid alerts are a &lt;reinsurance&gt; story/,'escaped');
+  assert.match(html,/<ol class="aha-chain"><li>Reserves are thin\.<\/li><li>Retentions went up\.<\/li><\/ol>/);
+  assert.match(html,/data-aha-link="1"[^>]*>↓ Tower renews reinsurance program<\/button>/);
+  assert.match(html,/<strong>Wrong if:<\/strong> NGCP margin above 300 MW\./);
+  assert.match(context.ahaHtml({title:'T',insight:'I',kind:''}),/<span class="aha-kind">Read<\/span>/);
+  assert.doesNotMatch(context.ahaHtml({title:'T',insight:'I'}),/aha-chain|aha-links|aha-wrong/,'empty parts are left out');
+  assert.equal(context.ahaHtml(null),'');
+  assert.equal(context.ahaHtml({title:'Only a title'}),'');
+});
+test('normalise keeps a cleaned aha, so it is saved with the briefing', () => {
+  const {context}=environment(['normalise']);
+  vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),context);
+  const data=context.normalise({date:'Saturday, September 26, 2026',sections:{interruptions:[{headline:'Visayas grid on yellow alert anew',body:'b'}]},
+    aha:{kind:'second-order',title:'Cold chains carry the grid risk',insight:'Spoilage, not outage.',chain:['a','b'],links:['Visayas grid on yellow alert anew','Not in this briefing'],wrong_if:'x',extra:1}});
+  assert.equal(data.aha.kind,'second-order');
+  assert.deepEqual([...data.aha.links],['Visayas grid on yellow alert anew']);
+  assert.equal(data.aha.extra,undefined);
+  assert.equal(context.normalise({date:'d',sections:{global:[]}}).aha,null,'an older briefing without one');
+});
