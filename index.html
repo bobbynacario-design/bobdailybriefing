@@ -270,10 +270,10 @@ window.fbSaveGoals = async function(uid, goals) {
 
 // Go deeper (functions/story-dossier.js): a working dossier on one story, and
 // the dossiers already built for this account (latest forty, keyed by story).
-window.fbGenerateDossier = async function(story) {
+window.fbGenerateDossier = async function(story, refresh) {
   if (!getUid()) throw new Error('Sign in first');
   var generate = httpsCallable(functions, 'generateStoryDossier', { timeout: 250000 });
-  var res = await generate({ story: story, requestId: crypto.randomUUID() });
+  var res = await generate({ story: story, refresh: refresh === true, requestId: crypto.randomUUID() });
   return res.data;
 };
 window.fbLoadDossiers = async function(uid) {
@@ -1519,7 +1519,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 @media(max-width:760px){.miro-brief-grid{grid-template-columns:1fr}.miro-signal{grid-template-columns:minmax(0,1fr) 72px}.miro-delta{grid-column:2}.miro-settings-body{display:block}.miro-controls{margin:.8rem 0 0}.miro-change{grid-template-columns:58px minmax(0,1fr)}}
 
 /* ── WATCH CARD ── */
-.dossier{margin:-.6rem 0 1.4rem;padding:1rem 1.2rem;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--txt2);font-size:13.5px;line-height:1.6}.dossier-status{font-family:var(--mono);font-size:11px;color:var(--txt3)}.dossier-status.is-error{color:var(--amber)}.dossier-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.4rem .8rem;margin-bottom:.5rem}.dossier-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber)}.dossier-meta{font-family:var(--mono);font-size:10px;color:var(--txt3)}.dossier-summary{font-family:var(--serif);font-size:17px;line-height:1.45;color:var(--txt);margin:.2rem 0 .7rem}.dossier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 1.2rem}.dossier-part{margin:.6rem 0}.dossier-part h4{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);font-weight:500;margin:0 0 .3rem}.dossier-part p{margin:0}.dossier-part ul,.dossier-part ol{margin:0;padding-left:1.15rem}.dossier-part li{margin:.2rem 0}.dossier-part strong{color:var(--txt)}.dossier-src{color:var(--txt3);font-size:12px}.dossier-chips{display:flex;flex-wrap:wrap;gap:.35rem}.dossier-chips span{font-family:var(--mono);font-size:11px;padding:.15rem .5rem;border:1px solid var(--line);border-radius:999px;color:var(--txt2)}.dossier-sources a{color:var(--txt2);text-decoration:none;border-bottom:1px solid var(--line)}.dossier-sources a:hover{color:var(--txt)}.dossier-note{font-size:11px;color:var(--txt3);margin:.7rem 0 .5rem}.dossier-actions{display:flex;flex-wrap:wrap;gap:.45rem}
+.dossier{margin:-.6rem 0 1.4rem;padding:1rem 1.2rem;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--txt2);font-size:13.5px;line-height:1.6}.dossier-status{font-family:var(--mono);font-size:11px;color:var(--txt3)}.dossier-status.is-error{color:var(--amber)}.dossier-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.4rem .8rem;margin-bottom:.5rem}.dossier-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber)}.dossier-meta{font-family:var(--mono);font-size:10px;color:var(--txt3)}.dossier-summary{font-family:var(--serif);font-size:15.5px;line-height:1.55;color:var(--txt);margin:.2rem 0 .7rem}.dossier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 1.2rem}.dossier-part{margin:.6rem 0}.dossier-part h4{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);font-weight:500;margin:0 0 .3rem}.dossier-part p{margin:0}.dossier-part ul,.dossier-part ol{margin:0;padding-left:1.15rem}.dossier-part li{margin:.2rem 0}.dossier-part strong{color:var(--txt)}.dossier-src{color:var(--txt3);font-size:12px}.dossier-chips{display:flex;flex-wrap:wrap;gap:.35rem}.dossier-chips span{font-size:12px;line-height:1.4;padding:.25rem .6rem;border:1px solid var(--line);border-radius:8px;color:var(--txt2);max-width:100%}.dossier-sources a{color:var(--txt2);text-decoration:none;border-bottom:1px solid var(--line)}.dossier-sources a:hover{color:var(--txt)}.dossier-note{font-size:11px;color:var(--txt3);margin:.7rem 0 .5rem}.dossier-actions{display:flex;flex-wrap:wrap;gap:.45rem}
 .aha-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.aha-card{background:var(--gold-dim);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:1.1rem 1.35rem}.aha-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.45rem}.aha-kind{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.aha-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.aha-title{font-family:var(--serif);font-size:21px;line-height:1.3;color:var(--txt);margin:.15rem 0 .5rem}.aha-insight{font-size:14px;line-height:1.65;color:var(--txt2)}.aha-chain{margin:.7rem 0 .2rem;padding-left:1.25rem;font-size:13px;line-height:1.6;color:var(--txt2)}.aha-chain li{margin:.2rem 0}.aha-links{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.75rem}.aha-links span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}.aha-links .card-act{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.aha-wrong{margin-top:.7rem;font-size:12px;line-height:1.6;color:var(--txt2)}.aha-wrong strong{color:var(--txt)}
 .card.is-kb,.aha-card.is-kb{outline:2px solid var(--gold);outline-offset:3px}.card[tabindex="-1"]:focus,.aha-card[tabindex="-1"]:focus{outline:none}.card.is-kb[tabindex="-1"]:focus,.aha-card.is-kb[tabindex="-1"]:focus{outline:2px solid var(--gold)}
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
@@ -8526,7 +8526,9 @@ function dossierHtml(d) {
   html += part('What would change this read', d.would_change ? '<p>' + esc(d.would_change) + '</p>' : '');
   html += part('Sources', (d.sources || []).length ? '<ul class="dossier-sources">' + d.sources.map(function(src) { return '<li><a href="' + esc(src.url) + '" target="_blank" rel="noopener noreferrer">' + esc(src.title || src.url) + ' ↗</a></li>'; }).join('') + '</ul>' : '');
   html += '<p class="dossier-note">An analytical read built from what the search found, not advice.</p>';
-  return html + '<div class="dossier-actions"><button type="button" class="card-act" data-dossier-act="save">＋ Save to Evidence</button><button type="button" class="card-act" data-dossier-act="close">Close</button></div>';
+  return html + '<div class="dossier-actions"><button type="button" class="card-act" data-dossier-act="save">＋ Save to Evidence</button>' +
+    '<button type="button" class="card-act" data-dossier-act="rebuild" title="Search again and replace this dossier. Counts towards the ten a day.">Rebuild</button>' +
+    '<button type="button" class="card-act" data-dossier-act="close">Close</button></div>';
 }
 // Plain text for Evidence (and anywhere else it is pasted).
 function dossierSnapshot(d) {
@@ -8551,6 +8553,25 @@ function renderDossier(panel, d, sec, idx) {
     openEvidencePicker({id:'briefing:' + key + ':' + sec + ':' + idx + ':dossier', source:'Briefing', title:'Dossier: ' + (story.headline || ''),
       detail:dossierSnapshot(d), meta:[_currentData && _currentData.date, 'Go deeper', story.source].filter(Boolean).join(' · '), page:'today', ref:key, url:story.url || ''});
   });
+  var rebuild = panel.querySelector('[data-dossier-act="rebuild"]');
+  rebuild.addEventListener('click', function() {
+    if (rebuild.dataset.confirm !== '1') { rebuild.dataset.confirm = '1'; rebuild.textContent = 'Rebuild? Uses one of ten today'; return; }
+    buildDossier(panel, _dossierInput[panel.dataset.key], panel.dataset.key, sec, idx, true);
+  });
+}
+// The story each open panel was built from, so Rebuild sends the same request.
+var _dossierInput = {};
+async function buildDossier(panel, story, key, sec, idx, refresh) {
+  if (!window._firebaseUid || typeof window.fbGenerateDossier !== 'function') { panel.innerHTML = '<div class="dossier-status">Sign in to go deeper on a story.</div>'; return; }
+  panel.innerHTML = '<div class="dossier-status">' + uiIcon('research') + (refresh ? ' Reading around this story again…' : ' Reading around this story…') + ' usually under a minute. It searches the web, so allow up to three.</div>';
+  try {
+    var result = await window.fbGenerateDossier(story, refresh);
+    if (!result || !result.dossier) throw new Error('The dossier came back empty. Try again in a minute.');
+    _dossiers[result.key || key] = result.dossier;
+    if (panel.isConnected) renderDossier(panel, result.dossier, sec, idx);
+  } catch (error) {
+    if (panel.isConnected) panel.innerHTML = '<div class="dossier-status is-error">' + esc(dossierError(error)) + '</div>';
+  }
 }
 async function toggleDossier(button, st, sec, idx) {
   var card = button.closest('.card'), next = card && card.nextElementSibling;
@@ -8559,20 +8580,12 @@ async function toggleDossier(button, st, sec, idx) {
   panel.className = 'dossier'; panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'Going deeper: ' + st.headline); panel.setAttribute('aria-live', 'polite');
   card.insertAdjacentElement('afterend', panel); button.setAttribute('aria-expanded', 'true');
   var story = dossierStory(st, sec), key = window.BriefingPromptCore.storyDossierKey(story);
+  panel.dataset.key = key; _dossierInput[key] = story;
   panel.innerHTML = '<div class="dossier-status">Checking for a saved dossier…</div>';
   var saved = await savedDossiers();
   if (!panel.isConnected) return;
   if (saved[key]) { renderDossier(panel, saved[key], sec, idx); return; }
-  if (!window._firebaseUid || typeof window.fbGenerateDossier !== 'function') { panel.innerHTML = '<div class="dossier-status">Sign in to go deeper on a story.</div>'; return; }
-  panel.innerHTML = '<div class="dossier-status">' + uiIcon('research') + ' Reading around this story… usually under a minute. It searches the web, so allow up to three.</div>';
-  try {
-    var result = await window.fbGenerateDossier(story);
-    if (!result || !result.dossier) throw new Error('The dossier came back empty. Try again in a minute.');
-    _dossiers[result.key || key] = result.dossier;
-    if (panel.isConnected) renderDossier(panel, result.dossier, sec, idx);
-  } catch (error) {
-    if (panel.isConnected) panel.innerHTML = '<div class="dossier-status is-error">' + esc(dossierError(error)) + '</div>';
-  }
+  await buildDossier(panel, story, key, sec, idx, false);
 }
 
 // ── Today's aha (asked for and cleaned by lib/briefing-prompt-core.js) ──

@@ -21,7 +21,9 @@ function text(value) {
 
 function clip(value, max) {
   const flat = text(value).replace(/\s+/g, " ");
-  return flat.length > max ? flat.slice(0, max - 1) + "…" : flat;
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max - 1), space = cut.lastIndexOf(" ");
+  return (space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:.-]+$/, "") + "…";
 }
 
 function arr(value) {
@@ -62,11 +64,11 @@ function buildDossierPrompt(story) {
     "",
     "Return a single JSON object with exactly these keys:",
     "{",
-    '  "summary": "2-3 sentences: what happened, as reported",',
+    '  "summary": "2 sentences, at most 60 words: what happened, as reported",',
     '  "background": ["2 to 4 short points: how this came about, the context a reader needs"],',
     '  "numbers": [{"figure": "A$3.98bn", "what": "what the figure measures", "source": "who reported it"}],',
     '  "bi_angle": "2-3 sentences: the loss mechanism, the covers that could respond (BI, contingent BI, supply chain, cyber, property...), and what would trigger them",',
-    '  "exposed": ["up to 5 classes of insured, industries or places exposed"],',
+    '  "exposed": ["up to 5 short phrases, six words or fewer each: classes of insured, industries or places exposed"],',
     '  "client_questions": ["exactly 3 questions"],',
     '  "would_change": "one checkable signal that would change this read: what it is, who publishes it, and when it is next due",',
     '  "sources": [{"title": "", "url": ""}]',
@@ -74,7 +76,9 @@ function buildDossierPrompt(story) {
     "",
     "RULES:",
     "- Report, then reason. Keep what was reported apart from your inference, and mark inference as such (\"which suggests\", \"likely\").",
-    "- numbers: at most 5, and only figures you found in a source. Never estimate or round a figure into existence. An empty list is fine.",
+    "- numbers: at most 5 figures (amounts, counts, rates, durations), each found in a source. Dates are not figures; put them in background.",
+    "  Never estimate or round a figure into existence. An empty list is fine.",
+    "- exposed: short phrases of six words or fewer (\"strata insurers\", \"cold-chain operators in Cebu\"), not sentences.",
     "- client_questions: exactly 3, specific to this story and useful this week, the kind Bob would put to an insured, a broker or an insurer. Not generic (\"what is your exposure?\").",
     "- sources: at most 6 pages you actually used, each url copied exactly from a web search result. Never type a url from memory.",
     "- If something is not known yet, say so in plain words rather than filling the gap.",
@@ -101,13 +105,13 @@ function cleanDossier(raw, searched) {
     }).slice(0, 6).map((item) => ({title: item.title || item.url.replace(/^https?:\/\//i, "").slice(0, 80), url: item.url.slice(0, 600)}));
   return {
     summary,
-    background: arr(raw.background).map((item) => clip(item, 320)).filter(Boolean).slice(0, 4),
+    background: arr(raw.background).map((item) => clip(item, 420)).filter(Boolean).slice(0, 4),
     numbers: arr(raw.numbers).filter((item) => item && text(item.figure)).slice(0, 5)
       .map((item) => ({figure: clip(item.figure, 40), what: clip(item.what, 200), source: clip(item.source, 100)})),
-    bi_angle: clip(raw.bi_angle, 700),
-    exposed: arr(raw.exposed).map((item) => clip(item, 80)).filter(Boolean).slice(0, 5),
-    client_questions: arr(raw.client_questions).map((item) => clip(item, 260)).filter(Boolean).slice(0, 3),
-    would_change: clip(raw.would_change, 400),
+    bi_angle: clip(raw.bi_angle, 900),
+    exposed: arr(raw.exposed).map((item) => clip(item, 140)).filter(Boolean).slice(0, 5),
+    client_questions: arr(raw.client_questions).map((item) => clip(item, 320)).filter(Boolean).slice(0, 3),
+    would_change: clip(raw.would_change, 700),
     sources,
   };
 }

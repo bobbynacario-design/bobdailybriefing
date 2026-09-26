@@ -23,7 +23,10 @@ test("the prompt carries the story and the rules that keep the dossier honest", 
   assert.match(prompt, /- Headline: Strata storm claim turns toxic/);
   assert.match(prompt, /- Why it mattered: Strata insurers are exposed/);
   assert.match(prompt, /briefing of Saturday, September 26, 2026/);
-  assert.match(prompt, /only figures you found in a source\. Never estimate/);
+  assert.match(prompt, /each found in a source\. Dates are not figures; put them in background\./);
+  assert.match(prompt, /Never estimate or round a figure into existence/);
+  assert.match(prompt, /exposed: short phrases of six words or fewer/);
+  assert.match(prompt, /"summary": "2 sentences, at most 60 words/);
   assert.match(prompt, /client_questions: exactly 3, specific to this story/);
   assert.match(prompt, /each url copied exactly from a web search result/);
   assert.match(prompt, /Never give investment advice/);
@@ -52,6 +55,20 @@ test("cleanDossier bounds fields and keeps only sources the search returned", ()
   assert.equal(cleanDossier({summary: " "}, []), null);
   assert.equal(cleanDossier(null, []), null);
   assert.deepEqual(cleanDossier({summary: "S", sources: [{url: "https://a.com/x"}]}, []).sources, [], "no search, no sources");
+});
+
+// The first real dossier ended two of its exposed items on "datas…" and "we…".
+test("a long field is cut at a word, never mid-word, and short ones are untouched", () => {
+  const long = "Health services and hospitals using aggregate datasets to train clinical models without consent from the patients concerned, ".repeat(2);
+  const [cut] = cleanDossier({summary: "S", exposed: [long]}, []).exposed;
+  assert.ok(cut.length <= 140 && cut.endsWith("…"), cut);
+  const kept = cut.slice(0, -1);
+  assert.ok(long.startsWith(kept) && long[kept.length] === " ", "ends on a whole word: " + cut);
+  assert.equal(cleanDossier({summary: "S", exposed: ["strata insurers"]}, []).exposed[0], "strata insurers");
+  const one = "x".repeat(200);
+  assert.equal(cleanDossier({summary: "S", exposed: [one]}, []).exposed[0], "x".repeat(139) + "…", "one unbroken word is still cut");
+  const change = "The Senate committee report on AI due 30 November 2026 would change this read if it recommends notifiable data breach duties for model providers, ".repeat(4);
+  assert.ok(cleanDossier({summary: "S", would_change: change}, []).would_change.length > 400, "room for the full signal");
 });
 
 test("the stored map keeps the latest forty", () => {

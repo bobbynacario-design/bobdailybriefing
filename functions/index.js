@@ -51,7 +51,7 @@ function protectGeneration(feature, handler) {
         period:daily ? phtDateKey() : phtDateKey().slice(0,7),
         cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : feature === "dossier" ? DOSSIER_DAILY_CAP : DEEP_RESEARCH_CAP,
         requestId:data.requestId,
-        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : feature === "dossier" ? {story:storyDossierKey(cleanStory(data.story))} : {topic:data.topic.trim(),premium:!!data.premium}
+        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : feature === "dossier" ? {story:storyDossierKey(cleanStory(data.story)),refresh:data.refresh === true} : {topic:data.topic.trim(),premium:!!data.premium}
       }, () => handler(request));
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -634,7 +634,8 @@ exports.generateStoryDossier = onCall(
     const key = storyDossierKey(story);
     const ref = db.collection(BRIEFINGS_COLL).doc("dossiers-" + uid);
     const stored = await ref.get().then((snap) => (snap.exists ? snap.data().items || {} : {})).catch(() => ({}));
-    if (stored[key]) return {key, dossier: stored[key], saved: true};
+    // A saved dossier comes back free, unless he asked for it to be rebuilt.
+    if (stored[key] && request.data.refresh !== true) return {key, dossier: stored[key], saved: true};
 
     const model = DEFAULT_MODEL;
     let response;

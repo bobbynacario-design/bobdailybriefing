@@ -341,7 +341,7 @@ test('the dossier renders escaped, skips empty parts, and copies to Evidence as 
   ['How it came about','The numbers','The BI and claims angle','Who is exposed','Questions to ask a client','What would change this read','Sources'].forEach(t=>assert.ok(html.includes(t),t));
   assert.ok(html.includes('<strong>A$3.98bn</strong> — declared events'));
   assert.ok(html.includes('href="https://insurancenews.com.au/strata" target="_blank" rel="noopener noreferrer"'));
-  assert.ok(html.includes('data-dossier-act="save"') && html.includes('data-dossier-act="close"'));
+  assert.ok(html.includes('data-dossier-act="save"') && html.includes('data-dossier-act="rebuild"') && html.includes('data-dossier-act="close"'));
   const bare=context.dossierHtml({summary:'Only this.'});
   ['How it came about','The numbers','Who is exposed','Sources'].forEach(t=>assert.ok(!bare.includes(t),'no empty '+t));
   assert.equal(context.dossierHtml(null),'');
