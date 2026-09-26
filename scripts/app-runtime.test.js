@@ -346,6 +346,23 @@ test('the working indicator counts up from when the work started and flags a lon
   assert.ok(!context.aiWorkingHtml('Checking', {since: 'junk'}).includes('data-ai-slow'), 'no limit, no note; a bad start time counts from now');
 });
 
+// The wildcard: one story from outside the beats, with its lens, its checked
+// link, a bridge back to Bob's work, and the story actions (but no votes).
+test('the wildcard card shows its lens, link, bridge and story actions, all escaped', () => {
+  const {context}=environment(['esc','uiIcon','srcHTML','wildcardLensLabel','wildcardHtml'],{BriefingPromptCore:{WILDCARD_LENSES:[{id:'far-field',label:'Far field'}]}});
+  const html=context.wildcardHtml({lens:'far-field',headline:'Bacteria <eat> plastic',body:'Reported.',source:'Nature',url:'https://nature.com/x',bridge:'Worth asking whether',grounded:true});
+  assert.ok(html.includes('Bacteria &lt;eat&gt; plastic'),'escaped');
+  assert.ok(html.includes('Far field') && html.includes('From outside your usual beats'));
+  assert.ok(html.includes('Link verified') && html.includes('href="https://nature.com/x"'));
+  assert.ok(html.includes('→ Back to your work:</strong> Worth asking whether'));
+  ['note','cite','evidence','deeper'].forEach(a=>assert.ok(html.includes('data-card-act="'+a+'" data-sec="wildcard" data-idx="0"'),a));
+  assert.ok(!html.includes('data-card-act="more"'),'no votes on the wildcard');
+  assert.ok(html.includes('class="card wildcard-card"'),'a card, so Go deeper opens under it');
+  assert.ok(context.wildcardHtml({lens:'x',headline:'H',body:'B',bridge:'Br'}).includes('Unverified source'));
+  assert.equal(context.wildcardLensLabel('gone'),'Wildcard');
+  assert.equal(context.wildcardHtml(null),'');
+});
+
 // Go deeper: the dossier renders escaped, leaves out empty parts, links only its
 // checked sources, and gives Evidence a plain-text copy.
 test('the dossier renders escaped, skips empty parts, and copies to Evidence as text', () => {

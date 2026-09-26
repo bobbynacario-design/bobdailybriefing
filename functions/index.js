@@ -12,9 +12,9 @@ const OpenAI = require("openai");
 const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
-const {buildEvidence, verifyGrounding, searchUrls} = require("./briefing-evidence");
+const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
-const {buildBriefingPrompt, cleanAha, buildRecentBriefings, countReruns, storyDossierKey} = require("./briefing-prompt-core");
+const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey} = require("./briefing-prompt-core");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
 const {
   parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
@@ -503,6 +503,14 @@ exports.generateBobDailyBriefing = onCall(
     // The aha is checked last, after grounding and link checks may have dropped
     // stories, so its link chips only name stories the briefing still has.
     briefing.aha = cleanAha(briefing.aha, briefing.sections);
+    // The wildcard's link is held to a story's standard, but a wildcard without
+    // one is dropped rather than shown bare: it comes from outside Bob's beats,
+    // where he has the least to judge a story by.
+    const wildcard = cleanWildcard(briefing.wildcard, String((request.data && request.data.date) || "").trim());
+    const wildcardUrl = wildcard && wildcard.url ? searched.find((url) => urlKey(url) === urlKey(wildcard.url)) || "" : "";
+    briefing.wildcard = wildcard && wildcardUrl ? Object.assign(wildcard, {url: wildcardUrl, grounded: true}) : null;
+    briefing.context.wildcard = !wildcard ? "none" : wildcardUrl ? "kept" : "dropped: link not a searched page";
+    if (wildcard && !wildcardUrl) logger.warn("wildcard dropped: its link was not a searched page", {url: wildcard.url});
     // Whether the no-rerun rule held: declared updates, and stories that look
     // like a recent headline without saying so. Counted after the checks above.
     const recent = context && context.recent;

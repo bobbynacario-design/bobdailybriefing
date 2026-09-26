@@ -1521,6 +1521,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 /* ── WATCH CARD ── */
 .dossier{margin:-.6rem 0 1.4rem;padding:1rem 1.2rem;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--txt2);font-size:13.5px;line-height:1.6}.dossier-status{font-family:var(--mono);font-size:11px;color:var(--txt3)}.dossier-status.is-error{color:var(--amber)}.dossier-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.4rem .8rem;margin-bottom:.5rem}.dossier-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber)}.dossier-meta{font-family:var(--mono);font-size:10px;color:var(--txt3)}.dossier-summary{font-family:var(--serif);font-size:15.5px;line-height:1.55;color:var(--txt);margin:.2rem 0 .7rem}.dossier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 1.2rem}.dossier-part{margin:.6rem 0}.dossier-part h4{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);font-weight:500;margin:0 0 .3rem}.dossier-part p{margin:0}.dossier-part ul,.dossier-part ol{margin:0;padding-left:1.15rem}.dossier-part li{margin:.2rem 0}.dossier-part strong{color:var(--txt)}.dossier-src{color:var(--txt3);font-size:12px}.dossier-chips{display:flex;flex-wrap:wrap;gap:.35rem}.dossier-chips span{font-size:12px;line-height:1.4;padding:.25rem .6rem;border:1px solid var(--line);border-radius:8px;color:var(--txt2);max-width:100%}.dossier-sources a{color:var(--txt2);text-decoration:none;border-bottom:1px solid var(--line)}.dossier-sources a:hover{color:var(--txt)}.dossier-note{font-size:11px;color:var(--txt3);margin:.7rem 0 .5rem}.dossier-actions{display:flex;flex-wrap:wrap;gap:.45rem}
 .aha-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.aha-card{background:var(--gold-dim);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:1.1rem 1.35rem}.aha-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.45rem}.aha-kind{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.aha-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.aha-title{font-family:var(--serif);font-size:21px;line-height:1.3;color:var(--txt);margin:.15rem 0 .5rem}.aha-insight{font-size:14px;line-height:1.65;color:var(--txt2)}.aha-chain{margin:.7rem 0 .2rem;padding-left:1.25rem;font-size:13px;line-height:1.6;color:var(--txt2)}.aha-chain li{margin:.2rem 0}.aha-links{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.75rem}.aha-links span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}.aha-links .card-act{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.aha-wrong{margin-top:.7rem;font-size:12px;line-height:1.6;color:var(--txt2)}.aha-wrong strong{color:var(--txt)}
+.wildcard-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.wildcard-card{border-left:3px solid var(--purple);background:linear-gradient(135deg,var(--purple-dim),transparent 55%),var(--bg2)}.wildcard-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.5rem}.wildcard-lens{display:inline-flex;align-items:center;gap:.35rem;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.wildcard-lens .ico{color:var(--purple)}.wildcard-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.wildcard-card .card-hl{display:block;margin-bottom:.45rem}.wildcard-bridge{font-size:13px;line-height:1.65;color:var(--txt2);border-top:1px solid var(--rim);padding-top:.6rem;margin:.2rem 0 .1rem}.wildcard-bridge strong{color:var(--txt)}
 .card.is-kb,.aha-card.is-kb{outline:2px solid var(--gold);outline-offset:3px}.card[tabindex="-1"]:focus,.aha-card[tabindex="-1"]:focus{outline:none}.card.is-kb[tabindex="-1"]:focus,.aha-card.is-kb[tabindex="-1"]:focus{outline:2px solid var(--gold)}
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
 .watch-stripe{position:absolute;top:0;left:0;width:4px;height:100%;background:var(--red)}
@@ -8402,6 +8403,7 @@ function normalise(d) {
   // The aha is cleaned against the stories it names (lib/briefing-prompt-core.js),
   // so a briefing pasted from an outside AI is held to the same as a generated one.
   r.aha = window.BriefingPromptCore && window.BriefingPromptCore.cleanAha ? window.BriefingPromptCore.cleanAha(d.aha, r.sections) : null;
+  r.wildcard = window.BriefingPromptCore && window.BriefingPromptCore.cleanWildcard ? window.BriefingPromptCore.cleanWildcard(d.wildcard, r.date) : null;
   return r;
 }
 
@@ -8637,6 +8639,25 @@ async function toggleDossier(button, st, sec, idx) {
 // the claim, why it is not the obvious read, the steps, the stories it rests on
 // (each a chip that jumps to its card) and what would show it is wrong.
 var AHA_KIND_LABELS = {'connection':'Connection', 'second-order':'Second-order', 'contrarian':'Contrarian'};
+
+// ── The wildcard (asked for and cleaned by lib/briefing-prompt-core.js) ──
+// One story from outside the beats, through the day's lens, with a bridge back
+// to Bob's work. Its buttons use the card actions under data-sec="wildcard".
+function wildcardLensLabel(id) {
+  var lens = ((window.BriefingPromptCore && window.BriefingPromptCore.WILDCARD_LENSES) || []).filter(function(item) { return item.id === id; })[0];
+  return lens ? lens.label : 'Wildcard';
+}
+function wildcardHtml(w) {
+  if (!w || !w.headline || !w.body) return '';
+  var act = function(name, label, title) { return '<button type="button" class="card-act" data-card-act="' + name + '" data-sec="wildcard" data-idx="0" title="' + title + '"' + (name === 'deeper' ? ' aria-expanded="false"' : '') + '>' + label + '</button>'; };
+  var html = '<div data-group="today" class="wildcard-group"><div class="sec-hdr"><div class="sec-pip" style="background:var(--purple)"></div><div class="sec-name">WILDCARD</div></div>';
+  html += '<div class="card wildcard-card"><div class="wildcard-top"><span class="wildcard-lens">' + uiIcon('sparkle') + ' ' + esc(wildcardLensLabel(w.lens)) + '</span><span class="wildcard-note">From outside your usual beats</span></div>';
+  html += '<div class="card-hl">' + esc(w.headline) + '</div><div class="card-body">' + esc(w.body) + '</div>' + srcHTML(Object.assign({groundedBy:'search'}, w));
+  if (w.bridge) html += '<div class="wildcard-bridge"><strong>→ Back to your work:</strong> ' + esc(w.bridge) + '</div>';
+  html += '<div class="card-actions">' + act('note', '✎ Note this', 'Open today’s reflection on this story') + act('cite', '⧉ Copy citation', 'Copy headline, source, date and link') +
+    act('evidence', '＋ Evidence', 'Save this story, with its link, to an evidence set') + act('deeper', uiIcon('research') + ' Go deeper', 'A short dossier on this story') + '</div>';
+  return html + '</div></div>';
+}
 function ahaHtml(aha) {
   if (!aha || !aha.title || !aha.insight) return '';
   var html = '<div data-group="today" class="aha-group"><div class="sec-hdr"><div class="sec-pip" style="background:var(--gold)"></div><div class="sec-name">TODAY’S AHA</div></div>';
@@ -8792,6 +8813,8 @@ function renderBriefing(options) {
   // Watch section. The follow-up on yesterday's item comes FIRST: it is the
   // answer to a question already asked, and reading today's new call before
   // finding out what happened to the last one gets the order backwards.
+  // The wildcard: a change of pace after the beats, before the day's watch.
+  todayHTML += wildcardHtml(data.wildcard);
   todayHTML += watchFollowupHtml(data.watch_followup);
   if (data.watch) {
     var wHTML = '<div data-group="today" style="margin-bottom:1.75rem"><div class="sec-hdr"><div class="sec-pip" style="background:#E85C5C"></div><div class="sec-name">ONE THING TO WATCH</div></div><div class="watch-card"><div class="watch-stripe"></div><div class="watch-body">'+esc(data.watch)+'</div>'+(data.watch_source?'<div style="margin-top:.6rem"><span class="src">'+uiIcon('pin')+' '+esc(data.watch_source)+'</span></div>':'')+'</div></div>';
@@ -9057,7 +9080,7 @@ var _kbCard = null;
 function readingCards() {
   var page = document.querySelector('.page.active');
   if (!page) return [];
-  return Array.prototype.filter.call(page.querySelectorAll('.aha-card, .card[data-command-id]'), function(card) { return card.offsetParent !== null; });
+  return Array.prototype.filter.call(page.querySelectorAll('.aha-card, .card[data-command-id], .wildcard-card'), function(card) { return card.offsetParent !== null; });
 }
 function focusReadingCard(card) {
   if (!card) return;
@@ -9109,7 +9132,7 @@ document.addEventListener('click', function(event) {
 document.addEventListener('click', function(event) {
   var button = event.target && event.target.closest ? event.target.closest('[data-card-act]') : null;
   if (!button) return;
-  var st = _currentData && _currentData.sections && (_currentData.sections[button.dataset.sec] || [])[Number(button.dataset.idx)];
+  var st = !_currentData ? null : button.dataset.sec === 'wildcard' ? _currentData.wildcard : _currentData.sections && (_currentData.sections[button.dataset.sec] || [])[Number(button.dataset.idx)];
   if (!st) return;
   var url = /^https?:\/\//i.test(String(st.url || '')) ? String(st.url) : '';
   if (button.dataset.cardAct === 'note') {
@@ -9128,7 +9151,7 @@ document.addEventListener('click', function(event) {
     // either place gives one item that reopens this briefing.
     var key = currentBriefingKey(), meta = SEC_META[button.dataset.sec];
     openEvidencePicker({id:'briefing:' + key + ':' + button.dataset.sec + ':' + button.dataset.idx, source:'Briefing', title:st.headline,
-      detail:st.relevance || st.body || '', meta:[_currentData.date, meta && meta.label, st.source].filter(Boolean).join(' · '), page:'today', ref:key, url:url});
+      detail:st.relevance || st.bridge || st.body || '', meta:[_currentData.date, meta ? meta.label : button.dataset.sec === 'wildcard' ? 'Wildcard · ' + wildcardLensLabel(st.lens) : '', st.source].filter(Boolean).join(' · '), page:'today', ref:key, url:url});
   } else if (button.dataset.cardAct === 'deeper') {
     toggleDossier(button, st, button.dataset.sec, button.dataset.idx);
   } else if (button.dataset.cardAct === 'cite') {
@@ -10101,6 +10124,33 @@ function exportPDF() {
       y+=3;
     });
 
+    // The wildcard, after the sections, in its own colour.
+    if (_currentData.wildcard) {
+      var wc=_currentData.wildcard;
+      doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      var wcHl=doc.splitTextToSize(pdfSafe(wc.headline),CW-10);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      var wcBd=doc.splitTextToSize(pdfSafe(wc.body),CW-10);
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+      var wcBr=wc.bridge?doc.splitTextToSize('Back to your work: '+pdfSafe(wc.bridge),CW-10):[];
+      var wcH=wcHl.length*5+wcBd.length*4+(wc.source?4:0)+(wcBr.length?wcBr.length*3.5+3:0)+10;
+      chk(wcH+8);
+      doc.setFillColor(155,111,232); doc.rect(ML,y,CW,.5,'F'); y+=3;
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+      doc.text('WILDCARD  -  '+pdfSafe(wildcardLensLabel(wc.lens)).toUpperCase(), ML, y); y+=4;
+      doc.setFillColor(248,245,254); doc.setDrawColor(155,111,232);
+      doc.roundedRect(ML,y,CW,wcH,2,2,'FD');
+      doc.setFillColor(155,111,232); doc.rect(ML,y,3,wcH,'F');
+      var wcy=y+5;
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(13,15,20);
+      wcHl.forEach(function(l){doc.text(l,ML+6,wcy);wcy+=5;}); wcy+=1;
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(70,70,70);
+      wcBd.forEach(function(l){doc.text(l,ML+6,wcy);wcy+=4;});
+      if (wc.source){doc.setFontSize(7);doc.setTextColor(150,150,150);doc.text(pdfSafe(wc.source),ML+6,wcy);wcy+=4;}
+      if (wcBr.length){wcy+=1;doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(110,80,170);wcBr.forEach(function(l){doc.text(l,ML+6,wcy);wcy+=3.5;});}
+      y+=wcH+6;
+    }
+
     // Watch
     if (_currentData.watch) {
       chk(20);
@@ -10271,6 +10321,15 @@ function copyAsText() {
       lines.push('');
     });
   });
+
+  if (d.wildcard) {
+    lines.push('## WILDCARD (' + wildcardLensLabel(d.wildcard.lens) + ')');
+    lines.push('### ' + d.wildcard.headline);
+    lines.push(d.wildcard.body);
+    if (d.wildcard.source) lines.push('Source: ' + d.wildcard.source + (d.wildcard.url ? ' — ' + d.wildcard.url : ''));
+    if (d.wildcard.bridge) lines.push('> Back to your work: ' + d.wildcard.bridge);
+    lines.push('');
+  }
 
   // Watch
   if (d.watch) {
