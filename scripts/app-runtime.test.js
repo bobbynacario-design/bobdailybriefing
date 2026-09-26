@@ -531,16 +531,19 @@ test('a meeting brief gathers his own recent material on the topic, capped per k
     .concat([{id:'old',source:'News',title:'Suncorp ancient',detail:'',searchText:core.normalized('News Suncorp ancient'),saved:now-90*86400000,entities:[]}]);
   const {context}=environment(['meetingTokens','meetingMatches','meetingMaterial'],{IntelligenceSearchCore:core,MEETING_DAYS:42,MEETING_MAX:24,Date:class extends Date{static now(){return now;}},
     intelligenceSearchState:{loaded:true,loadedAt:now,index},loadIntelligenceSearchData:async()=>{},dailyBoostSearchEntries:()=>[],
-    evidenceSetState:{data:{sets:[{items:[{title:'Dossier: Suncorp lifts reserves',detail:'Dossier · x\nSummary line.\n- bullet',note:'check the APRA data',url:'https://example.com/s',capturedAt:day(2)},{title:'Unrelated',detail:'Nothing here',capturedAt:day(1)}]}]}},
+    evidenceSetState:{data:{sets:[{items:[{title:'Suncorp lifts reserves',detail:'Summary line.\n- bullet',note:'check the APRA data',url:'https://example.com/s',capturedAt:day(2)},{title:'Unrelated',detail:'Nothing here',capturedAt:day(1)},
+      {id:'briefing:x:insurance:0:dossier',title:'Dossier: Storm claims test Suncorp',detail:'Dossier · Storm claims test Suncorp\nClaims rise.',note:'Raise this with the broker',url:'https://abc.net.au/x',capturedAt:day(3)}]}]}},
     savedDossiers:async()=>({k1:{story:{headline:'Storm claims test Suncorp',url:'https://abc.net.au/x'},summary:'Claims rise.',bi_angle:'Loss of use.',generatedAt:day(3)},k2:{story:{headline:'Other insurer'},summary:'No match',generatedAt:day(1)}})});
   const found=await context.meetingMaterial('Suncorp');
   assert.equal(found.counts.News,6,'no more than six of one kind');
-  assert.equal(found.counts.Decisions,1); assert.equal(found.counts.Evidence,1); assert.equal(found.counts.Dossier,1);
+  assert.equal(found.counts.Decisions,1); assert.equal(found.counts.Evidence,1);
+  assert.equal(found.counts.Dossier,1,'a dossier and its Evidence copy are one item');
+  const kept=found.items.find(item=>item.kind==='Dossier');
+  assert.equal(kept.title,'Storm claims test Suncorp'); assert.match(kept.text,/His note: Raise this with the broker/,'the copy with his note wins');
   assert.ok(!found.items.some(item=>/ancient/.test(item.title)),'older than six weeks stays out');
   const ev=found.items.find(item=>item.kind==='Evidence');
   assert.match(ev.text,/Summary line\..*His note: check the APRA data/); assert.equal(ev.url,'https://example.com/s');
-  const dossier=found.items.find(item=>item.kind==='Dossier');
-  assert.equal(dossier.url,'https://abc.net.au/x'); assert.match(dossier.text,/BI angle: Loss of use\./);
+  assert.equal(kept.url,'https://abc.net.au/x');
   assert.ok(found.items.every((item,i,all)=>!i||all[i-1].date>=item.date),'newest first');
 });
 test('a meeting brief renders escaped, copies as text, and says what it used',()=>{
@@ -550,7 +553,8 @@ test('a meeting brief renders escaped, copies as text, and says what it used',()
   const html=context.meetingBriefHtml(b);
   assert.ok(html.includes('Meeting brief · Suncorp &lt;Q3&gt;') && html.includes('4 of your items'));
   ['Lately','Your threads','Ask in the meeting','Watch afterwards','Sources'].forEach(t=>assert.ok(html.includes(t),t));
-  assert.ok(html.includes('<strong>20 Sep</strong> — <a href="https://x.com/a"'));
+  assert.ok(html.includes('<strong>20 Sep</strong> — Reserves up <a class="dossier-src" href="https://x.com/a" target="_blank" rel="noopener noreferrer">(insuranceNEWS ↗)</a>'),'the text is plain; the source is the link');
+  assert.ok(html.includes('<li>No link</li>'));
   assert.equal(context.meetingBriefHtml(null),'');
   const snap=context.meetingBriefSnapshot(b);
   assert.equal(snap.split('\n')[0],'Meeting brief · Suncorp <Q3>');

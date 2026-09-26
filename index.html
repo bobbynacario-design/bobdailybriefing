@@ -3835,7 +3835,7 @@ async function meetingMaterial(topic) {
       var at = Date.parse(item.capturedAt || '') || 0;
       if (at && at < since) return;
       if (!meetingMatches([item.title, item.detail, item.note].join(' '), tokens)) return;
-      rows.push({kind: 'Evidence', at: at, title: item.title, text: [String(item.detail || '').split('\n').slice(0, 3).join(' '), item.note ? 'His note: ' + item.note : ''].filter(Boolean).join(' '), url: item.url || ''});
+      rows.push({kind: /:dossier$/.test(item.id || '') ? 'Dossier' : 'Evidence', at: at, title: item.title, text: [String(item.detail || '').split('\n').slice(0, 3).join(' '), item.note ? 'His note: ' + item.note : ''].filter(Boolean).join(' '), url: item.url || ''});
     });
   });
   var dossiers = await savedDossiers();
@@ -3846,11 +3846,12 @@ async function meetingMaterial(topic) {
     rows.push({kind: 'Dossier', at: at, title: (d.story && d.story.headline) || 'Dossier', text: [d.summary, d.bi_angle ? 'BI angle: ' + d.bi_angle : ''].filter(Boolean).join(' '), url: (d.story && d.story.url) || ''});
   });
   var perKind = {}, seen = {}, items = [];
-  rows.sort(function(a, b) { return b.at - a.at; }).forEach(function(row) {
-    var id = row.kind + '|' + String(row.title).toLowerCase();
+  var sameAs = function(row) { return (/^(Evidence|Dossier)$/.test(row.kind) ? 'doc|' : row.kind + '|') + String(row.title).replace(/^Dossier:\s*/, '').toLowerCase(); };
+  rows.sort(function(a, b) { return b.at - a.at || (/His note:/.test(b.text) ? 1 : 0) - (/His note:/.test(a.text) ? 1 : 0); }).forEach(function(row) {
+    var id = sameAs(row);
     if (seen[id] || items.length >= MEETING_MAX || (perKind[row.kind] || 0) >= 6) return;
     seen[id] = true; perKind[row.kind] = (perKind[row.kind] || 0) + 1;
-    items.push({kind: row.kind, date: row.at ? new Date(row.at).toISOString().slice(0, 10) : '', title: String(row.title).slice(0, 200), text: String(row.text || '').slice(0, 500), url: /^https?:\/\//i.test(row.url) ? row.url : ''});
+    items.push({kind: row.kind, date: row.at ? new Date(row.at).toISOString().slice(0, 10) : '', title: String(row.title).replace(/^Dossier:\s*/, '').slice(0, 200), text: String(row.text || '').slice(0, 500), url: /^https?:\/\//i.test(row.url) ? row.url : ''});
   });
   return {items: items, counts: perKind};
 }
@@ -3882,8 +3883,9 @@ function meetingBriefHtml(b) {
     esc([b.materialCount ? b.materialCount + ' of your items' : 'web search only', when].filter(Boolean).join(' · ')) + '</span></div>';
   html += '<p class="dossier-summary">' + esc(b.where_things_stand) + '</p>';
   html += part('Lately', (b.recent || []).length ? '<ul>' + b.recent.map(function(r) {
-    var what = esc(r.what) + (r.source ? ' <span class="dossier-src">(' + esc(r.source) + ')</span>' : '');
-    return '<li>' + (r.when ? '<strong>' + esc(r.when) + '</strong> — ' : '') + (r.url ? '<a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' + what + ' ↗</a>' : what) + '</li>';
+    var source = r.source ? esc(r.source) : r.url ? 'source' : '';
+    var link = !source ? '' : r.url ? ' <a class="dossier-src" href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">(' + source + ' ↗)</a>' : ' <span class="dossier-src">(' + source + ')</span>';
+    return '<li>' + (r.when ? '<strong>' + esc(r.when) + '</strong> — ' : '') + esc(r.what) + link + '</li>';
   }).join('') + '</ul>' : '');
   html += part('Your threads', (b.his_threads || []).length ? '<ul>' + b.his_threads.map(function(t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' : '');
   html += part('Ask in the meeting', (b.questions || []).length ? '<ol>' + b.questions.map(function(q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ol>' : '');
