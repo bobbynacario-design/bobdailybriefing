@@ -1480,6 +1480,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 
 /* ── WATCH CARD ── */
 .aha-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.aha-card{background:var(--gold-dim);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:1.1rem 1.35rem}.aha-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.45rem}.aha-kind{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.aha-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.aha-title{font-family:var(--serif);font-size:21px;line-height:1.3;color:var(--txt);margin:.15rem 0 .5rem}.aha-insight{font-size:14px;line-height:1.65;color:var(--txt2)}.aha-chain{margin:.7rem 0 .2rem;padding-left:1.25rem;font-size:13px;line-height:1.6;color:var(--txt2)}.aha-chain li{margin:.2rem 0}.aha-links{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.75rem}.aha-links span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}.aha-links .card-act{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.aha-wrong{margin-top:.7rem;font-size:12px;line-height:1.6;color:var(--txt2)}.aha-wrong strong{color:var(--txt)}
+.card.is-kb,.aha-card.is-kb{outline:2px solid var(--gold);outline-offset:3px}.card[tabindex="-1"]:focus,.aha-card[tabindex="-1"]:focus{outline:none}.card.is-kb[tabindex="-1"]:focus,.aha-card.is-kb[tabindex="-1"]:focus{outline:2px solid var(--gold)}
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
 .watch-stripe{position:absolute;top:0;left:0;width:4px;height:100%;background:var(--red)}
 .watch-body{font-size:13px;color:var(--txt2);line-height:1.8;padding-left:.25rem}
@@ -2731,8 +2732,9 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <div class="help-h">⌨️ Keys</div>
       <ul>
         <li><b>N</b> — jump to today's note. <b>D</b> — mark the quest done (or undo). <b>T</b> — tuck the spark away, or open it again.</li>
+        <li><b>J</b> / <b>K</b> — next and previous story in the briefing. <b>O</b> — open its source. <b>M</b> — mark it read (or unread). <b>U</b> — jump to the next unread story.</li>
         <li><b>Ctrl+K</b> (<b>⌘K</b> on a Mac) — search everything.</li>
-        <li>The Today keys do nothing while you are typing, with Ctrl/⌘/Alt held, or with search open.</li>
+        <li>These keys do nothing while you are typing, with Ctrl/⌘/Alt held, or with search open.</li>
       </ul>
     </div>
 
@@ -8743,6 +8745,50 @@ function markCardOpened(event) {
   if (st && window.markBriefingStoryOpened) window.markBriefingStoryOpened({headline:st.headline, source:st.source || '', url:String(st.url || '')});
 }
 document.addEventListener('click', markCardOpened);
+
+// ── Keyboard reading: J / K next and previous story, O open its source, M mark
+// it read, U the next unread. The Today keys N, D and T stay with the spark.
+// Same guards as those: never while typing, with a modifier held, or behind an
+// overlay. The current story gets a visible ring and keeps it until another key.
+var _kbCard = null;
+function readingCards() {
+  var page = document.querySelector('.page.active');
+  if (!page) return [];
+  return Array.prototype.filter.call(page.querySelectorAll('.aha-card, .card[data-command-id]'), function(card) { return card.offsetParent !== null; });
+}
+function focusReadingCard(card) {
+  if (!card) return;
+  if (_kbCard && _kbCard !== card) _kbCard.classList.remove('is-kb');
+  _kbCard = card; card.classList.add('is-kb');
+  if (!card.hasAttribute('tabindex')) card.setAttribute('tabindex', '-1');
+  card.focus({preventScroll: true});
+  if (card.scrollIntoView) card.scrollIntoView({block: 'center', behavior: 'smooth'});
+}
+function readingKey(event) {
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+  var target = event.target, tag = target && target.tagName ? String(target.tagName).toUpperCase() : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (target && target.isContentEditable)) return;
+  if (document.querySelector('#auth-overlay:not(.hidden), #evidence-picker-overlay:not([hidden]), #intel-search-overlay:not([hidden])')) return;
+  var key = String(event.key || '').toLowerCase();
+  if (['j', 'k', 'o', 'm', 'u'].indexOf(key) < 0 || (event.repeat && key !== 'j' && key !== 'k')) return;
+  var cards = readingCards();
+  if (!cards.length) return;
+  var at = cards.indexOf(_kbCard);
+  if (key === 'j' || key === 'k') {
+    event.preventDefault();
+    focusReadingCard(cards[at < 0 ? (key === 'j' ? 0 : cards.length - 1) : Math.max(0, Math.min(cards.length - 1, at + (key === 'j' ? 1 : -1)))]);
+  } else if (key === 'u') {
+    var next = document.querySelector('#read-progress button');
+    if (!next) return;
+    event.preventDefault(); next.click();
+    var found = document.querySelector('.source-highlight');
+    if (found && found.closest('.card')) focusReadingCard(found.closest('.card'));
+  } else if (at >= 0) {
+    var control = key === 'o' ? _kbCard.querySelector('a.src[href^="http"]') : _kbCard.querySelector('[data-card-act="read"]');
+    if (control) { event.preventDefault(); control.click(); }
+  }
+}
+document.addEventListener('keydown', readingKey);
 document.addEventListener('auxclick', markCardOpened);
 
 // Today's aha: a "Built on" chip jumps to the story it names.

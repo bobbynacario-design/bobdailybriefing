@@ -273,3 +273,30 @@ test('the copied AI prompt carries the last briefings, and the verification line
   context.renderGroundingLine({grounding:{mode:'ungrounded',reason:'x'},context:{recent:{briefings:3,headlines:30,updates:1,reruns:2}}},line);
   assert.match(element('grounding-line').textContent,/2 stories look like a recent one; 1 marked Update\./);
 });
+// Keyboard reading: J/K move a visible ring through the briefing, O opens the
+// current story's source, M marks it read, and nothing fires while typing.
+test('J and K move through the stories, O opens the source, M marks read, typing is left alone', () => {
+  const clicks=[];
+  const card=(name,withLink=true)=>{
+    const classes=new Set(), attrs={};
+    return {name,offsetParent:{},classList:{add:c=>classes.add(c),remove:c=>classes.delete(c),has:c=>classes.has(c)},
+      hasAttribute:a=>a in attrs,setAttribute:(a,v)=>{attrs[a]=v;},focus(){},scrollIntoView(){},
+      querySelector:sel=>sel.includes('a.src')?(withLink?{click:()=>clicks.push('open:'+name)}:null):sel.includes('card-act')?{click:()=>clicks.push('read:'+name)}:null};
+  };
+  const cards=[card('aha',false),card('first'),card('second')];
+  const page={querySelectorAll:()=>cards};
+  const {context}=environment(['readingCards','focusReadingCard','readingKey'],{_kbCard:null});
+  context.document.querySelector=sel=>sel==='.page.active'?page:null;
+  const press=(key,extra={})=>{ let prevented=false; context.readingKey(Object.assign({key,target:{tagName:'BODY'},preventDefault(){prevented=true;}},extra)); return prevented; };
+  assert.equal(press('j'),true); assert.equal(context._kbCard.name,'aha');
+  press('j'); assert.equal(context._kbCard.name,'first');
+  assert.equal(cards[0].classList.has('is-kb'),false,'the ring moves'); assert.equal(cards[1].classList.has('is-kb'),true);
+  press('o'); press('m'); assert.deepEqual(clicks,['open:first','read:first']);
+  press('j'); press('j'); assert.equal(context._kbCard.name,'second','stops at the last story');
+  press('k'); assert.equal(context._kbCard.name,'first');
+  assert.equal(press('j',{target:{tagName:'TEXTAREA'}}),false,'not while typing');
+  assert.equal(press('j',{ctrlKey:true}),false,'not with a modifier');
+  assert.equal(press('o',{repeat:true}),false,'a held O does not open tab after tab');
+  context._kbCard=null; press('k'); assert.equal(context._kbCard.name,'second','K starts from the bottom');
+  press('o'); assert.equal(clicks.length,3);
+});

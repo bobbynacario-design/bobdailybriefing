@@ -316,6 +316,11 @@ actually runs. The generated briefing is shaped by four things beyond it:
   in `briefing.links`. Insurance stays closed to the snapshot on a grounded day.
   Kept links open from the card's source chip ("Source matched" for the news
   feed, "Link verified" for a search result).
+- **Keyboard reading** — on a briefing, **J** / **K** move a gold ring to the next
+  or previous story (the aha card first), **O** opens its source (and counts it
+  opened), **M** marks it read or unread, **U** jumps to the next unread story.
+  Like the Today keys, they do nothing while typing, with a modifier held, or
+  behind an overlay; a held O never opens tab after tab.
 - **No reruns** — the prompt carries the headlines and watch lines of the last
   three briefings (`buildRecentBriefings`, same-day skipped). A story on the same
   event comes back only if something material changed, as “Update: …” opening
