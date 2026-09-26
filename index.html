@@ -2055,7 +2055,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 /* A faint top highlight gives dark cards an edge of light, like a raised surface. */
 .card,.hero,.daily-boost{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 /* Meeting brief */
-.meeting-panel{margin-bottom:1rem}.meeting-panel .command-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:flex-start}.meeting-intro{font-size:12.5px;line-height:1.6;color:var(--txt2);margin:.2rem 0 .6rem}.meeting-form{display:flex;flex-wrap:wrap;gap:.5rem}.meeting-form input{flex:1 1 220px;min-width:0;padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font-size:14px}.meeting-status{font-family:var(--mono);font-size:11px;color:var(--txt3);margin:.5rem 0 0;min-height:1em}.meeting-brief{margin:.7rem 0 0}.meeting-brief a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}#meeting-history{max-width:100%;font-size:12px}
+.meeting-panel{margin-bottom:1rem}.meeting-panel .command-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:flex-start}.meeting-intro{font-size:12.5px;line-height:1.6;color:var(--txt2);margin:.2rem 0 .6rem}.meeting-form{display:flex;flex-wrap:wrap;gap:.5rem}.meeting-form input{flex:1 1 220px;min-width:0;padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font-size:14px}.meeting-status{font-family:var(--mono);font-size:11px;color:var(--txt3);margin:.5rem 0 0;min-height:1em}.meeting-status.is-warn{color:var(--amber);font-size:12px}.meeting-brief{margin:.7rem 0 0}.meeting-brief a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}#meeting-history{max-width:100%;font-size:12px}
 /* Called it? */
 .called-it .called-row{display:grid;grid-template-columns:minmax(0,1fr) auto 3.2em;gap:.6rem;align-items:baseline;padding:.35rem 0;border-bottom:1px solid var(--rim);font-size:12.5px;color:var(--txt2)}.called-it .called-row b{font-family:var(--mono);color:var(--txt);text-align:right}.called-split{font-family:var(--mono);font-size:10.5px;color:var(--txt3);margin:.5rem 0 .2rem}.called-read{font-size:13px;line-height:1.55;color:var(--txt);margin:.5rem 0 0}.called-waiting{font-size:12px;color:var(--amber);margin:.35rem 0 0}
 .decision-verdict{margin:.45rem 0 .2rem;font-size:12.5px;color:var(--txt2)}.decision-verdict .decision-buttons{margin-top:.35rem}
@@ -3912,6 +3912,10 @@ function showMeetingBrief(id) {
   out.innerHTML = b ? meetingBriefHtml(b) : '';
   var select = document.getElementById('meeting-history');
   if (select && b) select.value = id;
+  // The box always says what Build brief will build: a brief on screen puts
+  // its topic there, so building again is one tap.
+  var input = document.getElementById('meeting-topic');
+  if (input && b && b.topic) input.value = b.topic;
 }
 function paintMeetingHistory() {
   var select = document.getElementById('meeting-history');
@@ -3935,7 +3939,15 @@ async function runMeetingBrief() {
   var input = document.getElementById('meeting-topic'), status = document.getElementById('meeting-status'), button = document.getElementById('meeting-run');
   var topic = String(input && input.value || '').trim();
   if (!status || _meetingRunning) return;
-  if (topic.length < 3) { status.textContent = 'Name the client, insurer or topic first (at least three characters).'; return; }
+  status.classList.remove('is-warn');
+  // An empty box builds the brief on screen again.
+  if (!topic && _meetingBriefs[_meetingShown] && _meetingBriefs[_meetingShown].topic) { topic = _meetingBriefs[_meetingShown].topic; if (input) input.value = topic; }
+  if (topic.length < 3) {
+    status.textContent = 'Type a client, insurer or topic in the box first (at least three characters).';
+    status.classList.add('is-warn');
+    if (input) input.focus();
+    return;
+  }
   if (!window._firebaseUid || typeof window.fbGenerateMeetingBrief !== 'function') { status.textContent = 'Sign in to build a meeting brief.'; return; }
   _meetingRunning = true; if (button) button.disabled = true;
   status.innerHTML = aiWorkingHtml('Gathering your material on “' + topic + '”…');
