@@ -62,7 +62,7 @@ test("prints a call with its thesis and invalidation line", () => {
   assert.match(out.block, /- PLTR \/ long \/ took \/ logged 2026-09-08/);
   assert.match(out.block, /thesis: Ahead of the government contract cycle\./);
   assert.match(out.block, /wrong if: Wrong below the September low\./);
-  assert.deepEqual(out.stats, {decisions: 1, radar: 0, markets: 0});
+  assert.deepEqual(out.stats, {decisions: 1, questions: 0, radar: 0, markets: 0});
 });
 
 test("omits the direction when the call has no side", () => {
@@ -130,6 +130,22 @@ test("headings appear only for the parts that have content", () => {
   assert.match(out.block, /OPEN CALLS/);
   assert.doesNotMatch(out.block, /RADAR SETUPS/);
   assert.doesNotMatch(out.block, /EVENT MARKETS/);
+});
+
+test("an insight decision is an open question, never one of the open calls", () => {
+  const calls = Array.from({length: 10}, (_, i) => decision({id: "c" + i, asset: "CALL" + i, saved: 100 + i}));
+  const insight = decision({id: "q1", asset: "Whether AI-agent access counts as unauthorised under cyber wordings", source: "briefing", action: "watched",
+    direction: "none", saved: 5000, reason: "A long dossier summary.", invalidator: "Insurers confirm cover for agent access.", reviewDate: "2026-10-03",
+    linkedSignal: {kind: "insight", label: "Go deeper · Saturday"}});
+  const out = buildStandingContext({decisions: calls.concat([insight, decision({id: "q2", asset: "From Evidence", source: "evidence", saved: 4000})])});
+  const [callsPart, questionsPart] = out.block.split("OPEN QUESTIONS (insights he is testing, from his journal):");
+  assert.equal((callsPart.match(/^- CALL\d/gm) || []).length, 10, "all ten calls keep their places");
+  assert.doesNotMatch(callsPart, /Whether AI-agent access/);
+  assert.match(questionsPart, /- Whether AI-agent access counts as unauthorised under cyber wordings\n  wrong if: Insurers confirm cover for agent access\.\n  review on 2026-10-03/);
+  assert.match(questionsPart, /- From Evidence/);
+  assert.doesNotMatch(questionsPart, /A long dossier summary/, "a question carries its wrong-if, not the pasted evidence");
+  assert.equal(out.stats.decisions, 10); assert.equal(out.stats.questions, 2);
+  assert.match(buildStandingContext({decisions: [insight]}).block, /OPEN QUESTIONS/, "questions alone still make a block");
 });
 
 test("survives malformed inputs without throwing", () => {

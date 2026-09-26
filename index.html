@@ -2036,7 +2036,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 /* Goal moves use the room of a full row on desktop, then stack cleanly on phones. */
 .boost-goal-next{font-size:12px;line-height:1.55;color:var(--txt2);margin:.2rem 0 .45rem}
 .boost-goal-edit{grid-template-columns:minmax(180px,1.2fr) minmax(180px,1fr) auto auto}
-@media(max-width:700px){.boost-goal-edit{grid-template-columns:1fr}}
+@media(max-width:700px){.boost-goal-edit{grid-template-columns:1fr;padding-bottom:.7rem;margin-bottom:.7rem;border-bottom:1px solid var(--rim)}}
 </style>
 </head>
 <body>
@@ -2823,7 +2823,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <ul>
         <li><b>Reminders</b> fall due on a date named in the watch metric (“due 12 Oct”), otherwise in 3 days, 2 weeks or 30 days by the story's timeframe. Due ones appear in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> with <b>✓ Checked</b>, <b>✎ Note what you found</b>, <b>Snooze a week</b>, and a <b>Due</b> date you can change.</li>
         <li><b>In the Morning 5 push</b> a line reads “To check: …”; on a quiet morning, a reminder coming due gets a push of its own. Each is announced once.</li>
-        <li><b>Experiments</b> — under <b>Try an idea</b>, plan one small thing and when to revisit it; it comes back in <b>Your experiments</b> to record what happened. If a regular Morning 5 is already being sent when an experiment is due, it includes “Experiment to review: …” and opens the review panel. It never creates an extra push on its own.</li>
+        <li><b>Experiments</b> — under <b>Try an idea</b>, plan one small thing and when to revisit it; it comes back in <b>Your experiments</b> to record what happened. When one is due, a Morning 5 push that is already going out adds “Experiment to review: …”, and the Morning 5 lists it: tap it there to open its review. It never creates an extra push on its own. A decision whose <b>Review on</b> date has come is listed the same way.</li>
         <li><b>Sundays</b> bring <b>Look back on your week</b>: the week's notes and stories. <b>Carry forward</b> one note and it rides along on the spark until next Sunday.</li>
         <li><b>Your week, read back</b> — tap <b>Read my week back</b> (it opens by itself on Sundays) and an AI reads your last seven days: notes, quests, the stories you opened and voted on, experiments and decisions. It names what kept coming up, what gave or took energy, where what you said and did part ways, one small thing you have not tried, and a question to sit with. Each read follows up on the last one from at least five days before, so there has been time for something to change. Under its question, <b>Write my answer</b> saves your reply with that question, and the next read responds to what you wrote. It only sees what you recorded here, never gives trading advice, and your notes go to OpenAI only when you tap. Up to three reads a day; the last twelve are kept. On Sundays, until you have read it, the Morning 5 push says so (one push that day, even when nothing else changed) and the collapsed spark strip shows <b>Read my week back</b>.</li>
       </ul>
@@ -3820,7 +3820,8 @@ function openEvidenceAsDecision(setEncoded, keyEncoded) {
   var set = (evidenceSetState.data.sets || []).find(function(candidate) { return candidate.id === setId; });
   var item = set && set.items.find(function(candidate) { return candidate.key === key; });
   if (!item) { showToast('That evidence item is no longer available','warn'); return; }
-  openDecisionFromInsight({title:item.title, source:'evidence', detail:[item.detail,item.note ? 'Your note: ' + item.note : '',item.url ? 'Source: ' + item.url : ''].filter(Boolean).join('\n'),
+  var rows = evidenceDetailLines(item), body = rows ? [rows[0]].concat(rows.filter(function(line) { return /^(BI angle|Wrong if):/.test(line); })).join('\n') : item.detail;
+  openDecisionFromInsight({title:item.title.replace(/^Dossier:\s*/, ''), source:'evidence', detail:[body,item.note ? 'Your note: ' + item.note : '',item.url ? 'Source: ' + item.url : ''].filter(Boolean).join('\n'),
     invalidator:(String(item.detail || '').match(/(?:Wrong if|Would change the read):\s*([^\n]+)/i) || [,''])[1], label:'Evidence · ' + set.name, url:item.url || ''});
 }
 function paintEvidencePage() {
@@ -5128,7 +5129,9 @@ function rebuildCommandCenter() {
   if (!commandCenterInputs || !window.CommandCenterCore) return;
   commandCenterData = window.CommandCenterCore.buildCommandCenter(Object.assign({}, commandCenterInputs, {
     preferences: commandPreferences,
-    today: manilaDateKey()
+    today: manilaDateKey(),
+    // Read at each rebuild, so a review finished on Today drops off here too.
+    experiment: window.dailyBoostDueExperiment ? window.dailyBoostDueExperiment() : null
   }));
   if (window.CommandReviewCore) {
     var capture = window.CommandReviewCore.captureDay(commandPreferences.review, commandCenterData, manilaDateKey(), new Date().toISOString());
@@ -6065,7 +6068,8 @@ async function saveDecisionForm() {
   if (!window.fbSaveDecision) { showToast('Decision journal is not ready', 'error'); return; }
   var status = getDecisionField('decision-status') || 'open';
   var source = getDecisionField('decision-source') || 'manual';
-  var asset = ['radar','miro','sports'].indexOf(source) >= 0 ? rawAsset.toUpperCase() : rawAsset;
+  var tickerLike = /^[A-Za-z0-9.\/-]{1,12}$/.test(rawAsset);
+  var asset = ['radar','miro','sports'].indexOf(source) >= 0 || (source === 'manual' && tickerLike) ? rawAsset.toUpperCase() : rawAsset;
   var entry = {
     id: decisionEditingId,
     saved: decisionEditingSaved,
@@ -8726,6 +8730,12 @@ function dossierHtml(d) {
     '<button type="button" class="card-act" data-dossier-act="rebuild" title="Search again and replace this dossier. Counts towards the ten a day.">Rebuild</button>' +
     '<button type="button" class="card-act" data-dossier-act="close">Close</button></div>';
 }
+// A decision draft needs the read, not the whole dossier: the summary, the BI
+// angle and the first client question. The full dossier stays under its card.
+function dossierDecisionDetail(d) {
+  return [d.summary, d.bi_angle ? 'BI angle: ' + d.bi_angle : '', (d.client_questions || [])[0] ? 'First question: ' + d.client_questions[0] : '',
+    'Full dossier: Go deeper on the story' + (d.story && d.story.headline ? ' “' + d.story.headline + '”' : '') + '.'].filter(Boolean).join('\n');
+}
 // Plain text for Evidence (and anywhere else it is pasted).
 function dossierSnapshot(d) {
   var lines = ['Dossier · ' + ((d.story && d.story.headline) || ''), d.summary];
@@ -8750,9 +8760,9 @@ function renderDossier(panel, d, sec, idx) {
       detail:dossierSnapshot(d), meta:[_currentData && _currentData.date, 'Go deeper', story.source].filter(Boolean).join(' · '), page:'today', ref:key, url:story.url || ''});
   });
   panel.querySelector('[data-dossier-act="decision"]').addEventListener('click', function() {
-    var story = d.story || {}, tomorrow = new Date(Date.parse(manilaDateKey() + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10);
-    openDecisionFromInsight({title:story.headline || 'Dossier insight', source:'briefing', detail:dossierSnapshot(d), invalidator:d.would_change || '',
-      reviewDate:tomorrow, label:'Go deeper · ' + ((_currentData && _currentData.date) || manilaDateKey()), url:story.url || ''});
+    var story = d.story || {}, inAWeek = new Date(Date.parse(manilaDateKey() + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10);
+    openDecisionFromInsight({title:story.headline || 'Dossier insight', source:'briefing', detail:dossierDecisionDetail(d), invalidator:d.would_change || '',
+      reviewDate:inAWeek, label:'Go deeper · ' + ((_currentData && _currentData.date) || manilaDateKey()), url:story.url || ''});
   });
   var rebuild = panel.querySelector('[data-dossier-act="rebuild"]');
   rebuild.addEventListener('click', function() {

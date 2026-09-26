@@ -1168,7 +1168,8 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
       type: options.test ? "morning-digest-test" : remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : "morning-digest",
       title: copy.title,
       body: copy.body,
-      url: remindersOnly || weeklyOnly || boost.experiment ? TODAY_URL + (boost.experiment ? "#boost-experiments-panel" : "") : COMMAND_URL,
+      // The Morning 5 lists the due experiment, so the push still opens there.
+      url: remindersOnly || weeklyOnly ? TODAY_URL : COMMAND_URL,
       signature: remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : (signature || "test-empty"),
     },
     webpush: {headers: {Urgency: "high"}},

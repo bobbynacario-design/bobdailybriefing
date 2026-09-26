@@ -70,9 +70,13 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   to revisit them. One experiment per day captures an action, review date, and
   outcome; the experiments panel (open experiments plus those reviewed in the
   last two weeks) remains visible when the spark is tucked away.
-  A due experiment is added to a Morning 5 notification that is already being
-  sent, and tapping it opens the experiment review panel; it never causes an
-  additional push. Experiments follow the existing 90-entry retention and appear in the reflection export.
+  A due experiment rides as a line on a Morning 5 notification that is already
+  being sent (it never causes an additional push), and the Morning 5 in the app
+  lists it: tapping it there opens its review on Today. A decision whose review
+  date has come is listed the same way ("Review due: …"). Decisions opened from
+  an insight reach the briefing as **open questions**, a block of their own, so
+  they never push market calls out of the ten open calls it sees.
+  Experiments follow the existing 90-entry retention and appear in the reflection export.
   Favourites carry forward into new daily entries and sync with the account.
 - **Safer reflection sync** — atomic account transactions merge edits by field
   and individual story/reminder, including removal markers. Conflicting note text

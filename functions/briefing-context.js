@@ -86,9 +86,31 @@ function isTracked(entry) {
   return status !== "closed" && action !== "skipped";
 }
 
+// A decision opened from an aha, a dossier, Evidence or the weekly read is a
+// question he is testing, not a market call: it gets its own short block, so a
+// few of them never push his calls out of the ten.
+const INSIGHT_SOURCES = ["briefing", "weekly", "evidence"];
+function isInsight(entry) {
+  return !!entry && ((entry.linkedSignal && entry.linkedSignal.kind === "insight") || INSIGHT_SOURCES.indexOf(text(entry.source)) >= 0);
+}
+const MAX_QUESTIONS = 5;
+function questionLines(decisions) {
+  return arr(decisions)
+    .filter((entry) => isTracked(entry) && isInsight(entry))
+    .sort((a, b) => Number((b && b.saved) || 0) - Number((a && a.saved) || 0))
+    .slice(0, MAX_QUESTIONS)
+    .map((entry) => {
+      let out = "- " + (line(entry.asset || entry.subject, 120) || "(unnamed)");
+      const invalidator = line(entry.invalidator);
+      if (invalidator) out += "\n  wrong if: " + invalidator;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(text(entry.reviewDate))) out += "\n  review on " + text(entry.reviewDate);
+      return out;
+    });
+}
+
 function decisionLines(decisions) {
   return arr(decisions)
-    .filter(isTracked)
+    .filter((entry) => isTracked(entry) && !isInsight(entry))
     .sort((a, b) => Number((b && b.saved) || 0) - Number((a && a.saved) || 0))
     .slice(0, MAX_DECISIONS)
     .map((entry) => {
@@ -143,9 +165,10 @@ function marketLines(markets) {
 function buildStandingContext(input) {
   const source = input || {};
   const decisions = decisionLines(source.decisions);
+  const questions = questionLines(source.decisions);
   const radar = radarLines(source.radar);
   const markets = marketLines(source.markets);
-  if (!decisions.length && !radar.length && !markets.length) return null;
+  if (!decisions.length && !questions.length && !radar.length && !markets.length) return null;
 
   const parts = [
     "STANDING CONTEXT — Bob's own open state. This is private working state, " +
@@ -153,6 +176,9 @@ function buildStandingContext(input) {
   ];
   if (decisions.length) {
     parts.push("", "OPEN CALLS (his decision journal):", decisions.join("\n"));
+  }
+  if (questions.length) {
+    parts.push("", "OPEN QUESTIONS (insights he is testing, from his journal):", questions.join("\n"));
   }
   if (radar.length) {
     parts.push("", "RADAR SETUPS (confirmed or forming):", radar.join("\n"));
@@ -165,6 +191,7 @@ function buildStandingContext(input) {
     block: parts.join("\n"),
     stats: {
       decisions: decisions.length,
+      questions: questions.length,
       radar: radar.length,
       markets: markets.length,
     },

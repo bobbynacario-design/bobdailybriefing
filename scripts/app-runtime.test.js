@@ -21,9 +21,11 @@ test('Daily Boost account writes merge against the transaction snapshot', async(
 // Execute actual application handlers in a tiny DOM/data adapter. These tests
 // cover behavior; artifact presence is checked separately by check-site.js.
 function handler(name) {
-  const start=html.indexOf('function '+name+'(');
-  assert.ok(start>=0,name);
-  return html.slice(start,html.indexOf('\n}',start)+2);
+  const found=html.indexOf('function '+name+'(');
+  assert.ok(found>=0,name);
+  // Keep the async keyword, so an extracted async function can still await.
+  const start=html.slice(found-6,found)==='async '?found-6:found;
+  return html.slice(start,html.indexOf('\n}',found)+2);
 }
 function environment(names, extra={}) {
   const elements=new Map();
@@ -55,6 +57,27 @@ test('aha actions preserve sources and invalidation when saved or scheduled',()=
   assert.equal(check.source,'Today’s aha · 2026-09-26');
   assert.match(element('aha-action-status').textContent,/To check/);
   assert.equal(element('aha-review').hidden,true);
+});
+test('a dossier opens as a compact decision draft: the read, the BI angle, the first question',()=>{
+  const {context}=environment(['dossierDecisionDetail']);
+  const text=context.dossierDecisionDetail({summary:'A claim escalated.',bi_angle:'Loss of use.',client_questions:['Who owns the delay?','Q2','Q3'],background:['Long background that stays out'],story:{headline:'Strata storm claim'}});
+  assert.equal(text,'A claim escalated.\nBI angle: Loss of use.\nFirst question: Who owns the delay?\nFull dossier: Go deeper on the story “Strata storm claim”.');
+  assert.ok(!text.includes('Long background'));
+});
+test('a hand-typed ticker is still uppercased; an insight subject keeps its case',async()=>{
+  const saved=[];
+  const run=async(fields)=>{
+    const {context}=environment(['saveDecisionForm'],{getDecisionField:id=>fields[id]||'',showToast:()=>{},fbSaveDecision:async entry=>{saved.push(entry);},decisionEditingId:null,decisionEditingSaved:null,decisionEditingCreatedDate:'',
+      manilaDateKey:()=> '2026-09-26',decisionNum:v=>v?Number(v):null,decisionLinkedSignal:null,decisionBeatFromForm:()=>null,closeDecisionForm:()=>{},decisionRefPrice:{},renderDecisions:()=>{}});
+    await context.saveDecisionForm();
+    return saved[saved.length-1];
+  };
+  assert.equal((await run({'decision-asset':'nvda','decision-source':'manual'})).asset,'NVDA');
+  assert.equal((await run({'decision-asset':'brk.b','decision-source':'manual'})).asset,'BRK.B');
+  assert.equal((await run({'decision-asset':'A claims documentation gap','decision-source':'manual'})).asset,'A claims documentation gap');
+  assert.equal((await run({'decision-asset':'client question','decision-source':'briefing','decision-review-date':'2026-10-03'})).asset,'client question');
+  assert.equal(saved[saved.length-1].reviewDate,'2026-10-03');
+  assert.equal((await run({'decision-asset':'sol','decision-source':'radar'})).asset,'SOL');
 });
 test('an insight opens a reviewable decision form without saving it',()=>{
   let page, draft, saved=0, scrolled=0;
