@@ -112,7 +112,7 @@ function dayBlock(key, entry, core, today) {
   });
   const wrote = note.own || note.comments.length || note.takes.length;
   const active = wrote || entry.done || noted.length || opened.length || votes.length ||
-    reminders.length || text(entry.trialPlan) || text(entry.trialOutcome);
+    reminders.length || text(entry.trialPlan) || text(entry.trialOutcome) || entry.sparkResponse;
   if (!active) return null;
 
   const title = core && typeof core.sparkTitle === "function" ? core.sparkTitle(entry.spark) : "";
@@ -136,6 +136,13 @@ function dayBlock(key, entry, core, today) {
     lines.push("  Experiment planned: " + quote(entry.trialPlan) + (entry.trialDone ? " — marked done" : today ? " — not done yet" : ""));
   }
   if (text(entry.trialOutcome)) lines.push("  Experiment outcome: " + quote(entry.trialOutcome, 400));
+  const resultLabels = {helped:"Helped",mixed:"Mixed",unhelpful:"Didn't help",untried:"Haven't tried"};
+  const nextLabels = {keep:"Keep doing",adapt:"Adapt",release:"Let go"};
+  if (resultLabels[entry.trialResult]) lines.push("  His experiment assessment: " + resultLabels[entry.trialResult]);
+  if (nextLabels[entry.trialNext]) lines.push("  His chosen next step: " + nextLabels[entry.trialNext]);
+  const response = entry.sparkResponse, responseLabels = {helpful:"Helpful",more:"More like this","not-today":"Not today (not a permanent dislike)"};
+  if (response && responseLabels[response.value]) lines.push("  His feedback on spark " + quote(core.sparkTitle(response.spark),80) + ": " + responseLabels[response.value] + (text(response.note) ? " — " + quote(response.note,240) : ""));
+  reminders.filter((item) => text(item.finding)).slice(0,LIST_MAX).forEach((item) => lines.push("  Finding on " + quote(item.metric,140) + (item.done ? " (checked)" : " (draft, still open)") + ": " + quote(item.finding,400)));
   if (noted.length) lines.push("  Stories he noted without comment: " + storyList(noted).join("; "));
   if (opened.length) lines.push("  Opened " + opened.length + " briefing " + (opened.length === 1 ? "story" : "stories") + ": " + storyList(opened).join("; "));
   const more = votes.filter((item) => item.vote === 1), less = votes.filter((item) => item.vote === -1);

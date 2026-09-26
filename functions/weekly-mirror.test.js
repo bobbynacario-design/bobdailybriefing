@@ -234,3 +234,14 @@ test("the stored map keeps the latest twelve reads", () => {
   assert.equal(keys[0], "2026-09-04");
   assert.equal(mirrors["2026-09-15"].question, "q15");
 });
+
+
+test('explicit spark feedback, experiment outcomes, and check findings inform the read',()=>{
+  const entries=week();
+  Object.assign(entries['2026-09-25'],{trialResult:'untried',trialNext:'adapt',sparkResponse:{spark:3,value:'not-today',note:'Needed a quieter task'}});
+  entries['2026-09-25'].reminders[0].finding='The port is still closed';
+  const input=buildMirrorInput({entries,decisions:[],mirrors:{},todayKey:TODAY,core});
+  assert.match(input.text,/Haven't tried/); assert.match(input.text,/His chosen next step: Adapt/);
+  assert.match(input.text,/not a permanent dislike/); assert.match(input.text,/Needed a quieter task/);
+  assert.match(input.text,/draft, still open/); assert.match(input.text,/The port is still closed/);
+});

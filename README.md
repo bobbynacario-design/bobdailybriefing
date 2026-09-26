@@ -5,6 +5,25 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 
 ## Features
 
+- **Learn from your daily practice** — under the quest, “Did this help?” offers
+  Helpful, Not today and More like this, plus an optional sentence. The latest
+  response each day stays tied to its spark, syncs, and appears in reflection
+  exports and the weekly mirror. Feedback nudges the rotation rather than taking
+  it over: a theme asked for (one More like this, or two Helpfuls, in 30 days)
+  comes back at most once every four days as its next unused spark, never two
+  days running, and a Not today spark is passed over when it comes round; Sunday
+  look-backs and the 14-day no-repeat rule still hold. When feedback moved the
+  pick, the why line names it (“Because you asked for more like …”). Tap the
+  selected response again to clear it.
+- **Review and reuse experiments** — choose Helped, Mixed, Didn't help, or Haven't
+  tried, then Keep doing, Adapt, or Let go. A review needs an outcome or a written
+  finding; keep/adapt can prefill a new plan for today without overwriting an
+  existing experiment. These choices also inform the weekly mirror.
+- **Check findings safely** — Note what you found opens a draft beside the check.
+  Only Save finding & check off completes it. Completed checks free an open slot
+  (ten open checks per day, thirty saved checks total); their findings remain
+  available in exports and the weekly mirror.
+
 - **From insight to action** — weekly read-back suggestions have a review date
   and **Try this** action that saves an experiment without replacing one already
   saved today. Theme day citations open the matching daily entry; explicit ISO
