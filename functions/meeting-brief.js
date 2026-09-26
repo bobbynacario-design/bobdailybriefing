@@ -74,6 +74,7 @@ const SYSTEM = "You prepare short, factual one-page meeting briefs for an insura
 function buildMeetingPrompt(topic, material, dateLabel) {
   const lines = [
     "Bob is a forensic business-interruption (BI) consultant who works with Australian insurers and Philippine consulting firms.",
+    "Most of his files are third-party recoveries for QBE (vehicles damaging utility and road assets; heavy-vehicle loss of income) and small-business BI for Allianz, so the angles that matter are how a claimant built its costs or lost income.",
     "He has a meeting about: " + topic + (dateLabel ? " (today is " + dateLabel + ")" : "") + ".",
     "Brief him in one page. Search the web for what is new on this topic in the last 30 days, and use his own material below.",
     "",

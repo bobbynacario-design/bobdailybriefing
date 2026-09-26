@@ -287,6 +287,21 @@ window.fbLoadDossiers = async function(uid) {
     throw e;
   }
 };
+// Your accounts: the organisations his files involve (briefings-bob/accounts-<uid>).
+window.fbLoadAccounts = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'accounts-' + uid));
+    return snap.exists() ? (snap.data().accounts || []) : [];
+  } catch (e) {
+    if (e && e.code === 'permission-denied') return [];
+    throw e;
+  }
+};
+window.fbSaveAccounts = async function(uid, accounts) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  await setDoc(doc(db, COLL, 'accounts-' + uid), {uid: uid, kind: 'accounts', accounts: accounts, updatedAt: new Date().toISOString()});
+};
 // Meeting brief (functions/meeting-brief.js): one page before a call, and the
 // briefs already built for this account (latest twenty).
 window.fbGenerateMeetingBrief = async function(topic, material, dateLabel) {
@@ -2054,6 +2069,9 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup-chip.active,body.light .trend-period-btn.active,body.light .command-filter.active{border-color:rgba(114,86,16,.45)}
 /* A faint top highlight gives dark cards an edge of light, like a raised surface. */
 .card,.hero,.daily-boost{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+/* Your accounts */
+.acct-badges{display:flex;flex-wrap:wrap;gap:.3rem;margin:.1rem 0 .5rem}.acct-badge{font-family:var(--mono);font-size:10px;letter-spacing:.03em;padding:.14rem .5rem;border-radius:6px;border:1px solid var(--line);background:var(--gold-dim);color:var(--txt);cursor:pointer}.acct-badge:hover{border-color:var(--line-hover)}.acct-badge.is-call{background:var(--blue-dim)}
+.accounts-panel{margin-bottom:1rem}.accounts-panel .command-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}.acct-group{margin:.5rem 0 .2rem}.acct-group-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.2rem}.acct-row{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;padding:.3rem 0;border-bottom:1px solid var(--rim)}.acct-name{flex:1 1 9rem;font-size:13px;color:var(--txt)}.acct-count{font-family:var(--mono);font-size:10.5px;color:var(--txt3)}.acct-chips{display:flex;flex-wrap:wrap;gap:.3rem}.acct-more{margin-top:.6rem}.acct-more summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--txt2)}.acct-quiet{font-size:12.5px;color:var(--txt3);margin:.3rem 0}.acct-edit-label{display:block;font-size:12px;color:var(--txt2);margin:.4rem 0 .3rem}#accounts-text{width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:.5rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt)}
 /* Meeting brief */
 .meeting-panel{margin-bottom:1rem}.meeting-panel .command-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:flex-start}.meeting-intro{font-size:12.5px;line-height:1.6;color:var(--txt2);margin:.2rem 0 .6rem}.meeting-form{display:flex;flex-wrap:wrap;gap:.5rem}.meeting-form input{flex:1 1 220px;min-width:0;padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font-size:14px}.meeting-status{font-family:var(--mono);font-size:11px;color:var(--txt3);margin:.5rem 0 0;min-height:1em}.meeting-status.is-warn{color:var(--amber);font-size:12px}.meeting-brief{margin:.7rem 0 0}.meeting-brief a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}#meeting-history{max-width:100%;font-size:12px}
 /* Called it? */
@@ -2271,6 +2289,13 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="command-stat"><div class="command-stat-value" id="evidence-source-count">—</div><div class="command-stat-label">Sources represented</div></div>
     <div class="command-stat"><div class="command-stat-value" id="evidence-note-count">—</div><div class="command-stat-label">Items with notes</div></div>
   </div>
+  <section class="command-panel accounts-panel" id="accounts-panel" aria-labelledby="accounts-title">
+    <div class="command-panel-head"><div><div class="command-panel-title" id="accounts-title">Your accounts</div><div class="command-panel-meta">The organisations your files involve</div></div><button type="button" class="tool-chip" id="accounts-edit" onclick="editAccounts()">Edit</button></div>
+    <p class="meeting-intro" id="accounts-intro"></p>
+    <div id="accounts-list"></div>
+    <div id="accounts-editor" hidden></div>
+    <div class="meeting-status" id="accounts-status" role="status"></div>
+  </section>
   <section class="command-panel meeting-panel" id="meeting-panel" aria-labelledby="meeting-title">
     <div class="command-panel-head"><div><div class="command-panel-title" id="meeting-title">Meeting brief</div><div class="command-panel-meta">One page before a call</div></div><select id="meeting-history" aria-label="Earlier briefs" hidden onchange="showMeetingBrief(this.value)"></select></div>
     <p class="meeting-intro">Name the client, insurer or topic. The brief gathers your last six weeks on it (briefing stories, dossiers, saved evidence, notes and decisions), reads what is new on the web, and ends with three questions to ask. Your matched items go to OpenAI for this brief only. Up to five a day.</p>
@@ -2849,6 +2874,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li><b>Go deeper</b> — on any story, a short dossier opens under the card: what happened, how it came about, the key numbers, the BI and claims angle, who is exposed, three questions to ask a client, what would change the read, and its sources (only pages the search really returned). It is kept, so opening it again costs nothing; <b>Save to Evidence</b> files it with its sources, and <b>Open as decision</b> starts a journal draft from it. <b>Rebuild</b> (tap twice) searches again and replaces it. What would change the read only gives a date when a source states one. Up to ten new ones a day.</li>
         <li><b>How stories are ranked</b> — <span class="help-pill" style="color:var(--green)">HIGH</span> means you would act on it or raise it this week; being about insurance or BI earns a story its place, not the label. So some days have one or two highs, and some none. A market close (PSEi, ASX, the peso) is not a story on its own: those numbers are in the strip at the top, and a move only earns a card through its cause. The <b>→ Why it matters</b> line starts with the substance, never a stock opener.</li>
         <li><b>Wildcard</b> — after the sections, one real story from outside your usual beats, chosen through the day's lens: Sunday <b>Slow change</b>, Monday <b>A number that matters</b>, Tuesday <b>History rhymes</b>, Wednesday <b>Against the grain</b>, Thursday <b>Far field</b>, Friday <b>How it was solved</b>, Saturday <b>Somewhere else</b>. <b>→ Back to your work</b> offers a link to your field as a question to test, never forced. It is kept only when the search really returned its page, so some days there is none. It has Note, Copy citation, Evidence and Go deeper.</li>
+        <li><b>Your work and your accounts</b> — the briefing is told what your files turn on (utility and road-asset damage claims for QBE, heavy-vehicle loss of income, small-business BI for Allianz) and favours stories that move those numbers: network labour and contractor rates, traffic control, repair and parts lead times, hire and freight rates, court rulings on betterment or overheads, outages and storms. It also looks for news on <b>your accounts</b>. A story that names one gets a badge on its card (tap it for a meeting brief on that account); one that names an open market call gets a <b>Your call</b> badge (tap it to open the call).</li>
         <li><b>Your open calls and questions</b> — the briefing sees your open decisions: market calls, and <b>open questions</b> (decisions opened from an insight). When a story bears on one, especially on its <b>wrong if</b>, its Why it matters line names it. It never tells you what to do about it.</li>
         <li><b>No reruns</b> — each briefing is shown your last three, so a story only comes back as <b>Update:</b> with what changed. The line under the briefing title says whether anything was re-run.</li>
         <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Open as decision</b> prepares a decision-journal draft with the insight, evidence and invalidator, but never saves it for you. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> on the day you choose.</li>
@@ -2894,6 +2920,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-evidence"/></svg> Evidence — what you save</div>
       <ul>
+        <li><b>Your accounts</b> — the insurers you work for, the utilities, road authorities and telcos whose claims you assess, and the firms that instruct you. It starts as a list drawn from your recent files; <b>Edit</b> it (one per line: <b>Name | other names</b>) or go back to the starter list. Each shows how many stories named it in the last 30 days, with <b>Brief</b> and <b>Timeline</b>. The Morning 5 says which were in today's briefing.</li>
         <li><b>Saved dossiers, ahas and meeting briefs</b> read as documents: the summary, then labelled parts (how it came about, the numbers, the BI angle, questions, sources as links). Long ones open folded; <b>Show all</b> opens the rest.</li>
         <li><b>Open source</b> takes you to where it came from: a story's card in its briefing (older briefings too), highlighted, with a saved dossier opened under it; a meeting brief back in its panel. <b>← Back to Evidence</b> returns you and puts today's briefing back. If that briefing was deleted, it says so, and the copy saved here is what remains.</li>
         <li><b>Source ↗</b> opens the original article. <b>Open as decision</b> starts a journal draft from the item; nothing is saved until you tap <b>Save decision</b>.</li>
@@ -3137,6 +3164,7 @@ function clearPrivateSession() {
   _currentReportUrl = null;
   resetIntelligenceSearch(); resetEvidenceSets();
   _meetingBriefs = {}; _meetingFor = null; _meetingShown = '';
+  _accounts = null; _accountsFor = null; _callsCache = null; _callsLoading = false;
   if (window.fbAcceptEvidenceBase) window.fbAcceptEvidenceBase(null);
   resetTicker();
   setText('hero-date','Sign in to read your briefing');
@@ -3819,7 +3847,167 @@ function saveEvidenceSets(message) {
 function renderEvidencePage() {
   if (!evidenceSetState.loaded) loadEvidenceSets(); else paintEvidencePage();
   loadMeetingBriefs();
+  renderAccountsPanel(); loadAccounts().then(renderAccountsPanel);
 }
+
+// ── Your accounts ──
+// The insurers he works for, the utilities, road authorities and telcos whose
+// claims he assesses, and the firms that instruct him. A starter list (from
+// his own recent files; names only) stands until he saves his own. A story
+// that names one gets a badge on its card, the Morning 5 says which were in
+// today's briefing, and the briefing is told them so it looks for news on them.
+var _accounts = null, _accountsFor = null, _callsCache = null, _callsLoading = false;
+var ACCOUNT_KIND_LABELS = {insurer:'Insurers', utility:'Utilities', road:'Road authorities', telco:'Telcos', law:'Law firms', client:'Clients', other:'Others'};
+function activeAccounts() {
+  return _accounts && _accounts.length ? _accounts : ((window.BriefingPromptCore && window.BriefingPromptCore.DEFAULT_ACCOUNTS) || []);
+}
+async function loadAccounts() {
+  var uid = window._firebaseUid || null;
+  if (!uid || typeof window.fbLoadAccounts !== 'function' || _accountsFor === uid) return activeAccounts();
+  _accountsFor = uid;
+  try { var kept = window.BriefingPromptCore.cleanAccounts(await window.fbLoadAccounts(uid)); _accounts = kept.length ? kept : null; }
+  catch (e) { _accounts = null; _accountsFor = null; }
+  return activeAccounts();
+}
+// His open market calls (not questions from an insight), for the "Your call" badge.
+function openCallAssets() {
+  var list = (commandCenterInputs && commandCenterInputs.decisions) || (decisionEntries && decisionEntries.length ? decisionEntries : null) || _callsCache;
+  if (!list && !_callsLoading && window._firebaseUid && typeof window.fbLoadDecisions === 'function') {
+    _callsLoading = true;
+    window.fbLoadDecisions().then(function(entries) { _callsCache = entries || []; applyAccountBadges(); }).catch(function() { _callsCache = []; });
+  }
+  return (list || []).filter(function(e) {
+    return e && (e.status || 'open') !== 'closed' && e.action !== 'skipped' && !decisionIsInsight(e) && /^[A-Za-z0-9.&\/ -]{2,30}$/.test(String(e.asset || ''));
+  }).map(function(e) { return String(e.asset); });
+}
+function storyText(st) { return [st && st.headline, st && st.body, st && st.relevance, st && st.bridge].join(' '); }
+function accountBadgesHtml(st, calls) {
+  var core = window.BriefingPromptCore;
+  var names = core.accountsInText(storyText(st), activeAccounts());
+  var hitCalls = core.accountsInText(storyText(st), (calls || []).map(function(asset) { return {name: asset, aliases: []}; }));
+  if (!names.length && !hitCalls.length) return '';
+  return '<div class="acct-badges">' + names.map(function(name) { return '<button type="button" class="acct-badge" data-account="' + esc(name) + '" title="One of your accounts: open a meeting brief on it">' + esc(name) + '</button>'; }).join('') +
+    hitCalls.map(function(asset) { return '<button type="button" class="acct-badge is-call" data-call="' + esc(asset) + '" title="One of your open calls: open it in Decisions">Your call: ' + esc(asset) + '</button>'; }).join('') + '</div>';
+}
+// Runs after every render and again when the list or the calls arrive.
+function applyAccountBadges() {
+  if (!_currentData || !window.BriefingPromptCore || !window.BriefingPromptCore.accountsInText) return;
+  var calls = openCallAssets();
+  document.querySelectorAll('#today-out .card[data-command-id^="briefing-"], #today-out .wildcard-card').forEach(function(card) {
+    var st = card.classList.contains('wildcard-card') ? _currentData.wildcard : cardStory(card);
+    var old = card.querySelector('.acct-badges'); if (old) old.remove();
+    var html = st ? accountBadgesHtml(st, calls) : '';
+    var anchor = card.querySelector('.card-top') || card.querySelector('.wildcard-top');
+    if (html && anchor) anchor.insertAdjacentHTML('afterend', html);
+  });
+}
+// [{name, headlines}] for the accounts named in a briefing, in list order.
+function accountHitsIn(briefing) {
+  if (!briefing || !briefing.sections || !window.BriefingPromptCore) return [];
+  var hits = {}, order = [];
+  Object.keys(briefing.sections).forEach(function(sec) {
+    (briefing.sections[sec] || []).forEach(function(st) {
+      window.BriefingPromptCore.accountsInText(storyText(st), activeAccounts()).forEach(function(name) {
+        if (!hits[name]) { hits[name] = []; order.push(name); }
+        if (hits[name].indexOf(st.headline) < 0) hits[name].push(st.headline);
+      });
+    });
+  });
+  var rank = activeAccounts().map(function(a) { return a.name; });
+  return order.sort(function(a, b) { return rank.indexOf(a) - rank.indexOf(b); }).map(function(name) { return {name: name, headlines: hits[name]}; });
+}
+// How many stories named each account over the last 30 days of loaded briefings.
+function accountStoryCounts() {
+  var since = Date.now() - 30 * 86400000, counts = {};
+  (window._briefingHistory || []).forEach(function(entry) {
+    if (!entry || !entry.data || (entry.saved && entry.saved < since)) return;
+    accountHitsIn(entry.data).forEach(function(hit) { counts[hit.name] = (counts[hit.name] || 0) + hit.headlines.length; });
+  });
+  return counts;
+}
+function renderAccountsPanel() {
+  var list = document.getElementById('accounts-list'), intro = document.getElementById('accounts-intro');
+  if (!list) return;
+  var accounts = activeAccounts(), counts = accountStoryCounts(), groups = {};
+  if (intro) intro.textContent = (_accounts && _accounts.length ? 'Your list. ' : 'A starter list from your recent files; edit it to make it yours. ') +
+    'A story that names one gets a badge on its card, the Morning 5 says which were in today’s briefing, and the briefing looks for news on them.';
+  // The accounts in the news lately get a row each; the rest fold away as
+  // small buttons, so a long list does not push the meeting brief off screen.
+  var live = accounts.filter(function(a) { return counts[a.name]; }).sort(function(a, b) { return counts[b.name] - counts[a.name]; });
+  accounts.forEach(function(a) { (groups[a.kind] = groups[a.kind] || []).push(a); });
+  var rows = live.length ? '<div class="acct-group-label">In your briefings, last 30 days</div>' + live.map(function(a) {
+    var n = counts[a.name];
+    return '<div class="acct-row"><span class="acct-name">' + esc(a.name) + '</span><span class="acct-count">' + n + (n === 1 ? ' story' : ' stories') + '</span>' +
+      '<button type="button" class="card-act" data-account="' + esc(a.name) + '">Brief</button><button type="button" class="card-act" data-account-timeline="' + esc(a.name) + '">Timeline</button></div>';
+  }).join('') : '<p class="acct-quiet">None of your accounts has been named in a briefing in the last 30 days.</p>';
+  var all = Object.keys(ACCOUNT_KIND_LABELS).filter(function(kind) { return groups[kind]; }).map(function(kind) {
+    return '<div class="acct-group"><div class="acct-group-label">' + ACCOUNT_KIND_LABELS[kind] + '</div><div class="acct-chips">' + groups[kind].map(function(a) {
+      return '<button type="button" class="acct-badge" data-account="' + esc(a.name) + '" title="Open a meeting brief on ' + esc(a.name) + '">' + esc(a.name) + '</button>';
+    }).join('') + '</div></div>';
+  }).join('');
+  list.innerHTML = rows + '<details class="acct-more"><summary>All accounts (' + accounts.length + ')</summary>' + all + '</details>';
+}
+// One line per account: Name | other names.
+function accountsToText(accounts) {
+  return accounts.map(function(a) { return a.name + (a.aliases.length ? ' | ' + a.aliases.join(', ') : ''); }).join('\n');
+}
+function accountsFromText(value, previous) {
+  var kinds = {};
+  (previous || []).forEach(function(a) { kinds[a.name.toLowerCase()] = a.kind; });
+  return window.BriefingPromptCore.cleanAccounts(String(value || '').split(/\n+/).map(function(line) {
+    var parts = line.split('|'), name = String(parts[0] || '').trim();
+    return {name: name, aliases: String(parts[1] || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean), kind: kinds[name.toLowerCase()] || 'other'};
+  }));
+}
+function editAccounts() {
+  var editor = document.getElementById('accounts-editor'), status = document.getElementById('accounts-status');
+  if (!editor) return;
+  if (!window._firebaseUid) { if (status) status.textContent = 'Sign in to keep your own list.'; return; }
+  editor.hidden = false;
+  editor.innerHTML = '<label class="acct-edit-label" for="accounts-text">One per line: <b>Name | other names, comma separated</b></label><textarea id="accounts-text" rows="10" spellcheck="false"></textarea>' +
+    '<div class="meeting-form"><button type="button" class="tool-chip" onclick="saveAccounts()">Save list</button><button type="button" class="tool-chip" onclick="saveAccounts(true)">Use the starter list</button><button type="button" class="tool-chip" onclick="document.getElementById(\'accounts-editor\').hidden=true">Cancel</button></div>';
+  document.getElementById('accounts-text').value = accountsToText(activeAccounts());
+}
+async function saveAccounts(starter) {
+  var status = document.getElementById('accounts-status'), box = document.getElementById('accounts-text');
+  var list = starter ? [] : accountsFromText(box && box.value, activeAccounts());
+  if (!starter && !list.length) { if (status) status.textContent = 'Add at least one name, or use the starter list.'; return; }
+  try {
+    await window.fbSaveAccounts(window._firebaseUid, list);
+    _accounts = list.length ? list : null;
+    document.getElementById('accounts-editor').hidden = true;
+    if (status) status.textContent = starter ? 'Back to the starter list.' : 'Saved: ' + list.length + (list.length === 1 ? ' account.' : ' accounts.') + ' The next briefing looks for news on them.';
+    renderAccountsPanel(); applyAccountBadges(); if (commandCenterInputs) rebuildCommandCenter();
+  } catch (e) {
+    if (status) status.textContent = 'Could not save the list: ' + (e && e.message ? e.message : 'check your connection');
+  }
+}
+function openAccountBrief(name) {
+  switchPage('evidence', document.querySelector('.ntab[data-page="evidence"]'));
+  var input = document.getElementById('meeting-topic'), status = document.getElementById('meeting-status'), panel = document.getElementById('meeting-panel');
+  if (input) input.value = name;
+  if (status) { status.classList.remove('is-warn'); status.textContent = 'Ready: tap Build brief for one page on ' + name + '.'; }
+  if (panel) panel.scrollIntoView({block:'start', behavior:'smooth'});
+}
+function openAccountTimeline(name) {
+  switchPage('timeline', document.querySelector('.ntab[data-page="timeline"]'));
+  var input = document.getElementById('timeline-query');
+  if (input) input.value = name;
+  if (typeof runEntityTimeline === 'function') runEntityTimeline(name);
+}
+function openCallFromBadge(asset) {
+  switchPage('decisions', document.querySelector('.ntab[data-page="decisions"]'));
+  var tries = 0, timer = setInterval(function() {
+    if (highlightSourceTitle(asset, 'decisions') || ++tries > 12) clearInterval(timer);
+  }, 300);
+}
+document.addEventListener('click', function(event) {
+  var target = event.target && event.target.closest ? event.target.closest('[data-account],[data-account-timeline],[data-call]') : null;
+  if (!target) return;
+  if (target.hasAttribute('data-account')) openAccountBrief(target.getAttribute('data-account'));
+  else if (target.hasAttribute('data-account-timeline')) openAccountTimeline(target.getAttribute('data-account-timeline'));
+  else openCallFromBadge(target.getAttribute('data-call'));
+});
 
 // ── Meeting brief (functions/meeting-brief.js) ──
 // Bob names a client, insurer or topic; the app gathers his own material on it
@@ -5374,7 +5562,8 @@ function rebuildCommandCenter() {
     preferences: commandPreferences,
     today: manilaDateKey(),
     // Read at each rebuild, so a review finished on Today drops off here too.
-    experiment: window.dailyBoostDueExperiment ? window.dailyBoostDueExperiment() : null
+    experiment: window.dailyBoostDueExperiment ? window.dailyBoostDueExperiment() : null,
+    accountHits: accountHitsIn(commandCenterInputs.briefing)
   }));
   if (window.CommandReviewCore) {
     var capture = window.CommandReviewCore.captureDay(commandPreferences.review, commandCenterData, manilaDateKey(), new Date().toISOString());
@@ -9342,6 +9531,7 @@ function renderBriefing(options) {
   intelligenceSearchState.loaded = false;
   if (window.refreshDailyBoost) window.refreshDailyBoost();
   applyStoryRuns();
+  applyAccountBadges(); loadAccounts().then(applyAccountBadges);
 }
 
 function setTick(vi,mi,val,mov) {
@@ -11172,7 +11362,7 @@ function getGeminiPrompt() {
   return window.BriefingPromptCore.buildBriefingPrompt({
     dateLabel: getTodayBriefingDateLabel(),
     feedback: getBriefingFeedback(),
-    context: {recent: getRecentBriefings()}
+    context: {recent: getRecentBriefings(), accounts: activeAccounts()}
   });
 }
 

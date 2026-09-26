@@ -56,6 +56,16 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   entries are explained instead of guessed. The read-back waits for confirmed
   reflection sync, stops on save failure, and retains a fresh result when an older
   history request finishes later.
+- **His work and his accounts** — the briefing prompt carries a work profile
+  measured on his own files (themes only: QBE third-party utility and road-asset
+  damage, heavy-vehicle loss of income, Allianz small-business BI) and the
+  quantities stories should move (`workRules`). His accounts
+  (`briefings-bob/accounts-<uid>`, else `DEFAULT_ACCOUNTS` in the shared prompt
+  core) go into a private HIS ACCOUNTS block; `accountsInText` matches whole
+  words and aliases. On Today a story naming an account gets a badge (opens a
+  meeting brief) and one naming an open market call gets "Your call"; the Morning
+  5 lists the accounts named today (app-only, so never a push). Evidence has the
+  editable list with 30-day story counts, Brief and Timeline.
 - **Called it?** — decisions carry `verdict` (held / broke / unclear) and
   `verdictDate`. A due review shows one-tap verdicts on its row (an insight
   question is closed by its verdict; a market call keeps its status); a verdict

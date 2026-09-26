@@ -52,6 +52,7 @@ const SYSTEM = "You prepare short, factual working dossiers on news stories for 
 function buildDossierPrompt(story) {
   return [
     "Bob is a forensic business-interruption (BI) consultant who works with Australian insurers and Philippine consulting firms.",
+    "Most of his files are third-party recoveries for QBE (vehicles damaging utility and road assets; heavy-vehicle loss of income) and small-business BI for Allianz, so the angles that matter are how a claimant built its costs or lost income.",
     "He wants to go deeper on one story from his briefing" + (story.date ? " of " + story.date : "") + ". Search the web to check it and find what surrounds it.",
     "",
     "THE STORY (as his briefing gave it):",

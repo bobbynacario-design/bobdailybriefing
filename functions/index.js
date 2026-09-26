@@ -14,7 +14,7 @@ const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
-const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey} = require("./briefing-prompt-core");
+const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS} = require("./briefing-prompt-core");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
 const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
 const {
@@ -229,14 +229,17 @@ async function loadReaderFeedback(db, uid) {
 async function loadStandingContext(db, uid) {
   if (!uid) return {standing: null, watch: null, reason: "no-uid"};
   try {
-    const [radar, markets, decisionsSnap, briefingSnap] = await Promise.all([
+    const [radar, markets, decisionsSnap, briefingSnap, accountsSnap] = await Promise.all([
       pointedDocument(db, "radar-latest", "radar-").catch(() => null),
       pointedDocument(db, "miro-latest", "miro-").catch(() => null),
       db.collection(JOURNAL_COLL).where("uid", "==", uid)
         .orderBy("saved", "desc").limit(100).get().catch(() => null),
       db.collection(BRIEFINGS_COLL).where("uid", "==", uid)
         .orderBy("saved", "desc").limit(5).get().catch(() => null),
+      db.collection(BRIEFINGS_COLL).doc("accounts-" + uid).get().catch(() => null),
     ]);
+    // His accounts (Evidence, Your accounts), or the starter list until he keeps his own.
+    const kept = accountsSnap && accountsSnap.exists ? cleanAccounts((accountsSnap.data() || {}).accounts) : [];
 
     const decisions = decisionsSnap ?
       decisionsSnap.docs.map((doc) => Object.assign({id: doc.id}, doc.data())) : [];
@@ -261,11 +264,13 @@ async function loadStandingContext(db, uid) {
       // The last three briefings' headlines and watch lines, so a story only
       // comes back as an "Update:" that says what changed (briefing-prompt-core).
       recent: buildRecentBriefings(archive, phtDateKey()),
+      accounts: kept.length ? kept : DEFAULT_ACCOUNTS,
+      accountsSource: kept.length ? "his" : "starter",
       reason: null,
     };
   } catch (error) {
     logger.warn("standing context unavailable", {message: error.message});
-    return {standing: null, watch: null, recent: null, reason: "error"};
+    return {standing: null, watch: null, recent: null, accounts: DEFAULT_ACCOUNTS, accountsSource: "starter", reason: "error"};
   }
 }
 
@@ -469,6 +474,7 @@ exports.generateBobDailyBriefing = onCall(
       reason: (context && context.reason) || null,
       // How much of Bob's feedback shaped this briefing (null when none).
       feedback: feedback ? feedback.stats : null,
+      accounts: context && context.accounts ? {count: context.accounts.length, source: context.accountsSource || ""} : null,
     };
     // A follow-up is only meaningful about a watch item that was actually
     // supplied. Anything returned without one is invention, not a grade.

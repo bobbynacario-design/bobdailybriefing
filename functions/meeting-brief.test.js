@@ -36,6 +36,7 @@ test("the prompt carries the topic, his material as data, and the rules that kee
   assert.match(prompt, /his_threads: only from HIS MATERIAL/);
   assert.match(prompt, /questions: exactly 3, specific to this topic and this week/);
   assert.match(prompt, /Never give investment advice/);
+  assert.ok(prompt.includes("Most of his files are third-party recoveries for QBE"), "the one-line work profile");
   assert.match(buildMeetingPrompt("Suncorp", [], ""), /HIS MATERIAL: none of his saved items mention this topic/);
 });
 

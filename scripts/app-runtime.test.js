@@ -219,7 +219,7 @@ test('a card citation carries headline, source, the briefing date and a web link
 // story votes the same way the server generator does, and nothing when there are none.
 test('the copied AI prompt carries the reader feedback from synced votes', () => {
   let entries={};
-  const {context}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt'],{getTodayBriefingDateLabel:()=> 'Friday, September 25, 2026',
+  const {context}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt','activeAccounts'],{_accounts:null,getTodayBriefingDateLabel:()=> 'Friday, September 25, 2026',
     DailyBoostCore:{dateKey:()=> '2026-09-25'},dailyBoostFeedbackEntries:()=>entries});
   vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),context);
   assert.doesNotMatch(context.getGeminiPrompt(),/READER FEEDBACK/);
@@ -229,7 +229,9 @@ test('the copied AI prompt carries the reader feedback from synced votes', () =>
   assert.match(prompt,/READER FEEDBACK:\n- A READER FEEDBACK block near the end of this prompt/);
   assert.match(prompt,/More like this:\n- \[insurance\] Insurer lifts BI reserves again \(Insurance News\)/);
   assert.doesNotMatch(prompt,/Less like this/,'a vote taken back is no vote');
-  assert.equal(prompt,context.BriefingPromptCore.buildBriefingPrompt({dateLabel:'Friday, September 25, 2026',feedback:context.BriefingPromptCore.buildReaderFeedback(entries,'2026-09-25')}));
+  assert.equal(prompt,context.BriefingPromptCore.buildBriefingPrompt({dateLabel:'Friday, September 25, 2026',feedback:context.BriefingPromptCore.buildReaderFeedback(entries,'2026-09-25'),
+    context:{recent:context.getRecentBriefings(),accounts:context.BriefingPromptCore.DEFAULT_ACCOUNTS}}),'the same prompt the server builds, with the starter accounts');
+  assert.match(prompt,/HIS ACCOUNTS — private context, not news:\nQBE \(QBE Insurance\)/);
   delete context.dailyBoostFeedbackEntries;
   assert.doesNotMatch(context.getGeminiPrompt(),/READER FEEDBACK/,'no Daily Boost, no block');
 });
@@ -337,7 +339,7 @@ test('every section colour resolves to numbers for the PDF', () => {
 // The copied prompt gets the last briefings from the loaded history, so an
 // outside AI is held to the same no-rerun rule as the generator.
 test('the copied AI prompt carries the last briefings, and the verification line reports reruns', () => {
-  const {context,element}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt','renderGroundingLine'],{getTodayBriefingDateLabel:()=> 'Saturday, September 26, 2026',
+  const {context,element}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt','renderGroundingLine','activeAccounts'],{_accounts:null,getTodayBriefingDateLabel:()=> 'Saturday, September 26, 2026',
     DailyBoostCore:{dateKey:d=>d?new Date(d).toISOString().slice(0,10):'2026-09-26'},dailyBoostFeedbackEntries:()=>({}),
     _briefingHistory:[{key:'t',saved:Date.parse('2026-09-26T02:00:00Z'),data:{date:'Today',sections:{global:[{headline:'Today story'}]}}},
       {key:'f',saved:Date.parse('2026-09-25T02:00:00Z'),data:{date:'Friday, September 25, 2026',watch:'NGCP alerts',sections:{interruptions:[{headline:'Visayas grid on yellow alert anew'}]}}}]});
@@ -514,6 +516,36 @@ test('the dossier renders escaped, skips empty parts, and copies to Evidence as 
   const tags=context.dossierHtml({summary:'S',exposed:['Australian health insurers','government service providers','iPhone makers','eBay sellers','3PL operators']});
   ['Australian health insurers','Government service providers','iPhone makers','eBay sellers','3PL operators'].forEach(t=>assert.ok(tags.includes('<span>'+t+'</span>'),t));
   assert.equal(context.capFirst(''),'');
+});
+
+// Your accounts: a badge on each story that names one of his accounts or open
+// calls, the accounts named in a briefing, and the list's one-line text form.
+function promptCore(){
+  const context={}; vm.createContext(context);
+  vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),context);
+  return context.BriefingPromptCore;
+}
+test('stories that name an account or an open call get badges; the rest get none',()=>{
+  const core=promptCore();
+  const {context}=environment(['esc','storyText','activeAccounts','accountBadgesHtml','accountHitsIn'],{BriefingPromptCore:core,_accounts:null});
+  const st={headline:'SAPN lifts pole replacement charges',body:'Essential Energy follows.',relevance:'Flows into every pole-strike invoice.'};
+  const html=context.accountBadgesHtml(st,['NVDA']);
+  assert.ok(html.includes('data-account="SA Power Networks"') && html.includes('data-account="Essential Energy"'),'the starter list, by alias too');
+  assert.ok(!html.includes('data-call'),'no call named');
+  const call=context.accountBadgesHtml({headline:'NVDA slides after earnings'},['NVDA']);
+  assert.ok(call.includes('data-call="NVDA"') && call.includes('>Your call: NVDA</button>'));
+  assert.equal(context.accountBadgesHtml({headline:'A quiet day in retail'},[]),'');
+  const hits=context.accountHitsIn({sections:{insurance:[st,{headline:'QBE flags storm claims'}],global:[{headline:'Nothing relevant'}]}});
+  assert.deepEqual([...hits.map(h=>h.name)],['QBE','SA Power Networks','Essential Energy'],'in list order');
+  assert.deepEqual([...hits[1].headlines],['SAPN lifts pole replacement charges']);
+});
+test('the accounts list edits as one line per account, keeping each kind',()=>{
+  const core=promptCore();
+  const {context}=environment(['accountsToText','accountsFromText'],{BriefingPromptCore:core});
+  const text=context.accountsToText([{name:'QBE',aliases:['QBE Insurance'],kind:'insurer'},{name:'Optus',aliases:[],kind:'telco'}]);
+  assert.equal(text,'QBE | QBE Insurance\nOptus');
+  const back=context.accountsFromText('QBE | QBE Insurance, QBE AU\nOptus\n\nCebu Cold Chain Co | CCC',[{name:'QBE',aliases:[],kind:'insurer'},{name:'Optus',aliases:[],kind:'telco'}]);
+  assert.deepEqual([...back.map(a=>a.name+'/'+a.kind+'/'+a.aliases.join(','))],['QBE/insurer/QBE Insurance,QBE AU','Optus/telco/','Cebu Cold Chain Co/other/CCC']);
 });
 
 // Meeting brief: his own material on a topic, gathered from the search index,
