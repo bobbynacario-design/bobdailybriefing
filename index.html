@@ -957,8 +957,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
 /* ── HERO ── */
 .hero{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid var(--rim);border-radius:14px;padding:1.5rem 2rem;margin-bottom:1.5rem;position:relative;overflow:hidden}
-.hero::after{content:'';position:absolute;right:2rem;top:50%;transform:translateY(-50%);width:124px;height:124px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%23C9A84C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='11' y='10' width='42' height='44' rx='3'/%3E%3Cline x1='17' y1='18' x2='47' y2='18' stroke-width='3.5'/%3E%3Cline x1='17' y1='24' x2='47' y2='24' stroke-width='1.2'/%3E%3Crect x='17' y='30' width='14' height='12' rx='1.5'/%3E%3Cline x1='35' y1='31' x2='47' y2='31' stroke-width='1.4'/%3E%3Cline x1='35' y1='35' x2='47' y2='35' stroke-width='1.4'/%3E%3Cline x1='35' y1='39' x2='47' y2='39' stroke-width='1.4'/%3E%3Cline x1='17' y1='47' x2='47' y2='47' stroke-width='1.4'/%3E%3Cline x1='17' y1='51' x2='40' y2='51' stroke-width='1.4'/%3E%3C/svg%3E") center/contain no-repeat;opacity:.55;pointer-events:none}
-body.light .hero::after{opacity:.42}
+.hero-mark{position:absolute;right:2rem;top:50%;transform:translateY(-50%);width:112px;height:112px;fill:none;stroke:var(--gold);stroke-width:.9;stroke-linecap:round;stroke-linejoin:round;opacity:.42;pointer-events:none}
+body.light .hero-mark{opacity:.36}
 .hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--gold);margin-bottom:.4rem;text-transform:uppercase}
 .hero-date{font-family:var(--serif);font-size:28px;font-weight:700;color:var(--txt);line-height:1.2;margin-bottom:.35rem}
 .hero-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em}
@@ -1673,7 +1673,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
   .card-hl{font-size:14px}
   .search-input{font-size:16px}
   .hist-delete{opacity:1}
-  #page-miro .hero::after{width:88px;height:88px;right:1rem}
+  #page-miro .hero-mark{width:84px;height:84px;right:1rem}
   #page-miro .hero-eyebrow,#page-miro .hero-date,#page-miro .hero-sub,#page-miro .hero-divider{max-width:calc(100% - 94px)}
 }
 @media(max-width:520px){
@@ -1943,7 +1943,7 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 @media(max-width:1180px){.nav{gap:.3rem}.nav-brand{font-size:15px}.nav-center{order:3;flex-basis:100%;flex-wrap:wrap;justify-content:flex-start;gap:.2rem}.nav-right{margin-left:auto}.hero{padding:1.2rem}}
 @media(max-width:768px){.nav-center{display:flex}.nav-brand{font-size:13px}.nav{padding:.5rem}.nav-group>summary,.nav-center>.ntab{padding:.5rem .5rem;font-size:10px;letter-spacing:.06em}.nav-group-here{max-width:80px}.nav-group-panel{min-width:186px}.nav-right #sync-status{font-size:10px}.ticker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.tick{width:auto!important}.tick:last-child{grid-column:1/-1}.page{padding-bottom:2rem}.nav-right .nav-btn{font-size:11px}}
 .command-five-item,.command-queue-item{cursor:default}.command-item-title{font-size:15px}.command-item-detail{font-size:13px;color:var(--txt2)}.command-item-btn{font-size:11px;padding:.4rem .55rem}.command-explain{font-size:11px}.command-five-item>.command-item-actions{max-width:260px}summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-@media(max-width:620px){.hero::after{display:none}.command-five-item>.command-item-actions{grid-column:2/-1;justify-content:flex-start;margin-left:0;max-width:none}.command-queue-top{align-items:flex-start;flex-direction:column}.command-queue-top .command-item-actions{margin-left:0;justify-content:flex-start}}
+@media(max-width:620px){.hero-mark{display:none}.command-five-item>.command-item-actions{grid-column:2/-1;justify-content:flex-start;margin-left:0;max-width:none}.command-queue-top{align-items:flex-start;flex-direction:column}.command-queue-top .command-item-actions{margin-left:0;justify-content:flex-start}}
 .working-question{padding:1.2rem;border-bottom:1px solid var(--rim);display:grid;grid-template-columns:1fr 1fr;gap:1rem}
 .working-question h3,.working-question p,.working-question .evidence-item-actions{grid-column:1/-1;margin:0}
 .working-question p{font-size:13px;line-height:1.6;color:var(--txt2)}
