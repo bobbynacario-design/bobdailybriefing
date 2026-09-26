@@ -124,7 +124,8 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   day; a quiet week is called thin), no diagnosis or flattery, and no trading
   advice. Today is marked as still in progress, with the read time, so its
   unfinished quest is never held against him; “Note this” lines left without a
-  comment count as noted stories, not as his words; energy comes only from his
+  comment count as noted stories, not as his words (and a blank “Write my take”
+  line on the aha is dropped, while a written one is kept as his take); energy comes only from his
   own words or explicit choices; and a theme needs two or more days (the app
   labels single-day themes “What stood out”). An empty week makes no model call. Up to three reads a day
   (`MIRROR_DAILY_CAP`); the latest twelve are kept on

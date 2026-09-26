@@ -73,17 +73,23 @@ function storyList(list, limit) {
 // day's note. A line left at that is a story he noted without comment — not his
 // words, and not a note — so it is told apart from what he actually wrote.
 const STUB = /^On “(.+)”(?: \(([^()]*)\))?:\s*(.*)$/;
+// "Write my take" on the day's aha starts `My take on “Title”: ` the same way.
+// Left blank it is a prompt he did not answer, so it is dropped; filled in, it
+// is his take on that insight.
+const TAKE = /^My take on “(.+)”:\s*(.*)$/;
 function splitNote(note) {
-  const own = [], comments = [], bare = [];
+  const own = [], comments = [], bare = [], takes = [];
   text(note).split(/\n+/).forEach((line) => {
     const trimmed = line.trim();
     if (!trimmed) return;
+    const take = trimmed.match(TAKE);
+    if (take) { if (take[2].trim()) takes.push({title: take[1], text: take[2].trim()}); return; }
     const match = trimmed.match(STUB);
     if (!match) own.push(trimmed);
     else if (match[3].trim()) comments.push({headline: match[1], source: match[2] || "", text: match[3].trim()});
     else bare.push({headline: match[1], source: match[2] || ""});
   });
-  return {own: own.join(" "), comments, bare};
+  return {own: own.join(" "), comments, bare, takes};
 }
 
 // What one day looked like. Returns null for a day with nothing recorded.
@@ -104,7 +110,7 @@ function dayBlock(key, entry, core, today) {
     seen[id] = true;
     return true;
   });
-  const wrote = note.own || note.comments.length;
+  const wrote = note.own || note.comments.length || note.takes.length;
   const active = wrote || entry.done || noted.length || opened.length || votes.length ||
     reminders.length || text(entry.trialPlan) || text(entry.trialOutcome);
   if (!active) return null;
@@ -122,6 +128,9 @@ function dayBlock(key, entry, core, today) {
   if (note.own) lines.push("  Note: " + quote(note.own, NOTE_CHARS));
   note.comments.slice(0, LIST_MAX).forEach((item) => {
     lines.push("  On the story " + quote(item.headline, 140) + " he wrote: " + quote(item.text, 400));
+  });
+  note.takes.slice(0, LIST_MAX).forEach((item) => {
+    lines.push("  On the day’s briefing insight " + quote(item.title, 140) + " his take: " + quote(item.text, 400));
   });
   if (text(entry.trialPlan)) {
     lines.push("  Experiment planned: " + quote(entry.trialPlan) + (entry.trialDone ? " — marked done" : today ? " — not done yet" : ""));
@@ -255,7 +264,8 @@ function buildMirrorPrompt(input) {
     "- A day marked \"nothing recorded\" means nothing was recorded, not that nothing happened. Gaps are worth naming only as a pattern.",
     "- The last day is today and is still in progress when this is read. An unfinished quest or experiment on it is not a miss,",
     "  and nothing recorded yet today is not a gap. Never use today's unfinished items as evidence in any field.",
-    "- \"Note\" lines are his own words. \"On the story … he wrote\" lines are his comments on a briefing story. Stories he noted",
+    "- \"Note\" lines are his own words. \"On the story … he wrote\" lines are his comments on a briefing story, and \"his take\"",
+    "  lines are his view of the day's briefing insight — also his words. Stories he noted",
     "  without comment show interest only — do not read feelings or intentions into them.",
     "- If the week is thin (fewer than three days with a note, or no notes at all), say so plainly in week_in_a_line, keep every",
     "  field short, leave fields empty rather than stretching, and set confidence to \"thin\".",

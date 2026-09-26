@@ -98,6 +98,20 @@ test("Note this stubs are stories he noted, not his words, and a comment on one 
   assert.match(stubsOnly.text, /Stories he noted without comment: "A story" \(Src\)/);
 });
 
+test("a blank My take line is dropped, and a written one is kept as his take", () => {
+  const blank = buildMirrorInput({entries: {"2026-09-25": {spark: 1, done: false, note: "My take on “Renewals must test agent permissions”: "}}, decisions: [], todayKey: TODAY, core});
+  assert.equal(blank, null, "only a blank take: nothing recorded that day, so nothing to read");
+  const mixed = buildMirrorInput({entries: {"2026-09-25": {spark: 1, done: true, note: "My take on “Renewals must test agent permissions”: \n\nMy take on “Cold chains carry the grid risk”: Seen this at a Cebu client.\nA line of my own."}}, decisions: [], todayKey: TODAY, core});
+  assert.doesNotMatch(mixed.text, /Renewals must test agent permissions/, "the blank take leaves no trace");
+  assert.match(mixed.text, /  On the day’s briefing insight "Cold chains carry the grid risk" his take: "Seen this at a Cebu client\."/);
+  assert.match(mixed.text, /  Note: "A line of my own\."/);
+  assert.doesNotMatch(mixed.text, /Note: "My take on/);
+  assert.equal(mixed.stats.notes, 1);
+  const takeOnly = buildMirrorInput({entries: {"2026-09-25": {spark: 1, done: false, note: "My take on “Cold chains carry the grid risk”: Worth testing."}}, decisions: [], todayKey: TODAY, core});
+  assert.equal(takeOnly.stats.notes, 1, "a written take counts as writing");
+  assert.match(buildMirrorPrompt(takeOnly), /"his take"\n  lines are his view of the day's briefing insight — also his words/);
+});
+
 test("the prompt keeps today out of evidence, energy to his words, and themes to what recurs", () => {
   const prompt = buildMirrorPrompt(buildMirrorInput({entries: week(), decisions: [], mirrors: {}, todayKey: TODAY, core}));
   assert.match(prompt, /The last day is today and is still in progress when this is read\. An unfinished quest or experiment on it is not a miss/);
