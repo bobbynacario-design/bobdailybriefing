@@ -159,7 +159,7 @@ test("the last mirror before today is followed up, never today's own", () => {
     "2026-09-19": {question: "What would consistent look like on a busy day?", try_next: {action: "Write tomorrow's first step tonight"}},
     "2026-09-26": {question: "Today's own question", try_next: {action: "Today's try"}},
   };
-  assert.deepEqual(previousMirror(mirrors, TODAY), {weekKey: "2026-09-19", question: "What would consistent look like on a busy day?", tryNext: "Write tomorrow's first step tonight"});
+  assert.deepEqual(previousMirror(mirrors, TODAY), {weekKey: "2026-09-19", question: "What would consistent look like on a busy day?", tryNext: "Write tomorrow's first step tonight", answer: null});
   const input = buildMirrorInput({entries: week(), decisions: [], mirrors, todayKey: TODAY, core});
   assert.match(input.text, /LAST MIRROR \(Sat 19 Sep\):\n- The question it left him: "What would consistent look like on a busy day\?"\n- The thing it suggested trying: "Write tomorrow's first step tonight"/);
   assert.doesNotMatch(input.text, /Today's own question/);
@@ -244,4 +244,16 @@ test('explicit spark feedback, experiment outcomes, and check findings inform th
   assert.match(input.text,/Haven't tried/); assert.match(input.text,/His chosen next step: Adapt/);
   assert.match(input.text,/not a permanent dislike/); assert.match(input.text,/Needed a quieter task/);
   assert.match(input.text,/draft, still open/); assert.match(input.text,/The port is still closed/);
+});
+
+test("his written answer to the last read's question is carried into the follow-up", () => {
+  const question = "What would consistent look like on your busiest day?";
+  const mirrors = {"2026-09-19": {question, try_next: {action: "List three firsts"}, answer: {text: "A ten-minute note\nbefore I open email.", question, at: "2026-09-20T01:00:00Z"}}};
+  const input = buildMirrorInput({entries: week(), decisions: [], mirrors, todayKey: TODAY, core});
+  assert.match(input.text, /- His written answer: "A ten-minute note before I open email\."/);
+  const reworded = {"2026-09-19": {question, answer: {text: "Mornings.", question: "An earlier wording?"}}};
+  assert.match(buildMirrorInput({entries: week(), mirrors: reworded, todayKey: TODAY, core}).text, /- His written answer \(to an earlier wording, "An earlier wording\?"\): "Mornings\."/);
+  const blank = {"2026-09-19": {question, answer: {text: "  ", question}}};
+  assert.doesNotMatch(buildMirrorInput({entries: week(), mirrors: blank, todayKey: TODAY, core}).text, /His written answer/);
+  assert.match(buildMirrorPrompt(input), /If he wrote an answer, respond to what he wrote — quote a few of his words — and say whether\n  this week bears it out/);
 });

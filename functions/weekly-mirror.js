@@ -210,7 +210,10 @@ function previousMirror(mirrors, todayKey) {
   if (!keys.length) return null;
   const last = mirrors[keys[keys.length - 1]] || {};
   const question = text(last.question), tryNext = last.try_next && text(last.try_next.action);
-  return question || tryNext ? {weekKey: keys[keys.length - 1], question, tryNext} : null;
+  // Bob can answer a read's question in the app ("Write my answer"); the answer
+  // carries the question it answered, which a regenerated read may have changed.
+  const answer = last.answer && text(last.answer.text) ? {text: text(last.answer.text), question: text(last.answer.question)} : null;
+  return question || tryNext ? {weekKey: keys[keys.length - 1], question, tryNext, answer} : null;
 }
 
 // Everything the model is told about the week, or null when there is nothing to
@@ -251,6 +254,10 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now}) {
     parts.push("", "LAST MIRROR (" + dayLabel(previous.weekKey) + "):");
     if (previous.question) parts.push("- The question it left him: " + quote(previous.question, 240));
     if (previous.tryNext) parts.push("- The thing it suggested trying: " + quote(previous.tryNext, 240));
+    if (previous.answer) {
+      const same = !previous.answer.question || previous.answer.question === previous.question;
+      parts.push("- His written answer" + (same ? "" : " (to an earlier wording, " + quote(previous.answer.question, 200) + ")") + ": " + quote(previous.answer.text, 600));
+    }
   }
   return {text: parts.join("\n"), stats, window: win, previous: previous ? previous.weekKey : null};
 }
@@ -288,7 +295,8 @@ function buildMirrorPrompt(input) {
     "- decisions: how he decided, never what to trade — e.g. whether a thesis and an invalidation line were written, or how a close",
     "  was reviewed. Never recommend buying, selling, holding, exiting, sizing or hedging, and give no market view. Empty if none.",
     "- last_week: if a LAST MIRROR block is given, say honestly whether anything this week answers its question or shows the",
-    "  suggested try happening. Empty if there is no LAST MIRROR block.",
+    "  suggested try happening. If he wrote an answer, respond to what he wrote — quote a few of his words — and say whether",
+    "  this week bears it out, rather than restating the question. Empty if there is no LAST MIRROR block.",
     "- try_next: ONE small, concrete thing for the coming week that the record suggests he has not done yet — under 30 minutes,",
     "  tied to something he wrote, not a habit programme. why says which note or pattern it comes from.",
     "- question: ONE open question specific to this week that he could sit with. \"What do you want?\" is too generic.",

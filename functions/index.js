@@ -588,6 +588,10 @@ exports.generateWeeklyMirror = onCall(
     mirror.followedUp = input.previous;
     mirror.model = model;
     mirror.generatedAt = new Date().toISOString();
+    // A second read today replaces the first, but never Bob's written answer to
+    // it: the answer keeps the question it answered, so the app can say so.
+    const earlier = sources.mirrors[todayKey];
+    if (earlier && earlier.answer && earlier.answer.text) mirror.answer = earlier.answer;
 
     // Latest twelve reads, one per day (a second read today replaces the first).
     // Written with the uid field, so the shared rules let the app read it back.

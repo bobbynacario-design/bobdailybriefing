@@ -155,7 +155,9 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   labels single-day themes “What stood out”). An empty week makes no model call. Up to three reads a day
   (`MIRROR_DAILY_CAP`); the latest twelve are kept on
   `briefings-bob/weekly-mirror-<uid>` and shown by `lib/weekly-mirror.js`. Cost is
-  metered as `weekly-mirror` in the Help tab.
+  metered as `weekly-mirror` in the Help tab. **Write my answer** under the question saves a reply on
+  that read (`mirrors.<day>.answer`, with the question it answered) by a merge
+  write; the next read’s follow-up quotes it, and a regenerated read keeps it.
 
 - **New since yesterday** — each briefing card is marked **New** (not in the
   previous briefing) or **Day N** (its Nth briefing in a row), compared with the
