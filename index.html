@@ -898,7 +898,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
 /* ── NAV ── */
 .nav{background:var(--bg2);border-bottom:1px solid var(--rim);padding:.8rem 1.35rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:.65rem}
-.nav-brand{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--gold);white-space:nowrap}.icon-sprite{position:absolute;width:0;height:0;overflow:hidden}.ico{width:1.2em;height:1.2em;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav-brand{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--gold);white-space:nowrap}.icon-sprite{position:absolute;width:0;height:0;overflow:hidden}.ico{width:1.2em;height:1.2em;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:-.22em}.hero-date .ico,.help-h .ico,.digest-title .ico,.digest-section-name .ico{color:var(--gold);width:.95em;height:.95em;vertical-align:-.1em;margin-right:.12em}.auth-icon .ico{width:44px;height:44px;stroke-width:1.4;color:var(--gold)}.search-icon .ico{display:block;width:15px;height:15px}.lock-btn .ico,.theme-btn .ico{display:block;width:16px;height:16px}.watch-reminders h2 .ico{color:var(--amber);width:.9em;height:.9em;vertical-align:-.08em}
 .nav-mark{display:inline-block;width:1.05em;height:1.05em;vertical-align:-.16em;margin-right:.4em;border-radius:22%}
 .nav-brand span{font-family:var(--mono);font-size:11px;color:var(--txt3);margin-left:.5rem;letter-spacing:.08em}
 .nav-center{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center}
@@ -2007,12 +2007,38 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   <symbol id="i-sports" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5v17"/><path d="M6 6c3 2.6 3 9.4 0 12M18 6c-3 2.6-3 9.4 0 12"/></symbol>
   <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.4a2.4 2.4 0 1 1 3.3 2.2c-.6.3-1 .8-1 1.5v.5"/><path d="M12 16.6v.1"/></symbol>
   <symbol id="i-decisions" viewBox="0 0 24 24"><path d="M12 21v-7"/><path d="M12 14L6.5 8.5M12 14l5.5-5.5"/><path d="M6 4.5V9h4.5M18 4.5V9h-4.5"/></symbol>
+  <symbol id="i-news" viewBox="0 0 24 24"><path d="M5 4.5h11.5a1 1 0 0 1 1 1V18a2 2 0 0 0 2 2H6.5A2.5 2.5 0 0 1 4 17.5V5.5a1 1 0 0 1 1-1z"/><path d="M17.5 8.5H20v9.5a2 2 0 0 1-2 2"/><path d="M7.5 8.5h6M7.5 12h6M7.5 15.5h4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.8"/><path d="M4.5 5.5l2.5-2M19.5 5.5L17 3.5"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.1-6.5-11a6.5 6.5 0 0 1 13 0c0 4.9-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7"/><path d="M12 14.5v2"/></symbol>
+  <symbol id="i-contrast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M4.5 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5.5 17v3z"/><path d="M14.5 8l3 3"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3.5h8l4.5 4.5v11A1.5 1.5 0 0 1 17 20.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5z"/><path d="M14 3.5V8h4.5"/><path d="M8 12.5h7M8 16h5"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="5" y="4.5" width="14" height="16" rx="2"/><rect x="9" y="3" width="6" height="3.5" rx="1"/><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 16v4M16.5 18h4"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5V4.5"/><path d="M7.5 9L12 4.5 16.5 9"/><path d="M4.5 15.5v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5S9.6 5.9 12 3.5z"/></symbol>
+  <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9.5 3.5v3M14.5 3.5v3M9.5 17.5v3M14.5 17.5v3M3.5 9.5h3M3.5 14.5h3M17.5 9.5h3M17.5 14.5h3"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.8v5.2c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6.3z"/><path d="M9 12l2 2 4-4.2"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3.5L5.5 13.5H12l-1 7 7.5-10H12z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5"/><path d="M12 17.2v.1"/></symbol>
+  <symbol id="i-bars" viewBox="0 0 24 24"><path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="6.5" rx=".8"/><rect x="10.5" y="7" width="3" height="10.5" rx=".8"/><rect x="15.5" y="13" width="3" height="4.5" rx=".8"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4.5h8v4.5a4 4 0 0 1-8 0z"/><path d="M8 6.5H5.5a2.5 2.5 0 0 0 2.6 3.4M16 6.5h2.5a2.5 2.5 0 0 1-2.6 3.4"/><path d="M12 13v3.5M8.5 20h7M9.5 20l.5-3.5h4l.5 3.5"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><path d="M6.5 10h1M10 10h1M13.5 10h1M17 10h.5M6.5 13.5h.5M8.5 14h7M17 13.5h.5"/></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9.5" cy="7.5" rx="5" ry="2.5"/><path d="M4.5 7.5v4c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5v-4"/><path d="M9.5 16.5c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5v-4c0-1.2-1.6-2.2-3.8-2.5"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><path d="M19.5 11A7.5 7.5 0 0 0 6.2 6.8L4.5 8.5"/><path d="M4.5 4.5v4h4"/><path d="M4.5 13a7.5 7.5 0 0 0 13.3 4.2l1.7-1.7"/><path d="M19.5 19.5v-4h-4"/></symbol>
+  <symbol id="i-ph" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 5.5v1.8M12 16.7v1.8M5.5 12h1.8M16.7 12h1.8M7.4 7.4l1.3 1.3M15.3 15.3l1.3 1.3M7.4 16.6l1.3-1.3M15.3 8.7l1.3-1.3"/><path d="M4 4.2v.1M20 4.2v.1M12 21v.1"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
 </defs></svg>
 
 <!-- AUTH GATE -->
 <div class="auth-overlay" id="auth-overlay">
   <div class="auth-box">
-    <div class="auth-icon">🔐</div>
+    <div class="auth-icon"><svg class="ico" aria-hidden="true"><use href="#i-lock"/></svg></div>
     <div class="auth-title">Daybook</div>
     <div class="auth-sub">Sign in to sync your briefings across devices</div>
     <button class="auth-btn google-btn" id="auth-btn" onclick="handleAuth()">
@@ -2031,26 +2057,26 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <nav class="nav">
   <div class="nav-brand"><img class="nav-mark" src="./assets/icons/daybook-mark.svg" alt="" width="22" height="22">DAYBOOK <span id="nav-brand-date" aria-label="Today"></span></div>
   <div class="nav-center">
-    <button class="ntab active" data-page="today" onclick="switchPage('today',this)">📰 Today</button>
+    <button class="ntab active" data-page="today" onclick="switchPage('today',this)">Today</button>
     <button class="ntab" data-page="command" onclick="switchPage('command',this)">◎ Command</button>
     <button class="ntab" data-page="evidence" onclick="switchPage('evidence',this)">▣ Evidence</button>
     <button class="ntab" data-page="timeline" onclick="switchPage('timeline',this)">◷ Timeline</button>
-    <button class="ntab" data-page="history" onclick="switchPage('history',this)">📁 History</button>
-    <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">📈 Trends</button>
-    <button class="ntab" data-page="research" onclick="switchPage('research',this)">🔬 Research</button>
-    <button class="ntab" data-page="radar" onclick="switchPage('radar',this)">📡 Radar</button>
-    <button class="ntab" data-page="journal" onclick="switchPage('journal',this)">📓 Journal</button>
-    <button class="ntab" data-page="pse" onclick="switchPage('pse',this)">🇵🇭 PSE</button>
-    <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">🎲 Markets</button>
-    <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">⚽ Sports</button>
-    <button class="ntab" data-page="help" onclick="switchPage('help',this)">❔ Help</button>
+    <button class="ntab" data-page="history" onclick="switchPage('history',this)">History</button>
+    <button class="ntab" data-page="trends" onclick="switchPage('trends',this)">Trends</button>
+    <button class="ntab" data-page="research" onclick="switchPage('research',this)">Research</button>
+    <button class="ntab" data-page="radar" onclick="switchPage('radar',this)">Radar</button>
+    <button class="ntab" data-page="journal" onclick="switchPage('journal',this)">Journal</button>
+    <button class="ntab" data-page="pse" onclick="switchPage('pse',this)">PSE</button>
+    <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">Markets</button>
+    <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">Sports</button>
+    <button class="ntab" data-page="help" onclick="switchPage('help',this)">Help</button>
     <button class="ntab" data-page="decisions" onclick="switchPage('decisions',this)">Decisions</button>
   </div>
   <div class="nav-right">
     <div class="nav-clock" id="nav-clock">--:--</div>
     <div id="sync-status">○ Loading...</div>
-    <button class="lock-btn unlocked" id="lock-btn" onclick="lockSession()" title="Lock session">🔓</button>
-    <button class="theme-btn" id="theme-btn" aria-label="Display: theme and text size" aria-haspopup="true" aria-expanded="false" aria-controls="display-menu" onclick="toggleDisplayMenu()">🌓</button>
+    <button class="lock-btn unlocked" id="lock-btn" onclick="lockSession()" title="Lock session"><svg class="ico" aria-hidden="true"><use href="#i-unlock"/></svg></button>
+    <button class="theme-btn" id="theme-btn" aria-label="Display: theme and text size" aria-haspopup="true" aria-expanded="false" aria-controls="display-menu" onclick="toggleDisplayMenu()"><svg class="ico" aria-hidden="true"><use href="#i-contrast"/></svg></button>
     <button class="nav-btn" id="intel-search-open" onclick="openIntelligenceSearch()" title="Search all intelligence (Ctrl+K)">⌕ Search</button>
     <button class="install-btn" id="install-app-btn" onclick="installBriefingApp()" title="Install Daybook as a desktop app">INSTALL APP</button>
 
@@ -2228,7 +2254,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </section>
 
   <section class="boost-experiments" id="boost-experiments-panel" hidden aria-labelledby="boost-experiments-heading"><h2 id="boost-experiments-heading">Your experiments</h2><p>Try something small. Come back and capture what happened.</p><div id="boost-experiments"></div></section>
-  <section class="watch-reminders" id="boost-reminders" hidden aria-labelledby="boost-reminders-title"><div class="watch-head"><h2 id="boost-reminders-title">⏰ To check</h2><p class="boost-kicker" id="boost-reminders-sub"></p></div><div id="boost-reminder-list"></div><details id="boost-reminder-upcoming-wrap" hidden><summary id="boost-reminder-upcoming-title"></summary><div id="boost-reminder-upcoming"></div></details></section>
+  <section class="watch-reminders" id="boost-reminders" hidden aria-labelledby="boost-reminders-title"><div class="watch-head"><h2><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> <span id="boost-reminders-title">To check</span></h2><p class="boost-kicker" id="boost-reminders-sub"></p></div><div id="boost-reminder-list"></div><details id="boost-reminder-upcoming-wrap" hidden><summary id="boost-reminder-upcoming-title"></summary><div id="boost-reminder-upcoming"></div></details></section>
 
   <div class="hero" id="daily-intelligence" tabindex="-1">
     <div class="hero-eyebrow">Your wider world · Daily Intelligence Briefing</div>
@@ -2291,7 +2317,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="paste-actions">
       <span class="paste-hint">JSON → RENDER → AUTO-SAVE ↗ <span class="kbd-hint">(<span class="kbd">Ctrl+Enter</span> to render)</span></span>
       <div class="btn-row">
-        <span class="prompt-toggle" onclick="togglePrompt()">📝 AI Prompt</span>
+        <span class="prompt-toggle" onclick="togglePrompt()"><svg class="ico" aria-hidden="true"><use href="#i-note"/></svg> AI Prompt</span>
 
         <button class="btn-sec" onclick="clearBriefing()">CLEAR</button>
         <button class="btn-primary" onclick="renderBriefing()">RENDER ↗</button>
@@ -2335,10 +2361,10 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </div>
 
   <div class="section-nav" id="section-nav">
-    <button class="secgroup-chip active" data-group="all" onclick="setSectionGroup('all',this)">📰 All</button>
-    <button class="secgroup-chip" data-group="global" onclick="setSectionGroup('global',this)">🌍 Global</button>
-    <button class="secgroup-chip" data-group="ph" onclick="setSectionGroup('ph',this)">🇵🇭 Philippines</button>
-    <button class="secgroup-chip" data-group="ai" onclick="setSectionGroup('ai',this)">🤖 AI &amp; Markets</button>
+    <button class="secgroup-chip active" data-group="all" onclick="setSectionGroup('all',this)"><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> All</button>
+    <button class="secgroup-chip" data-group="global" onclick="setSectionGroup('global',this)"><svg class="ico" aria-hidden="true"><use href="#i-globe"/></svg> Global</button>
+    <button class="secgroup-chip" data-group="ph" onclick="setSectionGroup('ph',this)"><svg class="ico" aria-hidden="true"><use href="#i-ph"/></svg> Philippines</button>
+    <button class="secgroup-chip" data-group="ai" onclick="setSectionGroup('ai',this)"><svg class="ico" aria-hidden="true"><use href="#i-chip"/></svg> AI &amp; Markets</button>
   </div>
 
   <div class="reader-tools" id="reader-tools">
@@ -2364,13 +2390,13 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <div class="page" id="page-history">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Briefing Archive</div>
-    <div class="hero-date" style="font-size:22px">📁 History</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-history"/></svg> History</div>
     <div class="hero-sub" id="hist-count-sub">Loading...</div>
     <div class="hero-divider"></div>
   </div>
 
   <div class="digest-btn-wrap" id="digest-btn-wrap" style="display:none">
-    <button class="btn-primary" onclick="generateDigest()">📋 GENERATE WEEKLY DIGEST</button>
+    <button class="btn-primary" onclick="generateDigest()"><svg class="ico" aria-hidden="true"><use href="#i-clipboard"/></svg> GENERATE WEEKLY DIGEST</button>
   </div>
 
   <div id="digest-out"></div>
@@ -2383,7 +2409,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </div>
 
   <div class="search-bar">
-    <span class="search-icon">🔍</span>
+    <span class="search-icon"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg></span>
     <input class="search-input" type="text" id="search-input" placeholder="Search briefings by keyword..." oninput="searchBriefings(this.value)">
   </div>
 
@@ -2394,7 +2420,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <div class="page" id="page-trends">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Intelligence Analytics</div>
-    <div class="hero-date" style="font-size:22px">📈 Trend Tracker</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-trends"/></svg> Trend Tracker</div>
     <div class="hero-sub" id="trends-sub">Recurring topics across briefings</div>
     <div class="hero-divider"></div>
   </div>
@@ -2416,13 +2442,13 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   <div id="research-list-view">
     <div class="hero" style="margin-bottom:1.25rem">
       <div class="hero-eyebrow">Deep Research</div>
-      <div class="hero-date" style="font-size:22px">🔬 Research Reports</div>
+      <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-research"/></svg> Research Reports</div>
       <div class="hero-sub" id="research-sub">Long-form intelligence dossiers</div>
       <div class="hero-divider"></div>
     </div>
 
     <div class="digest-btn-wrap" style="display:flex;gap:.5rem;flex-wrap:wrap">
-      <button class="btn-primary" onclick="toggleResearchGen()">✨ GENERATE DEEP RESEARCH</button>
+      <button class="btn-primary" onclick="toggleResearchGen()"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg> GENERATE DEEP RESEARCH</button>
       <button class="btn-sec" onclick="toggleResearchImport()">＋ ADD REPORT</button>
     </div>
 
@@ -2449,7 +2475,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <div class="paste-label">Add Report — upload a Markdown (.md) or standalone .html file, or paste below</div>
       <div class="research-upload-row">
         <input type="file" id="research-file" accept=".md,.markdown,.html,.htm,text/markdown,text/html" style="display:none" onchange="handleReportFileUpload(this)">
-        <button class="btn-sec" onclick="document.getElementById('research-file').click()">⬆ UPLOAD .MD / .HTML</button>
+        <button class="btn-sec" onclick="document.getElementById('research-file').click()"><svg class="ico" aria-hidden="true"><use href="#i-upload"/></svg> UPLOAD .MD / .HTML</button>
         <span class="research-file-name" id="research-file-name"></span>
       </div>
       <input id="research-title" class="research-input" placeholder="Report title (auto-filled from the file)">
@@ -2467,7 +2493,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="search-bar">
-      <span class="search-icon">🔍</span>
+      <span class="search-icon"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg></span>
       <input class="search-input" type="text" id="research-search" placeholder="Search reports..." oninput="paintResearchList()">
     </div>
 
@@ -2489,7 +2515,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <div class="page" id="page-radar">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Market Opportunity Radar</div>
-    <div class="hero-date" style="font-size:22px">📡 Radar</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-radar"/></svg> Radar</div>
     <div class="hero-sub" id="radar-sub">Loading…</div>
     <div class="hero-divider"></div>
   </div>
@@ -2506,7 +2532,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <div class="page" id="page-journal">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Radar Performance Journal</div>
-    <div class="hero-date" style="font-size:22px">📓 Journal</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-journal"/></svg> Journal</div>
     <div class="hero-sub" id="journal-sub">Loading…</div>
     <div class="hero-divider"></div>
   </div>
@@ -2650,7 +2676,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <div class="page" id="page-pse">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Philippine Market</div>
-    <div class="hero-date" style="font-size:22px">🇵🇭 PSE</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-pse"/></svg> PSE</div>
     <div class="hero-sub" id="pse-sub">Loading…</div>
     <div class="hero-divider"></div>
   </div>
@@ -2683,7 +2709,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <div class="page" id="page-sports">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Sports Briefing</div>
-    <div class="hero-date" style="font-size:22px">⚽ Sports</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-sports"/></svg> Sports</div>
     <div class="hero-sub" id="sports-sub">NBA first, PH Local next, FIFA archived</div>
     <div class="hero-divider"></div>
   </div>
@@ -2695,22 +2721,22 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <div class="page" id="page-help">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">How to read it</div>
-    <div class="hero-date" style="font-size:22px">❔ Help</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg> Help</div>
     <div class="hero-sub">Reading Today, the Radar &amp; Journal in plain terms</div>
     <div class="hero-divider"></div>
   </div>
 
   <div class="help-body">
     <div class="help-card help-wide help-takeaway">
-      <div class="help-h">☀️ Today — how the page works</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> Today — how the page works</div>
       <p><b>Start here</b> at the top names the one thing to do next: a check that is due, an experiment ready to review, the weekly read on Sundays, today’s spark, then a line in your note. <b>Not now</b> shows the next one for this visit; nothing else is hidden.</p>
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
-      <p>Top to bottom: your <b>daily spark</b> (a small idea and a 2- or 10-minute quest), then <b>Your experiments</b> and <b>⏰ To check</b> when something is due, then the <b>briefing</b>. Once the spark is done, or you tap <b>Tuck away · briefing first</b>, it shrinks to one line so the briefing comes first; it opens again tomorrow.</p>
+      <p>Top to bottom: your <b>daily spark</b> (a small idea and a 2- or 10-minute quest), then <b>Your experiments</b> and <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> when something is due, then the <b>briefing</b>. Once the spark is done, or you tap <b>Tuck away · briefing first</b>, it shrinks to one line so the briefing comes first; it opens again tomorrow.</p>
       <p class="help-key">Nothing here is a streak to keep. A missed day is just a missed day.</p>
     </div>
 
     <div class="help-card">
-      <div class="help-h">✨ Your daily spark</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg> Your daily spark</div>
       <ul>
         <li><b>A new theme each day</b> — sparks rotate so two days in a row never share a theme, and one you had in the last two weeks is skipped. <b>Try another quest</b> moves to a different theme.</li>
         <li><b>What do you need today?</b> — pick Motivation, Clarity, Curiosity, Calm or A challenge and the spark changes to fit.</li>
@@ -2722,22 +2748,22 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="help-card">
-      <div class="help-h">📰 Reading the briefing</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> Reading the briefing</div>
       <ul>
         <li><b>No reruns</b> — each briefing is shown your last three, so a story only comes back as <b>Update:</b> with what changed. The line under the briefing title says whether anything was re-run.</li>
-        <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b>⏰ To check</b> on the day you choose.</li>
+        <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> on the day you choose.</li>
         <li><span class="help-pill" style="color:var(--blue)">New</span> — not in the previous briefing. <span class="help-pill">Day 3</span> — its third briefing in a row (hover for the dates). Matched by link or wording, since running stories are reworded daily.</li>
         <li><b>The progress line</b> counts what you have read, with <b>Next unread ↓</b> taking you to the most relevant story left. A story counts as read when you open its source, note it, or tap <b>Mark read</b>.</li>
         <li><b>Source chip</b> — <span class="help-pill" style="color:var(--green)">Source matched</span> came from the fetched news feed; <span class="help-pill" style="color:var(--green)">Link verified</span> is a page the AI's search really returned; <span class="help-pill">Unverified source</span> has no checked link.</li>
-        <li><b>On each card</b> — <b>✎ Note this</b> starts today's note about the story; <b>⧉ Copy citation</b> copies “Headline” — Source, date. link; <b>⏰ Remind me</b> (insurance and interruptions) brings its watch metric back when due.</li>
+        <li><b>On each card</b> — <b>✎ Note this</b> starts today's note about the story; <b>⧉ Copy citation</b> copies “Headline” — Source, date. link; <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> Remind me</b> (insurance and interruptions) brings its watch metric back when due.</li>
       </ul>
     </div>
 
     <div class="help-card">
-      <div class="help-h">⏰ Reminders, experiments &amp; the look-back</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> Reminders, experiments &amp; the look-back</div>
       <ul>
-        <li><b>Reminders</b> fall due on a date named in the watch metric (“due 12 Oct”), otherwise in 3 days, 2 weeks or 30 days by the story's timeframe. Due ones appear in <b>⏰ To check</b> with <b>✓ Checked</b>, <b>✎ Note what you found</b>, <b>Snooze a week</b>, and a <b>Due</b> date you can change.</li>
-        <li><b>In the Morning 5 push</b> a line reads “⏰ To check: …”; on a quiet morning, a reminder coming due gets a push of its own. Each is announced once.</li>
+        <li><b>Reminders</b> fall due on a date named in the watch metric (“due 12 Oct”), otherwise in 3 days, 2 weeks or 30 days by the story's timeframe. Due ones appear in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> with <b>✓ Checked</b>, <b>✎ Note what you found</b>, <b>Snooze a week</b>, and a <b>Due</b> date you can change.</li>
+        <li><b>In the Morning 5 push</b> a line reads “To check: …”; on a quiet morning, a reminder coming due gets a push of its own. Each is announced once.</li>
         <li><b>Experiments</b> — under <b>Try an idea</b>, plan one small thing and when to revisit it; it comes back in <b>Your experiments</b> to record what happened.</li>
         <li><b>Sundays</b> bring <b>Look back on your week</b>: the week's notes and stories. <b>Carry forward</b> one note and it rides along on the spark until next Sunday.</li>
         <li><b>Your week, read back</b> — tap <b>Read my week back</b> (it opens by itself on Sundays) and an AI reads your last seven days: notes, quests, the stories you opened and voted on, experiments and decisions. It names what kept coming up, what gave or took energy, where what you said and did part ways, one small thing you have not tried, and a question to sit with. Each read follows up on the last one from at least five days before, so there has been time for something to change. Under its question, <b>Write my answer</b> saves your reply with that question, and the next read responds to what you wrote. It only sees what you recorded here, never gives trading advice, and your notes go to OpenAI only when you tap. Up to three reads a day; the last twelve are kept. On Sundays, until you have read it, the Morning 5 push says so (one push that day, even when nothing else changed) and the collapsed spark strip shows <b>Read my week back</b>.</li>
@@ -2745,7 +2771,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="help-card">
-      <div class="help-h">🔄 Your notes — sync, search &amp; archive</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-sync"/></svg> Your notes — sync, search &amp; archive</div>
       <ul>
         <li><b>Synced and private</b> — notes, reminders, read marks and experiments follow your sign-in to every device and are visible only to you.</li>
         <li><b>Two devices at once</b> — edits to different parts of a day both keep. If the same note changed in both places, the other wording is kept under <b>Recovered reflection versions</b> to use or dismiss.</li>
@@ -2755,18 +2781,18 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="help-card">
-      <div class="help-h">⌨️ Keys</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-keyboard"/></svg> Keys</div>
       <ul>
         <li><b>N</b> — jump to today's note. <b>D</b> — mark the quest done (or undo). <b>T</b> — tuck the spark away, or open it again.</li>
         <li><b>J</b> / <b>K</b> — next and previous story in the briefing. <b>O</b> — open its source. <b>M</b> — mark it read (or unread). <b>U</b> — jump to the next unread story.</li>
         <li><b>Ctrl+K</b> (<b>⌘K</b> on a Mac) — search everything.</li>
-        <li>The <b>🌓</b> button at the top opens <b>Display</b>: theme <b>Auto</b> (follows your device), <b>Light</b> or <b>Dark</b>, and text size <b>A−</b> / <b>A+</b> (90%–125%). Both are kept on this device.</li>
+        <li>The <b><svg class="ico" aria-hidden="true"><use href="#i-contrast"/></svg></b> button at the top opens <b>Display</b>: theme <b>Auto</b> (follows your device), <b>Light</b> or <b>Dark</b>, and text size <b>A−</b> / <b>A+</b> (90%–125%). Both are kept on this device.</li>
         <li>These keys do nothing while you are typing, with Ctrl/⌘/Alt held, or with search open.</li>
       </ul>
     </div>
 
     <div class="help-card help-wide">
-      <div class="help-h">💰 LLM usage &amp; cost — where the AI spend goes</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-coins"/></svg> LLM usage &amp; cost — where the AI spend goes</div>
       <div class="llm-grid">
         <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
         <div class="llm-notes">
@@ -2777,7 +2803,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="help-card">
-      <div class="help-h">📡 Radar — what's worth a look today</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-radar"/></svg> Radar — what's worth a look today</div>
       <p>Each card is one asset, ranked by a <b>0–100 score</b> (higher = stronger setup right now on trend, volume and relative strength). Read a card top to bottom:</p>
       <ul>
         <li><b>Score + status badge</b> — the quick read:
@@ -2788,7 +2814,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
           </ul>
         </li>
         <li><b>The "why" sentence</b> — why it's moving, in words.</li>
-        <li><b>📰 catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event).</li>
+        <li><b><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event).</li>
         <li><b>Plan line</b> — <span class="src">Upside · Entry · Stop · Target · R:R</span>. <b>Upside</b> is target distance from entry, useful for comparing reward size. The <b>stop is the useful risk number</b>: the level where the idea is wrong.</li>
       </ul>
       <p><b>Taker Nuggets</b> is the more opportunistic read — the names to press <i>now</i>. It pulls the best actionable signals from the current filter and names the stance. Confirmed structure earns priority, but a forming name already <b>leading its benchmark</b> can outrank a merely-decent confirmed one — that's edge showing up early.</p>
@@ -2815,7 +2841,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="help-card">
-      <div class="help-h">📓 Journal — has the radar actually been right?</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-journal"/></svg> Journal — has the radar actually been right?</div>
       <p>The honesty check. It re-runs the score on the last ~60 days and measures what happened next. The one number that matters is <b>excess</b> — return <b>vs the asset's own benchmark</b> (QQQ / SPY / BTC):</p>
       <ul>
         <li><b>Raw return</b> — did it go up? (Easy in a rising market — everything went up.)</li>
@@ -2826,7 +2852,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="help-card">
-      <div class="help-h">Markets — what changed in decision-relevant events?</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-miro"/></svg> Markets — what changed in decision-relevant events?</div>
       <p>The Markets tab treats event-market probabilities as an external intelligence signal. Its watchlist is limited to Philippine policy, macro and rates, energy, regional security, trade, and AI industry events.</p>
       <ul>
         <li><b>Priority Signals</b> — the six most relevant followed events, ranked by configured importance, probability movement, and market liquidity.</li>
@@ -2840,7 +2866,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="help-card">
-      <div class="help-h">⚽ Sports — NBA momentum and PH local volleyball</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-sports"/></svg> Sports — NBA momentum and PH local volleyball</div>
       <p>The Sports tab defaults to <b>NBA</b>, with <b>PH Local / PBA</b> beside it and FIFA retained as an archive. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
       <ul>
         <li><b>Freshness banner</b> — says DATA CURRENT, STALE DATA, FALLBACK SNAPSHOT, or REFRESH FAILED and shows the last successful provider update.</li>
@@ -2924,7 +2950,7 @@ function onSignedIn() {
   var lockBtn = document.getElementById('lock-btn');
   if (lockBtn) {
     lockBtn.classList.add('unlocked');
-    lockBtn.textContent = '🔓';
+    lockBtn.innerHTML = uiIcon('unlock');
     lockBtn.title = 'Sign out';
   }
   // Feed health needs history in memory for the Briefing pill, so chain it.
@@ -3013,7 +3039,7 @@ function lockSession() {
   var lockBtn = document.getElementById('lock-btn');
   if (lockBtn) {
     lockBtn.classList.remove('unlocked');
-    lockBtn.textContent = '🔒';
+    lockBtn.innerHTML = uiIcon('lock');
   }
   document.getElementById('auth-error').textContent = '';
   // Reset UI
@@ -3178,7 +3204,7 @@ function applyDisplay() {
   document.documentElement.style.setProperty('--reading-zoom', String(size));
   var button = document.getElementById('theme-btn');
   if (button) {
-    button.textContent = choice === 'auto' ? '🌓' : light ? '☀️' : '🌙';
+    button.innerHTML = '<svg class="ico" aria-hidden="true"><use href="#i-' + (choice === 'auto' ? 'contrast' : light ? 'sun' : 'moon') + '"/></svg>';
     button.title = 'Display · ' + (choice === 'auto' ? 'theme follows your device (' + (light ? 'light' : 'dark') + ' now)' : (light ? 'light' : 'dark') + ' theme') + ' · text ' + Math.round(size * 100) + '%';
   }
   Array.prototype.forEach.call(document.querySelectorAll('[data-theme-choice]'), function(option) { option.setAttribute('aria-pressed', String(option.getAttribute('data-theme-choice') === choice)); });
@@ -3895,7 +3921,7 @@ function radarCatalyst(s) {
   var asOf = s.catalystAsOf && s.catalystAsOf !== 'recent'
     ? '<span class="radar-catalyst-asof">· ' + esc(s.catalystAsOf) + '</span>' : '';
   return '<div class="radar-catalyst">' +
-      '<span class="radar-event" style="color:' + radarEventColor(type) + '">📰 ' + esc(type) + '</span>' +
+      '<span class="radar-event" style="color:' + radarEventColor(type) + '">' + uiIcon('news') + ' ' + esc(type) + '</span>' +
       '<span class="radar-catalyst-txt">' + esc(s.catalyst) + ' ' + asOf + '</span>' +
     '</div>';
 }
@@ -3919,7 +3945,7 @@ function radar52(s) {
 function radarContext(s) {
   var bits = [];
   if (s.beta != null) bits.push('<span class="ph-chip">β <b>' + s.beta.toFixed(2) + '</b></span>');
-  if (s.nearBreakout) bits.push('<span class="ph-chip radar-chip-brk">⚡ near 52w high</span>');
+  if (s.nearBreakout) bits.push('<span class="ph-chip radar-chip-brk">' + uiIcon('bolt') + ' near 52w high</span>');
   if (!bits.length) return '';
   return '<div class="ph-chips radar-chips">' + bits.join('') + '</div>';
 }
@@ -4389,7 +4415,7 @@ function jExcessBar(label, g, barColor) {
 }
 function jOutcomeRow(e) {
   var orColor = e.exitReason === 'target-hit' ? 'var(--green)' : (e.exitReason === 'stop-hit' ? 'var(--red)' : 'var(--txt3)');
-  var amb = e.ambiguous ? ' <span class="jamb" title="same-bar stop+target — counted as stop">⚠</span>' : '';
+  var amb = e.ambiguous ? ' <span class="jamb" title="same-bar stop+target — counted as stop">' + uiIcon('alert') + '</span>' : '';
   return '<div class="jrow">' +
     '<span class="jrow-sym">' + esc(e.symbol) + '</span>' +
     '<span class="rel-badge ' + radarStatusClass(e.status) + '">' + esc(e.status) + '</span>' +
@@ -6448,10 +6474,10 @@ function renderPh() {
 
     var html = '';
     if (stale) {
-      html += '<div class="pse-stale">⚠ Snapshot is ' + ageDays + ' days old (last close ' + esc(idx.asOf) +
+      html += '<div class="pse-stale">' + uiIcon('alert') + ' Snapshot is ' + ageDays + ' days old (last close ' + esc(idx.asOf) +
         '). The free PSEi feed is intermittently stale — re-run <b>radar/refresh-ph.js</b> to refresh.</div>';
     }
-    html += '<div class="pse-caveat">⚠ ' + esc(d.caveat) + '</div>';
+    html += '<div class="pse-caveat">' + uiIcon('alert') + ' ' + esc(d.caveat) + '</div>';
 
     html += '<div class="card radar-card pse-index">' +
       '<div class="card-accent" style="background:' + trendCol + '"></div>' +
@@ -7019,7 +7045,7 @@ function sportsConfidentCalls(upcoming) {
     return '<b>' + esc(p.favorite) + '</b> ' + pct + '%';
   });
   if (!calls.length) return '';
-  return '<div class="sports-confcalls">🎯 Confident calls: ' + calls.slice(0, 8).join(' · ') + '</div>';
+  return '<div class="sports-confcalls">' + uiIcon('command') + ' Confident calls: ' + calls.slice(0, 8).join(' · ') + '</div>';
 }
 function sportsMatchCard(m) {
   return '<div class="sports-match ' + sportsStatusClass(m) + '">' +
@@ -7139,7 +7165,7 @@ function sportsProjectionJournalHtml(wc) {
     var bsk = j.brierSkill;
     var bcol = bsk == null ? 'var(--txt3)' : (bsk > 0.02 ? 'var(--green)' : (bsk < -0.02 ? 'var(--red)' : 'var(--txt3)'));
     var bverdict = bsk == null ? '' : (bsk > 0.02 ? 'edge over base rate' : (bsk < -0.02 ? 'below base rate' : 'about at base rate'));
-    html += '<div class="pse-caveat" style="margin-top:.2rem">📊 Win/draw/loss probabilities · ' + (j.probScored || 0) + ' scored · ' +
+    html += '<div class="pse-caveat" style="margin-top:.2rem">' + uiIcon('bars') + ' Win/draw/loss probabilities · ' + (j.probScored || 0) + ' scored · ' +
       'Brier ' + j.brier + ' vs base-rate ' + j.baselineBrier +
       ' · <span style="color:' + bcol + '">skill ' + (bsk > 0 ? '+' : '') + bsk + (bverdict ? ' (' + bverdict + ')' : '') + '</span>' +
       ' · log-loss ' + j.logLoss + ' vs ' + j.baselineLogLoss + '</div>';
@@ -7209,7 +7235,7 @@ function sportsMarketLens(wc, miro) {
     { h:'Market', num:true, v:function (r) { return sportsPct(r.marketShare); } },
     { h:'Gap', num:true, v:function (r) { return r.gap == null ? '-' : ((r.gap > 0 ? '+' : '') + (r.gap * 100).toFixed(1) + ' pts'); } },
     { h:'Read', v:function (r) { return r.read; } }
-  ]) + '<div class="sports-empty" style="margin-top:.55rem"><b>Outright</b> is the raw implied price straight from the 🎲 Markets tab (these ' + rows.length + ' teams sum to ' + sportsPct(sumImplied) + ', not 100% — most of the field has no market). <b>Model</b> (Elo + recent form) and <b>Market</b> are those re-based to a share <i>within just these teams</i> so both sum to 100% — that is why Market differs from Outright, and it makes the <b>Gap</b> like-for-like: FORM AHEAD = model ranks the team higher than the market, MARKET AHEAD = lower. A comparison lens, not a win probability.</div>';
+  ]) + '<div class="sports-empty" style="margin-top:.55rem"><b>Outright</b> is the raw implied price straight from the Markets tab (these ' + rows.length + ' teams sum to ' + sportsPct(sumImplied) + ', not 100% — most of the field has no market). <b>Model</b> (Elo + recent form) and <b>Market</b> are those re-based to a share <i>within just these teams</i> so both sum to 100% — that is why Market differs from Outright, and it makes the <b>Gap</b> like-for-like: FORM AHEAD = model ranks the team higher than the market, MARKET AHEAD = lower. A comparison lens, not a win probability.</div>';
 }
 // Knockout bracket + remaining-teams tracker. Pure render off the stored matches
 // (stage / provider-filled home-away / score / projection) — no recompute, no
@@ -7300,7 +7326,7 @@ function sportsKnockoutBracket(wc) {
   }
   var chips = alive.map(function (t) {
     var champ = champion && t === champion;
-    return '<span class="sports-ko-chip' + (champ ? ' champ' : '') + '">' + (champ ? '🏆 ' : '') + esc(t) + '</span>';
+    return '<span class="sports-ko-chip' + (champ ? ' champ' : '') + '">' + (champ ? uiIcon('trophy') + ' ' : '') + esc(t) + '</span>';
   }).join('');
   var tracker = '<div class="sports-ko-tracker">' +
     '<div class="sports-ko-count"><b>' + alive.length + '</b><span> of ' + surv.all.length + ' teams still in' +
@@ -8411,6 +8437,9 @@ var WATCH_STATUS = {
   dead:     {label: 'DEAD',     tone: 'dim'}
 };
 
+// A line icon from the sprite at the top of the page, for markup built in code.
+function uiIcon(name) { return '<svg class="ico" aria-hidden="true"><use href="#i-' + name + '"/></svg>'; }
+
 // ── Today's aha (asked for and cleaned by lib/briefing-prompt-core.js) ──
 // One non-obvious read built on today's stories, at the top of the briefing:
 // the claim, why it is not the obvious read, the steps, the stories it rests on
@@ -8424,7 +8453,7 @@ function ahaHtml(aha) {
   if ((aha.chain || []).length) html += '<ol class="aha-chain">' + aha.chain.map(function(step) { return '<li>' + esc(step) + '</li>'; }).join('') + '</ol>';
   if ((aha.links || []).length) html += '<div class="aha-links"><span>Built on</span>' + aha.links.map(function(link, index) { return '<button type="button" class="card-act" data-aha-link="' + index + '" title="Jump to this story">↓ ' + esc(link) + '</button>'; }).join('') + '</div>';
   if (aha.wrong_if) html += '<div class="aha-wrong"><strong>Wrong if:</strong> ' + esc(aha.wrong_if) + '</div>';
-  html += '<div class="card-actions"><button class="card-act" data-aha-act="save">Save insight</button><button class="card-act" data-aha-act="note">Write my take</button><button class="card-act" data-aha-act="check">Check this later</button></div><div id="aha-review" hidden><label>Check on <input id="aha-review-date" type="date"></label><button class="card-act" data-aha-act="confirm-check">Add to ⏰ To check</button></div><p id="aha-action-status" class="boost-kicker" role="status"></p>';
+  html += '<div class="card-actions"><button class="card-act" data-aha-act="save">Save insight</button><button class="card-act" data-aha-act="note">Write my take</button><button class="card-act" data-aha-act="check">Check this later</button></div><div id="aha-review" hidden><label>Check on <input id="aha-review-date" type="date"></label><button class="card-act" data-aha-act="confirm-check">Add to ' + uiIcon('clock') + ' To check</button></div><p id="aha-action-status" class="boost-kicker" role="status"></p>';
   return html + '</div></div>';
 }
 function ahaSnapshot(data) {
@@ -8453,7 +8482,7 @@ function handleAhaAction(action) {
     var date = document.getElementById('aha-review-date'); date.min = today;
     date.value = new Date(Date.parse(today + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10); date.focus();
   } else if (action === 'confirm-check') {
-    // A dated check in ⏰ To check (it comes back that day and in the Morning 5),
+    // A dated check in To check (it comes back that day and in the Morning 5),
     // not an experiment: those are one a day, and this one should not use it up.
     // Its source link is the first story the read is built on.
     var due = document.getElementById('aha-review-date').value;
@@ -8553,7 +8582,7 @@ function renderBriefing(options) {
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
       secHTML += srcHTML(st);
-      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button><button type="button" class="card-act" data-card-act="cite" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Copy headline, source, date and link">⧉ Copy citation</button><button type="button" class="card-act" data-card-act="read" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Count this story as read">Mark read</button><button type="button" class="card-act" data-card-act="evidence" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Save this story, with its link, to an evidence set">＋ Evidence</button>'+(String(st.watch_metric || '').trim() ? '<button type="button" class="card-act" data-card-act="remind" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Bring this watch metric back on Today when it is due">⏰ Remind me</button>' : '')+'</div>';
+      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button><button type="button" class="card-act" data-card-act="cite" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Copy headline, source, date and link">⧉ Copy citation</button><button type="button" class="card-act" data-card-act="read" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Count this story as read">Mark read</button><button type="button" class="card-act" data-card-act="evidence" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Save this story, with its link, to an evidence set">＋ Evidence</button>'+(String(st.watch_metric || '').trim() ? '<button type="button" class="card-act" data-card-act="remind" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Bring this watch metric back on Today when it is due">' + uiIcon('clock') + ' Remind me</button>' : '')+'</div>';
       secHTML += '</div>';
       // Column 2: Bob's relevance note.
       secHTML += '<div class="card-aside">';
@@ -8573,7 +8602,7 @@ function renderBriefing(options) {
   // finding out what happened to the last one gets the order backwards.
   todayHTML += watchFollowupHtml(data.watch_followup);
   if (data.watch) {
-    var wHTML = '<div data-group="today" style="margin-bottom:1.75rem"><div class="sec-hdr"><div class="sec-pip" style="background:#E85C5C"></div><div class="sec-name">ONE THING TO WATCH</div></div><div class="watch-card"><div class="watch-stripe"></div><div class="watch-body">'+esc(data.watch)+'</div>'+(data.watch_source?'<div style="margin-top:.6rem"><span class="src">📍 '+esc(data.watch_source)+'</span></div>':'')+'</div></div>';
+    var wHTML = '<div data-group="today" style="margin-bottom:1.75rem"><div class="sec-hdr"><div class="sec-pip" style="background:#E85C5C"></div><div class="sec-name">ONE THING TO WATCH</div></div><div class="watch-card"><div class="watch-stripe"></div><div class="watch-body">'+esc(data.watch)+'</div>'+(data.watch_source?'<div style="margin-top:.6rem"><span class="src">'+uiIcon('pin')+' '+esc(data.watch_source)+'</span></div>':'')+'</div></div>';
     todayHTML += wHTML;
   }
 
@@ -8637,7 +8666,7 @@ function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace
 function srcHTML(st) {
   var verified = st.grounded === true;
   // feed = matched the fetched news list; search = a page the search tool really returned.
-  var label = '📍 ' + esc(st.source || 'Source unavailable') + ' · ' + (verified ? (st.groundedBy === 'search' ? 'Link verified' : 'Source matched') : 'Unverified source');
+  var label = uiIcon('pin') + ' ' + esc(st.source || 'Source unavailable') + ' · ' + (verified ? (st.groundedBy === 'search' ? 'Link verified' : 'Source matched') : 'Unverified source');
   var url = String(st && st.url || '');
   if (!/^https?:\/\//i.test(url)) return '<span class="src">' + label + '</span>';
   return '<a class="src" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(url) + '">' + label + ' ↗</a>';
@@ -8781,7 +8810,7 @@ function applyOpenedTicks() {
     var remind = row.querySelector('[data-card-act="remind"]');
     if (remind && st) {
       var reminder = window.dailyBoostReminderFor ? window.dailyBoostReminderFor({headline:st.headline, url:st.url}) : null;
-      remind.textContent = reminder ? '⏰ ' + reminder.label : '⏰ Remind me';
+      remind.innerHTML = uiIcon('clock') + ' ' + (reminder ? esc(reminder.label) : 'Remind me');
       remind.title = reminder ? 'Reminder set for ' + reminder.label + '. Tap to cancel.' : 'Bring this watch metric back on Today when it is due';
       remind.setAttribute('aria-pressed', String(!!reminder));
     }
@@ -9399,8 +9428,8 @@ function paintResearchList() {
     html += '<div class="hist-chips">';
     if (!pending && !failed) (r.tags||[]).forEach(function(t){ html += '<span class="hist-chip">'+esc(t)+'</span>'; });
     if (pending) html += '<span class="report-badge gen"><span class="gen-spin">⟳</span> Generating…</span>';
-    else if (failed) html += '<span class="report-badge err">⚠ Failed</span>';
-    else html += '<span class="report-badge">'+(r.format==='md' ? '📝 Markdown' : '📄 Full report')+'</span>';
+    else if (failed) html += '<span class="report-badge err">' + uiIcon('alert') + ' Failed</span>';
+    else html += '<span class="report-badge">'+(r.format==='md' ? uiIcon('note') + ' Markdown' : uiIcon('doc') + ' Full report')+'</span>';
     html += '</div></div>';
   });
   html += '</div>';
@@ -9712,10 +9741,10 @@ function generateDigest() {
   });
 
   var html = '<div class="digest-card">';
-  html += '<div class="digest-title">📋 Weekly Intelligence Digest</div>';
+  html += '<div class="digest-title">' + uiIcon('clipboard') + ' Weekly Intelligence Digest</div>';
   html += '<div style="font-family:var(--mono);font-size:10px;color:var(--txt3);margin-bottom:1rem">'+thisWeek.length+' briefings · '+new Date(thisWeek[thisWeek.length-1].saved).toLocaleDateString()+' – '+new Date(thisWeek[0].saved).toLocaleDateString()+'</div>';
 
-  var labels = {global:'🌍 Global',ph:'🇵🇭 Philippines',insurance:'🛡 Insurance',interruptions:'⚠ Interruptions',ai:'🤖 AI & Tech',markets:'📈 Markets',ev:'⚡ EV Industry',watch:'🔭 Watch Items'};
+  var labels = {global:uiIcon('globe')+' Global',ph:uiIcon('ph')+' Philippines',insurance:uiIcon('shield')+' Insurance',interruptions:uiIcon('alert')+' Interruptions',ai:uiIcon('chip')+' AI &amp; Tech',markets:uiIcon('trends')+' Markets',ev:uiIcon('bolt')+' EV Industry',watch:uiIcon('eye')+' Watch Items'};
   var hasContent = false;
   Object.keys(labels).forEach(function(k) {
     if (!digest[k] || !digest[k].length) return;
@@ -10172,14 +10201,14 @@ function trendCrossLinks(m){
     var sym = aliasKey ? TREND_RADAR_ALIASES[aliasKey] : null;
     if(sym){
       var sig = _trendsRadar.filter(function(s){ return s.symbol===sym; })[0];
-      if(sig) chips.push('<span class="trend-xchip radar">📡 '+esc(sym)+' '+esc(sig.status)+' on Radar</span>');
+      if(sig) chips.push('<span class="trend-xchip radar">'+uiIcon('radar')+' '+esc(sym)+' '+esc(sig.status)+' on Radar</span>');
     }
   }
   if(_trendsMiro && _trendsMiro.length){
     var needle = m.name.toLowerCase().split(' ')[0];
     if(needle.length>=3){
       var mk = _trendsMiro.filter(function(x){ return String(x.label||x.question||'').toLowerCase().indexOf(needle)!==-1; })[0];
-      if(mk) chips.push('<span class="trend-xchip miro">🎲 in Markets</span>');
+      if(mk) chips.push('<span class="trend-xchip miro">'+uiIcon('miro')+' in Markets</span>');
     }
   }
   return chips;

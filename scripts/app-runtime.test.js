@@ -40,7 +40,7 @@ test('aha actions preserve sources and invalidation when saved or scheduled',()=
   const data={date:'2026-09-26',aha:{title:'A useful connection',insight:'A provisional reading',chain:['First observation'],wrong_if:'The delay is temporary',links:['Source headline']}};
   let evidence, check, trial;
   const {context,element}=environment(['ahaSnapshot','handleAhaAction'],{_currentData:data,getAllStories:()=>[{story:{headline:'Other headline',source:'X',url:'https://example.com/other'}},{story:{headline:'Source headline',source:'Publisher',url:'https://example.com/source'}}],currentBriefingKey:()=> '2026-09-26',openEvidencePicker:item=>evidence=item,
-    addDailyBoostCheck:item=>{check=item;return {ok:true,message:'Added to ⏰ To check for Sat 3 Oct.'};},createDailyBoostExperiment:(...args)=>{trial=args;return {ok:true,message:'Saved'};}});
+    addDailyBoostCheck:item=>{check=item;return {ok:true,message:'Added to To check for Sat 3 Oct.'};},createDailyBoostExperiment:(...args)=>{trial=args;return {ok:true,message:'Saved'};}});
   context.handleAhaAction('save');
   assert.equal(evidence.id,'briefing:2026-09-26:aha');
   assert.match(evidence.detail,/Wrong if: The delay is temporary/); assert.match(evidence.detail,/https:\/\/example.com\/source/);
@@ -215,7 +215,7 @@ test('the verification line says when the reader\'s feedback shaped the briefing
 // wrong-if; nothing at all when there is no aha; and normalise() keeps it,
 // cleaned against the briefing's own stories, so it survives the save.
 test('the aha card renders the read, and nothing when there is none', () => {
-  const {context}=environment(['esc','ahaHtml'],{AHA_KIND_LABELS:{'connection':'Connection','second-order':'Second-order','contrarian':'Contrarian'}});
+  const {context}=environment(['esc','uiIcon','ahaHtml'],{AHA_KIND_LABELS:{'connection':'Connection','second-order':'Second-order','contrarian':'Contrarian'}});
   const html=context.ahaHtml({kind:'connection',title:'Grid alerts are a <reinsurance> story',insight:'Two stories, one exposure.',chain:['Reserves are thin.','Retentions went up.'],links:['Visayas grid on yellow alert anew','Tower renews reinsurance program'],wrong_if:'NGCP margin above 300 MW.'});
   assert.match(html,/TODAY’S AHA/);
   assert.match(html,/<span class="aha-kind">Connection<\/span>/);
@@ -314,12 +314,12 @@ test('display settings: Auto follows the device, Light and Dark stick, text size
   Object.assign(context.document,{body:{classList:{toggle:(c,on)=>{on?classes.add(c):classes.delete(c);},contains:c=>classes.has(c)}},
     documentElement:{style:{setProperty:(k,v)=>{vars[k]=v;}}},querySelector:()=>null,querySelectorAll:()=>options,getElementById:id=>nodes[id]||null});
   context.applyDisplay();
-  assert.equal(classes.has('light'),false,'Auto on a dark device'); assert.equal(nodes['theme-btn'].textContent,'🌓'); assert.equal(attrs['opt-auto'],'true');
+  assert.equal(classes.has('light'),false,'Auto on a dark device'); assert.match(nodes['theme-btn'].innerHTML,/#i-contrast/); assert.equal(attrs['opt-auto'],'true');
   system.matches=true; context.applyDisplay();
   assert.equal(classes.has('light'),true,'Auto follows the device to light');
-  context.setTheme('dark'); assert.equal(classes.has('light'),false); assert.equal(store.get('briefing_theme'),'dark'); assert.equal(nodes['theme-btn'].textContent,'🌙');
+  context.setTheme('dark'); assert.equal(classes.has('light'),false); assert.equal(store.get('briefing_theme'),'dark'); assert.match(nodes['theme-btn'].innerHTML,/#i-moon/);
   context.setTheme('auto'); assert.equal(store.has('briefing_theme'),false,'Auto is the default, nothing stored');
-  store.set('briefing_theme','light'); context.applyDisplay(); assert.equal(nodes['theme-btn'].textContent,'☀️','a choice made with the old toggle is kept');
+  store.set('briefing_theme','light'); context.applyDisplay(); assert.match(nodes['theme-btn'].innerHTML,/#i-sun/,'a choice made with the old toggle is kept');
   context.toggleTheme(); assert.equal(store.get('briefing_theme'),'dark','the old toggle still works');
   assert.equal(vars['--reading-zoom'],'1');
   context.stepTextSize(1); context.stepTextSize(1); context.stepTextSize(1);
