@@ -1580,8 +1580,10 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .gen-opt{display:flex;align-items:center;gap:.45rem;font-family:var(--mono);font-size:11px;color:var(--txt2);margin:.35rem 0 .1rem;cursor:pointer}
 .gen-opt input{accent-color:var(--gold)}
 .hist-card.pending{cursor:default;opacity:.92}
-.hist-card.pending .gen-spin{display:inline-block;animation:genspin 1s linear infinite}
 @keyframes genspin{to{transform:rotate(360deg)}}
+/* ── WORKING ON IT (aiWorkingHtml) ── */
+.ai-ring{display:inline-block;box-sizing:border-box;width:1.15em;height:1.15em;min-width:13px;min-height:13px;margin-right:.55em;vertical-align:-.2em;border-radius:50%;border:2px solid var(--line);border-top-color:var(--amber);animation:genspin .9s linear infinite}.ai-time{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;margin-left:.5em}.ai-time::before{content:"· "}.ai-slow{color:var(--amber);margin-left:.4em}.ai-slow::before{content:"· "}.ai-slow:empty{display:none}
+@media(prefers-reduced-motion:reduce){.ai-ring{animation:none;border-color:var(--amber)}}
 @media(max-width:768px){.research-frame{height:calc(100vh - 210px)}}
 
 /* ── WEEKLY DIGEST ── */
@@ -8419,7 +8421,7 @@ async function generateWithOpenAI() {
     return;
   }
   try {
-    if (btn) { btn.disabled = true; btn.textContent = 'GENERATING...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = aiWorkingHtml('GENERATING', {slow:300}); }
     var result = await window.fbGenerateBriefing(getTodayBriefingDateLabel());
     var raw = result && (result.raw || result.text || '');
     var briefing = result && result.briefing;
@@ -8480,6 +8482,42 @@ var WATCH_STATUS = {
 
 // A line icon from the sprite at the top of the page, for markup built in code.
 function uiIcon(name) { return '<svg class="ico" aria-hidden="true"><use href="#i-' + name + '"/></svg>'; }
+
+// ── Working on it: a live sign that a model call is still running ──
+// A turning ring and a timer counting up, beside anything that waits on a model
+// (Go deeper, the briefing, the weekly read, deep research). The timer is the
+// honest part: the server does not report its stages, so nothing here guesses how
+// far along it is. Past the usual time (opts.slow, in seconds) it says so plainly.
+var _aiTicker = null, AI_SLOW_NOTE = 'longer than usual';
+function aiElapsed(ms) {
+  var s = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2);
+}
+function aiWorkingHtml(text, opts) {
+  opts = opts || {};
+  var since = typeof opts.since === 'number' ? opts.since : Date.parse(opts.since || '');
+  if (!isFinite(since)) since = Date.now();
+  var slow = Number(opts.slow) || 0, ms = Date.now() - since;
+  aiTickSoon();
+  return '<span class="ai-working" data-ai-since="' + since + '"' + (slow ? ' data-ai-slow="' + slow + '"' : '') + '>' +
+    '<span class="ai-ring" aria-hidden="true"></span><span class="ai-text">' + esc(text) + '</span>' +
+    '<span class="ai-time" aria-hidden="true">' + aiElapsed(ms) + '</span><span class="ai-slow">' + (slow && ms > slow * 1000 ? AI_SLOW_NOTE : '') + '</span></span>';
+}
+// One timer for every indicator on the page; it stops when none are left.
+function aiTickSoon() {
+  if (_aiTicker || typeof setInterval !== 'function') return;
+  _aiTicker = setInterval(function() {
+    var live = document.querySelectorAll('.ai-working[data-ai-since]');
+    if (!live.length) { clearInterval(_aiTicker); _aiTicker = null; return; }
+    var now = Date.now();
+    Array.prototype.forEach.call(live, function(box) {
+      var ms = now - Number(box.getAttribute('data-ai-since')), slow = Number(box.getAttribute('data-ai-slow')) || 0;
+      var time = box.querySelector('.ai-time'), note = box.querySelector('.ai-slow');
+      if (time) time.textContent = aiElapsed(ms);
+      if (note && slow && ms > slow * 1000 && !note.textContent) note.textContent = AI_SLOW_NOTE;
+    });
+  }, 1000);
+}
 
 // ── Go deeper: a working dossier on one story (functions/story-dossier.js) ──
 // Opens under the card: a saved dossier shows at once; otherwise the server
@@ -8569,7 +8607,7 @@ function renderDossier(panel, d, sec, idx) {
 var _dossierInput = {};
 async function buildDossier(panel, story, key, sec, idx, refresh) {
   if (!window._firebaseUid || typeof window.fbGenerateDossier !== 'function') { panel.innerHTML = '<div class="dossier-status">Sign in to go deeper on a story.</div>'; return; }
-  panel.innerHTML = '<div class="dossier-status">' + uiIcon('research') + (refresh ? ' Reading around this story again…' : ' Reading around this story…') + ' usually under a minute. It searches the web, so allow up to three.</div>';
+  panel.innerHTML = '<div class="dossier-status">' + aiWorkingHtml((refresh ? 'Reading around this story again.' : 'Reading around this story.') + ' Usually under a minute; it searches the web, so allow up to three.', {slow:180}) + '</div>';
   try {
     var result = await window.fbGenerateDossier(story, refresh);
     if (!result || !result.dossier) throw new Error('The dossier came back empty. Try again in a minute.');
@@ -8587,7 +8625,7 @@ async function toggleDossier(button, st, sec, idx) {
   card.insertAdjacentElement('afterend', panel); button.setAttribute('aria-expanded', 'true');
   var story = dossierStory(st, sec), key = window.BriefingPromptCore.storyDossierKey(story);
   panel.dataset.key = key; _dossierInput[key] = story;
-  panel.innerHTML = '<div class="dossier-status">Checking for a saved dossier…</div>';
+  panel.innerHTML = '<div class="dossier-status">' + aiWorkingHtml('Checking for a saved dossier…') + '</div>';
   var saved = await savedDossiers();
   if (!panel.isConnected) return;
   if (saved[key]) { renderDossier(panel, saved[key], sec, idx); return; }
@@ -9583,7 +9621,7 @@ function paintResearchList() {
     if (failed && r.error) html += '<div class="hist-preview">'+esc(r.error)+'</div>';
     html += '<div class="hist-chips">';
     if (!pending && !failed) (r.tags||[]).forEach(function(t){ html += '<span class="hist-chip">'+esc(t)+'</span>'; });
-    if (pending) html += '<span class="report-badge gen"><span class="gen-spin">⟳</span> Generating…</span>';
+    if (pending) html += '<span class="report-badge gen">' + aiWorkingHtml('Generating', {since:r.saved, slow:1200}) + '</span>';
     else if (failed) html += '<span class="report-badge err">' + uiIcon('alert') + ' Failed</span>';
     else html += '<span class="report-badge">'+(r.format==='md' ? uiIcon('note') + ' Markdown' : uiIcon('doc') + ' Full report')+'</span>';
     html += '</div></div>';

@@ -329,6 +329,23 @@ test('display settings: Auto follows the device, Light and Dark stick, text size
   context.stepTextSize(1); assert.equal(store.has('briefing_text_size'),false,'100% stores nothing');
   store.set('briefing_text_size','3'); context.applyDisplay(); assert.equal(vars['--reading-zoom'],'1','an odd stored value falls back to 100%');
 });
+// Anything waiting on a model shows a turning ring and a timer counting up; past
+// the usual time it says so, and it never claims a stage the server did not report.
+test('the working indicator counts up from when the work started and flags a long wait', () => {
+  const now = Date.parse('2026-09-26T05:00:00Z');
+  const {context} = environment(['esc', 'aiElapsed', 'aiWorkingHtml', 'aiTickSoon'], {Date: class extends Date { static now() { return now; } }, AI_SLOW_NOTE: 'longer than usual', _aiTicker: 1});
+  assert.equal(context.aiElapsed(0), '0:00'); assert.equal(context.aiElapsed(65999), '1:05'); assert.equal(context.aiElapsed(-5), '0:00');
+  const fresh = context.aiWorkingHtml('Reading <this> story.', {slow: 180});
+  assert.ok(fresh.includes('data-ai-since="' + now + '"') && fresh.includes('data-ai-slow="180"'));
+  assert.ok(fresh.includes('Reading &lt;this&gt; story.'), 'escaped');
+  assert.ok(fresh.includes('<span class="ai-time" aria-hidden="true">0:00</span><span class="ai-slow"></span>'), 'no note yet');
+  const started = context.aiWorkingHtml('Generating', {since: '2026-09-26T04:40:00Z', slow: 1200});
+  assert.ok(started.includes('>20:00</span>') && !started.includes('longer than usual'), 'an ISO start time, exactly at the limit');
+  const late = context.aiWorkingHtml('Generating', {since: now - 1201000, slow: 1200});
+  assert.ok(late.includes('>20:01</span><span class="ai-slow">longer than usual</span>'), 'past the limit on first paint');
+  assert.ok(!context.aiWorkingHtml('Checking', {since: 'junk'}).includes('data-ai-slow'), 'no limit, no note; a bad start time counts from now');
+});
+
 // Go deeper: the dossier renders escaped, leaves out empty parts, links only its
 // checked sources, and gives Evidence a plain-text copy.
 test('the dossier renders escaped, skips empty parts, and copies to Evidence as text', () => {
