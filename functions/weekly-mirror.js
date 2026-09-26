@@ -94,7 +94,7 @@ function splitNote(note) {
 
 // What one day looked like. Returns null for a day with nothing recorded.
 // `today` marks the day the read is taken on, which is not over yet.
-function dayBlock(key, entry, core, today) {
+function dayBlock(key, entry, core, today, goalNames) {
   if (!entry) return null;
   const lines = [];
   const note = splitNote(entry.note);
@@ -112,7 +112,7 @@ function dayBlock(key, entry, core, today) {
   });
   const wrote = note.own || note.comments.length || note.takes.length;
   const active = wrote || entry.done || noted.length || opened.length || votes.length ||
-    reminders.length || text(entry.trialPlan) || text(entry.trialOutcome) || entry.sparkResponse;
+    reminders.length || text(entry.trialPlan) || text(entry.trialOutcome) || entry.sparkResponse || arr(entry.goalTicks).length;
   if (!active) return null;
 
   const title = core && typeof core.sparkTitle === "function" ? core.sparkTitle(entry.spark) : "";
@@ -143,6 +143,8 @@ function dayBlock(key, entry, core, today) {
   const response = entry.sparkResponse, responseLabels = {helpful:"Helpful",more:"More like this","not-today":"Not today (not a permanent dislike)"};
   if (response && responseLabels[response.value]) lines.push("  His feedback on spark " + quote(core.sparkTitle(response.spark),80) + ": " + responseLabels[response.value] + (text(response.note) ? " — " + quote(response.note,240) : ""));
   reminders.filter((item) => text(item.finding)).slice(0,LIST_MAX).forEach((item) => lines.push("  Finding on " + quote(item.metric,140) + (item.done ? " (checked)" : " (draft, still open)") + ": " + quote(item.finding,400)));
+  const moved = arr(entry.goalTicks).map((id) => goalNames && goalNames[id]).filter(Boolean);
+  if (moved.length) lines.push("  Marked as moving his goal" + (moved.length > 1 ? "s" : "") + ": " + moved.map((name) => quote(name, 120)).join("; "));
   if (noted.length) lines.push("  Stories he noted without comment: " + storyList(noted).join("; "));
   if (opened.length) lines.push("  Opened " + opened.length + " briefing " + (opened.length === 1 ? "story" : "stories") + ": " + storyList(opened).join("; "));
   const more = votes.filter((item) => item.vote === 1), less = votes.filter((item) => item.vote === -1);
@@ -220,17 +222,21 @@ function previousMirror(mirrors, todayKey) {
 // read back (no model call is made for an empty week). `now` (ms) says how far
 // into today the read is taken: today is still going, so an unfinished quest on
 // it is not a miss — the first real read held a 6:45 AM "not done" against him.
-function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now}) {
+function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goals}) {
   if (!DAY.test(text(todayKey))) return null;
   const win = mirrorWindow(todayKey);
   const records = core && typeof core.clean === "function" ? core.clean(entries && typeof entries === "object" ? entries : {}) : (entries || {});
   const stats = {days: 0, notes: 0, done: 0, opened: 0, votes: 0, noted: 0, decisions: 0};
   const at = manilaTime(now);
   const todayNote = "today, still in progress" + (at ? " — read at " + at + " Manila" : "");
+  // His goals (the app's "Your goals"): active ones only, at most three.
+  const active = arr(goals).filter((goal) => goal && !goal.archived && text(goal.text) && text(goal.id)).slice(0, 3);
+  const goalNames = {};
+  active.forEach((goal) => { goalNames[text(goal.id)] = clip(goal.text, 120); });
   const dayLines = [];
   win.days.forEach((key) => {
     const today = key === todayKey ? todayNote : "";
-    const block = dayBlock(key, records[key], core, today);
+    const block = dayBlock(key, records[key], core, today, goalNames);
     if (!block) { dayLines.push(dayLabel(key) + (today ? " (" + today + ") — nothing recorded yet" : " — nothing recorded")); return; }
     stats.days++;
     stats.notes += block.stats.note; stats.done += block.stats.done; stats.opened += block.stats.opened;
@@ -249,6 +255,13 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now}) {
     parts.push("", "DECISIONS (his journal, this week):", journal.lines.join("\n"));
   }
   parts.push("", "Open calls in his journal overall: " + journal.open + ".");
+  if (active.length) {
+    parts.push("", "HIS GOALS — what he says he is working towards (a tick means he marked that day as moving it):");
+    active.forEach((goal, index) => {
+      const days = win.days.filter((key) => records[key] && arr(records[key].goalTicks).indexOf(text(goal.id)) >= 0);
+      parts.push((index + 1) + ". " + quote(goal.text, 120) + " — " + (days.length ? "ticked on " + days.map(dayLabel).join(", ") + " (" + days.length + " of 7 days)" : "no ticks this week"));
+    });
+  }
   const previous = previousMirror(mirrors, todayKey);
   if (previous) {
     parts.push("", "LAST MIRROR (" + dayLabel(previous.weekKey) + "):");
@@ -259,7 +272,7 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now}) {
       parts.push("- His written answer" + (same ? "" : " (to an earlier wording, " + quote(previous.answer.question, 200) + ")") + ": " + quote(previous.answer.text, 600));
     }
   }
-  return {text: parts.join("\n"), stats, window: win, previous: previous ? previous.weekKey : null};
+  return {text: parts.join("\n"), stats, window: win, previous: previous ? previous.weekKey : null, goals: active.length};
 }
 
 const SYSTEM = "You read back a person's week to them from what they recorded in a private app. " +
@@ -300,6 +313,9 @@ function buildMirrorPrompt(input) {
     "- try_next: ONE small, concrete thing for the coming week that the record suggests he has not done yet — under 30 minutes,",
     "  tied to something he wrote, not a habit programme. why says which note or pattern it comes from.",
     "- question: ONE open question specific to this week that he could sit with. \"What do you want?\" is too generic.",
+    "- goals: if a HIS GOALS block is given, one entry per goal in its order: goal is its text; read is one or two sentences on",
+    "  whether the week moved it, citing days and what he did or wrote, with a small next step only where the record points to",
+    "  one. Never scold or grade: no ticks is a fact, not a failure. An empty list if there is no HIS GOALS block.",
     "- No diagnosis or clinical words, no flattery, no generic self-help, no emojis. Plain English, short sentences, \"you\" not \"Bob\".",
     "  Never mention the app, the record, data or JSON — talk about his week.",
     "- Each string at most 60 words; week_in_a_line at most 25.",
@@ -312,7 +328,7 @@ function buildMirrorPrompt(input) {
 const MIRROR_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["week_in_a_line", "themes", "energy", "said_vs_did", "reading", "decisions", "last_week", "try_next", "question", "confidence"],
+  required: ["week_in_a_line", "themes", "energy", "said_vs_did", "reading", "decisions", "last_week", "try_next", "question", "confidence", "goals"],
   properties: {
     week_in_a_line: {type: "string"},
     themes: {
@@ -336,6 +352,10 @@ const MIRROR_SCHEMA = {
     },
     question: {type: "string"},
     confidence: {type: "string", enum: ["thin", "fair", "rich"]},
+    goals: {
+      type: "array",
+      items: {type: "object", additionalProperties: false, required: ["goal", "read"], properties: {goal: {type: "string"}, read: {type: "string"}}},
+    },
   },
 };
 
@@ -363,6 +383,7 @@ function cleanMirror(raw) {
     last_week: clip(raw.last_week, 600),
     try_next: {action: clip(raw.try_next && raw.try_next.action, 300), why: clip(raw.try_next && raw.try_next.why, 400)},
     question: clip(raw.question, 300),
+    goals: arr(raw.goals).filter((item) => item && text(item.goal)).slice(0, 3).map((item) => ({goal: clip(item.goal, 160), read: clip(item.read, 500)})),
     confidence: ["thin", "fair", "rich"].includes(raw.confidence) ? raw.confidence : "fair",
   };
   return out.week_in_a_line && out.question ? out : null;

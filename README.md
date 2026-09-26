@@ -5,6 +5,15 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 
 ## Features
 
+- **Your goals** — one to three goals on their own account doc
+  (`briefings-bob/goals-<uid>`, so the Daily Boost transaction can never drop
+  them), each with a theme guessed from its words. The rotation leans towards
+  goal themes on the same terms as More like this (`lean` in `sparkFor` /
+  `nextSpark`; at most one day in four, never two days running), and the why line
+  names the goal. **Moved a goal today?** ticks (`goalTicks` on the day, synced
+  and archived) feed a two-week record per goal, the weekly read gets a HIS GOALS
+  block and answers each goal, and the Morning 5 passes the same lean so its spark
+  matches the app.
 - **Start here** — one card at the top of Today names the next step, in order
   of what will not wait: a check due today, an experiment ready to review, the
   weekly read on Sundays (until there is one), today’s spark, then a line in the

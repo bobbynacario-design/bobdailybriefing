@@ -525,15 +525,17 @@ exports.generateBobDailyBriefing = onCall(
 // Everything the mirror reads, each read caught on its own: a failed journal
 // query costs the decisions paragraph, not the whole read-back.
 async function loadMirrorSources(db, uid) {
-  const [boost, journal, stored] = await Promise.all([
+  const [boost, journal, stored, goals] = await Promise.all([
     db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get()
       .then((snap) => (snap.exists ? snap.data().entries || {} : {})).catch(() => ({})),
     db.collection(JOURNAL_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(100).get()
       .then((snap) => snap.docs.map((doc) => doc.data())).catch(() => []),
     db.collection(BRIEFINGS_COLL).doc("weekly-mirror-" + uid).get()
       .then((snap) => (snap.exists ? snap.data().mirrors || {} : {})).catch(() => ({})),
+    db.collection(BRIEFINGS_COLL).doc("goals-" + uid).get()
+      .then((snap) => (snap.exists ? snap.data().goals || [] : [])).catch(() => []),
   ]);
-  return {entries: boost, decisions: journal, mirrors: stored};
+  return {entries: boost, decisions: journal, mirrors: stored, goals};
 }
 
 exports.generateWeeklyMirror = onCall(
@@ -1104,9 +1106,15 @@ async function dailyBoostFor(db, uid, now, lastWeeklyNudge) {
     }
   }
   try {
-    const doc = await db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get();
+    const [doc, lean] = await Promise.all([
+      db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get(),
+      // The themes of his goals: the app leans the spark towards them, so the push must too.
+      db.collection(BRIEFINGS_COLL).doc("goals-" + uid).get()
+        .then((snap) => (snap.exists ? (snap.data().goals || []).filter((goal) => goal && !goal.archived).slice(0, 3).map((goal) => goal.theme) : []))
+        .catch(() => []),
+    ]);
     const entries = doc.exists ? doc.data().entries : {};
-    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey), reminders: dueReminders(DailyBoostCore, entries, dayKey), weekly};
+    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey, lean), reminders: dueReminders(DailyBoostCore, entries, dayKey), weekly};
   } catch (error) {
     logger.warn("Daily Boost lookup failed", {message: error.message});
     return {spark: "", reminders: [], weekly};

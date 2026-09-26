@@ -137,10 +137,11 @@ function hasNewReminders(list, notified) {
 // entry (opened, picked or swapped to), else the default the app would show,
 // worked out by the same shared code (lib/daily-boost.js) from the same
 // synced history. Anything unusable gives "" and the line is simply left off.
-function todaysSparkTitle(core, entries, dayKey) {
+// lean: the themes of his goals, which the app's rotation leans towards.
+function todaysSparkTitle(core, entries, dayKey, lean) {
   if (!core || typeof core.clean !== "function" || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return "";
   const records = core.clean(entries && typeof entries === "object" ? entries : {});
-  const spark = records[dayKey] ? records[dayKey].spark : core.sparkFor(dayKey, records);
+  const spark = records[dayKey] ? records[dayKey].spark : core.sparkFor(dayKey, records, Array.isArray(lean) ? lean : undefined);
   return core.sparkTitle(spark) || "";
 }
 

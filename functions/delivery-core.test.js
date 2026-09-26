@@ -143,3 +143,12 @@ test("reminders ride in the Morning 5, or get a push of their own when nothing e
   assert.equal(notificationCopy([], true, {reminders}).body,
     "No priority items currently clear your delivery thresholds.\n⏰ To check: Fair Work hearing list · +1 more");
 });
+
+test("the push's spark leans towards his goals exactly as the app does", () => {
+  const core = DailyBoostCore, day = "2026-09-28";
+  const base = core.sparkFor(day, {}), target = core.order.find((id) => core.themes[id] !== core.themes[base]);
+  const lean = [core.themes[target]];
+  assert.equal(todaysSparkTitle(core, {}, day, lean), core.sparkTitle(core.sparkFor(day, {}, lean)));
+  assert.notEqual(todaysSparkTitle(core, {}, day, lean), todaysSparkTitle(core, {}, day), "a goal can change the day's spark");
+  assert.equal(todaysSparkTitle(core, {"2026-09-28": {spark: 11, updatedAt: 1}}, day, lean), core.sparkTitle(11), "a stored day keeps its spark");
+});

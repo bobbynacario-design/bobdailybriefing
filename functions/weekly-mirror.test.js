@@ -257,3 +257,30 @@ test("his written answer to the last read's question is carried into the follow-
   assert.doesNotMatch(buildMirrorInput({entries: week(), mirrors: blank, todayKey: TODAY, core}).text, /His written answer/);
   assert.match(buildMirrorPrompt(input), /If he wrote an answer, respond to what he wrote — quote a few of his words — and say whether\n  this week bears it out/);
 });
+
+test("his goals come with the days he ticked, and the read answers each one", () => {
+  const goals = [{id: "gcons1", text: "Be consistent with what I want", theme: "Momentum"}, {id: "goffer", text: "Build a BI advisory offer", theme: "Craft"},
+    {id: "gold1", text: "An archived goal", theme: "Reset", archived: true}];
+  const entries = Object.assign(week(), {"2026-09-22": {spark: 5, goalTicks: ["gcons1"]}, "2026-09-25": Object.assign(week()["2026-09-25"], {goalTicks: ["gcons1", "goffer"]})});
+  const input = buildMirrorInput({entries, decisions: [], mirrors: {}, todayKey: TODAY, core, goals});
+  assert.ok(input.text.includes("HIS GOALS — what he says he is working towards"));
+  assert.ok(input.text.includes('1. "Be consistent with what I want" — ticked on Tue 22 Sep, Fri 25 Sep (2 of 7 days)'));
+  assert.ok(input.text.includes('2. "Build a BI advisory offer" — ticked on Fri 25 Sep (1 of 7 days)'));
+  assert.ok(!input.text.includes("An archived goal"), "archived goals stay out");
+  assert.ok(input.text.includes('Tue 22 Sep — spark'), "a day with only a tick counts as recorded");
+  assert.ok(input.text.includes('  Marked as moving his goals: "Be consistent with what I want"; "Build a BI advisory offer"'));
+  assert.equal(input.goals, 2);
+  const none = buildMirrorInput({entries: week(), decisions: [], mirrors: {}, todayKey: TODAY, core, goals: [goals[1]]});
+  assert.ok(none.text.includes('1. "Build a BI advisory offer" — no ticks this week'));
+  assert.ok(!buildMirrorInput({entries: week(), todayKey: TODAY, core}).text.includes("HIS GOALS"), "no goals, no block");
+  const prompt = buildMirrorPrompt(input);
+  assert.ok(prompt.includes("- goals: if a HIS GOALS block is given, one entry per goal in its order"));
+  assert.ok(prompt.includes("Never scold or grade: no ticks is a fact, not a failure."));
+});
+
+test("cleanMirror keeps up to three goal reads", () => {
+  const base = {week_in_a_line: "W", question: "Q", themes: [], energy: {gave: [], drained: []}, try_next: {action: "", why: ""}};
+  const clean = cleanMirror(Object.assign({}, base, {goals: [{goal: "G1", read: "Moved on Tue."}, {goal: "", read: "dropped"}, {goal: "G2", read: "Not this week."}, {goal: "G3", read: "r"}, {goal: "G4", read: "r"}]}));
+  assert.deepEqual(clean.goals.map((g) => g.goal), ["G1", "G2", "G3"]);
+  assert.deepEqual(cleanMirror(base).goals, []);
+});
