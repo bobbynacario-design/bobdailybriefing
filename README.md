@@ -5,6 +5,11 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 
 ## Features
 
+- **Start here** — one card at the top of Today names the next step, in order
+  of what will not wait: a check due today, an experiment ready to review, the
+  weekly read on Sundays (until there is one), today’s spark, then a line in the
+  note; “All done for today” points to the briefing. **Not now** moves to the next
+  for the visit, and “Then:” lists what else is waiting, so nothing is hidden.
 - **Learn from your daily practice** — under the quest, “Did this help?” offers
   Helpful, Not today and More like this, plus an optional sentence. The latest
   response each day stays tied to its spark, syncs, and appears in reflection
