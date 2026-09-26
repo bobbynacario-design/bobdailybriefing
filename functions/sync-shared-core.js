@@ -7,8 +7,11 @@
 // twin here. Every one is written with a UMD-style tail that assigns both a
 // global and module.exports, which is what lets the same file serve both.
 //
-// Runs on pretest, precheck and predeploy, so a lib/ edit cannot reach
-// production as a half-applied change with the server still on the old copy.
+// Runs on pretest and precheck, and on every functions deploy through the
+// predeploy hook in firebase.json. That hook is what matters: deploys are run as
+// `firebase deploy --only functions:…` from the repo root, which never triggers
+// npm's own "predeploy" script, so before the hook a lib/ edit could reach
+// production with the server still on the old copy.
 
 const fs = require("node:fs");
 const path = require("node:path");

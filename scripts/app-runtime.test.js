@@ -612,3 +612,46 @@ test('a saved meeting brief reads as a document in Evidence',()=>{
   assert.ok(html.includes('<div class="evidence-doc-label">Your threads</div><ul><li>On 18 Sep you noted the wording.</li></ul>'));
   assert.ok(html.includes('<p><strong>Watch:</strong> APRA data.</p>') && html.includes('<ol><li>Q one?</li></ol>'));
 });
+
+// What you use: counts only. A button is named by a data attribute, its inline
+// handler or its id, never by its text; counts batch and survive a failed save.
+function fakeEl(attrs, tag){
+  return {tagName:tag||'BUTTON',id:attrs.id||'',parentElement:attrs.parent||null,
+    getAttribute:n=>attrs[n]==null?null:attrs[n],hasAttribute:n=>attrs[n]!=null};
+}
+test('usage names come from attributes, handlers or ids, never from text',()=>{
+  const names=['usageKey','usageNameFor'];
+  const {context}=environment(names,{USAGE_ATTRS:[['data-card-act','card_'],['data-aha-act','aha_'],['data-account','account_brief',true],['data-track','']]});
+  assert.equal(context.usageNameFor(fakeEl({'data-card-act':'deeper'})),'card_deeper');
+  assert.equal(context.usageNameFor(fakeEl({'data-account':'QBE'})),'account_brief','the account name is not recorded');
+  assert.equal(context.usageNameFor(fakeEl({onclick:"openEvidenceItem('a','b')"})),'fn_openevidenceitem');
+  assert.equal(context.usageNameFor(fakeEl({id:'meeting-run'})),'btn_meeting-run');
+  assert.equal(context.usageNameFor(fakeEl({'data-track':'mirror_try'})),'mirror_try');
+  assert.equal(context.usageNameFor(fakeEl({},'SUMMARY')),'','nothing to name it by: not counted');
+  assert.equal(context.usageNameFor(fakeEl({parent:{id:'boost-library'}},'SUMMARY')),'open_boost-library');
+  assert.equal(context.usageNameFor(null),'');
+});
+test('usage counts batch into one save per window, and a failed save keeps them',async()=>{
+  const saves=[]; let failNext=false, timer=null;
+  const {context}=environment(['usageKey','trackUse','flushUsage'],{_usage:{day:'',counts:{},timer:null,pruned:false},_firebaseUid:'alice',manilaDateKey:()=> '2026-09-26',
+    setTimeout:fn=>{timer=fn;return 1;},clearTimeout:()=>{},fbAddUsage:async(uid,day,counts,drop)=>{if(failNext){failNext=false;throw new Error('offline');} saves.push({day,counts:{...counts},drop:[...drop]});}});
+  context.trackUse('card_deeper'); context.trackUse('card_deeper'); context.trackUse('page_today');
+  assert.equal(saves.length,0,'nothing saved yet');
+  timer(); await new Promise(r=>setTimeout(r,0));
+  assert.deepEqual(saves[0].counts,{card_deeper:2,page_today:1});
+  assert.equal(saves[0].drop.length,60,'old days dropped once a session'); assert.equal(saves[0].drop[0],'2026-07-27');
+  failNext=true; context.trackUse('aha_save'); context.flushUsage(); await new Promise(r=>setTimeout(r,0));
+  context.trackUse('aha_save'); context.flushUsage(); await new Promise(r=>setTimeout(r,0));
+  assert.deepEqual(saves[1].counts,{aha_save:2},'the failed count is carried into the next save');
+  context._firebaseUid=null; context.trackUse('card_more'); context.flushUsage(); await new Promise(r=>setTimeout(r,0));
+  assert.equal(saves.length,2,'not signed in: nothing saved'); assert.equal(context._usage.counts.card_more,1,'but the count is kept');
+  context._firebaseUid='alice'; context.flushUsage(); await new Promise(r=>setTimeout(r,0));
+  assert.deepEqual(saves[2].counts,{card_more:1},'saved after sign-in');
+});
+test('the usage summary ranks the last 30 days and names what has gone unused',()=>{
+  const {context}=environment(['usageSummary'],{USAGE_LABELS:{card_deeper:'Go deeper',page_today:'Today',account_brief:'Account: meeting brief'},USAGE_WATCH:['card_deeper','account_brief']});
+  const s=context.usageSummary({'2026-09-26':{page_today:3,card_deeper:1},'2026-09-20':{page_today:2},'2026-07-01':{account_brief:9},'2026-09-25':{x:0}},'2026-09-26',30);
+  assert.equal(s.activeDays,2,'a day with only zero counts is not active');
+  assert.deepEqual([...s.used.map(u=>u.label+':'+u.count+':'+u.days)],['Today:5:2','Go deeper:1:1']);
+  assert.deepEqual([...s.unused],['Account: meeting brief'],'older than 30 days does not count');
+});

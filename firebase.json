@@ -6,6 +6,9 @@
     {
       "source": "functions",
       "codebase": "bobdailybriefing",
+      "predeploy": [
+        "npm --prefix functions run sync:shared-core"
+      ],
       "ignore": [
         "node_modules",
         ".git",

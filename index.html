@@ -36,7 +36,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, deleteDoc, deleteField, collection, getDocs, query, orderBy, limit, startAfter, where, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, deleteDoc, deleteField, collection, getDocs, query, orderBy, limit, startAfter, where, runTransaction, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 import { getMessaging, getToken, onMessage, isSupported as isMessagingSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
@@ -286,6 +286,31 @@ window.fbLoadDossiers = async function(uid) {
     if (e && e.code === 'permission-denied') return {};
     throw e;
   }
+};
+// What you use (briefings-bob/usage-<uid>): how often each page and button is
+// used, per day. Counts only: never what was read, typed or clicked on. The
+// increments add up across devices; days older than sixty are dropped.
+window.fbAddUsage = async function(uid, day, counts, drop) {
+  if (!uid || uid !== getUid()) return;
+  var patch = {}, days = {};
+  Object.keys(counts).forEach(function(key) { patch[key] = increment(counts[key]); });
+  days[day] = patch;
+  (drop || []).forEach(function(old) { days[old] = deleteField(); });
+  await setDoc(doc(db, COLL, 'usage-' + uid), {uid: uid, kind: 'usage', days: days, updatedAt: new Date().toISOString()}, {merge: true});
+};
+window.fbLoadUsage = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'usage-' + uid));
+    return snap.exists() ? (snap.data().days || {}) : {};
+  } catch (e) {
+    if (e && e.code === 'permission-denied') return {};
+    throw e;
+  }
+};
+window.fbClearUsage = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  await setDoc(doc(db, COLL, 'usage-' + uid), {uid: uid, kind: 'usage', days: deleteField(), updatedAt: new Date().toISOString()}, {merge: true});
 };
 // Your accounts: the organisations his files involve (briefings-bob/accounts-<uid>).
 window.fbLoadAccounts = async function(uid) {
@@ -2069,6 +2094,8 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup-chip.active,body.light .trend-period-btn.active,body.light .command-filter.active{border-color:rgba(114,86,16,.45)}
 /* A faint top highlight gives dark cards an edge of light, like a raised surface. */
 .card,.hero,.daily-boost{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+/* What you use */
+.usage-meta{font-family:var(--mono);font-size:10.5px;color:var(--txt3);margin:.3rem 0}.usage-list{margin:.3rem 0 .6rem;padding-left:1.2rem;font-size:12.5px;color:var(--txt2)}.usage-list li{margin:.15rem 0}.usage-list li span:first-child{display:inline-block;min-width:12rem}.usage-list b{font-family:var(--mono);color:var(--txt);margin:0 .6rem}.usage-days{font-family:var(--mono);font-size:10.5px;color:var(--txt3)}
 /* Your accounts */
 .acct-badges{display:flex;flex-wrap:wrap;gap:.3rem;margin:.1rem 0 .5rem}.acct-badge{font-family:var(--mono);font-size:10px;letter-spacing:.03em;padding:.14rem .5rem;border-radius:6px;border:1px solid var(--line);background:var(--gold-dim);color:var(--txt);cursor:pointer}.acct-badge:hover{border-color:var(--line-hover)}.acct-badge.is-call{background:var(--blue-dim)}
 .accounts-panel{margin-bottom:1rem}.accounts-panel .command-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}.acct-group{margin:.5rem 0 .2rem}.acct-group-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.2rem}.acct-row{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;padding:.3rem 0;border-bottom:1px solid var(--rim)}.acct-name{flex:1 1 9rem;font-size:13px;color:var(--txt)}.acct-count{font-family:var(--mono);font-size:10.5px;color:var(--txt3)}.acct-chips{display:flex;flex-wrap:wrap;gap:.3rem}.acct-more{margin-top:.6rem}.acct-more summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--txt2)}.acct-quiet{font-size:12.5px;color:var(--txt3);margin:.3rem 0}.acct-edit-label{display:block;font-size:12px;color:var(--txt2);margin:.4rem 0 .3rem}#accounts-text{width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:.5rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt)}
@@ -2928,6 +2955,12 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="help-card">
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-bars"/></svg> What you use</div>
+      <p class="help-key">Counts of which pages and buttons you use, per day, kept on your own account and visible only to you. Never what you read, typed or opened. It shows which features earn their place and which could go.</p>
+      <div id="usage-out"><p class="rel-none-txt">Loading…</p></div>
+    </div>
+
+    <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-keyboard"/></svg> Keys</div>
       <ul>
         <li><b>N</b> — jump to today's note. <b>D</b> — mark the quest done (or undo). <b>T</b> — tuck the spark away, or open it again.</li>
@@ -3116,6 +3149,8 @@ function onSignedIn() {
   }
   consumeBriefingDeliveryMute();
   navFromHash();  // open the deep-linked tab (e.g. a shared #sports link)
+  // The app opens on Today without switchPage, so that visit is counted here.
+  if (!location.hash || location.hash === '#today') trackUse('page_today');
 }
 
 function consumeBriefingDeliveryMute() {
@@ -3165,6 +3200,7 @@ function clearPrivateSession() {
   resetIntelligenceSearch(); resetEvidenceSets();
   _meetingBriefs = {}; _meetingFor = null; _meetingShown = '';
   _accounts = null; _accountsFor = null; _callsCache = null; _callsLoading = false;
+  clearTimeout(_usage.timer); _usage = {day: '', counts: {}, timer: null, pruned: false};
   if (window.fbAcceptEvidenceBase) window.fbAcceptEvidenceBase(null);
   resetTicker();
   setText('hero-date','Sign in to read your briefing');
@@ -3405,6 +3441,7 @@ applyDisplay();
 // ── PAGE SWITCHING ──
 function switchPage(id, el) {
   var pending;
+  if (id) trackUse('page_' + id);
   if (id==='today' && window.renderDailyBoost) window.renderDailyBoost();
   if (id==='today' && window.renderWeeklyMirror) window.renderWeeklyMirror();
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
@@ -3427,7 +3464,7 @@ function switchPage(id, el) {
   if (id==='pse') pending = renderPh();
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
-  if (id==='help') pending = renderLlmUsage();
+  if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
   setPageHash(id);
   window.scrollTo(0,0);
   updatePrimaryNavigation(id);
@@ -3455,7 +3492,7 @@ function switchPageMobile(id, el) {
   if (id==='pse') pending = renderPh();
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
-  if (id==='help') pending = renderLlmUsage();
+  if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
   setPageHash(id);
   window.scrollTo(0,0);
   updatePrimaryNavigation(id);
@@ -3848,6 +3885,119 @@ function renderEvidencePage() {
   if (!evidenceSetState.loaded) loadEvidenceSets(); else paintEvidencePage();
   loadMeetingBriefs();
   renderAccountsPanel(); loadAccounts().then(renderAccountsPanel);
+}
+
+// ── What you use ──
+// Counts of which pages and buttons get used, so features can earn their place
+// or be removed. A button is named by its data attribute (card, aha and dossier
+// actions), its inline handler's function name, or its id; anything else is not
+// counted. No text, headline, note or account name is ever recorded.
+var _usage = {day: '', counts: {}, timer: null, pruned: false};
+function usageKey(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60); }
+var USAGE_ATTRS = [['data-card-act', 'card_'], ['data-aha-act', 'aha_'], ['data-dossier-act', 'dossier_'], ['data-aha-link', 'aha_link', true],
+  ['data-account', 'account_brief', true], ['data-account-timeline', 'account_timeline', true], ['data-call', 'call_badge', true],
+  ['data-evidence-more', 'evidence_show_all', true], ['data-track', '']];
+function usageNameFor(el) {
+  if (!el || !el.getAttribute) return '';
+  for (var i = 0; i < USAGE_ATTRS.length; i++) {
+    var spec = USAGE_ATTRS[i];
+    if (el.hasAttribute(spec[0])) return usageKey(spec[2] ? spec[1] : spec[1] + el.getAttribute(spec[0]));
+  }
+  var handler = /^\s*(?:return\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(el.getAttribute('onclick') || '');
+  if (handler) return usageKey('fn_' + handler[1]);
+  if (el.id) return usageKey('btn_' + el.id);
+  var details = el.tagName === 'SUMMARY' && el.parentElement;
+  if (details && details.id) return usageKey('open_' + details.id);
+  return '';
+}
+function trackUse(name) {
+  var key = usageKey(name);
+  if (!key) return;
+  var day = manilaDateKey();
+  if (_usage.day && _usage.day !== day) flushUsage();
+  _usage.day = day;
+  _usage.counts[key] = (_usage.counts[key] || 0) + 1;
+  if (!_usage.timer) _usage.timer = setTimeout(flushUsage, 20000);
+}
+function flushUsage() {
+  clearTimeout(_usage.timer); _usage.timer = null;
+  // Not signed in yet: keep the counts for the first save after sign-in.
+  if (!_usage.day || !Object.keys(_usage.counts).length || typeof window.fbAddUsage !== 'function' || !window._firebaseUid) return;
+  var counts = _usage.counts, day = _usage.day;
+  _usage.counts = {};
+  // Once a session, days older than sixty are dropped from the record.
+  var drop = [];
+  if (!_usage.pruned) {
+    _usage.pruned = true;
+    for (var n = 61; n <= 120; n++) drop.push(new Date(Date.parse(day + 'T00:00:00Z') - n * 86400000).toISOString().slice(0, 10));
+  }
+  window.fbAddUsage(window._firebaseUid, day, counts, drop).catch(function() {
+    Object.keys(counts).forEach(function(key) { _usage.counts[key] = (_usage.counts[key] || 0) + counts[key]; });
+    _usage.pruned = false;
+  });
+}
+document.addEventListener('click', function(event) {
+  var el = event.target && event.target.closest ? event.target.closest('button, a, summary, [role="button"], [data-track]') : null;
+  var name = usageNameFor(el);
+  if (name) trackUse(name);
+}, true);
+document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'hidden') flushUsage(); });
+
+// Plain names for what the Help readout shows; anything else shows its key.
+var USAGE_LABELS = {
+  page_today:'Today', page_command:'Morning 5', page_evidence:'Evidence', page_decisions:'Decisions', page_research:'Research', page_timeline:'Timeline',
+  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_pse:'PSE', page_trends:'Trends',
+  card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
+  card_more:'More like this', card_less:'Less like this', card_remind:'Remind me',
+  aha_save:'Aha: save insight', aha_decision:'Aha: open as decision', aha_note:'Aha: write my take', aha_check:'Aha: check later', aha_link:'Aha: jump to a story',
+  dossier_save:'Dossier: save to Evidence', dossier_decision:'Dossier: open as decision', dossier_rebuild:'Dossier: rebuild', dossier_close:'Dossier: close',
+  account_brief:'Account: meeting brief', account_timeline:'Account: timeline', call_badge:'Your call badge', evidence_show_all:'Evidence: show all',
+  'btn_meeting-run':'Build meeting brief', 'btn_accounts-edit':'Edit accounts', 'btn_openai-generate-btn':'Generate briefing',
+  'btn_boost-mirror-run':'Read my week back', 'btn_boost-goals-edit':'Set goals', 'btn_boost-done':'Quest done', 'btn_boost-swap':'Try another quest',
+  'btn_boost-start-go':'Start here: go', 'btn_boost-start-skip':'Start here: not now', 'btn_boost-trial-save':'Save experiment', 'btn_boost-note-done':'Note: Done',
+  'btn_boost-past-use':'From your past: use today', 'btn_boost-tuck':'Tuck the spark away', fn_openevidenceitem:'Evidence: open source',
+  fn_openevidenceasdecision:'Evidence: open as decision', fn_setdecisionverdict:'Called it? verdict', fn_editdecision:'Edit a decision',
+  fn_closeoutdecision:'Close out a decision', fn_copyastext:'Copy briefing', fn_exportpdf:'Export PDF', fn_opendecisionformmanual:'Log a decision',
+  mirror_try:'Weekly read: try this', mirror_decision:'Weekly read: open as decision', mirror_answer:'Weekly read: write my answer'
+};
+// The features worth knowing about when unused: shown under "Not used lately".
+var USAGE_WATCH = ['card_deeper', 'aha_save', 'aha_decision', 'aha_check', 'account_brief', 'call_badge', 'btn_meeting-run', 'fn_setdecisionverdict',
+  'btn_boost-mirror-run', 'btn_boost-goals-edit', 'btn_boost-trial-save', 'card_remind', 'card_more', 'dossier_decision', 'page_command', 'page_timeline', 'mirror_try'];
+function usageSummary(days, today, span) {
+  span = span || 30;
+  var since = new Date(Date.parse(today + 'T00:00:00Z') - (span - 1) * 86400000).toISOString().slice(0, 10), totals = {}, daysUsed = {}, active = 0;
+  Object.keys(days || {}).forEach(function(day) {
+    if (day < since || day > today || !days[day] || typeof days[day] !== 'object') return;
+    var any = false;
+    Object.keys(days[day]).forEach(function(key) {
+      var n = Number(days[day][key]) || 0;
+      if (n <= 0) return;
+      any = true; totals[key] = (totals[key] || 0) + n; daysUsed[key] = (daysUsed[key] || 0) + 1;
+    });
+    if (any) active++;
+  });
+  var used = Object.keys(totals).sort(function(a, b) { return totals[b] - totals[a] || a.localeCompare(b); })
+    .map(function(key) { return {key: key, label: USAGE_LABELS[key] || key, count: totals[key], days: daysUsed[key]}; });
+  var unused = USAGE_WATCH.filter(function(key) { return !totals[key]; }).map(function(key) { return USAGE_LABELS[key] || key; });
+  return {span: span, activeDays: active, used: used, unused: unused};
+}
+async function renderUsage() {
+  var out = document.getElementById('usage-out');
+  if (!out) return;
+  if (!window._firebaseUid || typeof window.fbLoadUsage !== 'function') { out.innerHTML = '<p class="rel-none-txt">Sign in to see what you use.</p>'; return; }
+  flushUsage();
+  var days = {};
+  try { days = await window.fbLoadUsage(window._firebaseUid); } catch (e) { out.innerHTML = '<p class="rel-none-txt">Could not load your usage.</p>'; return; }
+  var s = usageSummary(days, manilaDateKey(), 30);
+  if (!s.used.length) { out.innerHTML = '<p class="rel-none-txt">Nothing counted yet. It starts from today.</p>'; return; }
+  out.innerHTML = '<p class="usage-meta">Last 30 days · used on ' + s.activeDays + (s.activeDays === 1 ? ' day' : ' days') + '</p>' +
+    '<ol class="usage-list">' + s.used.slice(0, 15).map(function(u) { return '<li><span>' + esc(u.label) + '</span><b>' + u.count + '</b><span class="usage-days">' + u.days + (u.days === 1 ? ' day' : ' days') + '</span></li>'; }).join('') + '</ol>' +
+    (s.unused.length ? '<p class="usage-meta">Not used lately: ' + s.unused.map(esc).join(' · ') + '</p>' : '') +
+    '<button type="button" class="tool-chip" data-track="usage_clear" onclick="clearUsage()">Clear the counts</button>';
+}
+async function clearUsage() {
+  if (!window._firebaseUid || !confirm('Clear the usage counts? This cannot be undone.')) return;
+  try { await window.fbClearUsage(window._firebaseUid); _usage.counts = {}; renderUsage(); } catch (e) { showToast('Could not clear the counts', 'warn'); }
 }
 
 // ── Your accounts ──
