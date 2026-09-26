@@ -35,6 +35,11 @@
 // against the ~40k/call that hosted search was measured costing on the Markets
 // panel, grounding is the cheap option as well as the auditable one.
 const MAX_EVIDENCE_ITEMS = 14;
+// Of those, up to this many come from the network and trucking feeds (lane
+// "beats") when they hit a core or context term: on score alone the insurance
+// trade press filled every place and his claim-cost beats never reached the
+// briefing.
+const BEAT_EVIDENCE = 3;
 
 // A news doc older than this is not used. Its own items are already bounded by
 // the feed's 10-day window, so a doc a couple of days stale is still true; one
@@ -102,11 +107,14 @@ function buildEvidence(newsDoc, options) {
     return {unavailable: "stale", ageDays: Math.round(age * 10) / 10, date: text(newsDoc.date)};
   }
 
-  const usable = arr(newsDoc.items)
+  const ranked = arr(newsDoc.items)
     .filter((item) => text(item.title) && text(item.url))
     .slice()
-    .sort((a, b) => groundingRank(b) - groundingRank(a))
-    .slice(0, limit);
+    .sort((a, b) => groundingRank(b) - groundingRank(a));
+  const beats = ranked.filter((item) => item.lane === "beats" && (item.tier === "core" || item.tier === "context"))
+    .slice(0, Math.min(BEAT_EVIDENCE, limit));
+  const usable = ranked.filter((item) => beats.indexOf(item) < 0).slice(0, limit - beats.length)
+    .concat(beats).sort((a, b) => groundingRank(b) - groundingRank(a));
 
   if (!usable.length) return {unavailable: "empty", date: text(newsDoc.date)};
 
@@ -130,7 +138,7 @@ function buildEvidence(newsDoc, options) {
   const feedsTotal = (newsDoc.counts && newsDoc.counts.feeds) || 0;
 
   const lines = [
-    "VERIFIED AUSTRALIAN INSURANCE STORIES FETCHED TODAY",
+    "VERIFIED AUSTRALIAN INSURANCE, NETWORK AND TRUCKING STORIES FETCHED TODAY",
     "These " + items.length + " stories were fetched from " + feedsOk + " of " + feedsTotal +
       " named trade feeds (" + sources.join(", ") + ") and are real, published articles.",
     "Snapshot " + text(newsDoc.date) + ". Headline, publisher and URL below are exact.",

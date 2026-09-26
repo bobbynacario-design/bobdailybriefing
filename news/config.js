@@ -51,7 +51,20 @@ var FEEDS = [
   { id: 'in-corporate',  url: 'https://www.insurancenews.com.au/rss/corporate',             source: 'insuranceNEWS.com.au',  section: 'Corporate',               priority: 3 },
   { id: 'in-local',      url: 'https://www.insurancenews.com.au/rss/local',                 source: 'insuranceNEWS.com.au',  section: 'Local',                   priority: 3 },
   { id: 'in-breaking',   url: 'https://www.insurancenews.com.au/rss/breaking-news',         source: 'insuranceNEWS.com.au',  section: 'Breaking News',           priority: 3 },
-  { id: 'in-intl',       url: 'https://www.insurancenews.com.au/rss/international',         source: 'insuranceNEWS.com.au',  section: 'International',           priority: 2 }
+  { id: 'in-intl',       url: 'https://www.insurancenews.com.au/rss/international',         source: 'insuranceNEWS.com.au',  section: 'International',           priority: 2 },
+  // Added 2026-09-26: his files turn on electricity-network and heavy-vehicle
+  // costs (pole and asset repair invoices; trucking downtime, parts and freight),
+  // which insurance trade press rarely covers. Each URL was fetched with this
+  // module's own USER_AGENT and returned RSS with items dated that week. Several
+  // obvious sources (Utility Magazine, Big Rigs, Fully Loaded/ATN, Roads Online)
+  // refuse non-browser clients with HTTP 403; they are deliberately left out
+  // rather than fetched under a disguised user agent.
+  { id: 'ena',           url: 'https://www.energynetworks.com.au/feed/',                    source: 'Energy Networks Australia', section: 'Networks',           priority: 3, lane: 'beats' },
+  { id: 'esd',           url: 'https://esdnews.com.au/feed/',                               source: 'Energy Source & Distribution', section: 'Networks',        priority: 3, lane: 'beats' },
+  { id: 'aemc',          url: 'https://www.aemc.gov.au/rss.xml',                            source: 'AEMC',                  section: 'Network regulation',      priority: 2, lane: 'beats' },
+  { id: 'ata',           url: 'https://www.truck.net.au/rss.xml',                           source: 'Australian Trucking Association', section: 'Trucking',     priority: 3, lane: 'beats' },
+  { id: 'nhvr',          url: 'https://www.nhvr.gov.au/rss.xml',                            source: 'NHVR',                  section: 'Heavy vehicles',          priority: 2, lane: 'beats' },
+  { id: 'truckbus',      url: 'https://www.truckandbus.net.au/feed/',                       source: 'Truck & Bus',           section: 'Trucking',                priority: 2, lane: 'beats' }
 ];
 
 // The rolling window. `lookbackDays` is 10 rather than 1 because of the weekly
@@ -63,6 +76,10 @@ var WINDOW = {
   lookbackDays: 10,
   staleFeedDays: 14,
   maxItems: 40,          // Firestore caps a doc at 1 MiB; 40 trimmed items sits far under
+  // Network and trucking stories rarely outscore insurance trade press (priority
+  // and "insurer" terms), so without this none reached the kept list. Up to this
+  // many "beats" stories that hit a core or context term keep a place of their own.
+  beatSlots: 8,
   maxSummaryChars: 320,  // summaries are already 1-2 sentences; this only guards outliers
   keepUndated: true      // an item with no parseable date is kept and FLAGGED, never silently dropped
 };
@@ -82,7 +99,12 @@ var KEYWORDS = {
     'business interruption', 'forensic', 'loss adjust', 'claims inflation',
     'quantum', 'indemnity', 'claim denial', 'denied claim', 'disputed claim',
     'claims dispute', 'expert evidence', 'reinsurance', 'catastrophe',
-    'cat pool', 'cyclone pool', 'supply chain', 'contingent business'
+    'cat pool', 'cyclone pool', 'supply chain', 'contingent business',
+    // His quantum topics (added 2026-09-26 with the network and trucking feeds).
+    // Whole phrases: matching is by substring, so "aer" alone would hit "aerial".
+    'betterment', 'loss of use', 'linesworker', 'network charges', 'network tariff',
+    'pole replacement', 'traffic control', 'traffic management', 'incident response',
+    'prime mover', 'heavy vehicle', 'freight rate', 'parts shortage', 'repair times', 'credit hire'
   ],
   // Tier 2 — the regulatory and peril environment those engagements sit in.
   context: [
@@ -90,7 +112,10 @@ var KEYWORDS = {
     'underwriting', 'premium', 'claims handling', 'flood', 'bushfire',
     'storm', 'cyclone', 'hail', 'cyber', 'outage', 'recall', 'litigation',
     'class action', 'royal commission', 'inquiry', 'prudential', 'solvency',
-    'reserving', 'fraud'
+    'reserving', 'fraud',
+    'australian energy regulator', 'aemc', 'determination', 'enterprise agreement',
+    'distribution network', 'power outage', 'blackout', 'diesel', 'fuel tax', 'haulage',
+    'roadworks', 'road maintenance', 'payment terms'
   ],
   // Tier 3 — general trade news. Present so the feed is not empty on a quiet
   // week, weighted low so it can never outrank the tiers above.

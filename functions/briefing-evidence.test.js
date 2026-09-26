@@ -273,3 +273,21 @@ test("a feed url used in an open section is accepted as a feed link", () => {
   assert.equal(out.briefing.sections.global[0].url, "https://news.example/real");
   assert.equal(out.briefing.sections.global[0].groundedBy, "feed");
 });
+
+test("up to three network or trucking stories with a keyword hit are offered alongside the insurance press", () => {
+  const insurance = Array.from({length: 20}, (_, i) => item({title: "Insurance story " + i, url: "https://news.example/i" + i, score: 60 - i, tier: "core"}));
+  const beats = [
+    item({title: "Linesworker agreement lifts network costs", url: "https://esd.example/1", score: 25, tier: "core", lane: "beats", source: "Energy Source & Distribution"}),
+    item({title: "Fuel tax relief backed by truckies", url: "https://ata.example/1", score: 22, tier: "context", lane: "beats"}),
+    item({title: "Heavy vehicle parts shortage worsens", url: "https://ata.example/2", score: 21, tier: "core", lane: "beats"}),
+    item({title: "NHVR rest area survey", url: "https://nhvr.example/1", score: 20, tier: "context", lane: "beats"}),
+    item({title: "Driver of the year", url: "https://tb.example/1", score: 30, tier: "general", lane: "beats"}),
+  ];
+  const out = buildEvidence(newsDoc({items: insurance.concat(beats)}), {now: NOW});
+  assert.equal(out.items.length, 14);
+  const offered = out.items.map((i) => i.title);
+  assert.deepEqual(offered.filter((t) => !/^Insurance story/.test(t)).sort(),
+    ["Fuel tax relief backed by truckies", "Heavy vehicle parts shortage worsens", "Linesworker agreement lifts network costs"], "three beats with a keyword hit; no fluff");
+  assert.equal(offered.filter((t) => /^Insurance story/.test(t)).length, 11);
+  assert.match(out.block, /^VERIFIED AUSTRALIAN INSURANCE, NETWORK AND TRUCKING STORIES FETCHED TODAY/);
+});

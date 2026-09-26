@@ -7,7 +7,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rankNews, dedupeKey } from './rank.js';
+import { rankNews, dedupeKey, scoreItem } from './rank.js';
+import { CONFIG as REAL_CONFIG } from './config.js';
 
 var NOW = Date.parse('2026-08-29T00:00:00.000Z');
 var DAY = 86400000;
@@ -191,4 +192,37 @@ test('the document carries its window and a plain-language note on what the scor
 test('dedupeKey falls back to the title when an item has no url', function () {
   assert.equal(dedupeKey({ title: 'Flood inquiry opens', url: '' }), 't:flood-inquiry-opens');
   assert.equal(dedupeKey({ title: '', url: '' }), '');
+});
+
+// Added with the network and trucking feeds: his quantum topics score as core
+// terms, and a short regulator acronym never matches inside another word.
+test('network and heavy-vehicle cost stories rank on his quantum terms', () => {
+  var feed = REAL_CONFIG.feeds.find(function (f) { return f.id === 'ata'; });
+  assert.ok(feed, 'the trucking association feed is configured');
+  var truck = scoreItem({ title: 'Prime mover repair times blow out as parts shortage bites', summary: 'Operators report longer downtime.', publishedAt: iso(1) }, feed, REAL_CONFIG, NOW);
+  var awards = scoreItem({ title: 'Association announces award finalists', summary: 'A night of celebration.', publishedAt: iso(1) }, feed, REAL_CONFIG, NOW);
+  assert.ok(truck.score > awards.score + 20, 'core terms lift a real cost story well above industry awards');
+  var aerial = scoreItem({ title: 'Aerial survey of new estate', summary: '', publishedAt: iso(1) }, feed, REAL_CONFIG, NOW);
+  assert.equal(aerial.score, awards.score, 'no regulator term matches inside "aerial"');
+  ['ena', 'esd', 'aemc', 'ata', 'nhvr', 'truckbus'].forEach(function (id) {
+    assert.ok(REAL_CONFIG.feeds.some(function (f) { return f.id === id; }), id + ' is configured');
+  });
+});
+
+// Network and trucking stories rarely outscore insurance trade press. Up to
+// window.beatSlots of them keep a place, but only with a core or context hit.
+test('network and trucking stories with a keyword hit keep reserved places; fluff does not', function () {
+  var config = JSON.parse(JSON.stringify(CONFIG));
+  config.feeds.push({ id: 'trucks', url: 'https://x/trucks', source: 'Trucking', section: 'Trucking', priority: 1, lane: 'beats' });
+  config.window.beatSlots = 1;
+  var doc = rankNews([
+    ok('reg', [item({ title: 'Reinsurance one', url: 'https://n/1' }), item({ title: 'Reinsurance two', url: 'https://n/2' }), item({ title: 'Reinsurance three', url: 'https://n/3' })]),
+    ok('trucks', [item({ title: 'Flood closes the highway for trucks', url: 'https://t/1' }), item({ title: 'Driver of the year named', url: 'https://t/2' })])
+  ], config, { now: NOW });
+  var titles = doc.items.map(function (e) { return e.title; });
+  assert.equal(doc.items.length, 3, 'the list is still maxItems long');
+  assert.ok(titles.indexOf('Flood closes the highway for trucks') >= 0, 'a trucking story with a context hit keeps its place');
+  assert.ok(titles.indexOf('Driver of the year named') < 0, 'no keyword hit, no reserved place');
+  assert.equal(doc.items.filter(function (e) { return e.lane === 'beats'; }).length, 1);
+  assert.equal(doc.items[doc.items.length - 1].title, 'Flood closes the highway for trucks', 'still ordered by score');
 });

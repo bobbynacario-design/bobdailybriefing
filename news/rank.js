@@ -201,6 +201,7 @@ function rankNews(feedResults, config, options) {
         undated: !dated,
         ageDays: age == null ? null : Math.round(age * 10) / 10,
         feedId: feed.id,
+        lane: feed.lane || 'insurance',
         source: feed.source,
         section: feed.section,
         alsoIn: [],
@@ -215,16 +216,24 @@ function rankNews(feedResults, config, options) {
     });
   });
 
-  kept.sort(function (a, b) {
+  function byRank(a, b) {
     if (b.score !== a.score) return b.score - a.score;
     var at = a.publishedAt ? Date.parse(a.publishedAt) : 0;
     var bt = b.publishedAt ? Date.parse(b.publishedAt) : 0;
     if (bt !== at) return bt - at;
     return text(a.title).localeCompare(text(b.title));
-  });
+  }
+  kept.sort(byRank);
 
   var uniqueCount = kept.length;
-  var items = kept.slice(0, config.window.maxItems);
+  // Reserved places for the network and trucking feeds (window.beatSlots): only
+  // stories that hit a core or context term, so awards and driver profiles never
+  // take one. The rest of the list is filled by rank as before.
+  var reserved = kept.filter(function (entry) {
+    return entry.lane === 'beats' && (entry.tier === 'core' || entry.tier === 'context');
+  }).slice(0, config.window.beatSlots || 0);
+  var items = kept.filter(function (entry) { return reserved.indexOf(entry) < 0; })
+    .slice(0, Math.max(0, config.window.maxItems - reserved.length)).concat(reserved).sort(byRank);
 
   var warnings = [];
   var feeds = arr(config.feeds).map(function (feed) {

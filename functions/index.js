@@ -376,7 +376,9 @@ exports.generateBobDailyBriefing = onCall(
       tools: [
         {
           type: "web_search",
-          search_context_size: "low",
+          // Medium, like the dossier and the meeting brief: at "low" the search
+          // rarely surfaced utility, road-asset or trucking stories at all.
+          search_context_size: "medium",
           user_location: {
             type: "approximate",
             country: "PH",

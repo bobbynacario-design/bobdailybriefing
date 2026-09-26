@@ -1,7 +1,8 @@
 # Australian insurance news feed
 
 A deterministic daily pull of named Australian insurance trade sources. No API
-key, no model call, no cost — nine public RSS/Atom feeds, deduped, ranked by a
+key, no model call, no cost — fifteen public RSS/Atom feeds (nine insurance trade,
+plus six electricity-network and trucking feeds added 2026-09-26), deduped, ranked by a
 fixed formula, written to one Firestore doc per PHT day.
 
 ## Why it exists
