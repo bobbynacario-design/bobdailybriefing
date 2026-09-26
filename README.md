@@ -268,8 +268,10 @@ actually runs. The generated briefing is shaped by four things beyond it:
   connection between two stories from different sections, a second-order effect
   further downstream than any source goes, or a contrarian case that the
   consensus reading is wrong — with a 2–4 step chain, the headlines it is built
-  on, and one checkable `wrong_if` signal. It must not restate a relevance line or
-  a first-order consequence, leans early rather than safe, never advises a trade,
+  on, and one checkable `wrong_if` signal (the nearest one that bears on those
+  stories, and one that will actually be published in a form that answers it).
+  Its title must be the step beyond what the linked stories already say. It must
+  not restate a relevance line or a first-order consequence, leans early rather than safe, never advises a trade,
   and is null when nothing clears the bar. `cleanAha` in
   `lib/briefing-prompt-core.js` (shared by the generator and the paste path)
   bounds the fields and keeps only links that name a story in the briefing; the
