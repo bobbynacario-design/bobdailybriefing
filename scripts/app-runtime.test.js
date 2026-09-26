@@ -68,6 +68,7 @@ test('a hand-typed ticker is still uppercased; an insight subject keeps its case
   const saved=[];
   const run=async(fields)=>{
     const {context}=environment(['saveDecisionForm'],{getDecisionField:id=>fields[id]||'',showToast:()=>{},fbSaveDecision:async entry=>{saved.push(entry);},decisionEditingId:null,decisionEditingSaved:null,decisionEditingCreatedDate:'',
+      decisionEditingVerdict:fields.was||'',decisionEditingVerdictDate:fields.wasDate||'',
       manilaDateKey:()=> '2026-09-26',decisionNum:v=>v?Number(v):null,decisionLinkedSignal:null,decisionBeatFromForm:()=>null,closeDecisionForm:()=>{},decisionRefPrice:{},renderDecisions:()=>{}});
     await context.saveDecisionForm();
     return saved[saved.length-1];
@@ -78,6 +79,51 @@ test('a hand-typed ticker is still uppercased; an insight subject keeps its case
   assert.equal((await run({'decision-asset':'client question','decision-source':'briefing','decision-review-date':'2026-10-03'})).asset,'client question');
   assert.equal(saved[saved.length-1].reviewDate,'2026-10-03');
   assert.equal((await run({'decision-asset':'sol','decision-source':'radar'})).asset,'SOL');
+  const kept=await run({'decision-asset':'x','decision-verdict':'held',was:'held',wasDate:'2026-09-20'});
+  assert.equal(kept.verdictDate,'2026-09-20','an unchanged verdict keeps its day');
+  assert.equal((await run({'decision-asset':'x','decision-verdict':'broke',was:'held',wasDate:'2026-09-20'})).verdictDate,'2026-09-26','a changed one is dated today');
+  assert.equal((await run({'decision-asset':'x'})).verdictDate,'','no verdict, no date');
+});
+// Called it?: verdicts graded against the conviction each read was written with.
+test('Called it? compares how reads held, band by conviction, and says what it shows',()=>{
+  const names=['decisionIsInsight','calledItSummary','calledItHtml','esc'];
+  const {context}=environment(names,{VERDICT_LABELS:{held:'held',broke:'broke',unclear:'unclear'}});
+  const e=(conviction,verdict,extra)=>Object.assign({conviction,verdict,status:'open'},extra||{});
+  const few=context.calledItSummary([e(5,'held'),e(4,'broke')],'2026-09-26');
+  assert.match(few.read,/after five held-or-broke verdicts/);
+  const overconfident=context.calledItSummary([e(5,'broke'),e(4,'broke'),e(5,'held'),e(4,'broke'),e(1,'held'),e(2,'held'),e(1,'held'),e(2,'broke'),e(3,'unclear',{source:'briefing'})],'2026-09-26');
+  assert.equal(overconfident.bands.high.rate,25); assert.equal(overconfident.bands.low.rate,75);
+  assert.match(overconfident.read,/Your confident reads held less often than your tentative ones \(25% against 75%\)/);
+  assert.equal(overconfident.insights.unclear,1,'an insight decision counts as an insight');
+  const earned=context.calledItSummary([e(5,'held'),e(4,'held'),e(5,'held'),e(1,'broke'),e(2,'broke'),e(1,'held')],'2026-09-26');
+  assert.match(earned.read,/earning its keep: high-conviction reads held 100% of the time, tentative ones 33%/);
+  const murky=context.calledItSummary([e(3,'held'),e(3,'broke'),e(3,'held'),e(3,'held'),e(3,'broke'),e(3,'unclear'),e(3,'unclear'),e(3,'unclear'),e(3,'unclear'),e(3,'unclear')],'2026-09-26');
+  assert.match(murky.read,/Grade reads at both ends/); assert.match(murky.read,/Many verdicts are unclear/);
+  const waiting=context.calledItSummary([{status:'open',reviewDate:'2026-09-25'},{status:'open',reviewDate:'2026-10-01'},{status:'closed',reviewDate:'2026-09-20'}],'2026-09-26');
+  assert.equal(waiting.waiting,1);
+  const html=context.calledItHtml(overconfident);
+  assert.ok(html.includes('Very sure (4–5)') && html.includes('<b>25%</b>') && html.includes('Tentative (1–2)'));
+  assert.equal(context.calledItHtml(context.calledItSummary([],'2026-09-26')),'','nothing graded or waiting, no panel');
+});
+test('a read due for review gets one-tap verdicts; an insight is settled by its verdict, a market call is not',async()=>{
+  const saved=[]; let rendered=0;
+  const decisions=[{id:'q1',asset:'A claims documentation gap',source:'briefing',status:'open',conviction:4,reviewDate:'2026-09-26',invalidator:'The record is produced',linkedSignal:{kind:'insight'}},
+    {id:'c1',asset:'NVDA',source:'radar',action:'took',status:'open',conviction:3,reviewDate:'2026-09-20'}];
+  const {context}=environment(['decisionIsInsight','decisionVerdictHtml','setDecisionVerdict','esc'],{VERDICT_LABELS:{held:'held',broke:'broke',unclear:'unclear'},decisionEntries:decisions,
+    manilaDateKey:()=> '2026-09-26',decisionPill:(t,c)=>'<pill '+(c||'')+'>'+t+'</pill>',fbSaveDecision:async entry=>{saved.push(entry);},showToast:()=>{},decisionRefPrice:{},renderDecisions:()=>{rendered++;}});
+  const due=context.decisionVerdictHtml(decisions[0]);
+  assert.ok(due.includes('wrong if The record is produced') && due.includes("setDecisionVerdict('q1','held')") && due.includes('Check in a week'));
+  assert.equal(context.decisionVerdictHtml({id:'x',status:'open',source:'radar',reviewDate:'2026-10-09'}),'','a market call not yet due has no buttons');
+  assert.ok(context.decisionVerdictHtml({id:'x',verdict:'broke',verdictDate:'2026-09-24'}).includes('<pill rel-low>broke</pill>'));
+  await context.setDecisionVerdict('q1','held');
+  assert.equal(saved[0].verdict,'held'); assert.equal(saved[0].verdictDate,'2026-09-26');
+  assert.equal(saved[0].status,'closed','a question opened from an insight is settled'); assert.equal(saved[0].closedDate,'2026-09-26');
+  await context.setDecisionVerdict('c1','broke');
+  assert.equal(saved[1].verdict,'broke'); assert.equal(saved[1].status,'open','the position stays open');
+  await context.setDecisionVerdict('q1','later');
+  assert.equal(saved[2].reviewDate,'2026-10-03'); assert.equal(saved[2].verdict,undefined);
+  await context.setDecisionVerdict('q1','nonsense');
+  assert.equal(saved.length,3); assert.equal(rendered,3);
 });
 test('an insight opens a reviewable decision form without saving it',()=>{
   let page, draft, saved=0, scrolled=0;
@@ -468,4 +514,57 @@ test('the dossier renders escaped, skips empty parts, and copies to Evidence as 
   const tags=context.dossierHtml({summary:'S',exposed:['Australian health insurers','government service providers','iPhone makers','eBay sellers','3PL operators']});
   ['Australian health insurers','Government service providers','iPhone makers','eBay sellers','3PL operators'].forEach(t=>assert.ok(tags.includes('<span>'+t+'</span>'),t));
   assert.equal(context.capFirst(''),'');
+});
+
+// Meeting brief: his own material on a topic, gathered from the search index,
+// saved evidence and dossiers; then a brief rendered, copied and saved.
+function searchCore(){
+  const context={Date,Intl}; vm.createContext(context);
+  vm.runInContext(readFileSync(new URL('../lib/intelligence-search-core.js',import.meta.url),'utf8'),context);
+  return context.IntelligenceSearchCore;
+}
+test('a meeting brief gathers his own recent material on the topic, capped per kind',async()=>{
+  const now=Date.parse('2026-09-27T01:00:00Z'), day=n=>new Date(now-n*86400000).toISOString();
+  const core=searchCore();
+  const index=core.buildIndex({decisions:[{id:'d1',asset:'Suncorp reserving call',reason:'BI reserves look light',status:'open',createdDate:'2026-09-20',saved:now-7*86400000}]})
+    .concat(Array.from({length:9},(_,i)=>({id:'n'+i,source:'News',title:'Suncorp story '+i,detail:'d',searchText:core.normalized('News Suncorp story '+i),saved:now-i*86400000,entities:[]})))
+    .concat([{id:'old',source:'News',title:'Suncorp ancient',detail:'',searchText:core.normalized('News Suncorp ancient'),saved:now-90*86400000,entities:[]}]);
+  const {context}=environment(['meetingTokens','meetingMatches','meetingMaterial'],{IntelligenceSearchCore:core,MEETING_DAYS:42,MEETING_MAX:24,Date:class extends Date{static now(){return now;}},
+    intelligenceSearchState:{loaded:true,loadedAt:now,index},loadIntelligenceSearchData:async()=>{},dailyBoostSearchEntries:()=>[],
+    evidenceSetState:{data:{sets:[{items:[{title:'Dossier: Suncorp lifts reserves',detail:'Dossier · x\nSummary line.\n- bullet',note:'check the APRA data',url:'https://example.com/s',capturedAt:day(2)},{title:'Unrelated',detail:'Nothing here',capturedAt:day(1)}]}]}},
+    savedDossiers:async()=>({k1:{story:{headline:'Storm claims test Suncorp',url:'https://abc.net.au/x'},summary:'Claims rise.',bi_angle:'Loss of use.',generatedAt:day(3)},k2:{story:{headline:'Other insurer'},summary:'No match',generatedAt:day(1)}})});
+  const found=await context.meetingMaterial('Suncorp');
+  assert.equal(found.counts.News,6,'no more than six of one kind');
+  assert.equal(found.counts.Decisions,1); assert.equal(found.counts.Evidence,1); assert.equal(found.counts.Dossier,1);
+  assert.ok(!found.items.some(item=>/ancient/.test(item.title)),'older than six weeks stays out');
+  const ev=found.items.find(item=>item.kind==='Evidence');
+  assert.match(ev.text,/Summary line\..*His note: check the APRA data/); assert.equal(ev.url,'https://example.com/s');
+  const dossier=found.items.find(item=>item.kind==='Dossier');
+  assert.equal(dossier.url,'https://abc.net.au/x'); assert.match(dossier.text,/BI angle: Loss of use\./);
+  assert.ok(found.items.every((item,i,all)=>!i||all[i-1].date>=item.date),'newest first');
+});
+test('a meeting brief renders escaped, copies as text, and says what it used',()=>{
+  const {context}=environment(['esc','uiIcon','meetingBriefHtml','meetingBriefSnapshot','meetingCountsText','meetingError']);
+  const b={topic:'Suncorp <Q3>',where_things_stand:'Reserves lifted.',recent:[{when:'20 Sep',what:'Reserves up',source:'insuranceNEWS',url:'https://x.com/a'},{what:'No link'}],
+    his_threads:['On 18 Sep you noted the wording.'],questions:['Q one?','Q two?','Q three?'],watch:'APRA data, 30 Nov.',sources:[{title:'S',url:'https://x.com/a'}],materialCount:4,generatedAt:'2026-09-27T01:00:00Z'};
+  const html=context.meetingBriefHtml(b);
+  assert.ok(html.includes('Meeting brief · Suncorp &lt;Q3&gt;') && html.includes('4 of your items'));
+  ['Lately','Your threads','Ask in the meeting','Watch afterwards','Sources'].forEach(t=>assert.ok(html.includes(t),t));
+  assert.ok(html.includes('<strong>20 Sep</strong> — <a href="https://x.com/a"'));
+  assert.equal(context.meetingBriefHtml(null),'');
+  const snap=context.meetingBriefSnapshot(b);
+  assert.equal(snap.split('\n')[0],'Meeting brief · Suncorp <Q3>');
+  assert.ok(snap.includes('- 20 Sep: Reserves up (insuranceNEWS)') && snap.includes('Thread: On 18 Sep you noted the wording.') && snap.includes('Q3. Q three?') && snap.includes('Watch: APRA data, 30 Nov.') && snap.includes('Source: S — https://x.com/a'));
+  assert.equal(context.meetingCountsText({News:2,Dossier:1,Decisions:1}),'Using 4 of your items: 2 news stories, 1 dossier, 1 decision.');
+  assert.match(context.meetingCountsText({}),/leans on the web search/);
+  assert.match(context.meetingError({code:'functions/resource-exhausted'}),/five meeting briefs today/);
+});
+test('a saved meeting brief reads as a document in Evidence',()=>{
+  const {context}=environment(['esc','evidenceDetailLines','evidenceDetailHtml'],{_evidenceOpen:{},EVIDENCE_LABEL:/^(BI angle|Exposed|Would change the read|Wrong if|Built on|Watch):\s*/});
+  const item={key:'k',id:'meeting:m1:brief',title:'Meeting brief: Suncorp',detail:'Meeting brief · Suncorp\nReserves lifted.\n- 20 Sep: Reserves up (insuranceNEWS)\nThread: On 18 Sep you noted the wording.\nQ1. Q one?\nWatch: APRA data.\nSource: S — https://x.com/a'};
+  const html=context.evidenceDetailHtml(item);
+  assert.ok(!html.includes('Meeting brief · Suncorp'),'the title line is not repeated');
+  assert.ok(html.includes('<div class="evidence-doc-label">Lately</div><ul><li>20 Sep: Reserves up (insuranceNEWS)</li></ul>'));
+  assert.ok(html.includes('<div class="evidence-doc-label">Your threads</div><ul><li>On 18 Sep you noted the wording.</li></ul>'));
+  assert.ok(html.includes('<p><strong>Watch:</strong> APRA data.</p>') && html.includes('<ol><li>Q one?</li></ol>'));
 });

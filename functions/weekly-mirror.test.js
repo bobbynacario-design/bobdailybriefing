@@ -285,3 +285,22 @@ test("cleanMirror keeps up to three goal reads", () => {
   assert.deepEqual(clean.goals.map((g) => g.goal), ["G1", "G2", "G3"]);
   assert.deepEqual(cleanMirror(base).goals, []);
 });
+
+test("a note brought back from the past is quoted as that day's words, not this week's", () => {
+  const note = "Coming back to “Clients never read the exclusions until a claim” (Mon 14 Sep): Still true, saw it again with a Cebu warehouse.\nA line of my own.";
+  const input = buildMirrorInput({entries: {"2026-09-25": {spark: 1, done: true, note}}, decisions: [], todayKey: TODAY, core});
+  assert.ok(input.text.includes('  Note: "A line of my own."'), "his own line stays a note");
+  assert.ok(input.text.includes('  Came back to his note from Mon 14 Sep: "Clients never read the exclusions until a claim" — and wrote today: "Still true, saw it again with a Cebu warehouse."'));
+  assert.ok(!/Note: "[^"]*Clients never read/.test(input.text), "the old words are never a note from this week");
+  const bare = buildMirrorInput({entries: {"2026-09-25": {spark: 1, done: false, note: "Coming back to “Ask for the maintenance log first” (Tue 8 Sep): "}}, decisions: [], todayKey: TODAY, core});
+  assert.ok(bare.text.includes('Came back to his note from Tue 8 Sep: "Ask for the maintenance log first" — added nothing new'), "a revisit alone still counts as a recorded day");
+  assert.ok(buildMirrorPrompt(input).includes("the quote is not this week's words"));
+});
+
+test("his Called it? verdicts that week reach the read, with the conviction they were written at", () => {
+  const decisions = [{asset: "A claims documentation gap", verdict: "broke", verdictDate: "2026-09-24", conviction: 5, status: "closed", closedDate: "2026-09-24", createdDate: "2026-09-10"}];
+  const input = buildMirrorInput({entries: {}, decisions, todayKey: TODAY, core});
+  assert.ok(input, "a week with only a verdict still has something to read back");
+  assert.ok(input.text.includes("- Graded Thu 24 Sep: A claims documentation gap — the read broke (conviction 5 when written)"));
+  assert.ok(buildMirrorPrompt(input).includes('"Graded" lines are his own verdicts on whether a read held'));
+});

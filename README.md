@@ -56,6 +56,21 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   entries are explained instead of guessed. The read-back waits for confirmed
   reflection sync, stops on save failure, and retains a fresh result when an older
   history request finishes later.
+- **Called it?** — decisions carry `verdict` (held / broke / unclear) and
+  `verdictDate`. A due review shows one-tap verdicts on its row (an insight
+  question is closed by its verdict; a market call keeps its status); a verdict
+  takes the review out of Needs review, the Morning 5 and the briefing's open
+  questions. The Decisions panel compares hit rates by conviction band
+  (4–5, 3, 1–2) with a plain read of what they show (`calledItSummary`), and the
+  weekly read gets "Graded" lines for the week's verdicts.
+- **Meeting brief** — `generateMeetingBrief` (`functions/meeting-brief.js`). The
+  app gathers up to 24 of Bob's items on the topic from the last six weeks (the
+  search index, saved evidence and dossiers; at most six of any kind) and sends
+  them with the topic; the model adds a web search. Links are kept only when the
+  search returned the page or it came with his material. Stored on
+  `briefings-bob/meeting-briefs-<uid>` (latest twenty), five a day, metered as
+  `meeting-brief`. It lives on the Evidence page, saves to Evidence as a
+  document, and Open source on a saved one reopens it.
 - **Aha actions** — **Open as decision** prepares an unsaved journal draft with
   the interpretation, evidence, invalidator, and review date. The same action is
   available on dossiers, saved Evidence, and weekly suggestions. **Save insight** opens the Evidence picker with a snapshot of

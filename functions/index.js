@@ -16,6 +16,7 @@ const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing
 const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
 const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey} = require("./briefing-prompt-core");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
+const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
 const {
   parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
 } = require("./market-facts");
@@ -46,12 +47,15 @@ function protectGeneration(feature, handler) {
       }
       if (feature === "briefing" && String(data.date || "").length > 100) throw new HttpsError("invalid-argument", "Invalid date label.");
       if (feature === "dossier" && !cleanStory(data.story)) throw new HttpsError("invalid-argument", "Choose a briefing story to go deeper on.");
-      const daily = feature === "briefing" || feature === "mirror" || feature === "dossier";
+      if (feature === "meeting" && !cleanTopic(data.topic)) throw new HttpsError("invalid-argument", "Name the client, insurer or topic (at least three characters).");
+      const daily = feature === "briefing" || feature === "mirror" || feature === "dossier" || feature === "meeting";
       return await guardedGeneration({db:getFirestore(), uid:request.auth.uid, feature,
         period:daily ? phtDateKey() : phtDateKey().slice(0,7),
-        cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : feature === "dossier" ? DOSSIER_DAILY_CAP : DEEP_RESEARCH_CAP,
+        cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : feature === "dossier" ? DOSSIER_DAILY_CAP :
+          feature === "meeting" ? MEETING_DAILY_CAP : DEEP_RESEARCH_CAP,
         requestId:data.requestId,
-        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : feature === "dossier" ? {story:storyDossierKey(cleanStory(data.story)),refresh:data.refresh === true} : {topic:data.topic.trim(),premium:!!data.premium}
+        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : feature === "dossier" ? {story:storyDossierKey(cleanStory(data.story)),refresh:data.refresh === true} :
+          feature === "meeting" ? {topic:cleanTopic(data.topic),items:cleanMaterial(data.material).length} : {topic:data.topic.trim(),premium:!!data.premium}
       }, () => handler(request));
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -69,6 +73,8 @@ const DEEP_RESEARCH_CAP = parseInt(process.env.DEEP_RESEARCH_CAP || "20", 10);
 const MIRROR_DAILY_CAP = parseInt(process.env.MIRROR_DAILY_CAP || "3", 10);
 // Go deeper dossiers a day: plenty for the stories worth taking further.
 const DOSSIER_DAILY_CAP = parseInt(process.env.DOSSIER_DAILY_CAP || "10", 10);
+// Meeting briefs: one page before a call; five a day is plenty.
+const MEETING_DAILY_CAP = parseInt(process.env.MEETING_DAILY_CAP || "5", 10);
 const REPORTS_COLL = "reports-bob";
 const REPORTS_META = "reports-bob-meta";
 const WEBHOOK_EVENTS_COLL = "openai-webhook-events";
@@ -694,6 +700,79 @@ exports.generateStoryDossier = onCall(
     dossier.generatedAt = new Date().toISOString();
     await ref.set({uid, kind: "dossiers", items: keepDossiers(stored, key, dossier), updatedAt: dossier.generatedAt});
     return {key, dossier};
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Meeting brief (functions/meeting-brief.js): one page before a call, built
+// from Bob's own material on the topic plus a web search. Kept per account,
+// latest twenty.
+// ─────────────────────────────────────────────────────────────
+exports.generateMeetingBrief = onCall(
+  {
+    region: "asia-southeast1",
+    timeoutSeconds: 240,
+    memory: "512MiB",
+    secrets: [OPENAI_API_KEY],
+  },
+  protectGeneration("meeting", async (request) => {
+    const db = getFirestore();
+    const uid = request.auth.uid;
+    const topic = cleanTopic(request.data.topic);
+    const material = cleanMaterial(request.data.material);
+    const dateLabel = String(request.data.dateLabel || "").slice(0, 60);
+    const model = DEFAULT_MODEL;
+    let response;
+    try {
+      response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
+        body: JSON.stringify({
+          model,
+          input: [{role: "system", content: MEETING_SYSTEM}, {role: "user", content: buildMeetingPrompt(topic, material, dateLabel)}],
+          tools: [{type: "web_search", search_context_size: "medium"}],
+          tool_choice: "auto",
+          include: ["web_search_call.action.sources"],
+        }),
+        signal: AbortSignal.timeout(220000),
+      });
+    } catch (err) {
+      logger.error("OpenAI network error (meeting brief)", err);
+      throw new HttpsError("unavailable", "OpenAI request failed before receiving a response.");
+    }
+    const responseText = await response.text();
+    let json;
+    try {
+      json = JSON.parse(responseText);
+    } catch (err) {
+      json = {error: {message: responseText || "Non-JSON OpenAI response"}};
+    }
+    if (!response.ok) {
+      const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
+      logger.error("OpenAI API error (meeting brief)", {status: response.status, message: msg});
+      throw new HttpsError("internal", msg);
+    }
+    await recordUsage(db, "meeting-brief", model, extractUsage(json), phtDateKey());
+
+    let brief;
+    try {
+      brief = cleanBrief(parseBriefing(extractText(json)), searchUrls(json), material);
+    } catch (err) {
+      brief = null;
+    }
+    if (!brief) {
+      logger.error("meeting brief JSON unusable");
+      throw new HttpsError("internal", "The brief came back unusable. Try again in a minute.");
+    }
+    brief.topic = topic;
+    brief.materialCount = material.length;
+    brief.model = model;
+    brief.generatedAt = new Date().toISOString();
+    const id = "m" + Date.now().toString(36);
+    const ref = db.collection(BRIEFINGS_COLL).doc("meeting-briefs-" + uid);
+    const stored = await ref.get().then((snap) => (snap.exists ? snap.data().items || {} : {})).catch(() => ({}));
+    await ref.set({uid, kind: "meeting-briefs", items: keepBriefs(stored, id, brief), updatedAt: brief.generatedAt});
+    return {id, brief};
   })
 );
 

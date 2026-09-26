@@ -77,11 +77,16 @@ const STUB = /^On “(.+)”(?: \(([^()]*)\))?:\s*(.*)$/;
 // Left blank it is a prompt he did not answer, so it is dropped; filled in, it
 // is his take on that insight.
 const TAKE = /^My take on “(.+)”:\s*(.*)$/;
+// "Use today" on From your past writes: Coming back to “<old note>” (Mon 14 Sep): <today's words>.
+// The quote is from that earlier day; only what follows the colon is this week's.
+const REVISIT = /^Coming back to “([\s\S]+?)” \(([^()]{3,24})\):\s*([\s\S]*)$/;
 function splitNote(note) {
-  const own = [], comments = [], bare = [], takes = [];
+  const own = [], comments = [], bare = [], takes = [], revisits = [];
   text(note).split(/\n+/).forEach((line) => {
     const trimmed = line.trim();
     if (!trimmed) return;
+    const revisit = trimmed.match(REVISIT);
+    if (revisit) { revisits.push({quote: revisit[1], from: revisit[2], text: revisit[3].trim()}); return; }
     const take = trimmed.match(TAKE);
     if (take) { if (take[2].trim()) takes.push({title: take[1], text: take[2].trim()}); return; }
     const match = trimmed.match(STUB);
@@ -89,7 +94,7 @@ function splitNote(note) {
     else if (match[3].trim()) comments.push({headline: match[1], source: match[2] || "", text: match[3].trim()});
     else bare.push({headline: match[1], source: match[2] || ""});
   });
-  return {own: own.join(" "), comments, bare, takes};
+  return {own: own.join(" "), comments, bare, takes, revisits};
 }
 
 // What one day looked like. Returns null for a day with nothing recorded.
@@ -110,7 +115,7 @@ function dayBlock(key, entry, core, today, goalNames) {
     seen[id] = true;
     return true;
   });
-  const wrote = note.own || note.comments.length || note.takes.length;
+  const wrote = note.own || note.comments.length || note.takes.length || note.revisits.length;
   const active = wrote || entry.done || noted.length || opened.length || votes.length ||
     reminders.length || text(entry.trialPlan) || text(entry.trialOutcome) || entry.sparkResponse || arr(entry.goalTicks).length;
   if (!active) return null;
@@ -126,6 +131,10 @@ function dayBlock(key, entry, core, today, goalNames) {
   else if (entry.intention && INTENTIONS[entry.intention]) head += "; intention: " + INTENTIONS[entry.intention];
   lines.push(head);
   if (note.own) lines.push("  Note: " + quote(note.own, NOTE_CHARS));
+  note.revisits.slice(0, LIST_MAX).forEach((item) => {
+    lines.push("  Came back to his note from " + item.from + ": " + quote(item.quote, 200) +
+      (item.text ? " — and wrote today: " + quote(item.text, 400) : " — added nothing new"));
+  });
   note.comments.slice(0, LIST_MAX).forEach((item) => {
     lines.push("  On the story " + quote(item.headline, 140) + " he wrote: " + quote(item.text, 400));
   });
@@ -189,7 +198,7 @@ function decisionLine(entry, verb, dayKey) {
 
 function decisionBlock(decisions, win) {
   const inWeek = (day) => DAY.test(day) && day >= win.from && day <= win.to;
-  const logged = [], closed = [];
+  const logged = [], closed = [], graded = [];
   let open = 0;
   arr(decisions).forEach((entry) => {
     if (!entry) return;
@@ -197,8 +206,13 @@ function decisionBlock(decisions, win) {
     if (status !== "closed" && text(entry.action) !== "skipped") open++;
     if (inWeek(text(entry.createdDate))) logged.push(decisionLine(entry, "Logged", text(entry.createdDate)));
     if (status === "closed" && inWeek(text(entry.closedDate))) closed.push(decisionLine(entry, "Closed", text(entry.closedDate)));
+    // "Called it?": his own verdict on whether the read held.
+    if (["held", "broke", "unclear"].indexOf(text(entry.verdict)) >= 0 && inWeek(text(entry.verdictDate))) {
+      graded.push("- Graded " + dayLabel(text(entry.verdictDate)) + ": " + (text(entry.asset || entry.subject).slice(0, 60) || "(unnamed)") +
+        " — the read " + text(entry.verdict) + " (conviction " + (text(entry.conviction) || "3") + " when written)");
+    }
   });
-  return {lines: logged.slice(0, 8).concat(closed.slice(0, 8)), logged: logged.length, closed: closed.length, open};
+  return {lines: logged.slice(0, 8).concat(closed.slice(0, 8), graded.slice(0, 8)), logged: logged.length, closed: closed.length, graded: graded.length, open};
 }
 
 // The most recent mirror at least five days old, so the new one can follow up
@@ -244,7 +258,7 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goa
     dayLines.push(...block.lines);
   });
   const journal = decisionBlock(decisions, win);
-  stats.decisions = journal.logged + journal.closed;
+  stats.decisions = journal.logged + journal.closed + journal.graded;
   if (!stats.days && !stats.decisions) return null;
 
   const parts = [
@@ -293,7 +307,9 @@ function buildMirrorPrompt(input) {
     "- The last day is today and is still in progress when this is read. An unfinished quest or experiment on it is not a miss,",
     "  and nothing recorded yet today is not a gap. Never use today's unfinished items as evidence in any field.",
     "- \"Note\" lines are his own words. \"On the story … he wrote\" lines are his comments on a briefing story, and \"his take\"",
-    "  lines are his view of the day's briefing insight — also his words. Stories he noted",
+    "  lines are his view of the day's briefing insight — also his words. A \"Came back to his note from …\" line quotes a note",
+    "  written on that earlier day: the quote is not this week's words, only what he \"wrote today\" is. Revisiting an old note",
+    "  is itself worth noticing (what he chose to return to), but never cite the old words as said this week. Stories he noted",
     "  without comment show interest only — do not read feelings or intentions into them.",
     "- If the week is thin (fewer than three days with a note, or no notes at all), say so plainly in week_in_a_line, keep every",
     "  field short, leave fields empty rather than stretching, and set confidence to \"thin\".",
@@ -308,6 +324,8 @@ function buildMirrorPrompt(input) {
     "- reading: what his noting, opening and voting say about where his attention goes. Empty if he did none.",
     "- decisions: how he decided, never what to trade — e.g. whether a thesis and an invalidation line were written, or how a close",
     "  was reviewed. Never recommend buying, selling, holding, exiting, sizing or hedging, and give no market view. Empty if none.",
+    "  \"Graded\" lines are his own verdicts on whether a read held; a pattern across them (confident reads breaking, or holding) is",
+    "  worth naming as something about how he judges, never as a view on any market.",
     "- last_week: if a LAST MIRROR block is given, say honestly whether anything this week answers its question or shows the",
     "  suggested try happening. If he wrote an answer, respond to what he wrote — quote a few of his words — and say whether",
     "  this week bears it out, rather than restating the question. Empty if there is no LAST MIRROR block.",

@@ -96,7 +96,7 @@ function isInsight(entry) {
 const MAX_QUESTIONS = 5;
 function questionLines(decisions) {
   return arr(decisions)
-    .filter((entry) => isTracked(entry) && isInsight(entry))
+    .filter((entry) => isTracked(entry) && isInsight(entry) && !text(entry.verdict))
     .sort((a, b) => Number((b && b.saved) || 0) - Number((a && a.saved) || 0))
     .slice(0, MAX_QUESTIONS)
     .map((entry) => {

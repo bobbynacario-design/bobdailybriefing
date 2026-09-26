@@ -287,6 +287,24 @@ window.fbLoadDossiers = async function(uid) {
     throw e;
   }
 };
+// Meeting brief (functions/meeting-brief.js): one page before a call, and the
+// briefs already built for this account (latest twenty).
+window.fbGenerateMeetingBrief = async function(topic, material, dateLabel) {
+  if (!getUid()) throw new Error('Sign in first');
+  var generate = httpsCallable(functions, 'generateMeetingBrief', { timeout: 250000 });
+  var res = await generate({ topic: topic, material: material, dateLabel: dateLabel || '', requestId: crypto.randomUUID() });
+  return res.data;
+};
+window.fbLoadMeetingBriefs = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'meeting-briefs-' + uid));
+    return snap.exists() ? (snap.data().items || {}) : {};
+  } catch (e) {
+    if (e && e.code === 'permission-denied') return {};
+    throw e;
+  }
+};
 window.fbLoadWeeklyMirror = async function(uid) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
   try {
@@ -396,6 +414,9 @@ window.fbSaveDecision = async function(entry) {
       invalidator: entry.invalidator || '',
       linkedSignal: entry.linkedSignal || null,
       reviewDate: entry.reviewDate || '',
+      // "Called it?": whether the read held, and when he said so.
+      verdict: ['held','broke','unclear'].indexOf(entry.verdict) >= 0 ? entry.verdict : '',
+      verdictDate: entry.verdictDate || '',
       // Optional position economics. Null when Bob does not bother — the tab
       // still derives a % move from the radar close on the decision date.
       entryPrice: entry.entryPrice == null ? null : Number(entry.entryPrice),
@@ -2033,6 +2054,11 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup-chip.active,body.light .trend-period-btn.active,body.light .command-filter.active{border-color:rgba(114,86,16,.45)}
 /* A faint top highlight gives dark cards an edge of light, like a raised surface. */
 .card,.hero,.daily-boost{box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+/* Meeting brief */
+.meeting-panel{margin-bottom:1rem}.meeting-panel .command-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:flex-start}.meeting-intro{font-size:12.5px;line-height:1.6;color:var(--txt2);margin:.2rem 0 .6rem}.meeting-form{display:flex;flex-wrap:wrap;gap:.5rem}.meeting-form input{flex:1 1 220px;min-width:0;padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font-size:14px}.meeting-status{font-family:var(--mono);font-size:11px;color:var(--txt3);margin:.5rem 0 0;min-height:1em}.meeting-brief{margin:.7rem 0 0}.meeting-brief a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}#meeting-history{max-width:100%;font-size:12px}
+/* Called it? */
+.called-it .called-row{display:grid;grid-template-columns:minmax(0,1fr) auto 3.2em;gap:.6rem;align-items:baseline;padding:.35rem 0;border-bottom:1px solid var(--rim);font-size:12.5px;color:var(--txt2)}.called-it .called-row b{font-family:var(--mono);color:var(--txt);text-align:right}.called-split{font-family:var(--mono);font-size:10.5px;color:var(--txt3);margin:.5rem 0 .2rem}.called-read{font-size:13px;line-height:1.55;color:var(--txt);margin:.5rem 0 0}.called-waiting{font-size:12px;color:var(--amber);margin:.35rem 0 0}
+.decision-verdict{margin:.45rem 0 .2rem;font-size:12.5px;color:var(--txt2)}.decision-verdict .decision-buttons{margin-top:.35rem}
 /* Goal moves use the room of a full row on desktop, then stack cleanly on phones. */
 .boost-goal-next{font-size:12px;line-height:1.55;color:var(--txt2);margin:.2rem 0 .45rem}
 .boost-goal-edit{grid-template-columns:minmax(180px,1.2fr) minmax(180px,1fr) auto auto}
@@ -2245,6 +2271,13 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="command-stat"><div class="command-stat-value" id="evidence-source-count">—</div><div class="command-stat-label">Sources represented</div></div>
     <div class="command-stat"><div class="command-stat-value" id="evidence-note-count">—</div><div class="command-stat-label">Items with notes</div></div>
   </div>
+  <section class="command-panel meeting-panel" id="meeting-panel" aria-labelledby="meeting-title">
+    <div class="command-panel-head"><div><div class="command-panel-title" id="meeting-title">Meeting brief</div><div class="command-panel-meta">One page before a call</div></div><select id="meeting-history" aria-label="Earlier briefs" hidden onchange="showMeetingBrief(this.value)"></select></div>
+    <p class="meeting-intro">Name the client, insurer or topic. The brief gathers your last six weeks on it (briefing stories, dossiers, saved evidence, notes and decisions), reads what is new on the web, and ends with three questions to ask. Your matched items go to OpenAI for this brief only. Up to five a day.</p>
+    <div class="meeting-form"><input id="meeting-topic" maxlength="120" placeholder="Suncorp, cold-chain in the Visayas, strata mould claims…" aria-label="Meeting topic" onkeydown="if(event.key==='Enter')runMeetingBrief()"><button type="button" class="tool-chip" id="meeting-run" onclick="runMeetingBrief()">Build brief</button></div>
+    <div class="meeting-status" id="meeting-status" role="status"></div>
+    <div id="meeting-out" aria-live="polite"></div>
+  </section>
   <div class="evidence-toolbar"><input class="evidence-name-input" id="evidence-new-name" maxlength="80" placeholder="Name a new evidence set" onkeydown="if(event.key==='Enter')createEvidenceSet()"><button class="tool-chip" onclick="createEvidenceSet()">Create set</button><span class="command-hidden-note" id="evidence-sync-status" role="status">Account-synced · up to 12 sets</span><button class="tool-chip" onclick="exportEvidenceEdits()">Export evidence</button><button class="tool-chip" onclick="reloadEvidenceEdits()">Reload evidence</button></div>
   <div class="evidence-layout">
     <aside class="command-panel"><div class="command-panel-head"><div><div class="command-panel-title">Sets</div><div class="command-panel-meta">Newest activity first</div></div></div><div class="evidence-set-list" id="evidence-set-list"><div class="command-empty">Loading evidence sets…</div></div></aside>
@@ -2677,6 +2710,10 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <input id="decision-review-date" type="date">
       </div>
       <div class="decision-field">
+        <label>Did the read hold? <span class="decision-opt">Called it?</span></label>
+        <select id="decision-verdict"><option value="">Not decided yet</option><option value="held">Held</option><option value="broke">Broke</option><option value="unclear">Unclear</option></select>
+      </div>
+      <div class="decision-field">
         <label>Status</label>
         <select id="decision-status" onchange="syncDecisionOutcomeFields()">
           <option value="open">Open</option>
@@ -2836,6 +2873,15 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li><b>Two devices at once</b> — edits to different parts of a day both keep. If the same note changed in both places, the other wording is kept under <b>Recovered reflection versions</b> to use or dismiss.</li>
         <li><b>Find anything</b> — <b>Ctrl+K</b> searches your notes alongside briefings, research and decisions; a result opens that day.</li>
         <li><b>Nothing is thrown away</b> — the latest 90 days stay on the page; older ones move to a yearly archive that search and <b>Copy all reflections</b> still reach.</li>
+      </ul>
+    </div>
+
+    <div class="help-card">
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-decisions"/></svg> Called it? &amp; the meeting brief</div>
+      <ul>
+        <li><b>Called it?</b> — every decision keeps the conviction (1–5) you gave it. When its <b>Review on</b> date comes, the row asks whether the read <b>Held</b>, <b>Broke</b> or stayed <b>Unclear</b> (or <b>Check in a week</b>). A question opened from an insight is settled by its answer; a market call keeps its status.</li>
+        <li>The <b>Called it?</b> panel on Decisions compares how your very-sure, fairly-sure and tentative reads turned out, and says plainly whether being sure has meant being right. Conviction is compared band against band, never treated as a probability. Your weekly read sees the verdicts you gave that week.</li>
+        <li><b>Meeting brief</b> — on Evidence, name a client, insurer or topic. It gathers your last six weeks on it (briefing stories, dossiers, saved evidence, notes, decisions), searches the web for what is new, and gives where things stand, what happened lately, the threads you have been following, three questions to ask and one thing to watch. Only the matched items go to OpenAI, only when you tap. Up to five a day; the latest twenty are kept under <b>Earlier briefs</b>; <b>Save to Evidence</b> files one.</li>
       </ul>
     </div>
 
@@ -3075,6 +3121,7 @@ function clearPrivateSession() {
   if (_currentReportUrl && _currentReportUrl.indexOf('blob:') === 0) URL.revokeObjectURL(_currentReportUrl);
   _currentReportUrl = null;
   resetIntelligenceSearch(); resetEvidenceSets();
+  _meetingBriefs = {}; _meetingFor = null; _meetingShown = '';
   if (window.fbAcceptEvidenceBase) window.fbAcceptEvidenceBase(null);
   resetTicker();
   setText('hero-date','Sign in to read your briefing');
@@ -3756,6 +3803,163 @@ function saveEvidenceSets(message) {
 }
 function renderEvidencePage() {
   if (!evidenceSetState.loaded) loadEvidenceSets(); else paintEvidencePage();
+  loadMeetingBriefs();
+}
+
+// ── Meeting brief (functions/meeting-brief.js) ──
+// Bob names a client, insurer or topic; the app gathers his own material on it
+// from the last six weeks (the search index, saved evidence and dossiers) and
+// the server adds a web search. Only the matched items are sent, and only when
+// he taps Build brief.
+var _meetingBriefs = {}, _meetingFor = null, _meetingRunning = false;
+var MEETING_DAYS = 42, MEETING_MAX = 24;
+function meetingTokens(topic) {
+  return window.IntelligenceSearchCore.normalized(topic).split(/[^a-z0-9]+/).filter(function(token) { return token.length >= 2; });
+}
+function meetingMatches(value, tokens) {
+  var hay = window.IntelligenceSearchCore.normalized(value);
+  return tokens.length > 0 && tokens.every(function(token) { return hay.indexOf(token) >= 0; });
+}
+// {items, counts} — his material on the topic, newest first, at most 24, at
+// most six from any one kind so one busy source cannot crowd out the rest.
+async function meetingMaterial(topic) {
+  var core = window.IntelligenceSearchCore, tokens = meetingTokens(topic), since = Date.now() - MEETING_DAYS * 86400000, rows = [];
+  if (!intelligenceSearchState.loaded || Date.now() - (intelligenceSearchState.loadedAt || 0) > 300000) await loadIntelligenceSearchData();
+  var reflections = core.buildIndex({reflections: window.dailyBoostSearchEntries ? window.dailyBoostSearchEntries() : []});
+  core.search((intelligenceSearchState.index || []).concat(reflections), topic, {limit: 80}).forEach(function(item) {
+    if (item.saved && item.saved < since) return;
+    rows.push({kind: item.source, at: item.saved || 0, title: item.title, text: item.detail || item.excerpt || '', url: ''});
+  });
+  ((evidenceSetState.data && evidenceSetState.data.sets) || []).forEach(function(set) {
+    (set.items || []).forEach(function(item) {
+      var at = Date.parse(item.capturedAt || '') || 0;
+      if (at && at < since) return;
+      if (!meetingMatches([item.title, item.detail, item.note].join(' '), tokens)) return;
+      rows.push({kind: 'Evidence', at: at, title: item.title, text: [String(item.detail || '').split('\n').slice(0, 3).join(' '), item.note ? 'His note: ' + item.note : ''].filter(Boolean).join(' '), url: item.url || ''});
+    });
+  });
+  var dossiers = await savedDossiers();
+  Object.keys(dossiers).forEach(function(key) {
+    var d = dossiers[key], at = Date.parse(d.generatedAt || '') || 0;
+    if (at && at < since) return;
+    if (!meetingMatches([d.story && d.story.headline, d.summary, d.bi_angle, (d.exposed || []).join(' ')].join(' '), tokens)) return;
+    rows.push({kind: 'Dossier', at: at, title: (d.story && d.story.headline) || 'Dossier', text: [d.summary, d.bi_angle ? 'BI angle: ' + d.bi_angle : ''].filter(Boolean).join(' '), url: (d.story && d.story.url) || ''});
+  });
+  var perKind = {}, seen = {}, items = [];
+  rows.sort(function(a, b) { return b.at - a.at; }).forEach(function(row) {
+    var id = row.kind + '|' + String(row.title).toLowerCase();
+    if (seen[id] || items.length >= MEETING_MAX || (perKind[row.kind] || 0) >= 6) return;
+    seen[id] = true; perKind[row.kind] = (perKind[row.kind] || 0) + 1;
+    items.push({kind: row.kind, date: row.at ? new Date(row.at).toISOString().slice(0, 10) : '', title: String(row.title).slice(0, 200), text: String(row.text || '').slice(0, 500), url: /^https?:\/\//i.test(row.url) ? row.url : ''});
+  });
+  return {items: items, counts: perKind};
+}
+function meetingCountsText(counts) {
+  var keys = Object.keys(counts || {});
+  if (!keys.length) return 'None of your items from the last six weeks mention it, so the brief leans on the web search.';
+  var names = {Briefing:['briefing story','briefing stories'], Decisions:['decision','decisions'], Evidence:['saved evidence item','saved evidence items'], Dossier:['dossier','dossiers'],
+    Reflections:['note','notes'], News:['news story','news stories'], Research:['report','reports'], Radar:['radar signal','radar signals'], Markets:['market','markets'], Sports:['sports item','sports items']};
+  var name = function(key, n) { var pair = names[key] || [key.toLowerCase() + ' item', key.toLowerCase() + ' items']; return n + ' ' + pair[n === 1 ? 0 : 1]; };
+  return 'Using ' + keys.reduce(function(sum, key) { return sum + counts[key]; }, 0) + ' of your items: ' + keys.map(function(key) { return name(key, counts[key]); }).join(', ') + '.';
+}
+function meetingError(error) {
+  var code = String(error && error.code || '').replace(/^functions\//, '');
+  if (code === 'resource-exhausted') return 'That is five meeting briefs today. It will be ready again tomorrow.';
+  if (code === 'invalid-argument') return (error && error.message) || 'Name the client, insurer or topic first.';
+  if (code === 'unauthenticated' || code === 'permission-denied') return 'Sign in with your own account to build a brief.';
+  if (code === 'deadline-exceeded' || code === 'unavailable') return 'The search took too long. Try again in a minute.';
+  if (code === 'not-found' || (code === 'internal' && String(error && error.message || '').toLowerCase() === 'internal')) {
+    return 'Could not reach the meeting brief. If it was just added it needs a functions deploy; otherwise try again in a minute.';
+  }
+  return (error && error.message) || 'Could not build the brief. Try again in a minute.';
+}
+function meetingBriefHtml(b) {
+  if (!b || !b.where_things_stand) return '';
+  var part = function(title, body) { return body ? '<section class="dossier-part"><h4>' + title + '</h4>' + body + '</section>' : ''; };
+  var at = b.generatedAt ? new Date(b.generatedAt) : null;
+  var when = at && !isNaN(at) ? at.toLocaleDateString('en-AU', {day:'numeric', month:'short'}) + ', ' + at.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+  var html = '<div class="dossier meeting-brief"><div class="dossier-head"><span class="dossier-kicker">' + uiIcon('clipboard') + ' Meeting brief · ' + esc(b.topic || '') + '</span><span class="dossier-meta">' +
+    esc([b.materialCount ? b.materialCount + ' of your items' : 'web search only', when].filter(Boolean).join(' · ')) + '</span></div>';
+  html += '<p class="dossier-summary">' + esc(b.where_things_stand) + '</p>';
+  html += part('Lately', (b.recent || []).length ? '<ul>' + b.recent.map(function(r) {
+    var what = esc(r.what) + (r.source ? ' <span class="dossier-src">(' + esc(r.source) + ')</span>' : '');
+    return '<li>' + (r.when ? '<strong>' + esc(r.when) + '</strong> — ' : '') + (r.url ? '<a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' + what + ' ↗</a>' : what) + '</li>';
+  }).join('') + '</ul>' : '');
+  html += part('Your threads', (b.his_threads || []).length ? '<ul>' + b.his_threads.map(function(t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' : '');
+  html += part('Ask in the meeting', (b.questions || []).length ? '<ol>' + b.questions.map(function(q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ol>' : '');
+  html += part('Watch afterwards', b.watch ? '<p>' + esc(b.watch) + '</p>' : '');
+  html += part('Sources', (b.sources || []).length ? '<ul class="dossier-sources">' + b.sources.map(function(src) { return '<li><a href="' + esc(src.url) + '" target="_blank" rel="noopener noreferrer">' + esc(src.title || src.url) + ' ↗</a></li>'; }).join('') + '</ul>' : '');
+  html += '<p class="dossier-note">An analytical brief from your saved items and a web search, not advice. Check the sources before quoting them.</p>';
+  return html + '<div class="dossier-actions"><button type="button" class="card-act" onclick="copyMeetingBrief()">⧉ Copy as text</button><button type="button" class="card-act" onclick="saveMeetingBrief()">＋ Save to Evidence</button></div></div>';
+}
+// Plain text for pasting and for Evidence (whose renderer reads its markers).
+function meetingBriefSnapshot(b) {
+  var lines = ['Meeting brief · ' + (b.topic || ''), b.where_things_stand];
+  (b.recent || []).forEach(function(r) { lines.push('- ' + (r.when ? r.when + ': ' : '') + r.what + (r.source ? ' (' + r.source + ')' : '')); });
+  (b.his_threads || []).forEach(function(t) { lines.push('Thread: ' + t); });
+  (b.questions || []).forEach(function(q, i) { lines.push('Q' + (i + 1) + '. ' + q); });
+  if (b.watch) lines.push('Watch: ' + b.watch);
+  (b.sources || []).forEach(function(src) { lines.push('Source: ' + (src.title ? src.title + ' — ' : '') + src.url); });
+  return lines.join('\n').slice(0, 4000);
+}
+var _meetingShown = '';
+function showMeetingBrief(id) {
+  var b = _meetingBriefs[id], out = document.getElementById('meeting-out');
+  if (!out) return;
+  _meetingShown = b ? id : '';
+  out.innerHTML = b ? meetingBriefHtml(b) : '';
+  var select = document.getElementById('meeting-history');
+  if (select && b) select.value = id;
+}
+function paintMeetingHistory() {
+  var select = document.getElementById('meeting-history');
+  if (!select) return;
+  var ids = Object.keys(_meetingBriefs).sort(function(a, b) { return String(_meetingBriefs[b].generatedAt || '').localeCompare(String(_meetingBriefs[a].generatedAt || '')); });
+  select.hidden = !ids.length;
+  select.innerHTML = '<option value="">Earlier briefs (' + ids.length + ')</option>' + ids.map(function(id) {
+    var b = _meetingBriefs[id], at = new Date(b.generatedAt || 0);
+    return '<option value="' + esc(id) + '">' + esc((b.topic || 'Brief') + ' · ' + (isNaN(at) ? '' : at.toLocaleDateString('en-AU', {day:'numeric', month:'short'}))) + '</option>';
+  }).join('');
+  if (_meetingShown) select.value = _meetingShown;
+}
+async function loadMeetingBriefs() {
+  var uid = window._firebaseUid || null;
+  if (!uid || typeof window.fbLoadMeetingBriefs !== 'function' || _meetingFor === uid) return;
+  _meetingFor = uid;
+  try { _meetingBriefs = (await window.fbLoadMeetingBriefs(uid)) || {}; } catch (e) { _meetingBriefs = {}; _meetingFor = null; }
+  paintMeetingHistory();
+}
+async function runMeetingBrief() {
+  var input = document.getElementById('meeting-topic'), status = document.getElementById('meeting-status'), button = document.getElementById('meeting-run');
+  var topic = String(input && input.value || '').trim();
+  if (!status || _meetingRunning) return;
+  if (topic.length < 3) { status.textContent = 'Name the client, insurer or topic first (at least three characters).'; return; }
+  if (!window._firebaseUid || typeof window.fbGenerateMeetingBrief !== 'function') { status.textContent = 'Sign in to build a meeting brief.'; return; }
+  _meetingRunning = true; if (button) button.disabled = true;
+  status.innerHTML = aiWorkingHtml('Gathering your material on “' + topic + '”…');
+  try {
+    var found = await meetingMaterial(topic);
+    status.innerHTML = aiWorkingHtml(meetingCountsText(found.counts) + ' Reading around it now. Usually under a minute; allow up to three.', {slow: 180});
+    var result = await window.fbGenerateMeetingBrief(topic, found.items, getTodayBriefingDateLabel());
+    if (!result || !result.brief) throw new Error('The brief came back empty. Try again in a minute.');
+    _meetingBriefs[result.id] = result.brief;
+    status.textContent = meetingCountsText(found.counts);
+    showMeetingBrief(result.id); paintMeetingHistory();
+  } catch (error) {
+    status.textContent = meetingError(error);
+  } finally {
+    _meetingRunning = false; if (button) button.disabled = false;
+  }
+}
+function copyMeetingBrief() {
+  var b = _meetingBriefs[_meetingShown];
+  if (b) copyCardText(meetingBriefSnapshot(b), document.querySelector('#meeting-out .card-act'));
+}
+function saveMeetingBrief() {
+  var b = _meetingBriefs[_meetingShown];
+  if (!b) return;
+  openEvidencePicker({id:'meeting:' + _meetingShown + ':brief', source:'Meeting', title:'Meeting brief: ' + (b.topic || ''), detail:meetingBriefSnapshot(b),
+    meta:[new Date(b.generatedAt || Date.now()).toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric'}), b.materialCount ? b.materialCount + ' of your items' : 'web search only'].join(' · '), page:'evidence', ref:_meetingShown});
 }
 function createEvidenceSet() {
   if (!evidenceSetState.loaded) { loadEvidenceSets(); showToast('Loading evidence sets first','info'); return; }
@@ -3821,7 +4025,7 @@ function openEvidenceAsDecision(setEncoded, keyEncoded) {
   var item = set && set.items.find(function(candidate) { return candidate.key === key; });
   if (!item) { showToast('That evidence item is no longer available','warn'); return; }
   var rows = evidenceDetailLines(item), body = rows ? [rows[0]].concat(rows.filter(function(line) { return /^(BI angle|Wrong if):/.test(line); })).join('\n') : item.detail;
-  openDecisionFromInsight({title:item.title.replace(/^Dossier:\s*/, ''), source:'evidence', detail:[body,item.note ? 'Your note: ' + item.note : '',item.url ? 'Source: ' + item.url : ''].filter(Boolean).join('\n'),
+  openDecisionFromInsight({title:item.title.replace(/^(Dossier|Meeting brief):\s*/, ''), source:'evidence', detail:[body,item.note ? 'Your note: ' + item.note : '',item.url ? 'Source: ' + item.url : ''].filter(Boolean).join('\n'),
     invalidator:(String(item.detail || '').match(/(?:Wrong if|Would change the read):\s*([^\n]+)/i) || [,''])[1], label:'Evidence · ' + set.name, url:item.url || ''});
 }
 function paintEvidencePage() {
@@ -3856,11 +4060,13 @@ function paintEvidencePage() {
 // breaks were kept arrive as one line, so their parts are found again from the
 // markers the snapshots write ("- ", "BI angle:", "Q1.", "Source:" and so on).
 var _evidenceOpen = {};
-var EVIDENCE_LABEL = /^(BI angle|Exposed|Would change the read|Wrong if|Built on):\s*/;
+var EVIDENCE_LABEL = /^(BI angle|Exposed|Would change the read|Wrong if|Built on|Watch):\s*/;
 function evidenceDetailLines(item) {
-  if (!/:(aha|dossier)$/.test(String(item && item.id || ''))) return null;
+  if (!/:(aha|dossier|brief)$/.test(String(item && item.id || ''))) return null;
   var detail = String(item.detail || ''), lead = 'Dossier · ' + String(item.title || '').replace(/^Dossier:\s*/, '');
   if (detail.indexOf(lead) === 0) detail = detail.slice(lead.length);
+  // A brief's first line repeats its title.
+  if (/^Meeting brief · /.test(detail)) detail = detail.indexOf('\n') >= 0 ? detail.slice(detail.indexOf('\n') + 1) : detail;
   if (detail.indexOf('\n') < 0) {
     // Bullets and figures come before the first labelled part; after it, a
     // " - " can sit inside a source title, so it is left alone there.
@@ -3878,7 +4084,7 @@ function evidenceDetailHtml(item) {
   var rows = evidenceDetailLines(item);
   if (!rows) return '<div class="evidence-item-detail">' + esc(item.detail || 'Saved source item.') + '</div>';
   var html = '', list = '';
-  var labels = {ul:/:dossier$/.test(item.id) ? 'How it came about' : '', fig:'The numbers', ol:'Questions to ask', src:'Sources'};
+  var labels = {ul:/:dossier$/.test(item.id) ? 'How it came about' : /:brief$/.test(item.id) ? 'Lately' : '', thr:'Your threads', fig:'The numbers', ol:'Questions to ask', src:'Sources'};
   var close = function() { if (list) html += list === 'ol' ? '</ol>' : '</ul>'; list = ''; };
   var start = function(kind) {
     if (list === kind) return;
@@ -3889,6 +4095,7 @@ function evidenceDetailHtml(item) {
   rows.forEach(function(line) {
     var m;
     if (/^- /.test(line)) { start('ul'); html += '<li>' + esc(line.slice(2)) + '</li>'; }
+    else if (/^Thread:\s*/.test(line)) { start('thr'); html += '<li>' + esc(line.replace(/^Thread:\s*/, '')) + '</li>'; }
     else if ((m = /^Q\d+\.\s*(.*)$/.exec(line))) { start('ol'); html += '<li>' + esc(m[1]) + '</li>'; }
     else if ((m = /^Source:\s*(.*?)(?:\s+—\s+(https?:\/\/\S+))?$/.exec(line))) {
       start('src'); html += '<li>' + (m[2] ? '<a href="' + esc(m[2]) + '" target="_blank" rel="noopener noreferrer">' + esc(m[1] || m[2]) + ' ↗</a>' : esc(m[1])) + '</li>';
@@ -4020,6 +4227,13 @@ async function openEvidenceItem(setEncoded,keyEncoded) {
     if (!getReportById(item.ref) && window.fbLoadReports) window._reportFeed = await window.fbLoadReports();
     switchPage('research',document.querySelector('.ntab[data-page="research"]'));
     openReport(item.ref);
+    return;
+  }
+  if (item.source === 'Meeting') {
+    // A saved meeting brief reopens in its panel, above the sets.
+    await loadMeetingBriefs();
+    if (_meetingBriefs[item.ref]) { showMeetingBrief(item.ref); var panel = document.getElementById('meeting-panel'); if (panel) panel.scrollIntoView({block:'start', behavior:'smooth'}); }
+    else showToast('That brief is no longer kept (the latest twenty are). The copy saved here is what remains.','info');
     return;
   }
   if (item.source === 'News' && openNewsRecord(item.ref)) return;
@@ -5521,6 +5735,7 @@ var decisionEntries = [];
 var decisionEditingId = null;
 var decisionEditingSaved = null;
 var decisionEditingCreatedDate = null;
+var decisionEditingVerdict = '', decisionEditingVerdictDate = '';
 var decisionLinkedSignal = null;
 
 // ── DECISIONS: live position layer ────────────────────────────────────────
@@ -5925,6 +6140,7 @@ function openDecisionForm(entry) {
   decisionEditingId = entry.id || null;
   decisionEditingSaved = entry.saved || null;
   decisionEditingCreatedDate = entry.createdDate || manilaDateKey();
+  decisionEditingVerdict = entry.verdict || ''; decisionEditingVerdictDate = entry.verdictDate || '';
   decisionLinkedSignal = entry.linkedSignal || null;
   var form = document.getElementById('decision-form');
   if (form) form.classList.add('active');
@@ -5950,6 +6166,7 @@ function openDecisionForm(entry) {
   setDecisionField('decision-reason', entry.reason || '');
   setDecisionField('decision-invalidator', entry.invalidator || '');
   setDecisionField('decision-review-date', entry.reviewDate || '');
+  setDecisionField('decision-verdict', entry.verdict || '');
   setDecisionField('decision-mistake', entry.mistakeType || 'none');
   setDecisionField('decision-outcome-note', entry.outcomeNote || '');
   syncDecisionOutcomeFields();
@@ -6088,6 +6305,10 @@ async function saveDecisionForm() {
     reason: getDecisionField('decision-reason').trim(),
     invalidator: getDecisionField('decision-invalidator').trim(),
     reviewDate: getDecisionField('decision-review-date'),
+    verdict: getDecisionField('decision-verdict') || '',
+    // A new or changed verdict is dated today; an unchanged one keeps its day.
+    verdictDate: !getDecisionField('decision-verdict') ? '' :
+      getDecisionField('decision-verdict') === decisionEditingVerdict && decisionEditingVerdictDate ? decisionEditingVerdictDate : manilaDateKey(),
     linkedSignal: decisionLinkedSignal,
     status: status,
     outcome: status === 'closed' ? (getDecisionField('decision-outcome') || null) : null,
@@ -6418,13 +6639,90 @@ function decisionGradeHtml(e, g) {
     (chips.length ? '<div class="dec-live-chips">' + chips.join('') + '</div>' : '') +
     '<div class="dec-live-econ">' + econ.join('') + '</div></div>';
 }
+// ── Called it? ──
+// Every read in the journal carries a conviction (1-5) from the day it was
+// written. Grading whether it held, broke or stayed unclear lets the journal
+// answer the question it could not: does his confidence line up with results?
+// Conviction is compared band against band, never passed off as a probability.
+var VERDICT_LABELS = {held:'held', broke:'broke', unclear:'unclear'};
+function decisionIsInsight(e) {
+  return !!e && ((e.linkedSignal && e.linkedSignal.kind === 'insight') || ['briefing','weekly','evidence'].indexOf(e.source) >= 0);
+}
+function calledItSummary(entries, today) {
+  var band = function(c) { c = Number(c) || 3; return c >= 4 ? 'high' : c <= 2 ? 'low' : 'mid'; };
+  var empty = function() { return {held:0, broke:0, unclear:0, rate:null}; };
+  var out = {bands:{low:empty(), mid:empty(), high:empty()}, all:empty(), insights:empty(), calls:empty(), waiting:0, read:''};
+  (entries || []).forEach(function(e) {
+    if (!e) return;
+    if (VERDICT_LABELS[e.verdict]) {
+      [out.bands[band(e.conviction)], out.all, decisionIsInsight(e) ? out.insights : out.calls].forEach(function(bucket) { bucket[e.verdict]++; });
+    } else if ((e.status || 'open') !== 'closed' && e.reviewDate && e.reviewDate <= today) out.waiting++;
+  });
+  [out.all, out.insights, out.calls, out.bands.low, out.bands.mid, out.bands.high].forEach(function(bucket) {
+    var decided = bucket.held + bucket.broke;
+    bucket.rate = decided ? Math.round(bucket.held / decided * 100) : null;
+  });
+  var decided = out.all.held + out.all.broke, graded = decided + out.all.unclear;
+  var hi = out.bands.high, lo = out.bands.low;
+  if (decided < 5) out.read = 'Grade a few more: after five held-or-broke verdicts this shows whether your confidence lines up with what happens.';
+  else if (hi.held + hi.broke >= 3 && lo.held + lo.broke >= 3) {
+    out.read = hi.rate < lo.rate - 10 ? 'Your confident reads held less often than your tentative ones (' + hi.rate + '% against ' + lo.rate + '%). Worth asking what makes you sure.'
+      : hi.rate > lo.rate + 10 ? 'Your confidence is earning its keep: high-conviction reads held ' + hi.rate + '% of the time, tentative ones ' + lo.rate + '%.'
+      : 'Your confidence does not yet separate the reads that hold from the ones that break (' + hi.rate + '% high, ' + lo.rate + '% low).';
+  } else out.read = 'Held ' + out.all.held + ' of ' + decided + ' decided. Grade reads at both ends of your confidence (1-2 and 4-5) to see whether being sure means being right.';
+  if (graded >= 5 && out.all.unclear / graded > 0.4) out.read += ' Many verdicts are unclear: a sharper "wrong if" makes a read easier to grade.';
+  return out;
+}
+function calledItHtml(s) {
+  var graded = s.all.held + s.all.broke + s.all.unclear;
+  if (!graded && !s.waiting) return '';
+  var row = function(label, b) {
+    var n = b.held + b.broke + b.unclear;
+    return '<div class="called-row"><span>' + label + '</span><span>' + (n ? b.held + ' held · ' + b.broke + ' broke' + (b.unclear ? ' · ' + b.unclear + ' unclear' : '') : '—') + '</span><b>' + (b.rate == null ? '' : b.rate + '%') + '</b></div>';
+  };
+  return '<div class="decision-panel called-it"><div class="decision-panel-title">Called it?<span>by conviction</span></div>' +
+    (graded ? row('Very sure (4–5)', s.bands.high) + row('Fairly sure (3)', s.bands.mid) + row('Tentative (1–2)', s.bands.low) +
+      '<div class="called-split">Insights ' + (s.insights.rate == null ? '—' : s.insights.rate + '%') + ' · Market calls ' + (s.calls.rate == null ? '—' : s.calls.rate + '%') + '</div>' : '') +
+    '<p class="called-read">' + esc(s.read) + '</p>' +
+    (s.waiting ? '<p class="called-waiting">' + s.waiting + (s.waiting === 1 ? ' review is' : ' reviews are') + ' waiting for a verdict below.</p>' : '') + '</div>';
+}
+function decisionVerdictHtml(e) {
+  var cls = {held:'rel-high', broke:'rel-low', unclear:'rel-med'};
+  if (VERDICT_LABELS[e.verdict]) return '<div class="decision-verdict"><b>Called it?</b> ' + decisionPill(VERDICT_LABELS[e.verdict], cls[e.verdict]) + (e.verdictDate ? ' <span class="decision-mini">' + esc(e.verdictDate) + '</span>' : '') + '</div>';
+  var open = (e.status || 'open') !== 'closed', due = open && e.reviewDate && e.reviewDate <= manilaDateKey();
+  if (!due && !(open && decisionIsInsight(e))) return '';
+  var id = esc(e.id), btn = function(verdict, label) { return '<button class="btn-sec" onclick="setDecisionVerdict(\'' + id + '\',\'' + verdict + '\')">' + label + '</button>'; };
+  return '<div class="decision-verdict"><b>Called it?</b> Did the read hold' + (e.invalidator ? ' — wrong if ' + esc(String(e.invalidator).slice(0, 140)) : '') + '?' +
+    '<div class="decision-buttons">' + btn('held','Held') + btn('broke','Broke') + btn('unclear','Unclear') + btn('later','Check in a week') + '</div></div>';
+}
+// One tap from the row. A question opened from an insight is settled by its
+// verdict (closed); a market call keeps its status, since a thesis can hold or
+// break while the position is still open.
+async function setDecisionVerdict(id, verdict) {
+  var entry = decisionEntries.filter(function (d) { return d.id === id; })[0];
+  if (!entry || !window.fbSaveDecision) return;
+  var today = manilaDateKey(), next = Object.assign({}, entry);
+  if (verdict === 'later') next.reviewDate = new Date(Date.parse(today + 'T00:00:00Z') + 7 * 86400000).toISOString().slice(0, 10);
+  else if (VERDICT_LABELS[verdict]) {
+    next.verdict = verdict; next.verdictDate = today;
+    if (decisionIsInsight(entry) && (entry.status || 'open') !== 'closed') { next.status = 'closed'; next.closedDate = today; }
+  } else return;
+  try {
+    await window.fbSaveDecision(next);
+    showToast(verdict === 'later' ? 'Back for review on ' + next.reviewDate : 'Recorded: the read ' + verdict, 'ok');
+    decisionRefPrice = {};
+    renderDecisions();
+  } catch (e) {
+    showToast('Could not save the verdict: ' + (e && e.message ? e.message : 'check your connection'), 'error');
+  }
+}
 function decisionRow(e) {
   var closed = (e.status || 'open') === 'closed';
   var grade = closed ? gradeDecision(e) : null;
   var effOutcome = decisionOutcomeOf(e, grade);
   var actionCls = e.action === 'took' ? 'rel-high' : (e.action === 'skipped' ? 'rel-low' : 'rel-med');
   var outcomeCls = effOutcome === 'win' ? 'rel-high' : (effOutcome === 'loss' ? 'rel-low' : 'rel-med');
-  var linked = e.linkedSignal ? decisionPill(e.linkedSignal.status || 'radar', radarStatusClass(e.linkedSignal.status)) : '';
+  var linked = !e.linkedSignal ? '' : e.linkedSignal.kind === 'insight' ? decisionPill('insight') : decisionPill(e.linkedSignal.status || 'radar', radarStatusClass(e.linkedSignal.status));
   var beat = e.beatBenchmark == null ? '' : decisionPill(e.beatBenchmark ? 'beat benchmark' : 'lagged benchmark', e.beatBenchmark ? 'rel-high' : 'rel-low');
   return '<div class="decision-row' + (closed ? ' closed' : '') + '" data-command-id="decision-' + esc(e.id || e.asset) + '">' +
     '<div class="decision-top"><div><div class="decision-asset">' + esc(e.asset || 'Untitled') + '</div>' +
@@ -6439,10 +6737,10 @@ function decisionRow(e) {
     '<div class="decision-body">' +
       (e.reason ? '<div><b>Reason:</b> ' + esc(e.reason) + '</div>' : '') +
       (e.invalidator ? '<div><b>Change-my-mind:</b> ' + esc(e.invalidator) + '</div>' : '') +
-      (closed ? '<div><b>Review:</b> ' + decisionPill(effOutcome || 'closed', outcomeCls) + ' ' +
+      (closed && !(decisionIsInsight(e) && !e.outcome) ? '<div><b>Review:</b> ' + decisionPill(effOutcome || 'closed', outcomeCls) + ' ' +
         esc(DECISION_MISTAKE_LABELS[e.mistakeType || 'none'] || e.mistakeType || 'none') +
         (e.outcomeNote ? ' - ' + esc(e.outcomeNote) : '') + '</div>' : '') +
-    '</div>' +
+    '</div>' + decisionVerdictHtml(e) +
     (closed ? decisionGradeHtml(e, grade) : decisionLiveHtml(decisionLive(e))) +
     '<div class="decision-foot"><span class="decision-mini">' + esc(decisionLinkedText(e.linkedSignal)) + '</span>' +
       '<div class="decision-buttons">' +
@@ -6537,7 +6835,7 @@ function renderDecisions() {
     var today = manilaDateKey();
     var todaysCalls = decisionEntries.filter(function (e) { return (e.createdDate || '') === today; });
     var needsReview = decisionEntries.filter(function (e) {
-      return (e.status || 'open') !== 'closed' && ((e.reviewDate && e.reviewDate <= today) || (e.action === 'took' && (e.createdDate || '') !== today));
+      return (e.status || 'open') !== 'closed' && ((e.reviewDate && e.reviewDate <= today && !e.verdict) || (e.action === 'took' && (e.createdDate || '') !== today));
     });
     var closed = decisionEntries.filter(function (e) { return (e.status || 'open') === 'closed'; });
     if (sub) sub.textContent = todaysCalls.length + ' today / ' + needsReview.length + ' needs review / ' + stats.closed + ' closed';
@@ -6550,7 +6848,7 @@ function renderDecisions() {
           renderDecisionPanel('Needs Review', needsReview, 'older taken calls still open', 'warn') +
           renderDecisionPanel('Closed / Learned', closed.slice(0, 16), 'latest reviewed decisions', 'learned') +
         '</div>' +
-        '<div>' + decisionVsRadarHtml(stats, decisionRadarJournal) +
+        '<div>' + calledItHtml(calledItSummary(decisionEntries, today)) + decisionVsRadarHtml(stats, decisionRadarJournal) +
           decisionPatternDeckHtml(stats) + '</div>' +
       '</div>';
   });

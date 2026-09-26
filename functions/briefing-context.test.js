@@ -146,6 +146,7 @@ test("an insight decision is an open question, never one of the open calls", () 
   assert.doesNotMatch(questionsPart, /A long dossier summary/, "a question carries its wrong-if, not the pasted evidence");
   assert.equal(out.stats.decisions, 10); assert.equal(out.stats.questions, 2);
   assert.match(buildStandingContext({decisions: [insight]}).block, /OPEN QUESTIONS/, "questions alone still make a block");
+  assert.equal(buildStandingContext({decisions: [Object.assign({}, insight, {verdict: "held"})]}), null, "a settled question is not an open one");
 });
 
 test("survives malformed inputs without throwing", () => {
