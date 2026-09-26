@@ -153,6 +153,19 @@ test("the last mirror before today is followed up, never today's own", () => {
   assert.equal(previousMirror({}, TODAY), null);
 });
 
+test("only a read at least five days old is followed up", () => {
+  const read = (question) => ({question, try_next: {action: "Try " + question}});
+  // Saturday's read, then a Sunday read the next day: nothing old enough yet.
+  assert.equal(previousMirror({"2026-09-26": read("Sat")}, "2026-09-27"), null);
+  assert.equal(previousMirror({"2026-09-22": read("Tue"), "2026-09-26": read("Sat")}, "2026-09-26"), null, "four days is too soon");
+  assert.equal(previousMirror({"2026-09-21": read("Mon"), "2026-09-25": read("Fri")}, "2026-09-26").weekKey, "2026-09-21",
+    "exactly five days counts, and a newer read too recent to grade is passed over");
+  assert.equal(previousMirror({"2026-09-26": read("Sat")}, "2026-10-03").weekKey, "2026-09-26", "a week later it is followed up");
+  const input = buildMirrorInput({entries: week(), decisions: [], mirrors: {"2026-09-25": read("Fri")}, todayKey: TODAY, core});
+  assert.doesNotMatch(input.text, /LAST MIRROR/);
+  assert.equal(input.previous, null);
+});
+
 // ── the prompt ──
 
 test("the prompt holds the lines that keep it honest", () => {

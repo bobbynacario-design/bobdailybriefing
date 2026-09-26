@@ -183,11 +183,14 @@ function decisionBlock(decisions, win) {
   return {lines: logged.slice(0, 8).concat(closed.slice(0, 8)), logged: logged.length, closed: closed.length, open};
 }
 
-// The most recent mirror from before today, so the new one can follow up on
-// the question and the try it left. A regenerated mirror today must not follow
-// up on itself from an hour ago.
+// The most recent mirror at least five days old, so the new one can follow up
+// on the question and the try it left. A regenerated mirror today must not
+// follow up on itself from an hour ago, and a Sunday read must not grade a
+// Saturday read after one day — that always comes back "too early to tell".
+const FOLLOW_UP_MIN_DAYS = 5;
 function previousMirror(mirrors, todayKey) {
-  const keys = Object.keys(mirrors || {}).filter((key) => DAY.test(key) && key < todayKey).sort();
+  const latest = shiftDay(todayKey, -FOLLOW_UP_MIN_DAYS);
+  const keys = Object.keys(mirrors || {}).filter((key) => DAY.test(key) && key <= latest).sort();
   if (!keys.length) return null;
   const last = mirrors[keys[keys.length - 1]] || {};
   const question = text(last.question), tryNext = last.try_next && text(last.try_next.action);

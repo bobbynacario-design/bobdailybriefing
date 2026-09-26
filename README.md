@@ -104,7 +104,8 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   (process only: no prices or sizes) — and asks the model for a strict-JSON read:
   the week in a line, up to three recurring themes with their days, what gave or
   took energy, where what he said and did part ways, where his attention went,
-  how he decided, a follow-up on the previous read’s question and try, one small
+  how he decided, a follow-up on the question and try of the last read at least
+  five days old (never one from the day before), one small
   thing he has not done yet, and one question to sit with
   (`functions/weekly-mirror.js`). The rules are evidence-only (every point cites a
   day; a quiet week is called thin), no diagnosis or flattery, and no trading
