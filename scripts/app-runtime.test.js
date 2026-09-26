@@ -363,6 +363,37 @@ test('the wildcard card shows its lens, link, bridge and story actions, all esca
   assert.equal(context.wildcardHtml(null),'');
 });
 
+// A saved dossier in Evidence reads as a document, including one saved before
+// line breaks were kept: its parts are found again from the snapshot's markers.
+test('a saved dossier reads as a document in Evidence, even an old flattened copy', () => {
+  const {context}=environment(['esc','evidenceDetailLines','evidenceDetailHtml'],{_evidenceOpen:{},EVIDENCE_LABEL:/^(BI angle|Exposed|Would change the read|Wrong if|Built on):\s*/});
+  const flat='Dossier · Strata storm claim turns toxic A claim escalated after rain. - Rain in March. - Mould followed. A$3.98bn — declared events (ICA) 12% — premium rise (APRA) '+
+    'BI angle: Loss of use. Exposed: Strata insurers; Landlords Q1. Who owns the delay? Q2. How are mould <claims> reserved? Would change the read: AFCA ruling next month. '+
+    'Source: Strata claims - insuranceNEWS — https://insurancenews.com.au/strata Source: AFCA — https://afca.org.au/d/1';
+  const item={key:'k1',id:'briefing:2026-09-26:insurance:0:dossier',title:'Dossier: Strata storm claim turns toxic',detail:flat};
+  assert.deepEqual([...context.evidenceDetailLines(item)],['A claim escalated after rain.','- Rain in March.','- Mould followed.','A$3.98bn — declared events (ICA)','12% — premium rise (APRA)',
+    'BI angle: Loss of use.','Exposed: Strata insurers; Landlords','Q1. Who owns the delay?','Q2. How are mould <claims> reserved?','Would change the read: AFCA ruling next month.',
+    'Source: Strata claims - insuranceNEWS — https://insurancenews.com.au/strata','Source: AFCA — https://afca.org.au/d/1']);
+  const multi=Object.assign({},item,{detail:'Dossier · Strata storm claim turns toxic\nA claim escalated.\n- Rain in March.\nA$3.98bn — declared events (ICA)\nQ1. Who owns the delay?\nSource: AFCA — https://afca.org.au/d/1'});
+  assert.deepEqual([...context.evidenceDetailLines(multi)],['A claim escalated.','- Rain in March.','A$3.98bn — declared events (ICA)','Q1. Who owns the delay?','Source: AFCA — https://afca.org.au/d/1'],'a new copy splits on its own lines');
+  const html=context.evidenceDetailHtml(item);
+  assert.ok(html.includes('<div class="evidence-doc-label">How it came about</div><ul><li>Rain in March.</li><li>Mould followed.</li></ul>'));
+  ['The numbers','Questions to ask','Sources'].forEach(label=>assert.ok(html.includes('<div class="evidence-doc-label">'+label+'</div>'),label));
+  assert.ok(html.includes('<li><strong>A$3.98bn</strong> — declared events (ICA)</li>'));
+  assert.ok(html.includes('<p><strong>BI angle:</strong> Loss of use.</p>'));
+  assert.ok(html.includes('<ol><li>Who owns the delay?</li><li>How are mould &lt;claims&gt; reserved?</li></ol>'),'escaped');
+  assert.ok(html.includes('<a href="https://insurancenews.com.au/strata" target="_blank" rel="noopener noreferrer">Strata claims - insuranceNEWS ↗</a>'));
+  assert.ok(!html.includes('Dossier · Strata storm'),'the lead repeats the title, so it goes');
+  assert.ok(html.includes('is-folded') && html.includes('data-evidence-more="k1" aria-expanded="false">Show all'),'long, so it opens folded');
+  context._evidenceOpen.k1=true;
+  assert.ok(context.evidenceDetailHtml(item).includes('is-folded is-open') && context.evidenceDetailHtml(item).includes('Show less'),'stays open across a repaint');
+  const aha={key:'k2',id:'briefing:2026-09-26:aha',title:'Alert counts understate exposure',detail:'Analytical insight · 2026-09-26\nAlert counts understate exposure\nWrong if: ASD data shows otherwise.\nSource: Cyber alerts — insuranceNEWS — https://x.com/a'};
+  const ahaHtml=context.evidenceDetailHtml(aha);
+  assert.ok(ahaHtml.includes('<p><strong>Wrong if:</strong> ASD data shows otherwise.</p>') && ahaHtml.includes('>Cyber alerts — insuranceNEWS ↗</a>'));
+  assert.ok(!ahaHtml.includes('evidence-more'),'short, so no fold');
+  assert.equal(context.evidenceDetailHtml({id:'briefing:2026-09-26:insurance:0',detail:'One <line>.'}),'<div class="evidence-item-detail">One &lt;line&gt;.</div>','an ordinary story is unchanged');
+});
+
 // Go deeper: the dossier renders escaped, leaves out empty parts, links only its
 // checked sources, and gives Evidence a plain-text copy.
 test('the dossier renders escaped, skips empty parts, and copies to Evidence as text', () => {

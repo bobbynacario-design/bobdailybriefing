@@ -1920,7 +1920,10 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .evidence-set-row{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;text-align:left;border:1px solid var(--rim);border-radius:9px;background:var(--bg3);color:inherit;padding:.65rem .7rem;cursor:pointer}.evidence-set-row:hover,.evidence-set-row.active{border-color:rgba(201,168,76,.4);background:var(--gold-dim)}
 .evidence-set-name{font-size:12.5px;font-weight:600;color:var(--txt)}.evidence-set-meta{font-family:var(--mono);font-size:8px;color:var(--txt3);margin-top:.18rem}.evidence-count{font-family:var(--mono);font-size:10px;color:var(--gold)}
 .evidence-detail-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:center;margin-bottom:.75rem}.evidence-rename{border:0;border-bottom:1px solid var(--rim2);background:transparent;color:var(--txt);font-family:var(--serif);font-size:21px;outline:none;padding:.15rem 0}.evidence-rename:focus{border-color:var(--gold)}
-.evidence-item{border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem}.evidence-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem}.evidence-item-title{font-size:13px;font-weight:600;color:var(--txt);line-height:1.4}.evidence-item-detail{font-size:11px;color:var(--txt2);line-height:1.5;margin-top:.25rem}.evidence-item-provenance{font-family:var(--mono);font-size:8px;color:var(--txt3);letter-spacing:.04em;text-transform:uppercase;margin-top:.35rem}
+.evidence-item{border:1px solid var(--rim);border-radius:10px;background:var(--bg3);padding:.7rem}.evidence-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem}.evidence-item-title{font-size:13px;font-weight:600;color:var(--txt);line-height:1.4}.evidence-item-detail{font-size:11px;color:var(--txt2);line-height:1.5;margin-top:.25rem}
+.evidence-item-detail.is-doc{font-size:12px;line-height:1.55;overflow-wrap:anywhere}.evidence-item-detail.is-doc p{margin:.35rem 0}.evidence-item-detail.is-doc ul,.evidence-item-detail.is-doc ol{margin:.35rem 0;padding-left:1.15rem}.evidence-item-detail.is-doc li{margin:.15rem 0}.evidence-item-detail.is-doc strong{color:var(--txt)}.evidence-doc-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin:.65rem 0 .1rem}.evidence-item-detail .evidence-sources a{color:var(--txt2);text-decoration:none;border-bottom:1px solid var(--line)}.evidence-item-detail .evidence-sources a:hover{color:var(--txt)}
+.evidence-item-detail.is-folded{max-height:9.5em;overflow:hidden;position:relative}.evidence-item-detail.is-folded::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3em;background:linear-gradient(to bottom,transparent,var(--bg3))}.evidence-item-detail.is-folded.is-open{max-height:none}.evidence-item-detail.is-folded.is-open::after{display:none}
+.evidence-more{margin-top:.3rem;padding:.1rem 0;border:0;background:none;font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--gold);cursor:pointer}.evidence-more:hover{text-decoration:underline}.evidence-item-provenance{font-family:var(--mono);font-size:8px;color:var(--txt3);letter-spacing:.04em;text-transform:uppercase;margin-top:.35rem}
 .evidence-item-actions{display:flex;gap:.3rem;flex-wrap:wrap;justify-content:flex-end}.evidence-note{width:100%;min-height:58px;resize:vertical;margin-top:.55rem;border:1px solid var(--rim);border-radius:7px;background:var(--bg2);color:var(--txt2);font-family:var(--sans);font-size:11px;line-height:1.45;padding:.5rem .6rem;outline:none}
 .evidence-picker-overlay{position:fixed;inset:0;z-index:8500;background:rgba(3,5,8,.72);display:flex;align-items:center;justify-content:center;padding:1rem}.evidence-picker-overlay[hidden]{display:none}.evidence-picker{width:min(460px,100%);max-height:75vh;overflow-y:auto;border:1px solid var(--rim2);border-radius:13px;background:var(--bg2);padding:1rem;box-shadow:0 25px 80px rgba(0,0,0,.5)}.evidence-picker-target{font-size:12px;color:var(--txt2);line-height:1.45;margin:.35rem 0 .8rem}.evidence-picker-list{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.75rem}.evidence-picker-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;border:1px solid var(--rim);border-radius:8px;background:var(--bg3);color:var(--txt);padding:.55rem .65rem;cursor:pointer;font-size:12px}.evidence-picker-row:hover{border-color:var(--gold)}
 .intel-search-result-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem;align-items:stretch}.intel-search-result-actions{display:flex;flex-direction:column;gap:.2rem}.intel-search-save{flex:1;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--txt3);font-family:var(--mono);font-size:8px;padding:.35rem .5rem;cursor:pointer}.intel-search-save:hover{border-color:rgba(201,168,76,.35);color:var(--gold);background:var(--gold-dim)}
@@ -3820,11 +3823,74 @@ function paintEvidencePage() {
   var setEncoded = evidenceEncode(selected.id);
   var itemsHtml = selected.items.length ? selected.items.map(function (item) {
     var keyEncoded = evidenceEncode(item.key);
-    return '<article class="evidence-item"><div class="evidence-item-head"><div><div class="evidence-item-title">' + esc(item.title) + '</div><div class="evidence-item-detail">' + esc(item.detail || 'Saved source item.') + '</div><div class="evidence-item-provenance">' + esc(item.source) + ' · captured ' + esc(evidenceDate(item.capturedAt)) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions">' + (item.url ? '<a class="command-item-btn" href="' + esc(item.url) + '" target="_blank" rel="noopener noreferrer">Source ↗</a>' : '') + '<button class="command-item-btn" onclick="openEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open source</button><button class="command-item-btn" onclick="removeEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Remove</button></div></div><textarea class="evidence-note" maxlength="500" placeholder="Add your note — why this matters, what to verify, or how it connects…" onblur="updateEvidenceNote(\'' + setEncoded + '\',\'' + keyEncoded + '\',this.value)">' + esc(item.note) + '</textarea></article>';
+    return '<article class="evidence-item"><div class="evidence-item-head"><div><div class="evidence-item-title">' + esc(item.title) + '</div>' + evidenceDetailHtml(item) + '<div class="evidence-item-provenance">' + esc(item.source) + ' · captured ' + esc(evidenceDate(item.capturedAt)) + (item.meta ? ' · ' + esc(item.meta) : '') + '</div></div><div class="evidence-item-actions">' + (item.url ? '<a class="command-item-btn" href="' + esc(item.url) + '" target="_blank" rel="noopener noreferrer">Source ↗</a>' : '') + '<button class="command-item-btn" onclick="openEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Open source</button><button class="command-item-btn" onclick="removeEvidenceItem(\'' + setEncoded + '\',\'' + keyEncoded + '\')">Remove</button></div></div><textarea class="evidence-note" maxlength="500" placeholder="Add your note — why this matters, what to verify, or how it connects…" onblur="updateEvidenceNote(\'' + setEncoded + '\',\'' + keyEncoded + '\',this.value)">' + esc(item.note) + '</textarea></article>';
   }).join('') : '<div class="command-empty">This set is empty. Save stories from a briefing card, results from Search or items from Command Center.</div>';
   detail.innerHTML = '<div class="evidence-detail-head"><input class="evidence-rename" maxlength="80" value="' + esc(selected.name) + '" onchange="renameEvidenceSet(\'' + setEncoded + '\',this.value)" aria-label="Evidence set name"><div class="evidence-item-actions"><button class="tool-chip" onclick="openIntelligenceSearch()">Search to add</button><button class="tool-chip" onclick="deleteEvidenceSet(\'' + setEncoded + '\')">Delete set</button></div></div><div class="evidence-item-list">' + itemsHtml + '</div>';
   renderWorkingQuestion(selected);
 }
+// ── A saved item's detail ──
+// A story's detail is a line or two. A saved aha or dossier is a document: its
+// lines become bullets, figures, numbered questions, labelled parts and source
+// links, and a long one opens folded with "Show all". Items saved before line
+// breaks were kept arrive as one line, so their parts are found again from the
+// markers the snapshots write ("- ", "BI angle:", "Q1.", "Source:" and so on).
+var _evidenceOpen = {};
+var EVIDENCE_LABEL = /^(BI angle|Exposed|Would change the read|Wrong if|Built on):\s*/;
+function evidenceDetailLines(item) {
+  if (!/:(aha|dossier)$/.test(String(item && item.id || ''))) return null;
+  var detail = String(item.detail || ''), lead = 'Dossier · ' + String(item.title || '').replace(/^Dossier:\s*/, '');
+  if (detail.indexOf(lead) === 0) detail = detail.slice(lead.length);
+  if (detail.indexOf('\n') < 0) {
+    // Bullets and figures come before the first labelled part; after it, a
+    // " - " can sit inside a source title, so it is left alone there.
+    var tail = detail.search(/ (?=(?:BI angle|Exposed|Would change the read|Wrong if|Built on|Source):|Q1\. )/);
+    var head = tail < 0 ? detail : detail.slice(0, tail), rest = tail < 0 ? '' : detail.slice(tail);
+    // A figure line ("A$3.98bn — what (source)") follows a full stop or a
+    // closing bracket; the figure itself may hold a decimal point but no ". ".
+    head = head.replace(/ (?=- )/g, '\n').replace(/([.)]) (?=(?:(?!\. )[^—\n]){1,40} — )/g, '$1\n');
+    rest = rest.replace(/ (?=(BI angle|Exposed|Would change the read|Wrong if|Built on|Source):)/g, '\n').replace(/ (?=Q\d\. )/g, '\n');
+    detail = head + rest;
+  }
+  return detail.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
+}
+function evidenceDetailHtml(item) {
+  var rows = evidenceDetailLines(item);
+  if (!rows) return '<div class="evidence-item-detail">' + esc(item.detail || 'Saved source item.') + '</div>';
+  var html = '', list = '';
+  var labels = {ul:/:dossier$/.test(item.id) ? 'How it came about' : '', fig:'The numbers', ol:'Questions to ask', src:'Sources'};
+  var close = function() { if (list) html += list === 'ol' ? '</ol>' : '</ul>'; list = ''; };
+  var start = function(kind) {
+    if (list === kind) return;
+    close(); list = kind;
+    if (labels[kind]) html += '<div class="evidence-doc-label">' + labels[kind] + '</div>';
+    html += kind === 'ol' ? '<ol>' : '<ul' + (kind === 'src' ? ' class="evidence-sources"' : '') + '>';
+  };
+  rows.forEach(function(line) {
+    var m;
+    if (/^- /.test(line)) { start('ul'); html += '<li>' + esc(line.slice(2)) + '</li>'; }
+    else if ((m = /^Q\d+\.\s*(.*)$/.exec(line))) { start('ol'); html += '<li>' + esc(m[1]) + '</li>'; }
+    else if ((m = /^Source:\s*(.*?)(?:\s+—\s+(https?:\/\/\S+))?$/.exec(line))) {
+      start('src'); html += '<li>' + (m[2] ? '<a href="' + esc(m[2]) + '" target="_blank" rel="noopener noreferrer">' + esc(m[1] || m[2]) + ' ↗</a>' : esc(m[1])) + '</li>';
+    }
+    else if ((m = EVIDENCE_LABEL.exec(line))) { close(); html += '<p><strong>' + esc(m[1]) + ':</strong> ' + esc(line.slice(m[0].length)) + '</p>'; }
+    else if ((m = /^([^—]{1,40}) — (.+)$/.exec(line))) { start('fig'); html += '<li><strong>' + esc(m[1]) + '</strong> — ' + esc(m[2]) + '</li>'; }
+    else { close(); html += '<p>' + esc(line) + '</p>'; }
+  });
+  close();
+  if (String(item.detail || '').length < 360) return '<div class="evidence-item-detail is-doc">' + html + '</div>';
+  var open = !!_evidenceOpen[item.key];
+  return '<div class="evidence-item-detail is-doc is-folded' + (open ? ' is-open' : '') + '">' + html + '</div>' +
+    '<button type="button" class="evidence-more" data-evidence-more="' + esc(item.key) + '" aria-expanded="' + open + '">' + (open ? 'Show less' : 'Show all') + '</button>';
+}
+document.addEventListener('click', function(event) {
+  var button = event.target && event.target.closest ? event.target.closest('[data-evidence-more]') : null;
+  if (!button) return;
+  var key = button.getAttribute('data-evidence-more'), open = !_evidenceOpen[key], box = button.previousElementSibling;
+  _evidenceOpen[key] = open;
+  if (box) box.classList.toggle('is-open', open);
+  button.setAttribute('aria-expanded', String(open));
+  button.textContent = open ? 'Show less' : 'Show all';
+});
 function openEvidencePicker(item) {
   if (!item || !item.title) return;
   evidenceSetState.pendingItem = item;
