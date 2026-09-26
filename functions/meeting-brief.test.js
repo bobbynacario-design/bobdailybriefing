@@ -56,6 +56,8 @@ test("each item says whose words it is, and his threads must respect that", () =
   assert.match(prompt, /do not start sentences with labels such as "Reported:" or "Inference:"/);
   assert.match(prompt, /Never refer to him as "Bob" in the brief/);
   assert.match(prompt, /at most 25 words, on what happened/);
+  assert.ok(prompt.includes("- watch: give a date only if a search result or his material states it"), "a due date must come from a source");
+  assert.ok(prompt.includes("never estimate a date or tie it to a meeting you have not found"));
 });
 
 test("cleanBrief keeps known fields and only links the search returned or his material carried", () => {

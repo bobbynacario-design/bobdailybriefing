@@ -109,6 +109,7 @@ function buildMeetingPrompt(topic, material, dateLabel) {
     "- Report, then reason. Say who reported something in the sentence (\"ABC reported…\") and mark inference in plain words (\"which suggests\", \"likely\");",
     "  do not start sentences with labels such as \"Reported:\" or \"Inference:\".",
     "- Write to him as \"you\". Never refer to him as \"Bob\" in the brief.",
+    "- watch: give a date only if a search result or his material states it (a scheduled hearing, a published release date). If none does, say no date is set and what to look for; never estimate a date or tie it to a meeting you have not found.",
     "- sources: at most 6 pages you actually used from the search, each url copied exactly. Never type a url from memory.",
     "- If something is not known yet, say so plainly. Never give investment advice: no buying, selling, holding or sizing anything.",
     "- Plain English, Australian spelling, no emojis, no markdown inside the strings.",

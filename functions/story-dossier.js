@@ -82,6 +82,7 @@ function buildDossierPrompt(story) {
     "- exposed: short phrases of six words or fewer, each starting with a capital (\"Strata insurers\", \"Cold-chain operators in Cebu\"), not sentences.",
     "- client_questions: exactly 3, specific to this story and useful this week, the kind Bob would put to an insured, a broker or an insurer. Not generic (\"what is your exposure?\").",
     "- sources: at most 6 pages you actually used, each url copied exactly from a web search result. Never type a url from memory.",
+    "- would_change: give a date only if a search result states it (a scheduled hearing, a published release date). If none does, say no date is set and what to look for; never estimate a date or tie it to a meeting you have not found.",
     "- If something is not known yet, say so in plain words rather than filling the gap.",
     "- Never give investment advice: no buying, selling, holding or sizing anything.",
     "- Plain English, Australian spelling, no emojis, no markdown inside the strings.",
