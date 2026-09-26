@@ -139,7 +139,7 @@ test('a card citation carries headline, source, the briefing date and a web link
 // story votes the same way the server generator does, and nothing when there are none.
 test('the copied AI prompt carries the reader feedback from synced votes', () => {
   let entries={};
-  const {context}=environment(['getBriefingFeedback','getGeminiPrompt'],{getTodayBriefingDateLabel:()=> 'Friday, September 25, 2026',
+  const {context}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt'],{getTodayBriefingDateLabel:()=> 'Friday, September 25, 2026',
     DailyBoostCore:{dateKey:()=> '2026-09-25'},dailyBoostFeedbackEntries:()=>entries});
   vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),context);
   assert.doesNotMatch(context.getGeminiPrompt(),/READER FEEDBACK/);
@@ -253,4 +253,23 @@ test('every section colour resolves to numbers for the PDF', () => {
   assert.deepEqual([...context.pdfRgb('var(--amber)')],[127,79,0]);
   assert.deepEqual([...context.pdfRgb('#fff')],[255,255,255]);
   assert.deepEqual([...context.pdfRgb('var(--unknown)')],[201,168,76],'an unresolved colour falls back to gold, never NaN');
+});
+// The copied prompt gets the last briefings from the loaded history, so an
+// outside AI is held to the same no-rerun rule as the generator.
+test('the copied AI prompt carries the last briefings, and the verification line reports reruns', () => {
+  const {context,element}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt','renderGroundingLine'],{getTodayBriefingDateLabel:()=> 'Saturday, September 26, 2026',
+    DailyBoostCore:{dateKey:d=>d?new Date(d).toISOString().slice(0,10):'2026-09-26'},dailyBoostFeedbackEntries:()=>({}),
+    _briefingHistory:[{key:'t',saved:Date.parse('2026-09-26T02:00:00Z'),data:{date:'Today',sections:{global:[{headline:'Today story'}]}}},
+      {key:'f',saved:Date.parse('2026-09-25T02:00:00Z'),data:{date:'Friday, September 25, 2026',watch:'NGCP alerts',sections:{interruptions:[{headline:'Visayas grid on yellow alert anew'}]}}}]});
+  vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),context);
+  const prompt=context.getGeminiPrompt();
+  assert.match(prompt,/RECENT BRIEFINGS — already given to Bob, newest first:\nFriday, September 25, 2026:\n- \[interruptions\] Visayas grid on yellow alert anew\n  Watch: NGCP alerts/);
+  assert.doesNotMatch(prompt,/Today story/,'today’s own briefing is not old news');
+  context._briefingHistory=undefined;
+  assert.doesNotMatch(context.getGeminiPrompt(),/RECENT BRIEFINGS/,'no history loaded, no block');
+  const line={parentNode:{}};
+  context.renderGroundingLine({grounding:{mode:'ungrounded',reason:'x'},context:{recent:{briefings:3,headlines:30,updates:2,reruns:0}}},line);
+  assert.match(element('grounding-line').textContent,/Nothing re-run from your last 3 briefings \(2 updates\)\./);
+  context.renderGroundingLine({grounding:{mode:'ungrounded',reason:'x'},context:{recent:{briefings:3,headlines:30,updates:1,reruns:2}}},line);
+  assert.match(element('grounding-line').textContent,/2 stories look like a recent one; 1 marked Update\./);
 });

@@ -14,7 +14,7 @@ const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
-const {buildBriefingPrompt, cleanAha} = require("./briefing-prompt-core");
+const {buildBriefingPrompt, cleanAha, buildRecentBriefings, countReruns} = require("./briefing-prompt-core");
 const {
   parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
 } = require("./market-facts");
@@ -248,11 +248,14 @@ async function loadStandingContext(db, uid) {
     return {
       standing: buildStandingContext({decisions, radar, markets}),
       watch: priorWatch(archive, phtDateKey()),
+      // The last three briefings' headlines and watch lines, so a story only
+      // comes back as an "Update:" that says what changed (briefing-prompt-core).
+      recent: buildRecentBriefings(archive, phtDateKey()),
       reason: null,
     };
   } catch (error) {
     logger.warn("standing context unavailable", {message: error.message});
-    return {standing: null, watch: null, reason: "error"};
+    return {standing: null, watch: null, recent: null, reason: "error"};
   }
 }
 
@@ -496,6 +499,10 @@ exports.generateBobDailyBriefing = onCall(
     // The aha is checked last, after grounding and link checks may have dropped
     // stories, so its link chips only name stories the briefing still has.
     briefing.aha = cleanAha(briefing.aha, briefing.sections);
+    // Whether the no-rerun rule held: declared updates, and stories that look
+    // like a recent headline without saying so. Counted after the checks above.
+    const recent = context && context.recent;
+    briefing.context.recent = recent ? Object.assign({}, recent.stats, countReruns(briefing, recent)) : null;
 
     // Record token usage to the shared LLM cost ledger (no-throw).
     await recordUsage(db, "briefing", model, extractUsage(json), phtDateKey());

@@ -2694,6 +2694,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="help-card">
       <div class="help-h">📰 Reading the briefing</div>
       <ul>
+        <li><b>No reruns</b> — each briefing is shown your last three, so a story only comes back as <b>Update:</b> with what changed. The line under the briefing title says whether anything was re-run.</li>
         <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b>⏰ To check</b> on the day you choose.</li>
         <li><span class="help-pill" style="color:var(--blue)">New</span> — not in the previous briefing. <span class="help-pill">Day 3</span> — its third briefing in a row (hover for the dates). Matched by link or wording, since running stories are reworded daily.</li>
         <li><b>The progress line</b> counts what you have read, with <b>Next unread ↓</b> taking you to the most relevant story left. A story counts as read when you open its source, note it, or tap <b>Mark read</b>.</li>
@@ -8039,6 +8040,13 @@ function renderGroundingLine(data, anchor) {
   // Whether Bob's own votes shaped this briefing.
   var f = data && data.context && data.context.feedback;
   if (f && (f.up || f.down)) el.textContent += ' Tuned by your feedback: ' + f.up + ' more, ' + f.down + ' less.';
+  // Whether the no-rerun rule held (briefing-prompt-core countReruns).
+  var recent = data && data.context && data.context.recent;
+  if (recent && recent.briefings) {
+    el.textContent += recent.reruns
+      ? ' ' + recent.reruns + (recent.reruns === 1 ? ' story looks' : ' stories look') + ' like a recent one' + (recent.updates ? '; ' + recent.updates + ' marked Update.' : '.')
+      : ' Nothing re-run from your last ' + (recent.briefings === 1 ? 'briefing' : recent.briefings + ' briefings') + (recent.updates ? ' (' + recent.updates + (recent.updates === 1 ? ' update' : ' updates') + ').' : '.');
+  }
   // Story links in the other sections, checked against the pages the web search returned.
   var l = data && data.links;
   if (l && typeof l.verified === 'number') {
@@ -10244,10 +10252,19 @@ function getBriefingFeedback() {
   if (!core.buildReaderFeedback || !window.DailyBoostCore) return null;
   return core.buildReaderFeedback(entries, window.DailyBoostCore.dateKey());
 }
+// The last three briefings' headlines, from the history already loaded here, so
+// a prompt run in an outside AI gets the same no-rerun rule as the generator.
+function getRecentBriefings() {
+  var core = window.BriefingPromptCore, history = window._briefingHistory;
+  if (!core.buildRecentBriefings || !window.DailyBoostCore || !Array.isArray(history)) return null;
+  var rows = history.map(function(entry) { return {dateKey: entry && entry.saved ? window.DailyBoostCore.dateKey(new Date(entry.saved)) : '', briefing: entry && entry.data}; });
+  return core.buildRecentBriefings(rows, window.DailyBoostCore.dateKey());
+}
 function getGeminiPrompt() {
   return window.BriefingPromptCore.buildBriefingPrompt({
     dateLabel: getTodayBriefingDateLabel(),
-    feedback: getBriefingFeedback()
+    feedback: getBriefingFeedback(),
+    context: {recent: getRecentBriefings()}
   });
 }
 
@@ -10264,7 +10281,8 @@ function togglePrompt() {
 
 function copyPrompt() {
   var text = getGeminiPrompt();
-  var message = text.indexOf('READER FEEDBACK —') >= 0 ? 'AI prompt copied, with your recent story votes' : 'AI prompt copied to clipboard';
+  var extras = [text.indexOf('READER FEEDBACK —') >= 0 ? 'your recent story votes' : '', text.indexOf('RECENT BRIEFINGS — already') >= 0 ? 'your last briefings, so nothing is re-run' : ''].filter(Boolean);
+  var message = extras.length ? 'AI prompt copied, with ' + extras.join(' and ') : 'AI prompt copied to clipboard';
   navigator.clipboard.writeText(text).then(function() {
     showToast(message,'ok');
   }).catch(function() {

@@ -305,6 +305,14 @@ actually runs. The generated briefing is shaped by four things beyond it:
   in `briefing.links`. Insurance stays closed to the snapshot on a grounded day.
   Kept links open from the card's source chip ("Source matched" for the news
   feed, "Link verified" for a search result).
+- **No reruns** — the prompt carries the headlines and watch lines of the last
+  three briefings (`buildRecentBriefings`, same-day skipped). A story on the same
+  event comes back only if something material changed, as “Update: …” opening
+  with what changed; otherwise it is left out, and the watch line may not repeat
+  the last two unless that event is decided or due. `countReruns` records
+  declared updates and silent repeats on `briefing.context.recent`, and the
+  verification line reports them (“Nothing re-run from your last 3 briefings”).
+  The copied AI prompt builds the same block from the loaded history.
 - **Today’s aha** — every briefing asks for one non-obvious read (`aha`): a
   connection between two stories from different sections, a second-order effect
   further downstream than any source goes, or a contrarian case that the
