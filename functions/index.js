@@ -14,7 +14,8 @@ const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
-const {buildBriefingPrompt, cleanAha, buildRecentBriefings, countReruns} = require("./briefing-prompt-core");
+const {buildBriefingPrompt, cleanAha, buildRecentBriefings, countReruns, storyDossierKey} = require("./briefing-prompt-core");
+const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
 const {
   parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
 } = require("./market-facts");
@@ -44,12 +45,13 @@ function protectGeneration(feature, handler) {
         throw new HttpsError("invalid-argument", "Enter a research topic between 8 and 4,000 characters.");
       }
       if (feature === "briefing" && String(data.date || "").length > 100) throw new HttpsError("invalid-argument", "Invalid date label.");
-      const daily = feature === "briefing" || feature === "mirror";
+      if (feature === "dossier" && !cleanStory(data.story)) throw new HttpsError("invalid-argument", "Choose a briefing story to go deeper on.");
+      const daily = feature === "briefing" || feature === "mirror" || feature === "dossier";
       return await guardedGeneration({db:getFirestore(), uid:request.auth.uid, feature,
         period:daily ? phtDateKey() : phtDateKey().slice(0,7),
-        cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : DEEP_RESEARCH_CAP,
+        cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : feature === "dossier" ? DOSSIER_DAILY_CAP : DEEP_RESEARCH_CAP,
         requestId:data.requestId,
-        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : {topic:data.topic.trim(),premium:!!data.premium}
+        input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : feature === "dossier" ? {story:storyDossierKey(cleanStory(data.story))} : {topic:data.topic.trim(),premium:!!data.premium}
       }, () => handler(request));
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -65,6 +67,8 @@ const DEEP_MODEL_PREMIUM = process.env.DEEP_MODEL_PREMIUM || "o3-deep-research";
 const DEEP_RESEARCH_CAP = parseInt(process.env.DEEP_RESEARCH_CAP || "20", 10);
 // Weekly mirror reads a day: enough to regenerate after writing more, not a loop.
 const MIRROR_DAILY_CAP = parseInt(process.env.MIRROR_DAILY_CAP || "3", 10);
+// Go deeper dossiers a day: plenty for the stories worth taking further.
+const DOSSIER_DAILY_CAP = parseInt(process.env.DOSSIER_DAILY_CAP || "10", 10);
 const REPORTS_COLL = "reports-bob";
 const REPORTS_META = "reports-bob-meta";
 const WEBHOOK_EVENTS_COLL = "openai-webhook-events";
@@ -606,6 +610,79 @@ exports.generateWeeklyMirror = onCall(
       uid, kind: "weekly-mirror", mirrors: keepRecent(sources.mirrors, todayKey, mirror), updatedAt: mirror.generatedAt,
     });
     return {mirror};
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Go deeper — a working dossier on one briefing story (functions/story-dossier.js)
+// ─────────────────────────────────────────────────────────────
+// Kept per account (latest forty) on briefings-bob/dossiers-<uid>, keyed by the
+// shared storyDossierKey, so a story already read returns without a second call.
+exports.generateStoryDossier = onCall(
+  {
+    region: "asia-southeast1",
+    timeoutSeconds: 240,
+    memory: "512MiB",
+    secrets: [OPENAI_API_KEY],
+  },
+  protectGeneration("dossier", async (request) => {
+    const db = getFirestore();
+    const uid = request.auth.uid;
+    const story = cleanStory(request.data.story);
+    const key = storyDossierKey(story);
+    const ref = db.collection(BRIEFINGS_COLL).doc("dossiers-" + uid);
+    const stored = await ref.get().then((snap) => (snap.exists ? snap.data().items || {} : {})).catch(() => ({}));
+    if (stored[key]) return {key, dossier: stored[key], saved: true};
+
+    const model = DEFAULT_MODEL;
+    let response;
+    try {
+      response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
+        body: JSON.stringify({
+          model,
+          input: [{role: "system", content: DOSSIER_SYSTEM}, {role: "user", content: buildDossierPrompt(story)}],
+          tools: [{type: "web_search", search_context_size: "medium"}],
+          tool_choice: "auto",
+          // Every page the search returned, so the dossier's sources can be checked.
+          include: ["web_search_call.action.sources"],
+        }),
+        signal: AbortSignal.timeout(220000),
+      });
+    } catch (err) {
+      logger.error("OpenAI network error (dossier)", err);
+      throw new HttpsError("unavailable", "OpenAI request failed before receiving a response.");
+    }
+    const responseText = await response.text();
+    let json;
+    try {
+      json = JSON.parse(responseText);
+    } catch (err) {
+      json = {error: {message: responseText || "Non-JSON OpenAI response"}};
+    }
+    if (!response.ok) {
+      const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
+      logger.error("OpenAI API error (dossier)", {status: response.status, message: msg});
+      throw new HttpsError("internal", msg);
+    }
+    await recordUsage(db, "story-dossier", model, extractUsage(json), phtDateKey());
+
+    let dossier;
+    try {
+      dossier = cleanDossier(parseBriefing(extractText(json)), searchUrls(json));
+    } catch (err) {
+      dossier = null;
+    }
+    if (!dossier) {
+      logger.error("dossier JSON unusable");
+      throw new HttpsError("internal", "The dossier came back unusable. Try again in a minute.");
+    }
+    dossier.story = {headline: story.headline, source: story.source, url: story.url, section: story.section, date: story.date};
+    dossier.model = model;
+    dossier.generatedAt = new Date().toISOString();
+    await ref.set({uid, kind: "dossiers", items: keepDossiers(stored, key, dossier), updatedAt: dossier.generatedAt});
+    return {key, dossier};
   })
 );
 

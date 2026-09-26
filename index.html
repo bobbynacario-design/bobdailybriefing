@@ -251,6 +251,25 @@ window.fbGenerateWeeklyMirror = async function() {
   var res = await generate({ requestId: crypto.randomUUID() });
   return res.data;
 };
+// Go deeper (functions/story-dossier.js): a working dossier on one story, and
+// the dossiers already built for this account (latest forty, keyed by story).
+window.fbGenerateDossier = async function(story) {
+  if (!getUid()) throw new Error('Sign in first');
+  var generate = httpsCallable(functions, 'generateStoryDossier', { timeout: 250000 });
+  var res = await generate({ story: story, requestId: crypto.randomUUID() });
+  return res.data;
+};
+window.fbLoadDossiers = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'dossiers-' + uid));
+    return snap.exists() ? (snap.data().items || {}) : {};
+  } catch (e) {
+    // None built yet: the shared rule reads a missing doc as denied.
+    if (e && e.code === 'permission-denied') return {};
+    throw e;
+  }
+};
 window.fbLoadWeeklyMirror = async function(uid) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
   try {
@@ -1483,6 +1502,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 @media(max-width:760px){.miro-brief-grid{grid-template-columns:1fr}.miro-signal{grid-template-columns:minmax(0,1fr) 72px}.miro-delta{grid-column:2}.miro-settings-body{display:block}.miro-controls{margin:.8rem 0 0}.miro-change{grid-template-columns:58px minmax(0,1fr)}}
 
 /* ── WATCH CARD ── */
+.dossier{margin:-.6rem 0 1.4rem;padding:1rem 1.2rem;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--txt2);font-size:13.5px;line-height:1.6}.dossier-status{font-family:var(--mono);font-size:11px;color:var(--txt3)}.dossier-status.is-error{color:var(--amber)}.dossier-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.4rem .8rem;margin-bottom:.5rem}.dossier-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber)}.dossier-meta{font-family:var(--mono);font-size:10px;color:var(--txt3)}.dossier-summary{font-family:var(--serif);font-size:17px;line-height:1.45;color:var(--txt);margin:.2rem 0 .7rem}.dossier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 1.2rem}.dossier-part{margin:.6rem 0}.dossier-part h4{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);font-weight:500;margin:0 0 .3rem}.dossier-part p{margin:0}.dossier-part ul,.dossier-part ol{margin:0;padding-left:1.15rem}.dossier-part li{margin:.2rem 0}.dossier-part strong{color:var(--txt)}.dossier-src{color:var(--txt3);font-size:12px}.dossier-chips{display:flex;flex-wrap:wrap;gap:.35rem}.dossier-chips span{font-family:var(--mono);font-size:11px;padding:.15rem .5rem;border:1px solid var(--line);border-radius:999px;color:var(--txt2)}.dossier-sources a{color:var(--txt2);text-decoration:none;border-bottom:1px solid var(--line)}.dossier-sources a:hover{color:var(--txt)}.dossier-note{font-size:11px;color:var(--txt3);margin:.7rem 0 .5rem}.dossier-actions{display:flex;flex-wrap:wrap;gap:.45rem}
 .aha-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.aha-card{background:var(--gold-dim);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:1.1rem 1.35rem}.aha-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.45rem}.aha-kind{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.aha-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.aha-title{font-family:var(--serif);font-size:21px;line-height:1.3;color:var(--txt);margin:.15rem 0 .5rem}.aha-insight{font-size:14px;line-height:1.65;color:var(--txt2)}.aha-chain{margin:.7rem 0 .2rem;padding-left:1.25rem;font-size:13px;line-height:1.6;color:var(--txt2)}.aha-chain li{margin:.2rem 0}.aha-links{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.75rem}.aha-links span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}.aha-links .card-act{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.aha-wrong{margin-top:.7rem;font-size:12px;line-height:1.6;color:var(--txt2)}.aha-wrong strong{color:var(--txt)}
 .card.is-kb,.aha-card.is-kb{outline:2px solid var(--gold);outline-offset:3px}.card[tabindex="-1"]:focus,.aha-card[tabindex="-1"]:focus{outline:none}.card.is-kb[tabindex="-1"]:focus,.aha-card.is-kb[tabindex="-1"]:focus{outline:2px solid var(--gold)}
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
@@ -2750,6 +2770,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> Reading the briefing</div>
       <ul>
+        <li><b>Go deeper</b> — on any story, a short dossier opens under the card: what happened, how it came about, the key numbers, the BI and claims angle, who is exposed, three questions to ask a client, what would change the read, and its sources (only pages the search really returned). It is kept, so opening it again costs nothing; <b>Save to Evidence</b> files it with its sources. Up to ten new ones a day.</li>
         <li><b>No reruns</b> — each briefing is shown your last three, so a story only comes back as <b>Update:</b> with what changed. The line under the briefing title says whether anything was re-run.</li>
         <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> on the day you choose.</li>
         <li><span class="help-pill" style="color:var(--blue)">New</span> — not in the previous briefing. <span class="help-pill">Day 3</span> — its third briefing in a row (hover for the dates). Matched by link or wording, since running stories are reworded daily.</li>
@@ -8440,6 +8461,100 @@ var WATCH_STATUS = {
 // A line icon from the sprite at the top of the page, for markup built in code.
 function uiIcon(name) { return '<svg class="ico" aria-hidden="true"><use href="#i-' + name + '"/></svg>'; }
 
+// ── Go deeper: a working dossier on one story (functions/story-dossier.js) ──
+// Opens under the card: a saved dossier shows at once; otherwise the server
+// builds one from a web search (usually under a minute) and keeps it, so the
+// same story never costs twice. Everything shown is escaped.
+var _dossiers = {}, _dossiersFor = null;
+async function savedDossiers() {
+  var uid = window._firebaseUid || null;
+  if (!uid || typeof window.fbLoadDossiers !== 'function') return {};
+  if (_dossiersFor !== uid) {
+    _dossiersFor = uid; _dossiers = {};
+    try { _dossiers = (await window.fbLoadDossiers(uid)) || {}; } catch (e) { _dossiers = {}; }
+  }
+  return _dossiers;
+}
+function dossierStory(st, sec) {
+  return {headline:st.headline || '', source:st.source || '', url:/^https?:\/\//i.test(String(st.url || '')) ? String(st.url) : '', body:st.body || '',
+    relevance:st.relevance || '', section:sec || '', date:(_currentData && _currentData.date) || ''};
+}
+function dossierError(error) {
+  var code = String(error && error.code || '').replace(/^functions\//, '');
+  if (code === 'resource-exhausted') return 'That is ten dossiers today. Go deeper will be ready again tomorrow.';
+  if (code === 'unauthenticated' || code === 'permission-denied') return 'Sign in with your own account to go deeper on a story.';
+  if (code === 'deadline-exceeded' || code === 'unavailable') return 'The search took too long. Try again in a minute.';
+  if (code === 'not-found' || (code === 'internal' && String(error && error.message || '').toLowerCase() === 'internal')) {
+    return 'Could not reach Go deeper. If it was just added it needs a functions deploy; otherwise try again in a minute.';
+  }
+  return (error && error.message) || 'Could not build the dossier. Try again in a minute.';
+}
+function dossierHtml(d) {
+  if (!d || !d.summary) return '';
+  var list = function(items, fn) { return '<ul>' + items.map(function(item) { return '<li>' + fn(item) + '</li>'; }).join('') + '</ul>'; };
+  var part = function(title, body) { return body ? '<section class="dossier-part"><h4>' + title + '</h4>' + body + '</section>' : ''; };
+  var at = d.generatedAt ? new Date(d.generatedAt) : null;
+  var when = at && !isNaN(at) ? at.toLocaleDateString('en-AU', {day:'numeric', month:'short'}) + ', ' + at.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+  var html = '<div class="dossier-head"><span class="dossier-kicker">' + uiIcon('research') + ' Going deeper</span><span class="dossier-meta">Built from a web search' + (d.model ? ' · ' + esc(d.model) : '') + (when ? ' · ' + esc(when) : '') + '</span></div>';
+  html += '<p class="dossier-summary">' + esc(d.summary) + '</p>';
+  var grid = part('How it came about', (d.background || []).length ? list(d.background, esc) : '') +
+    part('The numbers', (d.numbers || []).length ? list(d.numbers, function(n) { return '<strong>' + esc(n.figure) + '</strong>' + (n.what ? ' — ' + esc(n.what) : '') + (n.source ? ' <span class="dossier-src">(' + esc(n.source) + ')</span>' : ''); }) : '');
+  if (grid) html += '<div class="dossier-grid">' + grid + '</div>';
+  html += part('The BI and claims angle', d.bi_angle ? '<p>' + esc(d.bi_angle) + '</p>' : '');
+  html += part('Who is exposed', (d.exposed || []).length ? '<div class="dossier-chips">' + d.exposed.map(function(x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '');
+  html += part('Questions to ask a client', (d.client_questions || []).length ? '<ol>' + d.client_questions.map(function(q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ol>' : '');
+  html += part('What would change this read', d.would_change ? '<p>' + esc(d.would_change) + '</p>' : '');
+  html += part('Sources', (d.sources || []).length ? '<ul class="dossier-sources">' + d.sources.map(function(src) { return '<li><a href="' + esc(src.url) + '" target="_blank" rel="noopener noreferrer">' + esc(src.title || src.url) + ' ↗</a></li>'; }).join('') + '</ul>' : '');
+  html += '<p class="dossier-note">An analytical read built from what the search found, not advice.</p>';
+  return html + '<div class="dossier-actions"><button type="button" class="card-act" data-dossier-act="save">＋ Save to Evidence</button><button type="button" class="card-act" data-dossier-act="close">Close</button></div>';
+}
+// Plain text for Evidence (and anywhere else it is pasted).
+function dossierSnapshot(d) {
+  var lines = ['Dossier · ' + ((d.story && d.story.headline) || ''), d.summary];
+  (d.background || []).forEach(function(item) { lines.push('- ' + item); });
+  (d.numbers || []).forEach(function(n) { lines.push(n.figure + (n.what ? ' — ' + n.what : '') + (n.source ? ' (' + n.source + ')' : '')); });
+  if (d.bi_angle) lines.push('BI angle: ' + d.bi_angle);
+  if ((d.exposed || []).length) lines.push('Exposed: ' + d.exposed.join('; '));
+  (d.client_questions || []).forEach(function(q, i) { lines.push('Q' + (i + 1) + '. ' + q); });
+  if (d.would_change) lines.push('Would change the read: ' + d.would_change);
+  (d.sources || []).forEach(function(src) { lines.push('Source: ' + (src.title ? src.title + ' — ' : '') + src.url); });
+  return lines.join('\n').slice(0, 4000);
+}
+function renderDossier(panel, d, sec, idx) {
+  panel.innerHTML = dossierHtml(d);
+  panel.querySelector('[data-dossier-act="close"]').addEventListener('click', function() {
+    var button = panel.previousElementSibling && panel.previousElementSibling.querySelector('[data-card-act="deeper"]');
+    panel.remove(); if (button) { button.setAttribute('aria-expanded', 'false'); button.focus(); }
+  });
+  panel.querySelector('[data-dossier-act="save"]').addEventListener('click', function() {
+    var key = currentBriefingKey(), story = d.story || {};
+    openEvidencePicker({id:'briefing:' + key + ':' + sec + ':' + idx + ':dossier', source:'Briefing', title:'Dossier: ' + (story.headline || ''),
+      detail:dossierSnapshot(d), meta:[_currentData && _currentData.date, 'Go deeper', story.source].filter(Boolean).join(' · '), page:'today', ref:key, url:story.url || ''});
+  });
+}
+async function toggleDossier(button, st, sec, idx) {
+  var card = button.closest('.card'), next = card && card.nextElementSibling;
+  if (next && next.classList && next.classList.contains('dossier')) { next.remove(); button.setAttribute('aria-expanded', 'false'); return; }
+  var panel = document.createElement('div');
+  panel.className = 'dossier'; panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'Going deeper: ' + st.headline); panel.setAttribute('aria-live', 'polite');
+  card.insertAdjacentElement('afterend', panel); button.setAttribute('aria-expanded', 'true');
+  var story = dossierStory(st, sec), key = window.BriefingPromptCore.storyDossierKey(story);
+  panel.innerHTML = '<div class="dossier-status">Checking for a saved dossier…</div>';
+  var saved = await savedDossiers();
+  if (!panel.isConnected) return;
+  if (saved[key]) { renderDossier(panel, saved[key], sec, idx); return; }
+  if (!window._firebaseUid || typeof window.fbGenerateDossier !== 'function') { panel.innerHTML = '<div class="dossier-status">Sign in to go deeper on a story.</div>'; return; }
+  panel.innerHTML = '<div class="dossier-status">' + uiIcon('research') + ' Reading around this story… usually under a minute. It searches the web, so allow up to three.</div>';
+  try {
+    var result = await window.fbGenerateDossier(story);
+    if (!result || !result.dossier) throw new Error('The dossier came back empty. Try again in a minute.');
+    _dossiers[result.key || key] = result.dossier;
+    if (panel.isConnected) renderDossier(panel, result.dossier, sec, idx);
+  } catch (error) {
+    if (panel.isConnected) panel.innerHTML = '<div class="dossier-status is-error">' + esc(dossierError(error)) + '</div>';
+  }
+}
+
 // ── Today's aha (asked for and cleaned by lib/briefing-prompt-core.js) ──
 // One non-obvious read built on today's stories, at the top of the briefing:
 // the claim, why it is not the obvious read, the steps, the stories it rests on
@@ -8582,7 +8697,7 @@ function renderBriefing(options) {
       secHTML += '<div class="card-top"><div class="card-hl">'+esc(st.headline)+'</div><span class="rel-badge '+bc+'">'+score.toUpperCase()+'</span></div>';
       secHTML += '<div class="card-body">'+esc(st.body)+'</div>';
       secHTML += srcHTML(st);
-      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button><button type="button" class="card-act" data-card-act="cite" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Copy headline, source, date and link">⧉ Copy citation</button><button type="button" class="card-act" data-card-act="read" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Count this story as read">Mark read</button><button type="button" class="card-act" data-card-act="evidence" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Save this story, with its link, to an evidence set">＋ Evidence</button>'+(String(st.watch_metric || '').trim() ? '<button type="button" class="card-act" data-card-act="remind" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Bring this watch metric back on Today when it is due">' + uiIcon('clock') + ' Remind me</button>' : '')+'</div>';
+      secHTML += '<div class="card-actions"><button type="button" class="card-act" data-card-act="note" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Open today’s reflection on this story">✎ Note this</button><button type="button" class="card-act" data-card-act="cite" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Copy headline, source, date and link">⧉ Copy citation</button><button type="button" class="card-act" data-card-act="read" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Count this story as read">Mark read</button><button type="button" class="card-act" data-card-act="evidence" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" title="Save this story, with its link, to an evidence set">＋ Evidence</button><button type="button" class="card-act" data-card-act="deeper" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-expanded="false" title="A short dossier: background, the numbers, the BI angle, who is exposed and questions for a client">'+uiIcon('research')+' Go deeper</button>'+(String(st.watch_metric || '').trim() ? '<button type="button" class="card-act" data-card-act="remind" data-sec="'+esc(id)+'" data-idx="'+storyIndex+'" aria-pressed="false" title="Bring this watch metric back on Today when it is due">' + uiIcon('clock') + ' Remind me</button>' : '')+'</div>';
       secHTML += '</div>';
       // Column 2: Bob's relevance note.
       secHTML += '<div class="card-aside">';
@@ -8937,6 +9052,8 @@ document.addEventListener('click', function(event) {
     var key = currentBriefingKey(), meta = SEC_META[button.dataset.sec];
     openEvidencePicker({id:'briefing:' + key + ':' + button.dataset.sec + ':' + button.dataset.idx, source:'Briefing', title:st.headline,
       detail:st.relevance || st.body || '', meta:[_currentData.date, meta && meta.label, st.source].filter(Boolean).join(' · '), page:'today', ref:key, url:url});
+  } else if (button.dataset.cardAct === 'deeper') {
+    toggleDossier(button, st, button.dataset.sec, button.dataset.idx);
   } else if (button.dataset.cardAct === 'cite') {
     copyCardText(briefingCitation(st, _currentData.date), button);
   }

@@ -327,6 +327,15 @@ actually runs. The generated briefing is shaped by four things beyond it:
   opened), **M** marks it read or unread, **U** jumps to the next unread story.
   Like the Today keys, they do nothing while typing, with a modifier held, or
   behind an overlay; a held O never opens tab after tab.
+- **Go deeper** — every briefing card has **Go deeper**: `generateStoryDossier`
+  builds a short working dossier from a web search (summary, how it came about,
+  up to five sourced figures, the BI and claims angle, who is exposed, exactly
+  three questions for a client, what would change the read, and sources kept only
+  when the search returned them; `functions/story-dossier.js`). It opens under the
+  card, is kept per account (`briefings-bob/dossiers-<uid>`, latest forty, keyed by
+  `storyDossierKey`) so reopening costs nothing, and **Save to Evidence** files it
+  with its sources. Owner-only, ten new ones a day (`DOSSIER_DAILY_CAP`), metered
+  as `story-dossier`.
 - **No reruns** — the prompt carries the headlines and watch lines of the last
   three briefings (`buildRecentBriefings`, same-day skipped). A story on the same
   event comes back only if something material changed, as “Update: …” opening

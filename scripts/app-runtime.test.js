@@ -329,3 +329,26 @@ test('display settings: Auto follows the device, Light and Dark stick, text size
   context.stepTextSize(1); assert.equal(store.has('briefing_text_size'),false,'100% stores nothing');
   store.set('briefing_text_size','3'); context.applyDisplay(); assert.equal(vars['--reading-zoom'],'1','an odd stored value falls back to 100%');
 });
+// Go deeper: the dossier renders escaped, leaves out empty parts, links only its
+// checked sources, and gives Evidence a plain-text copy.
+test('the dossier renders escaped, skips empty parts, and copies to Evidence as text', () => {
+  const {context}=environment(['esc','uiIcon','dossierHtml','dossierSnapshot','dossierError']);
+  const d={summary:'A claim <escalated>.',background:['Rain in March.'],numbers:[{figure:'A$3.98bn',what:'declared events',source:'ICA'}],bi_angle:'Loss of use.',exposed:['Strata insurers'],
+    client_questions:['How are mould claims reserved?','Who owns the delay?','What about accommodation?'],would_change:'AFCA ruling next month.',sources:[{title:'insuranceNEWS',url:'https://insurancenews.com.au/strata'}],
+    story:{headline:'Strata storm claim turns toxic',source:'insuranceNEWS'},model:'gpt-5.5',generatedAt:'2026-09-26T02:00:00Z'};
+  const html=context.dossierHtml(d);
+  assert.ok(html.includes('A claim &lt;escalated&gt;.'),'escaped');
+  ['How it came about','The numbers','The BI and claims angle','Who is exposed','Questions to ask a client','What would change this read','Sources'].forEach(t=>assert.ok(html.includes(t),t));
+  assert.ok(html.includes('<strong>A$3.98bn</strong> — declared events'));
+  assert.ok(html.includes('href="https://insurancenews.com.au/strata" target="_blank" rel="noopener noreferrer"'));
+  assert.ok(html.includes('data-dossier-act="save"') && html.includes('data-dossier-act="close"'));
+  const bare=context.dossierHtml({summary:'Only this.'});
+  ['How it came about','The numbers','Who is exposed','Sources'].forEach(t=>assert.ok(!bare.includes(t),'no empty '+t));
+  assert.equal(context.dossierHtml(null),'');
+  const text=context.dossierSnapshot(d);
+  assert.ok(text.startsWith('Dossier · Strata storm claim turns toxic'));
+  assert.ok(text.includes('Q3. What about accommodation?') && text.includes('Source: insuranceNEWS — https://insurancenews.com.au/strata'));
+  assert.ok(text.includes('A claim <escalated>.') && !text.includes('&lt;'),'plain text, not escaped HTML');
+  assert.ok(context.dossierError({code:'functions/resource-exhausted'}).includes('ten dossiers today'));
+  assert.ok(context.dossierError({code:'functions/internal',message:'internal'}).includes('needs a functions deploy'));
+});
