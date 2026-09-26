@@ -79,19 +79,33 @@ function notificationCopy(items, test, extra) {
   items = Array.isArray(items) ? items : [];
   const reminders = Array.isArray(extra.reminders) ? extra.reminders : [];
   const sparkLine = extra.spark ? "\nToday’s spark: " + extra.spark : "";
+  const weeklyLine = extra.weekly ? "\nIt’s Sunday: read your week back." : "";
   const toCheck = reminders.length ? reminders[0].metric + (reminders.length > 1 ? " · +" + (reminders.length - 1) + " more" : "") : "";
   if (extra.remindersOnly && toCheck) {
-    return {title: test ? "Test · To check today" : "⏰ To check today", body: toCheck + sparkLine};
+    return {title: test ? "Test · To check today" : "⏰ To check today", body: toCheck + weeklyLine + sparkLine};
+  }
+  if (extra.weeklyOnly) {
+    return {title: test ? "Test · Your week" : "Your week is ready to read back", body: "A few minutes on Today: what kept coming up, and one thing to carry forward." + sparkLine};
   }
   const lead = items[0];
   const title = test ? "Test · Morning 5" : "Your Morning 5 is ready";
   const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
-  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + reminderLine + sparkLine};
+  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + reminderLine + weeklyLine + sparkLine};
   const remaining = Math.max(0, items.length - 1);
   return {
     title,
-    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + reminderLine + sparkLine,
+    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + reminderLine + weeklyLine + sparkLine,
   };
+}
+
+// Sunday's weekly read (functions/weekly-mirror.js) is worth one nudge that day,
+// until it has been read: it opens by itself on Today, but only for someone who
+// opens Today. mirrors: the stored reads keyed by PHT day.
+function weeklyReadDue(dayKey, mirrors, lastNudge) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return false;
+  if (new Date(dayKey + "T00:00:00Z").getUTCDay() !== 0) return false;
+  if (mirrors && typeof mirrors === "object" && mirrors[dayKey]) return false;
+  return lastNudge !== dayKey;
 }
 
 // Daily Boost watch-metric reminders due for the push: not checked, due today
@@ -140,6 +154,7 @@ module.exports = {
   isMaterialChange,
   notificationCopy,
   todaysSparkTitle,
+  weeklyReadDue,
   dueReminders,
   reminderIds,
   hasNewReminders,

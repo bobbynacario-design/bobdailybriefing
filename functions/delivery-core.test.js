@@ -62,6 +62,31 @@ test("the notification carries today's spark as a second line when there is one"
   assert.equal(notificationCopy(items, false, "").body, "Radar: NVDA confirmed");
 });
 
+test("Sunday's weekly read is worth one nudge that day, until it has been read", () => {
+  const {weeklyReadDue} = require("./delivery-core");
+  assert.equal(weeklyReadDue("2026-09-27", {}, ""), true, "a Sunday with no read yet");
+  assert.equal(weeklyReadDue("2026-09-26", {}, ""), false, "not a Sunday");
+  assert.equal(weeklyReadDue("2026-09-27", {"2026-09-27": {question: "q"}}, ""), false, "already read today");
+  assert.equal(weeklyReadDue("2026-09-27", {"2026-09-20": {question: "q"}}, ""), true, "last week's read does not count");
+  assert.equal(weeklyReadDue("2026-09-27", {}, "2026-09-27"), false, "only one nudge that day");
+  assert.equal(weeklyReadDue("junk", {}, ""), false);
+});
+
+test("the weekly read rides along with a push, or is the push on a quiet Sunday", () => {
+  const items = [{source: "Radar", title: "NVDA confirmed"}];
+  assert.equal(notificationCopy(items, false, {spark: "Look back on your week", weekly: true}).body,
+    "Radar: NVDA confirmed\nIt’s Sunday: read your week back.\nToday’s spark: Look back on your week");
+  assert.deepEqual(notificationCopy([], false, {spark: "Look back on your week", weekly: true, weeklyOnly: true}), {
+    title: "Your week is ready to read back",
+    body: "A few minutes on Today: what kept coming up, and one thing to carry forward.\nToday’s spark: Look back on your week",
+  });
+  assert.equal(notificationCopy([], true, {weekly: true, weeklyOnly: true}).title, "Test · Your week");
+  const due = [{metric: "Check whether: margins recover", due: "2026-09-27"}];
+  assert.equal(notificationCopy([], false, {reminders: due, remindersOnly: true, weekly: true}).body,
+    "Check whether: margins recover\nIt’s Sunday: read your week back.", "a reminders-only push mentions it too");
+  assert.equal(notificationCopy(items, false, {spark: ""}).body, "Radar: NVDA confirmed", "no line on other days");
+});
+
 test("today's spark is the one on the day's entry, else the app's own default", () => {
   const core = DailyBoostCore;
   assert.equal(todaysSparkTitle(core, {"2026-09-25": {spark: 11, note: "", updatedAt: 1}}, "2026-09-25"), "Turn a headline into a question");

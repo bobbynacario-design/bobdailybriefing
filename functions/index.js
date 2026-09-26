@@ -21,7 +21,7 @@ const {
 const {authorize, guardedGeneration} = require("./generation-guard");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
-  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, reminderIds, hasNewReminders,
+  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, reminderIds, hasNewReminders, weeklyReadDue,
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
@@ -1013,16 +1013,26 @@ function withAudit(state, entry) {
 }
 
 // Today's spark and due watch-metric reminders, from one read of the account's
-// synced Daily Boost doc. Best effort: a failed read leaves both off the push.
-async function dailyBoostFor(db, uid, now) {
+// synced Daily Boost doc, and on Sundays whether the weekly read is still to do
+// (one more read, that day only). Best effort: a failed read leaves it off the push.
+async function dailyBoostFor(db, uid, now, lastWeeklyNudge) {
   const dayKey = phtDateKey(now);
+  let weekly = false;
+  if (weeklyReadDue(dayKey, {}, lastWeeklyNudge)) {
+    try {
+      const reads = await db.collection(BRIEFINGS_COLL).doc("weekly-mirror-" + uid).get();
+      weekly = weeklyReadDue(dayKey, reads.exists ? reads.data().mirrors : {}, lastWeeklyNudge);
+    } catch (error) {
+      logger.warn("Weekly read lookup failed", {message: error.message});
+    }
+  }
   try {
     const doc = await db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get();
     const entries = doc.exists ? doc.data().entries : {};
-    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey), reminders: dueReminders(DailyBoostCore, entries, dayKey)};
+    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey), reminders: dueReminders(DailyBoostCore, entries, dayKey), weekly};
   } catch (error) {
     logger.warn("Daily Boost lookup failed", {message: error.message});
-    return {spark: "", reminders: []};
+    return {spark: "", reminders: [], weekly};
   }
 }
 
@@ -1046,23 +1056,26 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const command = buildCommandCenter(inputs, now);
   const items = selectDeliverable(command.morningFive, config);
   const signature = digestSignature(items);
-  const boost = await dailyBoostFor(db, prefs.uid, now);
+  const boost = await dailyBoostFor(db, prefs.uid, now, state.lastWeeklyNudge);
   const changed = isMaterialChange(state.lastSignature, items);
   // A reminder coming due is worth a push even on a morning the Morning 5 has
   // not changed; one already announced is not.
   const remindersNew = hasNewReminders(boost.reminders, state.lastReminderIds);
-  if (!options.test && !changed && !remindersNew) return {status: items.length ? "unchanged" : "below-threshold"};
-  const remindersOnly = !options.test && !changed;
+  // So is Sunday's weekly read, once that day, until it has been read.
+  if (!options.test && !changed && !remindersNew && !boost.weekly) return {status: items.length ? "unchanged" : "below-threshold"};
+  const quiet = !options.test && !changed;
+  const remindersOnly = quiet && remindersNew;
+  const weeklyOnly = quiet && !remindersNew && boost.weekly;
 
-  const copy = notificationCopy(items, !!options.test, {spark: boost.spark, reminders: boost.reminders, remindersOnly});
+  const copy = notificationCopy(items, !!options.test, {spark: boost.spark, reminders: boost.reminders, remindersOnly, weekly: boost.weekly, weeklyOnly});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
-      type: options.test ? "morning-digest-test" : remindersOnly ? "watch-reminders" : "morning-digest",
+      type: options.test ? "morning-digest-test" : remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : "morning-digest",
       title: copy.title,
       body: copy.body,
-      url: remindersOnly ? TODAY_URL : COMMAND_URL,
-      signature: remindersOnly ? "watch-reminders" : (signature || "test-empty"),
+      url: remindersOnly || weeklyOnly ? TODAY_URL : COMMAND_URL,
+      signature: remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : (signature || "test-empty"),
     },
     webpush: {headers: {Urgency: "high"}},
   });
@@ -1075,15 +1088,16 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   await updateDeliveryState(db, prefDoc.ref, (next) => {
     next.tokens = validTokens;
     if (!options.test && response.successCount) {
-      if (!remindersOnly) next.lastSignature = signature;
+      if (!remindersOnly && !weeklyOnly) next.lastSignature = signature;
       next.lastReminderIds = reminderIds(boost.reminders);
+      if (boost.weekly) next.lastWeeklyNudge = phtDateKey(now);
       next.lastSentAt = new Date(now).toISOString();
     }
     return withAudit(next, auditEntry(type, {
       itemCount: items.length,
       successCount: response.successCount,
       failureCount: response.failureCount,
-      lead: remindersOnly ? "To check: " + boost.reminders[0].metric : (items[0] ? items[0].source + ": " + items[0].title : "No items above threshold"),
+      lead: remindersOnly ? "To check: " + boost.reminders[0].metric : weeklyOnly ? "Weekly read" : (items[0] ? items[0].source + ": " + items[0].title : "No items above threshold"),
       reminders: boost.reminders.length,
     }));
   });

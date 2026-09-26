@@ -162,7 +162,11 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   labels single-day themes “What stood out”). An empty week makes no model call. Up to three reads a day
   (`MIRROR_DAILY_CAP`); the latest twelve are kept on
   `briefings-bob/weekly-mirror-<uid>` and shown by `lib/weekly-mirror.js`. Cost is
-  metered as `weekly-mirror` in the Help tab. **Write my answer** under the question saves a reply on
+  metered as `weekly-mirror` in the Help tab. On Sundays, until that day’s read exists, the Morning 5 push
+  carries “It’s Sunday: read your week back.” (or, on a quiet morning, is a single
+  “Your week is ready to read back” push, once: `weeklyReadDue`,
+  `deliveryState.lastWeeklyNudge`), and the collapsed spark strip offers **Read my
+  week back**. **Write my answer** under the question saves a reply on
   that read (`mirrors.<day>.answer`, with the question it answered) by a merge
   write; the next read’s follow-up quotes it, and a regenerated read keeps it.
 
