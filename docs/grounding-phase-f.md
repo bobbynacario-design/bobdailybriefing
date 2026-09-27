@@ -222,6 +222,20 @@ already changed in 2136a5a, but only in `planImport` and `nextImportState`:
   (fact-verified, plausible). The live guide matches the capture, and CPI is
   unchanged.
 
+## Live, 2026-09-27
+
+- Dispatch run 36309820281 on ec7cade published **release 000003**, manifest
+  `25332d0661dad7aba996544d62c1fc650ab006e6709ea0d9084fe3a515702520`. It adds
+  `fwo_ma000020_cw2_ordinary@2026-07-01#r1` = 30.39, and CPI is unchanged.
+- `fetchRelease` against the live URL returned ok. The award is source-linked
+  and fact-verified, plausible under BI-Assessor's bounds, and eligible.
+- A plan shaped like BI-Assessor's (the award mapped, derived records refused)
+  imports exactly the award and skips CPI as "series not allowlisted".
+- GitHub's runner reached the FWO pay guide: `grounding-ops` shows the check
+  with no error, and the watch reads published, so the live guide matches the
+  capture.
+- The Firestore mirror is at sequence 3.
+
 ## Change to BI-Assessor's contract table
 
 Its mapping must change before its smoke test:
