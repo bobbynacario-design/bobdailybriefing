@@ -415,8 +415,11 @@ network adapter is `grounding/fetch-release.js`. Release 000001 (empty, as
 intended until E and F) is on `grounding-data`; it passes `fetchRelease`, the
 Firestore mirror matches its digest, and a second run cut no release.
 The Morning 5 push Functions (`deliverMorningFive`, `testBriefingDelivery`)
-were redeployed the same day. **Phase D is not yet complete.** It still needs
-the two consumer follow-ups, each in its own repo session. See
+were redeployed the same day. Both consumer follow-ups pass their gates
+(BI-Assessor f3f75c7, RiskM8 a21c388 to eed9e4c) on unmerged branches, so
+**Phase D completes when those are merged.** Before Phase E publishes any
+`plausibilityOverride`, the validator must stop rejecting a whole release for an
+override on a series the consumer has no bounds for. See
 [the runbook and consumer handovers](grounding-phase-d.md).
 
 1. `grounding/` producer module (built like `news/`):

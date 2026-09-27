@@ -3,7 +3,8 @@
 Updated 2026-09-27. This records the implementation in Daybook; the contract is
 [grounding-roadmap.md](grounding-roadmap.md). No real pilot values are included.
 Daybook's side is live and checked (see "Live result" below), Functions
-included; Phase D waits on the two consumer follow-ups.
+included. Both consumer follow-ups pass their gates on their own branches;
+Phase D is complete once those branches are merged (see "Consumer results").
 
 ## Implemented in Daybook
 
@@ -98,8 +99,35 @@ now; if it is ever deleted, the next grounding run writes it again.
 selection includes Numbers the way the page does. `firebase functions:list`
 shows both on a new source hash (f15333f1) that no other function shares.
 
-**Still to do for Phase D:**
-- The two consumer follow-ups below, each in its own repo session. Copy
+### Consumer results, 2026-09-27
+
+Both follow-ups ran in their own repo sessions. I re-ran each grounding check
+myself; the `check:deploy-candidate` results are as those sessions reported them.
+Both copies of `fetch-release.js` (a01354b5…) and `validate.js` (b639edfe…)
+match Daybook byte for byte, and each copy record now points at 28a808d.
+
+| Repo | Branch and commits | Gate | Live smoke against 000001 |
+|---|---|---|---|
+| BI-Assessor | `claude/practical-einstein-c27f25`, f3f75c7: admin task `admin_claimbench_daybook_import` behind a **Check Daybook release** button on the ClaimBench card; proposals, receipt and import state saved in one transaction | `check:claimbench-daybook` 134 passed; `check:deploy-candidate` passed | 0 proposed, 0 skipped, nothing written |
+| RiskM8 | `claude/peaceful-gould-3a6169`, a21c388, baf6aab, eed9e4c: `--latest-url` option on `import-daybook-grounding.js`, the same importer as the fixture path | `check:daybook-grounding` 47 passed; `check:deploy-candidate` passed | 0 candidates, `provenance.js` unchanged |
+
+**To close Phase D:** merge each branch into its repo's main and push. BI-Assessor's
+button goes live only after its `deploy:safe`; nobody has clicked it in a browser
+yet. RiskM8's change is a script outside the Firebase bundle, so it needs no
+deploy.
+
+**Fix Daybook's validator before Phase E publishes any override.** Both consumers
+found the same problem. If a fact carries a `plausibilityOverride` for a series a
+consumer has no bounds for, `validate.js` rejects the whole release
+("plausibilityOverride present but no bounds are known for this series").
+`facts.json` keeps history, so every later release would be rejected too, and
+that consumer's imports would stop for good: RiskM8's CPI, for example, would
+block BI-Assessor. Over the network, `fetchRelease` also retries a release that
+cannot pass validation three times, 30 seconds apart. A validator change moves its
+SHA-256, so both consumers re-copy it; bundle the fix with Phase E's contract work.
+
+**Copy details, for the record:**
+- Consumers copied
   `grounding/fetch-release.js` from Daybook commit **28a808d**; its SHA-256 is
   `a01354b546c4e83e9c2bbe09c84feb119f465f15baab6a78431c8a4a216a4c8b` (pinned to
   LF). `validate.js` is unchanged since 105d3c8
