@@ -142,6 +142,15 @@ notice. NSW is current.
   release 000004, with the four fee records new (all fact-verified and
   plausible) and every watch published.
 
+### Live, 2026-09-27
+
+- Dispatch run 36324283364 on 756d26c published **release 000004**, manifest
+  `f51f1a439d02d19985ae19ea5c7c0981e2ad5102919b86c328a2b06258efae64`. It holds six
+  facts: CPI, the award and the four fees. All are fact-verified and plausible
+  under Daybook's bounds, and every watch reads published.
+- GitHub's runner read the NSW page and the gazette search: `grounding-ops`
+  records both checks with no error. The mirror is at sequence 4.
+
 ### For BI-Assessor (next, in its own session)
 
 | Daybook series | ClaimBench record | Action |
