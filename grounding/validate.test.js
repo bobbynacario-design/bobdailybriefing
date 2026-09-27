@@ -98,6 +98,22 @@ test('a token must stand alone in the quote', () => {
   assert.deepEqual(V.numbersInQuote('Aug-2026,139.2,3.1'), ['2026', '139.2', '3.1'], 'a data row is several numbers');
   assert.deepEqual(V.numbersInQuote('fell -0.3%, then 1,250'), ['-0.3', '1250']);
 });
+test('a hyphen joining a range or a label is not a minus sign', () => {
+  // Found by the BI-Assessor Phase C review: an approved ClaimBench quote reads "45%-65%".
+  assert.deepEqual(V.numbersInQuote('GP 45%-65% of turnover'), ['45', '65']);
+  assert.equal(V.tokenStandsAlone('GP 45%-65% of turnover', '65'), true);
+  assert.equal(V.tokenStandsAlone('GP 45%-65% of turnover', '-65'), false, 'no negative hiding in a range');
+  assert.deepEqual(V.numbersInQuote('the 2020-21 year'), ['2020', '21']);
+  assert.equal(V.tokenStandsAlone('Aug-2026,139.2', '2026'), true);
+  assert.deepEqual(V.numbersInQuote('rate,-0.3,1.2'), ['-0.3', '1.2'], 'after a separator it is a sign');
+  assert.deepEqual(V.numbersInQuote('change (-0.3) this month'), ['-0.3']);
+});
+test('the typographic minus sign counts as a minus', () => {
+  assert.equal(V.normaliseNumberText('−0.30'), '-0.3');
+  assert.equal(V.tokenStandsAlone('fell −0.3% in the month', '−0.3'), true);
+  assert.equal(V.tokenStandsAlone('fell −0.3% in the month', '0.3'), false, 'the token dropped its minus sign');
+  assert.deepEqual(V.numbersInQuote('fell −0.3% in the month'), ['-0.3']);
+});
 
 // ── the sample releases ──────────────────────────────────────────────────────
 test('release 1 is valid, and the trust attributes are computed, not declared', () => {
@@ -146,6 +162,24 @@ test('a token that means a different value fails', () => {
 test('a range needs a binding for each end', () => {
   const r = factsWith((recs) => { recs.find((x) => x.recordId === STORAGE).valueBindings.pop(); });
   assert.match(errorsOf(r), /range.max has no value binding/);
+});
+test('a range written with a hyphen binds both ends', () => {
+  const r = factsWith((recs) => {
+    const s = recs.find((x) => x.recordId === STORAGE);
+    s.range = { min: 45, max: 65 };
+    s.valueBindings = [{ field: 'range.min', token: '45', evidenceId: 'notice' }, { field: 'range.max', token: '65', evidenceId: 'notice' }];
+    s.evidence[0].quote = 'FIXTURE: gross profit of 45%-65% of turnover.';
+  });
+  assert.equal(byId(r, STORAGE).checks.factVerified, true, errorsOf(r));
+});
+test('a negative value binds to a typographic minus in the quote', () => {
+  const r = factsWith((recs) => {
+    const cpi = recs.find((x) => x.recordId === CPI);
+    cpi.value = -0.3; cpi.valueBindings = [{ field: 'value', token: '−0.3', evidenceId: 'release' }];
+    cpi.evidence[0].quote = 'FIXTURE: prices fell −0.3% in the 12 months to August 2026.';
+    cpi.evidence[1].quote = 'Aug-2026,139.2,−0.3';
+  });
+  assert.deepEqual(byId(r, CPI).checks, { sourceLinked: true, factVerified: true, crossChecked: true, plausible: true }, errorsOf(r));
 });
 test('a cross-check that disagrees is a conflict', () => {
   const r = factsWith((recs) => { recs.find((x) => x.recordId === CPI).evidence[1].quote = 'Aug-2026,139.2,3.4'; });

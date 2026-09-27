@@ -110,11 +110,20 @@ function checkEnum(value, list, where, errors) {
 }
 
 // ── numbers ──────────────────────────────────────────────────────────────────
+// A minus is the ASCII hyphen or the typographic minus sign (U+2212), which
+// statistical releases often print.
+const isMinus = (ch) => ch === '-' || ch === '−';
+// Where a minus can act as a sign: at the start, after a space, or after an
+// opening bracket or separator ("(-0.3)", "rate: -0.3", "Aug,-0.3"). Anywhere
+// else it joins two things: "45%-65%" is a range, "Aug-2026" and "2020-21" are
+// labels, so the number after it is not negative.
+const signContext = (ch) => ch === '' || /\s/.test(ch) || '([{=:;,/'.indexOf(ch) >= 0;
+
 // "1,250.50" -> "1250.5", "3.60" -> "3.6", "-0.30" -> "-0.3". Null for anything
 // that is not a plain decimal number, so "1.25k" or "5m" never normalise.
 function normaliseNumberText(text) {
   if (typeof text !== 'string') return null;
-  const m = /^(-)?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?$/.exec(text);
+  const m = /^([-−])?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?$/.exec(text);
   if (!m) return null;
   const whole = m[2].replace(/,/g, '').replace(/^0+(?=\d)/, '');
   const frac = (m[3] || '').replace(/0+$/, '');
@@ -135,11 +144,14 @@ function standsAloneAt(quote, at, token) {
   const beforePrev = at > 1 ? quote[at - 2] : '';
   const end = at + token.length;
   const after = quote[end] || '';
-  const groups = token.replace(/^-/, '').split('.')[0].split(',');
+  const signed = isMinus(token[0]);
+  const groups = token.replace(/^[-−]/, '').split('.')[0].split(',');
   if (/[0-9A-Za-z]/.test(before)) return false;
-  // A minus sign that belongs to the number ("-0.3") but not to the token.
-  // A hyphen between words or digits ("Aug-2026", "2020-21") is a separator.
-  if (before === '-' && token[0] !== '-' && !/[0-9A-Za-z]/.test(beforePrev)) return false;
+  // A signed token's minus must really be a sign: "-65" is not in "45%-65%".
+  if (signed && !signContext(before)) return false;
+  // A minus sign that belongs to the number ("-0.3") but not to the token. A
+  // hyphen joining a range or a label ("45%-65%", "Aug-2026") is not a sign.
+  if (!signed && isMinus(before) && signContext(beforePrev)) return false;
   if (before === '.' && /[0-9]/.test(beforePrev)) return false; // the tail of a decimal ("5" in "1.5")
   if (before === ',' && /[0-9]/.test(beforePrev) && /^\d{3}$/.test(groups[0])) {
     // The tail of a digit group ("250" in "1,250"), but only when the digits
@@ -172,7 +184,7 @@ function numbersInQuote(quote) {
   while ((m = re.exec(quote))) {
     let token = m[0], at = m.index;
     const before = at > 0 ? quote[at - 1] : '', beforePrev = at > 1 ? quote[at - 2] : '';
-    if (before === '-' && !/[0-9A-Za-z]/.test(beforePrev)) { token = '-' + token; at -= 1; }
+    if (isMinus(before) && signContext(beforePrev)) { token = before + token; at -= 1; }
     if (standsAloneAt(quote, at, token)) {
       const n = normaliseNumberText(token);
       if (n !== null) out.push(n);
