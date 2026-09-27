@@ -1,0 +1,502 @@
+{
+  "schema": "daybook-grounding-facts/1",
+  "generatedAt": "2026-10-29T04:15:00Z",
+  "records": [
+    {
+      "supersedes": null,
+      "value": 3.1,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "3.1",
+          "evidenceId": "release"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "seriesId": "fixture_cpi_annual_change",
+      "observationKey": "2026-08",
+      "revision": 1,
+      "lifecycle": "superseded",
+      "kind": "index",
+      "title": "Fixture CPI, annual change",
+      "unitCode": "pct",
+      "basisCode": "annual_change",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "All groups, weighted average of the eight capitals",
+        "period": {
+          "from": "2025-09-01",
+          "to": "2026-08-31"
+        }
+      },
+      "observationDate": "2026-08-31",
+      "publishedAt": "2026-09-30",
+      "evidence": [
+        {
+          "evidenceId": "release",
+          "role": "release",
+          "url": "https://example.org/fixture/cpi-release",
+          "publisher": "Fixture Statistics Bureau (not a real source)",
+          "title": "Fixture page cpi-release",
+          "quote": "FIXTURE: The monthly CPI indicator rose 3.1% in the 12 months to August 2026.",
+          "locator": {
+            "paragraph": 1
+          },
+          "asOf": "2026-09-30",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "addecc3daac9cb88889947c23d256014e0c5bf064e6e8bc92c494a2e5cb9bdbb",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        },
+        {
+          "evidenceId": "table",
+          "role": "cross_check",
+          "url": "https://example.org/fixture/cpi-table.csv",
+          "publisher": "Fixture Statistics Bureau (not a real source)",
+          "title": "Fixture page cpi-table.csv",
+          "quote": "Aug-2026,139.2,3.1",
+          "locator": {
+            "table": "fixture-cpi",
+            "row": "Aug-2026"
+          },
+          "asOf": "2026-09-30",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "d519a0428f9ab05e04f294219067dd895f1aca2ad9523659224190f1254ed94d",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        }
+      ],
+      "captureMethod": "api",
+      "recordId": "fixture_cpi_annual_change@2026-08#r1"
+    },
+    {
+      "supersedes": "fixture_cpi_annual_change@2026-08#r1",
+      "value": 2.9,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "2.9",
+          "evidenceId": "release"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "seriesId": "fixture_cpi_annual_change",
+      "observationKey": "2026-09",
+      "revision": 1,
+      "lifecycle": "current",
+      "kind": "index",
+      "title": "Fixture CPI, annual change",
+      "unitCode": "pct",
+      "basisCode": "annual_change",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "All groups, weighted average of the eight capitals",
+        "period": {
+          "from": "2025-10-01",
+          "to": "2026-09-30"
+        }
+      },
+      "observationDate": "2026-09-30",
+      "publishedAt": "2026-10-28",
+      "evidence": [
+        {
+          "evidenceId": "release",
+          "role": "release",
+          "url": "https://example.org/fixture/cpi-release-sep",
+          "publisher": "Fixture Statistics Bureau (not a real source)",
+          "title": "Fixture page cpi-release-sep",
+          "quote": "FIXTURE: The monthly CPI indicator rose 2.9% in the 12 months to September 2026.",
+          "locator": {
+            "paragraph": 1
+          },
+          "asOf": "2026-10-28",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "5673ff51db02fb9619c42d3deafb89da74db7f16d7176133813b85a9a0f5cc95",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        },
+        {
+          "evidenceId": "table",
+          "role": "cross_check",
+          "url": "https://example.org/fixture/cpi-table-sep.csv",
+          "publisher": "Fixture Statistics Bureau (not a real source)",
+          "title": "Fixture page cpi-table-sep.csv",
+          "quote": "Sep-2026,139.6,2.9",
+          "locator": {
+            "table": "fixture-cpi",
+            "row": "Sep-2026"
+          },
+          "asOf": "2026-10-28",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "00f639ab837a6c5ee28dc5dc04dc8749cce5157a5b2082612674a976292a1f02",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        }
+      ],
+      "captureMethod": "api",
+      "recordId": "fixture_cpi_annual_change@2026-09#r1"
+    },
+    {
+      "supersedes": null,
+      "value": 139.2,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "139.2",
+          "evidenceId": "table"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "seriesId": "fixture_cpi_index_level",
+      "observationKey": "2026-08",
+      "revision": 1,
+      "lifecycle": "current",
+      "kind": "index",
+      "title": "Fixture CPI, index level",
+      "unitCode": "index_points",
+      "basisCode": "index_level",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": null,
+        "period": {
+          "from": "2026-08-01",
+          "to": "2026-08-31"
+        }
+      },
+      "observationDate": "2026-08-31",
+      "publishedAt": "2026-09-30",
+      "evidence": [
+        {
+          "evidenceId": "table",
+          "role": "table",
+          "url": "https://example.org/fixture/cpi-table.csv",
+          "publisher": "Fixture Statistics Bureau (not a real source)",
+          "title": "Fixture page cpi-table.csv",
+          "quote": "Aug-2026,139.2,3.1",
+          "locator": {
+            "table": "fixture-cpi",
+            "row": "Aug-2026"
+          },
+          "asOf": "2026-09-30",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "d519a0428f9ab05e04f294219067dd895f1aca2ad9523659224190f1254ed94d",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        }
+      ],
+      "captureMethod": "csv",
+      "recordId": "fixture_cpi_index_level@2026-08#r1"
+    },
+    {
+      "supersedes": null,
+      "value": 135,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "135.0",
+          "evidenceId": "table"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "seriesId": "fixture_cpi_index_level",
+      "observationKey": "2025-08",
+      "revision": 1,
+      "lifecycle": "current",
+      "kind": "index",
+      "title": "Fixture CPI, index level",
+      "unitCode": "index_points",
+      "basisCode": "index_level",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": null,
+        "period": {
+          "from": "2025-08-01",
+          "to": "2025-08-31"
+        }
+      },
+      "observationDate": "2025-08-31",
+      "publishedAt": "2025-09-24",
+      "evidence": [
+        {
+          "evidenceId": "table",
+          "role": "table",
+          "url": "https://example.org/fixture/cpi-table.csv",
+          "publisher": "Fixture Statistics Bureau (not a real source)",
+          "title": "Fixture page cpi-table.csv",
+          "quote": "Aug-2025,135.0,2.9",
+          "locator": {
+            "table": "fixture-cpi",
+            "row": "Aug-2025"
+          },
+          "asOf": "2026-09-30",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "d519a0428f9ab05e04f294219067dd895f1aca2ad9523659224190f1254ed94d",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        }
+      ],
+      "captureMethod": "csv",
+      "recordId": "fixture_cpi_index_level@2025-08#r1"
+    },
+    {
+      "supersedes": null,
+      "value": 3.1,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": {
+        "formula": "pct_change",
+        "inputs": [
+          "fixture_cpi_index_level@2026-08#r1",
+          "fixture_cpi_index_level@2025-08#r1"
+        ],
+        "rounding": "dp:1"
+      },
+      "plausibilityOverride": null,
+      "seriesId": "fixture_cpi_annual_change_derived",
+      "observationKey": "2026-08",
+      "revision": 1,
+      "lifecycle": "current",
+      "kind": "index",
+      "title": "Fixture CPI, annual change derived from index levels",
+      "unitCode": "pct",
+      "basisCode": "annual_change",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": null,
+        "period": {
+          "from": "2025-08-01",
+          "to": "2026-08-31"
+        }
+      },
+      "observationDate": "2026-08-31",
+      "publishedAt": "2026-09-30",
+      "evidence": [],
+      "captureMethod": "csv",
+      "recordId": "fixture_cpi_annual_change_derived@2026-08#r1"
+    },
+    {
+      "supersedes": null,
+      "value": 31.15,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "Minimum hourly rate for full-time and part-time employees, ordinary hours.",
+          "evidenceId": "guide"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "31.15",
+          "evidenceId": "guide"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "seriesId": "fixture_award_cw1_ordinary",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "superseded",
+      "kind": "award_wage",
+      "title": "Fixture award, CW1 ordinary hourly rate",
+      "unitCode": "aud_per_hour",
+      "basisCode": "award_min_wage",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "CW1, ordinary hours",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-06-20",
+      "evidence": [
+        {
+          "evidenceId": "guide",
+          "role": "release",
+          "url": "https://example.org/fixture/pay-guide.pdf",
+          "publisher": "Fixture Wage Office (not a real source)",
+          "title": "Fixture page pay-guide.pdf",
+          "quote": "FIXTURE pay guide, Level CW1: ordinary hourly rate $31.15",
+          "locator": {
+            "page": 7,
+            "table": "Adult employees"
+          },
+          "asOf": "2026-06-20",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "11098b111d606f4254f4014d1fde210e7cb09b7ebef88f9c67aac6e6a793da62",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        }
+      ],
+      "captureMethod": "manual",
+      "recordId": "fixture_award_cw1_ordinary@2026-07-01#r1"
+    },
+    {
+      "supersedes": "fixture_award_cw1_ordinary@2026-07-01#r1",
+      "value": 31.25,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "Minimum hourly rate for full-time and part-time employees, ordinary hours.",
+          "evidenceId": "guide"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "31.25",
+          "evidenceId": "guide"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "seriesId": "fixture_award_cw1_ordinary",
+      "observationKey": "2026-07-01",
+      "revision": 2,
+      "lifecycle": "corrected",
+      "kind": "award_wage",
+      "title": "Fixture award, CW1 ordinary hourly rate",
+      "unitCode": "aud_per_hour",
+      "basisCode": "award_min_wage",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "CW1, ordinary hours",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-06-20",
+      "evidence": [
+        {
+          "evidenceId": "guide",
+          "role": "release",
+          "url": "https://example.org/fixture/pay-guide-v2.pdf",
+          "publisher": "Fixture Wage Office (not a real source)",
+          "title": "Fixture page pay-guide-v2.pdf",
+          "quote": "FIXTURE pay guide (updated), Level CW1: ordinary hourly rate $31.25",
+          "locator": {
+            "page": 7,
+            "table": "Adult employees"
+          },
+          "asOf": "2026-09-15",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "bd89ab6d723ff9020b6b91d7a0a7ffd180405d24795b47747b9cace48bc44542",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        },
+        {
+          "evidenceId": "note",
+          "role": "correction",
+          "url": "https://example.org/fixture/pay-guide-note",
+          "publisher": "Fixture Wage Office (not a real source)",
+          "title": "Fixture page pay-guide-note",
+          "quote": "FIXTURE: this guide replaces the version of 20 June, which misstated the CW1 rate.",
+          "locator": {
+            "paragraph": 1
+          },
+          "asOf": "2026-09-15",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "f9025c25b9d8f8093a6b12de9e330df5ac82fa84d851ae8ad75da0c5e0faf534",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        }
+      ],
+      "captureMethod": "manual",
+      "recordId": "fixture_award_cw1_ordinary@2026-07-01#r2"
+    },
+    {
+      "supersedes": null,
+      "value": null,
+      "range": {
+        "min": 18.5,
+        "max": 34
+      },
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "range.min",
+          "token": "18.50",
+          "evidenceId": "notice"
+        },
+        {
+          "field": "range.max",
+          "token": "34.00",
+          "evidenceId": "notice"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "seriesId": "fixture_vehicle_storage_fee",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "kind": "regulated_fee",
+      "title": "Fixture vehicle storage fee, per day",
+      "unitCode": "aud_per_day",
+      "basisCode": "regulated_fee_max",
+      "scope": {
+        "jurisdiction": "NSW",
+        "classification": "Accident-damaged vehicle storage",
+        "period": {
+          "from": "2026-07-01",
+          "to": null
+        }
+      },
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-06-25",
+      "evidence": [
+        {
+          "evidenceId": "notice",
+          "role": "release",
+          "url": "https://example.org/fixture/storage-fees",
+          "publisher": "Fixture Statistics Bureau (not a real source)",
+          "title": "Fixture page storage-fees",
+          "quote": "FIXTURE: maximum storage fees range from $18.50 to $34.00 per day, depending on the vehicle.",
+          "locator": {
+            "paragraph": 1
+          },
+          "asOf": "2026-09-30",
+          "tier": "primary",
+          "retrievedAt": "2026-10-01T04:15:00Z",
+          "contentSha256": "0e8fcacf9dbc789e312b6eddf8e057994ed3380bc2d70cf520d8e86b29f8c657",
+          "licence": "Fixture only: not a real source, not licensed for any use"
+        }
+      ],
+      "captureMethod": "manual",
+      "recordId": "fixture_vehicle_storage_fee@2026-07-01#r1"
+    }
+  ]
+}

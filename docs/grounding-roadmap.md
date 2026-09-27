@@ -146,7 +146,7 @@ grounding/                              (on the orphan branch grounding-data)
   "value": "<number, or null when range is used>",
   "range": "<{min, max}, or null>",
   "unitCode": "pct | pct_pa | aud_per_hour | aud_per_day | aud_per_item | index_points",
-  "basisCode": "annual_change | policy_rate_target | award_min_wage | regulated_fee_max | market_rate",
+  "basisCode": "annual_change | index_level | policy_rate_target | statutory_rate | award_min_wage | regulated_fee_max | market_rate",
   "scope": {
     "jurisdiction": "AU | NSW | VIC | QLD | SA | WA | TAS | NT | ACT | PH",
     "classification": "<source-stated, e.g. CW1 ordinary hours; or null>",
@@ -293,8 +293,9 @@ is its own decision, recorded in Phase C.
 - **Manual** (`manual`): for figures published once a year in PDF or Word guides
   with conditions attached (award rates, gazetted fees). Daybook automates the
   **watch** ("the FY27 pay guide is out"). The value is captured in a reviewed
-  file in this repo (`grounding/manual/<seriesId>.json`: value, quote,
-  valueToken, locator, URL) and the same validator checks it. Git history is the
+  file in this repo (`grounding/manual/<seriesId>.json`: a full fact record
+  with its value, quote, `valueBindings`, locator, URL and the downloaded
+  file's digest) and the same validator checks it. Git history is the
   audit trail. There is no UI in v1.
 
 ## 7. Threat and licence note (short by design)
@@ -329,7 +330,9 @@ this file.
 - A separate task has already been raised for this. Phase C for BI-Assessor
   waits on it.
 
-### Phase B: contracts, validator and fixtures (Daybook, about 1–1.5 days)
+### Phase B: contracts, validator and fixtures (Daybook, about 1–1.5 days) — done 2026-09-27
+
+Built in `grounding/`: `validate.js`, `schema/`, `fixtures/` (two sample releases), `build-contract-files.js`, 26 tests in `npm test`, and the relabelled source chips. v1 facts are numeric (a value or a range); a non-numeric change is a watch state.
 
 1. `grounding/schema/` holds `facts`, `watch`, `insights` and `manifest`
    schemas (plain JSON Schema).

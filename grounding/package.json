@@ -1,0 +1,13 @@
+{
+  "name": "daybook-grounding",
+  "private": true,
+  "description": "Daybook grounding contract v1: validator, import planner, schemas and fixtures. No dependencies; consumers copy these files.",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test validate.test.js",
+    "fixtures": "node fixtures/build-fixtures.js"
+  }
+}

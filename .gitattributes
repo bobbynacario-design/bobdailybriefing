@@ -1,0 +1,4 @@
+# Grounding releases are checked by SHA-256 over their exact bytes, so their
+# line endings must never be converted on checkout (core.autocrlf is on here).
+grounding/fixtures/** -text
+grounding/schema/** eol=lf

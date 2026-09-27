@@ -1,0 +1,26 @@
+{
+  "schema": "daybook-grounding-insights/1",
+  "generatedAt": "2026-10-01T04:15:00Z",
+  "records": [
+    {
+      "insightId": "fixture-question-1",
+      "kind": "question",
+      "title": "Fixture RFI idea",
+      "text": "Ask whether the traffic-control invoice separates crew hours from equipment hire.",
+      "aiAssisted": true,
+      "sources": [
+        {
+          "url": "https://example.org/fixture/story",
+          "publisher": "Fixture Statistics Bureau (not a real source)"
+        }
+      ],
+      "tags": {
+        "streams": [
+          "tp_road"
+        ],
+        "anzsic": []
+      },
+      "createdAt": "2026-10-01T04:15:00Z"
+    }
+  ]
+}

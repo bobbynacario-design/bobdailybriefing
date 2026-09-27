@@ -1,0 +1,543 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daybook-grounding-facts/1",
+  "title": "Daybook grounding facts file (complete snapshot)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generatedAt",
+    "records"
+  ],
+  "properties": {
+    "schema": {
+      "const": "daybook-grounding-facts/1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fact"
+      }
+    }
+  },
+  "$defs": {
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recordId",
+        "seriesId",
+        "observationKey",
+        "revision",
+        "lifecycle",
+        "kind",
+        "title",
+        "unitCode",
+        "basisCode",
+        "scope",
+        "observationDate",
+        "publishedAt",
+        "evidence",
+        "captureMethod"
+      ],
+      "properties": {
+        "recordId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seriesId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]{2,80}$"
+        },
+        "observationKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lifecycle": {
+          "type": "string",
+          "enum": [
+            "current",
+            "corrected",
+            "superseded",
+            "withdrawn"
+          ]
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "index",
+            "rate",
+            "regulated_fee",
+            "award_wage",
+            "regulatory"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/range"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unitCode": {
+          "type": "string",
+          "enum": [
+            "pct",
+            "pct_pa",
+            "aud_per_hour",
+            "aud_per_day",
+            "aud_per_item",
+            "index_points"
+          ]
+        },
+        "basisCode": {
+          "type": "string",
+          "enum": [
+            "annual_change",
+            "index_level",
+            "policy_rate_target",
+            "statutory_rate",
+            "award_min_wage",
+            "regulated_fee_max",
+            "market_rate"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "qualifications": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/qualification"
+          }
+        },
+        "valueBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        },
+        "observationDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "publishedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "effectiveFrom": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effectiveTo": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "derivation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/derivation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plausibilityOverride": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/override"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "captureMethod": {
+          "type": "string",
+          "enum": [
+            "api",
+            "csv",
+            "rss",
+            "page",
+            "manual"
+          ]
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jurisdiction"
+      ],
+      "properties": {
+        "jurisdiction": {
+          "type": "string",
+          "enum": [
+            "AU",
+            "NSW",
+            "VIC",
+            "QLD",
+            "SA",
+            "WA",
+            "TAS",
+            "NT",
+            "ACT",
+            "PH"
+          ]
+        },
+        "classification": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "period": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "to": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max"
+      ],
+      "properties": {
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "evidenceId"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "token",
+        "evidenceId"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "enum": [
+            "value",
+            "range.min",
+            "range.max"
+          ]
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "page": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "paragraph": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "table": {
+          "type": "string",
+          "minLength": 1
+        },
+        "row": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selector": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "minProperties": 1
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "role",
+        "url",
+        "publisher",
+        "title",
+        "quote",
+        "locator",
+        "asOf",
+        "tier",
+        "retrievedAt",
+        "contentSha256",
+        "licence"
+      ],
+      "properties": {
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "release",
+            "table",
+            "cross_check",
+            "correction"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "publisher": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "asOf": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "tier": {
+          "type": "string",
+          "enum": [
+            "primary",
+            "secondary"
+          ]
+        },
+        "retrievedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "contentSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "licence": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formula",
+        "inputs",
+        "rounding"
+      ],
+      "properties": {
+        "formula": {
+          "type": "string",
+          "enum": [
+            "pct_change",
+            "difference",
+            "sum",
+            "ratio_pct"
+          ]
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "rounding": {
+          "type": "string",
+          "pattern": "^dp:[0-9]$"
+        }
+      }
+    },
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "at",
+        "reason",
+        "failedBound"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "failedBound": {
+          "$ref": "#/$defs/failedBound"
+        }
+      }
+    },
+    "failedBound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "limit",
+        "observed"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "absolute",
+            "change"
+          ]
+        },
+        "limit": {
+          "type": "number"
+        },
+        "observed": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

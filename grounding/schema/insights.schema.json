@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daybook-grounding-insights/1",
+  "title": "Daybook grounding insights file (complete snapshot)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generatedAt",
+    "records"
+  ],
+  "properties": {
+    "schema": {
+      "const": "daybook-grounding-insights/1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/insight"
+      }
+    }
+  },
+  "$defs": {
+    "insight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "insightId",
+        "kind",
+        "title",
+        "text",
+        "aiAssisted",
+        "sources",
+        "createdAt"
+      ],
+      "properties": {
+        "insightId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "event",
+            "emerging_risk",
+            "question",
+            "idea"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "aiAssisted": {
+          "type": "boolean"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/insightSource"
+          }
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/tags"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "insightSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "publisher"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "publisher": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "streams": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "tp_utility",
+              "tp_road",
+              "hv_loi",
+              "sme_bi",
+              "risk_review"
+            ]
+          }
+        },
+        "anzsic": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\d{2,4}$"
+          }
+        }
+      }
+    }
+  }
+}

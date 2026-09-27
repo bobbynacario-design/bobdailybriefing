@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daybook-grounding-latest/1",
+  "title": "Daybook grounding latest-release pointer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sequence",
+    "generatedAt",
+    "manifest"
+  ],
+  "properties": {
+    "schema": {
+      "const": "daybook-grounding-latest/1"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "manifest": {
+      "$ref": "#/$defs/latestManifest"
+    }
+  },
+  "$defs": {
+    "latestManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^releases/\\d{6}/manifest\\.json$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

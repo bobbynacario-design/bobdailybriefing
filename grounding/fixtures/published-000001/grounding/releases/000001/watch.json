@@ -1,0 +1,30 @@
+{
+  "schema": "daybook-grounding-watch/1",
+  "generatedAt": "2026-10-01T04:15:00Z",
+  "records": [
+    {
+      "watchId": "fixture_award_cw1_ordinary@2026-07-01",
+      "seriesId": "fixture_award_cw1_ordinary",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-06-20T22:00:00Z",
+      "detail": "Fixture pay guide for 2026-27 found.",
+      "evidence": {
+        "url": "https://example.org/fixture/pay-guides",
+        "retrievedAt": "2026-06-20T22:00:00Z"
+      }
+    },
+    {
+      "watchId": "fixture_benchmarks_release@2027",
+      "seriesId": "fixture_benchmarks_release",
+      "state": "awaiting_publication",
+      "expectedBy": "2027-03-31",
+      "stateChangedAt": "2026-10-01T04:15:00Z",
+      "detail": "The fixture publisher states its next benchmarks update is due by 31 March 2027.",
+      "evidence": {
+        "url": "https://example.org/fixture/benchmarks-schedule",
+        "retrievedAt": "2026-10-01T04:15:00Z"
+      }
+    }
+  ]
+}

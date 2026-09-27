@@ -1,0 +1,12 @@
+{
+  "fixture_cpi_annual_change": {
+    "min": -5,
+    "max": 15,
+    "maxChange": 2
+  },
+  "fixture_award_cw1_ordinary": {
+    "min": 20,
+    "max": 60,
+    "maxChange": 5
+  }
+}

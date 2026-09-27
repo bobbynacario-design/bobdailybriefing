@@ -196,7 +196,7 @@ test('each Command item shows once, and marks itself where it is shown', () => {
 test('missing verification metadata renders an explicit unknown state', () => {
   const {context,element}=environment(['renderGroundingLine']);
   context.renderGroundingLine({grounding:null},{parentNode:{}});
-  assert.match(element('grounding-line').textContent,/verification unknown/i);
+  assert.match(element('grounding-line').textContent,/source links unknown/i);
   assert.equal(element('grounding-line').className,'qa-line warn');
 });
 test('opening an archived briefing asks for a read-only render', () => {
@@ -489,12 +489,13 @@ test('the wildcard card shows its lens, link, bridge and story actions, all esca
   const html=context.wildcardHtml({lens:'far-field',headline:'Bacteria <eat> plastic',body:'Reported.',source:'Nature',url:'https://nature.com/x',bridge:'Worth asking whether',grounded:true});
   assert.ok(html.includes('Bacteria &lt;eat&gt; plastic'),'escaped');
   assert.ok(html.includes('Far field') && html.includes('From outside your usual beats'));
-  assert.ok(html.includes('Link verified') && html.includes('href="https://nature.com/x"'));
+  assert.ok(html.includes('Linked · found by search') && html.includes('href="https://nature.com/x"'));
+  assert.ok(!/verified/i.test(html),'a chip never claims more than a real link');
   assert.ok(html.includes('→ Back to your work:</strong> Worth asking whether'));
   ['note','cite','evidence','deeper'].forEach(a=>assert.ok(html.includes('data-card-act="'+a+'" data-sec="wildcard" data-idx="0"'),a));
   assert.ok(!html.includes('data-card-act="more"'),'no votes on the wildcard');
   assert.ok(html.includes('class="card wildcard-card"'),'a card, so Go deeper opens under it');
-  assert.ok(context.wildcardHtml({lens:'x',headline:'H',body:'B',bridge:'Br'}).includes('Unverified source'));
+  assert.ok(context.wildcardHtml({lens:'x',headline:'H',body:'B',bridge:'Br'}).includes('No checked link'));
   assert.equal(context.wildcardLensLabel('gone'),'Wildcard');
   assert.equal(context.wildcardHtml(null),'');
 });

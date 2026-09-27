@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daybook-grounding-manifest/1",
+  "title": "Daybook grounding release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sequence",
+    "previousSequence",
+    "generatedAt",
+    "producerCommit",
+    "files"
+  ],
+  "properties": {
+    "schema": {
+      "const": "daybook-grounding-manifest/1"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "previousSequence": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producerCommit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/manifestFile"
+      }
+    }
+  },
+  "$defs": {
+    "manifestFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "sha256",
+        "schema",
+        "recordCount"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recordCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

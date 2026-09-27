@@ -2430,7 +2430,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="hero-date" id="hero-date">Paste briefing to begin</div>
     <div class="hero-sub">FORENSIC BI · AUSTRALIAN INSURANCE · PH CONSULTING</div>
     <div class="hero-timestamp" id="hero-timestamp"></div>
-    <div id="grounding-line" class="qa-line warn" role="status">Source verification unknown</div>
+    <div id="grounding-line" class="qa-line warn" role="status">Source links unknown</div>
     <div class="hero-divider"></div>
   </div>
 
@@ -2943,7 +2943,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li><b>Today’s aha</b> — the card at the top is the one non-obvious read of the day: a <b>Connection</b> between two stories from different sections, a <b>Second-order</b> effect further downstream than any source goes, or a <b>Contrarian</b> case that the obvious reading is wrong. It shows the steps, the stories it is <b>Built on</b> (tap one to jump to it) and what would prove it <b>Wrong if</b>. It is an analysis, not news, and some days there is none — that is on purpose. <b>Open as decision</b> prepares a decision-journal draft with the insight, evidence and invalidator, but never saves it for you. <b>Save insight</b> keeps it in Evidence with its sources; <b>Write my take</b> starts your reflection on it; <b>Check this later</b> puts its wrong-if in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> on the day you choose.</li>
         <li><span class="help-pill" style="color:var(--blue)">New</span> — not in the previous briefing. <span class="help-pill">Day 3</span> — its third briefing in a row (hover for the dates). Matched by link or wording, since running stories are reworded daily.</li>
         <li><b>The progress line</b> counts what you have read, with <b>Next unread ↓</b> taking you to the most relevant story left. A story counts as read when you open its source, note it, or tap <b>Mark read</b>.</li>
-        <li><b>Source chip</b> — <span class="help-pill" style="color:var(--green)">Source matched</span> came from the fetched news feed; <span class="help-pill" style="color:var(--green)">Link verified</span> is a page the AI's search really returned; <span class="help-pill">Unverified source</span> has no checked link.</li>
+        <li><b>Source chip</b> — <span class="help-pill" style="color:var(--green)">Linked · today’s feed</span> came from the fetched news feed; <span class="help-pill" style="color:var(--green)">Linked · found by search</span> is a page the AI's search really returned; <span class="help-pill">No checked link</span> has none. A linked chip means the link is real and the story came from it. It does not mean every sentence or number was checked against the page, so open the source before you rely on a figure.</li>
         <li><b>On each card</b> — <b>✎ Note this</b> starts today's note about the story; <b>⧉ Copy citation</b> copies “Headline” — Source, date. link; <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> Remind me</b> (insurance and interruptions) brings its watch metric back when due.</li>
       </ul>
     </div>
@@ -9087,7 +9087,7 @@ function renderGroundingLine(data, anchor) {
   el.style.display = '';
   if (g.mode === 'unknown') {
     el.className = 'qa-line warn';
-    el.textContent = 'Source verification unknown — this briefing has no verification metadata. Check original sources before relying on it.';
+    el.textContent = 'Source links unknown — this briefing has no record of its links being checked. Check original sources before relying on it.';
   } else if (g.mode === 'grounded') {
     var linked = Number(g.grounded || 0);
     var total = linked + Number(g.ungrounded || 0);
@@ -9095,7 +9095,7 @@ function renderGroundingLine(data, anchor) {
       linked + '/' + total + ' stories linked',
       (g.feedsOk || 0) + '/' + (g.feedsTotal || 0) + ' feeds'];
     if (g.unmatchedUrls) {
-      parts.push(g.unmatchedUrls + ' unverified link' + (g.unmatchedUrls === 1 ? '' : 's') + ' withheld');
+      parts.push(g.unmatchedUrls + ' unmatched link' + (g.unmatchedUrls === 1 ? '' : 's') + ' withheld');
     }
     el.className = 'qa-line ' + (g.unmatchedUrls ? 'warn' : 'ok');
     el.textContent = parts.join(' / ') + '. URL matching does not verify every claim.';
@@ -9117,7 +9117,7 @@ function renderGroundingLine(data, anchor) {
   // Story links in the other sections, checked against the pages the web search returned.
   var l = data && data.links;
   if (l && typeof l.verified === 'number') {
-    el.textContent += ' Other story links: ' + l.verified + ' verified' +
+    el.textContent += ' Other story links: ' + l.verified + ' matched to a searched page' +
       (l.removed ? ', ' + l.removed + ' withheld (no matching page)' : '') + '.';
   }
 }
@@ -9806,8 +9806,11 @@ function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace
 // it did not supply, but this is the last stop before a string becomes an href.
 function srcHTML(st) {
   var verified = st.grounded === true;
-  // feed = matched the fetched news list; search = a page the search tool really returned.
-  var label = uiIcon('pin') + ' ' + esc(st.source || 'Source unavailable') + ' · ' + (verified ? (st.groundedBy === 'search' ? 'Link verified' : 'Source matched') : 'Unverified source');
+  // feed = matched the fetched news list; search = a page the search tool really
+  // returned. Both prove only that the link is real (source-linked, in the
+  // grounding roadmap's terms), not that each sentence of the story is checked,
+  // so the chip never says "verified".
+  var label = uiIcon('pin') + ' ' + esc(st.source || 'Source unavailable') + ' · ' + (verified ? (st.groundedBy === 'search' ? 'Linked · found by search' : 'Linked · today’s feed') : 'No checked link');
   var url = String(st && st.url || '');
   if (!/^https?:\/\//i.test(url)) return '<span class="src">' + label + '</span>';
   return '<a class="src" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(url) + '">' + label + ' ↗</a>';
