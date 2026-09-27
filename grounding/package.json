@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test validate.test.js producer.test.js publisher/publish.test.js fetch-release.test.js",
+    "test": "node --test validate.test.js producer.test.js publisher/publish.test.js fetch-release.test.js sources/abs-cpi.test.js",
     "fixtures": "node build-contract-files.js",
     "fixtures:check": "node build-contract-files.js --check"
   }

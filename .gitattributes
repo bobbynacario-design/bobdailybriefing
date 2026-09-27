@@ -6,3 +6,5 @@ grounding/schema/** eol=lf
 # SHA-256, so their bytes must be the same in every checkout.
 grounding/validate.js eol=lf
 grounding/fetch-release.js eol=lf
+# Verbatim ABS responses used as test data; the CSV arrives with CRLF.
+grounding/sources/fixtures/** -text

@@ -135,6 +135,13 @@ function watchFor(series, facts, issue, status, now) {
   } else {
     state = 'awaiting_publication'; detail = 'No figure captured yet.';
   }
+  // A fetcher may add the date the source itself gives for its next
+  // publication (G8) without changing the state: { expectedBy, url, detail }.
+  // The watch then points at the page that states it.
+  if (!issue && status && !status.state && !status.keep && status.expectedBy && status.url) {
+    expectedBy = status.expectedBy; url = status.url;
+    if (status.detail) detail = detail + ' ' + status.detail;
+  }
   return { state, detail, url, expectedBy };
 }
 
@@ -143,8 +150,9 @@ function watchFor(series, facts, issue, status, now) {
 //   previous:     null | { sequence, facts, watch, insights }    (a validated release)
 //   registry:     [{ seriesId, title, freshnessDays, bounds }]
 //   observations: [fact-shaped observations; identity fields are assigned here]
-//   seriesStatus: { [seriesId]: { state, detail, url, expectedBy } | { keep: true } }
-//                 (optional, from fetchers; keep = the fetch failed transiently)
+//   seriesStatus: { [seriesId]: { state, detail, url, expectedBy } | { keep: true } | { expectedBy, url, detail } }
+//                 (optional, from fetchers; keep = the fetch failed transiently;
+//                 the last form adds a stated next date to the computed state)
 //   insights:     [] | undefined (undefined keeps the previous insights)
 //   now:          ISO timestamp
 //   producerCommit
