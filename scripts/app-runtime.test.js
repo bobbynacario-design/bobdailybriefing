@@ -139,6 +139,40 @@ test('absent Command dependency produces a recovery action, not initial placehol
   assert.match(element('command-five').innerHTML,/Reload app/);
   assert.match(element('command-queue').textContent,/source tabs remain available/);
 });
+test('each Command item shows once, and marks itself where it is shown', () => {
+  const day='2026-09-27', now='2026-09-27T01:00:00.000Z';
+  const mk=(i,source)=>({id:'n-'+i,source,title:'Item '+i,detail:'Detail '+i,urgency:'act',confidence:'high',score:90-i,scoreBreakdown:['base'],kind:'signal'});
+  const items=[mk(1,'Briefing'),mk(2,'News'),mk(3,'Radar'),mk(4,'Decisions'),mk(5,'Markets'),mk(6,'News'),mk(7,'Sports'),mk(8,'Radar')];
+  const {context,element}=environment(['commandStateButtons','commandReviewItem','commandItemHtml','paintCommandCenter','renderCommandReview'],{
+    esc:s=>String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'),
+    manilaDateKey:()=>day,renderCommandControls:()=>{},commandFilter:'all',commandCenterInputs:null});
+  vm.runInContext(readFileSync(new URL('../lib/command-review-core.js',import.meta.url),'utf8'),context);
+  const core=context.CommandReviewCore;
+  // Captured this morning: 1, 2, 3, 7 and 9. Item 7 has since dropped out of the
+  // top five into the queue, and item 9 is gone from today's feeds.
+  let review=core.captureDay({days:{}},{morningFive:[items[0],items[1],items[2],items[6],mk(9,'Radar')]},day,now).review;
+  review=core.setItemState(review,day,items[0],'acted',now).review;
+  review=core.setItemState(review,day,items[6],'reviewed',now).review;
+  context.commandPreferences={review};
+  context.commandCenterData={items,morningFive:items.slice(0,5),counts:{act:8,review:0,total:8,sources:5,hidden:0},generatedAt:now};
+  element('command-review-today').querySelector=()=>null;
+  context.paintCommandCenter();
+  const five=element('command-five').innerHTML, queue=element('command-queue').innerHTML, rest=element('command-review-today').innerHTML;
+  assert.equal(five.match(/command-five-item/g).length,5);
+  assert.equal(five.match(/command-review-state /g).length,15,'every Morning 5 card carries Acted / Reviewed / Ignored');
+  assert.match(five,/command-five-item handled/); assert.match(five,/aria-pressed="true"[^>]*>Acted/);
+  ['Item 1<','Item 5<'].forEach(title=>assert.ok(!queue.includes(title),'the queue leaves out the Morning 5'));
+  assert.equal(queue.match(/command-queue-item/g).length,3);
+  assert.equal(element('command-queue-meta').textContent,'3 of 3 beyond the Morning 5');
+  const seven=queue.slice(queue.indexOf('n-7'),queue.indexOf('n-8')), eight=queue.slice(queue.indexOf('n-8'));
+  const oneTap=/command-item-btn[^"]*" onclick="event\.stopPropagation\(\);setCommandReviewState/;
+  assert.match(seven,/aria-pressed="true"[^>]*>Reviewed/,'a marked queue item carries its state');
+  assert.doesNotMatch(seven,oneTap,'and no separate one-tap button');
+  assert.match(eight,oneTap,'an unmarked queue item keeps its one tap'); assert.doesNotMatch(eight,/command-review-state/);
+  assert.ok(rest.includes('Item 9') && !rest.includes('Item 7<'),'the rest of today’s list is only what is not on screen');
+  assert.match(rest,/was Morning 5 #5/); assert.match(rest,/2 of 5 handled · closing marks the rest ignored/);
+  assert.equal(element('command-review-week-line').textContent,'0/1 days closed · 40% of Morning 5 handled');
+});
 test('missing verification metadata renders an explicit unknown state', () => {
   const {context,element}=environment(['renderGroundingLine']);
   context.renderGroundingLine({grounding:null},{parentNode:{}});
