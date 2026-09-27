@@ -424,11 +424,10 @@ network adapter is `grounding/fetch-release.js`. Release 000001 (empty, as
 intended until E and F) is on `grounding-data`; it passes `fetchRelease`, the
 Firestore mirror matches its digest, and a second run cut no release.
 The Morning 5 push Functions (`deliverMorningFive`, `testBriefingDelivery`)
-were redeployed the same day. Both consumer follow-ups pass their gates
-(BI-Assessor f3f75c7, RiskM8 a21c388 to eed9e4c) on unmerged branches, so
-**Phase D completes when those are merged.** Before Phase E publishes any
-`plausibilityOverride`, the validator must stop rejecting a whole release for an
-override on a series the consumer has no bounds for. See
+were redeployed the same day. **Phase D is complete (2026-09-27).** Both
+consumers merged, pushed and deployed their network import: BI-Assessor
+f3f75c7 and 90cd17b, and RiskM8 a21c388 to eed9e4c. Both then re-copied the
+corrected validator from 2a162d7. See
 [the runbook and consumer handovers](grounding-phase-d.md).
 
 1. `grounding/` producer module (built like `news/`):
@@ -453,6 +452,12 @@ override on a series the consumer has no bounds for. See
    the raw-file cache, and `planImport`. The fixture tests stay.
 
 ### Phase E: Pilot 1, ABS CPI → RiskM8 (about 1 day)
+
+**Status, 2026-09-27: done, apart from Bob's own look at the note in a signed-in
+report.** Daybook publishes July 2026 CPI (release 000002). RiskM8 imported it
+(receipt for release 2, one candidate, no skips), and Bob accepted it into
+RiskM8's source library. RiskM8 is deployed with the BI note. See
+[grounding-phase-e.md](grounding-phase-e.md).
 
 - **Feasibility row:**
   - which CPI measure is used (monthly or quarterly, all groups, weighted

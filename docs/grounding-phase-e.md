@@ -107,7 +107,14 @@ Everything below was read on 2026-09-27 with Daybook's own user agent
 - `fetchRelease` against the live URL: ok with Daybook's bounds (plausible) and with none (plausible null, still eligible). A consumer allowlisting the series plans exactly this record.
 - The Firestore mirror is at sequence 2 with the same digest, and `grounding-ops` records the check time.
 - Signed in, Evidence shows the figure with Source-linked · Fact-verified · Cross-checked, and the Morning 5 lists it (fourth of five, source Numbers).
-- Still to do for Phase E: the RiskM8 session (mapping, network import of release 2, Bob accepts into `provenance.js`, the BI row shows the note).
+- **RiskM8, same day** (main 55400ed):
+  - Phase D merged (2e72aff), and the contract re-copied from 2a162d7. Both digests match, and COPIED_FROM.json points at 2a162d7.
+  - Production mapping `riskm8-daybook-map/2`: the CPI series goes to `bi_price_index`, with publisher `Australian Bureau of Statistics`, AU, and RiskM8's own bounds -3/12/1.5.
+  - Release 000002 imported over the network. `docs/daybook-imports/receipt-000002-import.json` names manifest `97186fc0…`, imports `dbk_abs_cpi_2026_07`, and has no skips or flags.
+  - Bob accepted it into `library/provenance.js` (d4291bd).
+  - Deployed from 03b96d8. The session rendered a report with the production copy of `report-content.js`, and it drew the July CPI note with its source.
+  - On my re-run, `check:daybook-grounding` passes 50.
+- **Left for Bob:** rebuild one report as a signed-in broker and look at the note on the BI row. Drafts reviewed before the deploy are flagged out of date at sign-off.
 
 ## Timeline this makes possible
 
