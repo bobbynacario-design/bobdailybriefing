@@ -192,7 +192,10 @@ Reviewing the FY26 records is BI-Assessor's call.
 
 ## H-2: the Superannuation Guarantee charge percentage (watch only)
 
-Status: **built, 2026-09-28.** The roadmap says "Legislated at 12%; watch for
+Status: **live, 2026-09-28**, in release 000005 (manifest `133e5977…`; dispatch on c6a5d24).
+It is a watch-only release: `facts.json` is byte-identical to release 000004, so
+consumers skip it, and GitHub's runner read the Register API with no error.
+The roadmap says "Legislated at 12%; watch for
 change", for BI-Assessor's wages method.
 
 - **What BI-Assessor holds** (read-only):
