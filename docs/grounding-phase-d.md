@@ -116,15 +116,20 @@ button goes live only after its `deploy:safe`; nobody has clicked it in a browse
 yet. RiskM8's change is a script outside the Firebase bundle, so it needs no
 deploy.
 
-**Fix Daybook's validator before Phase E publishes any override.** Both consumers
-found the same problem. If a fact carries a `plausibilityOverride` for a series a
+**Fixed at the start of Phase E (commit COMMIT_HASH; roadmap 5.2).** Plausibility is
+now judged per record against each evaluator's own bounds and never rejects a
+release, and `fetchRelease` retries only a missing file, a network error or a
+digest mismatch. The new SHA-256s are `validate.js` `6cca646b1e2840bc1b9bf4a2440cd4996b9d8a8bbc758713781db277df2f2074`
+and `fetch-release.js` `27374fafd52bd6e91e159a8af51d428460b01bce773da1da0e990f8183eb4854`;
+both consumers re-copy them. The problem, as both consumers
+found it: If a fact carries a `plausibilityOverride` for a series a
 consumer has no bounds for, `validate.js` rejects the whole release
 ("plausibilityOverride present but no bounds are known for this series").
 `facts.json` keeps history, so every later release would be rejected too, and
 that consumer's imports would stop for good: RiskM8's CPI, for example, would
 block BI-Assessor. Over the network, `fetchRelease` also retries a release that
 cannot pass validation three times, 30 seconds apart. A validator change moves its
-SHA-256, so both consumers re-copy it; bundle the fix with Phase E's contract work.
+SHA-256, so both consumers re-copy it.
 
 **Copy details, for the record:**
 - Consumers copied

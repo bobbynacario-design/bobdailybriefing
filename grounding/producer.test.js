@@ -105,6 +105,36 @@ test('a plausibility breach is not published: the last good figure stays and the
   assert.equal(cleared.snapshot.facts.find((f) => f.observationKey === '2026-09').lifecycle, 'current');
   assert.equal(cleared.snapshot.watch[0].state, 'published');
 });
+test('Daybook publishes a new override only when its own bounds confirm it; history is never re-judged', () => {
+  const override = (kind, limit, observed) => ({ plausibilityOverride: { reviewer: 'BN', at: T2, reason: 'Checked against the release.', failedBound: { kind, limit, observed } } });
+  const first = run(null, [cpi('2026-08', 3.1)], T1);
+  // Records a bound that did not fail.
+  const wrong = run(asPrevious(first), [cpi('2026-09', 8.5, override('absolute', 15, 8.5))], T2);
+  assert.equal(wrong.snapshot.facts.length, 1);
+  assert.match(wrong.snapshot.watch[0].detail, /and its plausibilityOverride records a different bound/);
+  // Nothing breached.
+  const needless = run(asPrevious(first), [cpi('2026-09', 3.3, override('change', 2, 0.2))], T2);
+  assert.equal(needless.snapshot.facts.length, 1);
+  assert.equal(needless.snapshot.watch[0].state, 'blocked');
+  assert.match(needless.snapshot.watch[0].detail, /inside this series' bounds, so there is nothing to clear; remove the override/);
+  assert.equal(needless.skipped[0].reason, 'plausibilityOverride not needed');
+  // A series with no bounds to check it against.
+  const unbounded = REGISTRY.map((s) => Object.assign({}, s, { bounds: undefined }));
+  const blind = produce({ previous: null, registry: unbounded, observations: [cpi('2026-08', 3.1, override('absolute', 15, 3.1))], now: T1, producerCommit: 'test' });
+  assert.equal(blind.snapshot.facts.length, 0);
+  assert.match(blind.snapshot.watch.find((w) => w.seriesId === 'test_cpi_annual_change').detail, /no bounds in grounding\/series\.js to check it against/);
+  // A published, cleared override stays readable after the bounds are widened:
+  // the previous release is not re-judged, and the unchanged figure changes nothing.
+  const cleared = run(asPrevious(first), [cpi('2026-09', 8.5, override('change', 2, 5.4))], T2);
+  assert.equal(cleared.snapshot.facts.find((f) => f.observationKey === '2026-09').lifecycle, 'current');
+  const wider = REGISTRY.map((s) => Object.assign({}, s, { bounds: { min: -5, max: 15, maxChange: 10 } }));
+  const later = produce({ previous: asPrevious(cleared), registry: wider, observations: [cpi('2026-09', 8.5, override('change', 2, 5.4))], now: T3, producerCommit: 'test' });
+  assert.equal(later.changed, false);
+  const rel = cleared.release, d = rel.dir;
+  const v = V.validateRelease({ latestText: rel.files['latest.json'], manifestText: rel.files[d + '/manifest.json'], fileTexts: { 'facts.json': rel.files[d + '/facts.json'], 'watch.json': rel.files[d + '/watch.json'], 'insights.json': rel.files[d + '/insights.json'] }, directorySequence: rel.sequence }, { bounds: { test_cpi_annual_change: { min: -5, max: 15, maxChange: 10 } } });
+  assert.equal(v.ok, true, v.errors.join('; '));
+  assert.equal(v.facts.results.find((r) => r.record.observationKey === '2026-09').overrideVerdict, 'not_needed');
+});
 test('a cross-check that disagrees is a conflict, not a figure', () => {
   const obs = cpi('2026-08', 3.1);
   obs.evidence.push(Object.assign({}, obs.evidence[0], { evidenceId: 'table', role: 'cross_check', quote: 'Aug-2026,139.2,3.4', locator: { table: 't', row: 'Aug-2026' } }));

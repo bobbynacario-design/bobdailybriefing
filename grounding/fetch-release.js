@@ -6,6 +6,11 @@ const crypto = require('node:crypto');
 const { validateRelease } = require('./validate');
 const digest = (body) => crypto.createHash('sha256').update(body).digest('hex');
 const DEFAULT_LATEST = 'https://raw.githubusercontent.com/bobbynacario-design/bobdailybriefing/grounding-data/grounding/latest.json';
+// Once a file's digest matches, its bytes are exactly what was published, so a
+// failure after that would repeat on every attempt: it is thrown at once. Only
+// a missing file, a network error or a digest mismatch (the raw-file cache
+// catching up) is retried.
+const final = (message) => Object.assign(new Error(message), { retry: false });
 
 async function fetchRelease(opts = {}) {
   const latestUrl = new URL(opts.latestUrl || DEFAULT_LATEST);
@@ -32,10 +37,11 @@ async function fetchRelease(opts = {}) {
       const manifestBytes = await read(manifestUrl);
       if (digest(manifestBytes) !== latest.manifest.sha256) throw new Error('manifest digest mismatch');
       const manifestText = manifestBytes.toString('utf8');
-      const manifest = JSON.parse(manifestText);
+      let manifest;
+      try { manifest = JSON.parse(manifestText); } catch (e) { throw final('manifest is not valid JSON'); }
       const names = ['facts.json', 'watch.json', 'insights.json'];
       if (!Array.isArray(manifest.files) || manifest.files.length !== 3 ||
-        names.some((name) => manifest.files.filter((f) => f.name === name && /^[a-f0-9]{64}$/.test(f.sha256)).length !== 1)) throw new Error('invalid release file list');
+        names.some((name) => manifest.files.filter((f) => f.name === name && /^[a-f0-9]{64}$/.test(f.sha256)).length !== 1)) throw final('invalid release file list');
       const fileTexts = {};
       for (const name of names) {
         const bytes = await read(new URL(name, manifestUrl));
@@ -44,10 +50,11 @@ async function fetchRelease(opts = {}) {
       }
       const input = { latestText, manifestText, fileTexts, directorySequence: latest.sequence };
       const release = validateRelease(input, { bounds: opts.bounds });
-      if (!release.ok) throw new Error('invalid release: ' + release.errors.join('; '));
+      if (!release.ok) throw final('invalid release: ' + release.errors.join('; '));
       return { input, release };
     } catch (e) {
       error = e;
+      if (e.retry === false) break;
       if (attempt < 2) await pause(30000);
     }
   }

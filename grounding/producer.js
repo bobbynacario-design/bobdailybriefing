@@ -186,13 +186,30 @@ function produce(input) {
       skipped.push({ seriesId: obs.seriesId, observationKey: obs.observationKey, reason: errors[0] || 'invalid' });
       return;
     }
+    // The validator only reports what Daybook's bounds make of an override; a
+    // consumer's differ, so it cannot refuse one. Daybook stays strict about its
+    // own, but only for the record it is about to publish: history is never
+    // re-judged, so changing a series' bounds later cannot stop the publisher.
+    const ov = mine.overrideVerdict;
+    if (ov === 'not_evaluated' || ov === 'not_needed') {
+      issues[obs.seriesId] = {
+        state: 'blocked',
+        detail: 'Not published: ' + formatValue(step.change.record) + ' (' + obs.observationKey + ') carries a plausibilityOverride, but ' +
+          (ov === 'not_evaluated' ? 'the series has no bounds in grounding/series.js to check it against'
+            : 'it is inside this series\' bounds, so there is nothing to clear; remove the override') + '.',
+        url: firstEvidenceUrl(obs),
+      };
+      skipped.push({ seriesId: obs.seriesId, observationKey: obs.observationKey, reason: 'plausibilityOverride ' + (ov === 'not_evaluated' ? 'without series bounds' : 'not needed') });
+      return;
+    }
     if (mine.checks.plausible === false) {
       const b = bounds[obs.seriesId];
       issues[obs.seriesId] = {
         state: 'blocked',
         detail: 'Not published: ' + formatValue(step.change.record) + ' (' + obs.observationKey + ') is outside this series\' plausibility bounds' +
           (b ? ' (' + [b.min != null ? 'min ' + b.min : '', b.max != null ? 'max ' + b.max : '', b.maxChange != null ? 'max change ' + b.maxChange : ''].filter(Boolean).join(', ') + ')' : '') +
-          '. Check it against the source and record a plausibilityOverride to publish it.',
+          (ov === 'unmatched' ? ', and its plausibilityOverride records a different bound. Record the bound that failed to publish it.'
+            : '. Check it against the source and record a plausibilityOverride to publish it.'),
         url: firstEvidenceUrl(obs),
       };
       skipped.push({ seriesId: obs.seriesId, observationKey: obs.observationKey, reason: 'plausibility breach' });

@@ -210,14 +210,61 @@ test('a plausibility breach blocks the record unless a matching override is reco
   });
   assert.equal(byId(cleared, CPI).checks.plausible, true);
   assert.equal(byId(cleared, CPI).eligible, true);
+  assert.equal(byId(cleared, CPI).overrideVerdict, 'cleared');
+  // An override that records another bound clears nothing: the record is
+  // ineligible, but the file stays readable.
   const wrongBound = factsWith((recs) => {
     breach(recs).plausibilityOverride = { reviewer: 'BN', at: '2026-10-01T05:00:00Z', reason: 'x', failedBound: { kind: 'absolute', limit: 20, observed: 25 } };
   });
-  assert.match(errorsOf(wrongBound), /does not record the bound that failed/);
+  assert.equal(wrongBound.ok, true, errorsOf(wrongBound));
+  assert.equal(byId(wrongBound, CPI).overrideVerdict, 'unmatched');
+  assert.equal(byId(wrongBound, CPI).checks.plausible, false);
+  assert.equal(byId(wrongBound, CPI).eligible, false);
   const needless = factsWith((recs) => {
     recs.find((x) => x.recordId === CPI).plausibilityOverride = { reviewer: 'BN', at: '2026-10-01T05:00:00Z', reason: 'x', failedBound: { kind: 'absolute', limit: 15, observed: 3.1 } };
   });
-  assert.match(errorsOf(needless), /nothing breached/);
+  assert.equal(needless.ok, true, errorsOf(needless));
+  assert.equal(byId(needless, CPI).overrideVerdict, 'not_needed');
+  assert.equal(byId(needless, CPI).checks.plausible, true);
+  assert.equal(byId(needless, AWARD).overrideVerdict, null, 'no override, no verdict');
+});
+// Found by both consumers in Phase D: a consumer's bounds differ from Daybook's,
+// or are absent for a series it does not use. Plausibility is theirs to judge,
+// per record; it must never make the whole release unreadable, because
+// facts.json keeps history and every later release would carry the record too.
+test('an override is judged against each evaluator\'s own bounds and never rejects the release', () => {
+  const o = release1Objects();
+  const cpi = o.facts.records.find((x) => x.recordId === CPI);
+  cpi.value = 25; cpi.valueBindings[0].token = '25';
+  cpi.evidence[0].quote = 'FIXTURE: The monthly CPI indicator rose 25% in the 12 months to August 2026.';
+  cpi.evidence.splice(1, 1);
+  // The derived record depends on this CPI value; drop it so only the override is under test.
+  o.facts.records = o.facts.records.filter((x) => x.recordId !== DERIVED);
+  cpi.plausibilityOverride = { reviewer: 'BN', at: '2026-10-01T05:00:00Z', reason: 'Checked against the release.', failedBound: { kind: 'absolute', limit: 15, observed: 25 } };
+  const rel = makeRelease(1, o.facts, o.watch, o.insights);
+  const others = Object.assign({}, FIXTURE_BOUNDS);
+  delete others.fixture_cpi_annual_change;
+  const cases = [
+    ['Daybook\'s bounds', FIXTURE_BOUNDS, 'cleared', true],
+    ['a consumer with no bounds for the series', others, 'not_evaluated', null],
+    ['a consumer with no bounds at all', undefined, 'not_evaluated', null],
+    ['a consumer whose bounds are wider', Object.assign({}, others, { fixture_cpi_annual_change: { min: -5, max: 40, maxChange: 50 } }), 'not_needed', true],
+    ['a consumer whose bounds are tighter', Object.assign({}, others, { fixture_cpi_annual_change: { min: -5, max: 10, maxChange: 50 } }), 'unmatched', false],
+  ];
+  cases.forEach(([label, bounds, verdict, plausible]) => {
+    const v = V.validateRelease(rel, { bounds });
+    assert.equal(v.ok, true, label + ': ' + v.errors.join('; '));
+    const r = byId(v.facts, CPI);
+    assert.equal(r.overrideVerdict, verdict, label);
+    assert.equal(r.checks.plausible, plausible, label);
+    assert.equal(r.checks.factVerified, true, label);
+    const policy = { allow: { series: ['fixture_cpi_annual_change'], units: ['pct'], jurisdictions: ['AU'], publishers: r.record.evidence.map((e) => e.publisher) } };
+    const plan = V.planImport(null, v, policy, '2026-10-01T06:00:00Z');
+    assert.equal(plan.action, 'import', label);
+    const skip = plan.skips.find((s) => s.recordId === CPI);
+    if (plausible === false) assert.equal(skip.reason, 'plausibility breach (its override records a different bound)', label);
+    else assert.ok(plan.toImport.some((x) => x.recordId === CPI), label + ': eligible');
+  });
 });
 test('corrections must supersede the previous revision, which becomes history', () => {
   const r2 = (recs, patch) => {

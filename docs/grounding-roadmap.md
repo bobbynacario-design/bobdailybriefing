@@ -206,6 +206,15 @@ Rules the validator enforces:
   previous observation). A breach blocks the record unless it carries a
   `plausibilityOverride` recording who cleared it, when, why, and the bound it
   failed.
+  - **Each evaluator judges plausibility with its own bounds,** so the verdict only
+    ever decides that record's eligibility for that evaluator. It never rejects
+    the release (amended at the start of Phase E, after both consumers found
+    that it did). The validator reports an `overrideVerdict` for each record:
+    `cleared`, `unmatched` (a different bound failed, so the record is not
+    eligible), `not_needed` or `not_evaluated` (no bounds for the series).
+  - **Daybook is stricter about its own overrides:** it publishes a new override
+    only when its registry bounds make it `cleared`. Published history is never
+    re-judged, so changing a series' bounds later cannot stop the publisher.
 - **Derived values** carry `derivation: {formula, inputs: [recordIds], rounding}`
   and no quote bindings. They are fact-verified through their inputs (each must
   be a fact-verified record in the same snapshot) and the deterministic formula,

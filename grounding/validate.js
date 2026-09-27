@@ -13,6 +13,12 @@
 //
 // v1 facts are numeric: every fact has a value or a range. A non-numeric change
 // (a determination published, a guide updated) is a watch state, not a fact.
+//
+// Plausibility is the one judgement that depends on who is validating: it uses
+// the evaluator's own bounds (Daybook's registry, or a consumer's). So it only
+// ever decides one record's eligibility for that evaluator, never whether the
+// release is readable. Everything else is the same for every evaluator, and any
+// failure there rejects the release.
 
 const SCHEMAS = Object.freeze({
   latest: 'daybook-grounding-latest/1',
@@ -376,7 +382,20 @@ function sameBound(a, b) {
 
 // Validate a facts file: every record, then the relations between them.
 //   opts.bounds: { [seriesId]: { min, max, maxChange } }
-// Returns { ok, errors, results: [{ recordId, record, ok, errors, checks, eligible, historical }] }.
+// Returns { ok, errors, results: [{ recordId, record, ok, errors, checks, eligible, historical, overrideVerdict }] }.
+//
+// overrideVerdict says what these bounds make of a record's plausibilityOverride
+// (null when it has none):
+//   'cleared'        a bound was breached and the override records exactly it
+//   'unmatched'      a bound was breached that the override does not record:
+//                    plausible is false, so the record is not eligible
+//   'not_needed'     nothing breached these bounds (plausible is true)
+//   'not_evaluated'  no bounds are known for the series (plausible is null)
+// None of these is an error. A consumer's bounds may differ from Daybook's, or
+// be absent for a series it does not use, and facts.json keeps history, so an
+// error here would make every later release unreadable to that consumer. The
+// producer refuses to publish a new override that is not 'cleared' under its
+// own bounds (grounding/producer.js).
 function validateFactsFile(file, opts) {
   opts = opts || {};
   const errors = [];
@@ -438,6 +457,7 @@ function validateFactsFile(file, opts) {
     const rec = r.record;
     if (!isObj(rec) || r.errors.length) {
       r.checks = { sourceLinked: false, factVerified: false, crossChecked: false, plausible: null };
+      r.overrideVerdict = null;
       return;
     }
     // Supersession: same series; a correction is the next revision of the same
@@ -467,11 +487,12 @@ function validateFactsFile(file, opts) {
 
     const plaus = plausibilityVerdict(rec, (opts.bounds || {})[rec.seriesId], previousObservation);
     let plausible = plaus.evaluated ? plaus.breaches.length === 0 : null;
+    r.overrideVerdict = null;
     if (rec.plausibilityOverride) {
-      if (!plaus.evaluated) r.errors.push(r.where + ': plausibilityOverride present but no bounds are known for this series');
-      else if (!plaus.breaches.length) r.errors.push(r.where + ': plausibilityOverride present but nothing breached');
-      else if (!plaus.breaches.every((b) => sameBound(b, rec.plausibilityOverride.failedBound))) r.errors.push(r.where + ': plausibilityOverride does not record the bound that failed');
-      else plausible = true;
+      if (!plaus.evaluated) r.overrideVerdict = 'not_evaluated';
+      else if (!plaus.breaches.length) r.overrideVerdict = 'not_needed';
+      else if (plaus.breaches.every((b) => sameBound(b, rec.plausibilityOverride.failedBound))) { r.overrideVerdict = 'cleared'; plausible = true; }
+      else r.overrideVerdict = 'unmatched';
     }
     r.checks = {
       sourceLinked: rec.derivation
@@ -691,7 +712,11 @@ function planImport(lastImported, release, policy, now) {
       return;
     }
     if (r.historical) { plan.skips.push({ recordId: rec.recordId, reason: 'historical (' + rec.lifecycle + ')' }); return; }
-    if (!r.eligible) { plan.skips.push({ recordId: rec.recordId, reason: r.checks.plausible === false ? 'plausibility breach' : 'not fact-verified' }); return; }
+    if (!r.eligible) {
+      plan.skips.push({ recordId: rec.recordId, reason: r.checks.plausible !== false ? 'not fact-verified'
+        : r.overrideVerdict === 'unmatched' ? 'plausibility breach (its override records a different bound)' : 'plausibility breach' });
+      return;
+    }
     if (rec.derivation && policy.refuseDerived) { plan.skips.push({ recordId: rec.recordId, reason: 'derived records refused by policy' }); return; }
     if (!listed(allow.series, rec.seriesId)) { plan.skips.push({ recordId: rec.recordId, reason: 'series not allowlisted' }); return; }
     if (!listed(allow.units, rec.unitCode)) { plan.skips.push({ recordId: rec.recordId, reason: 'unit not allowlisted' }); return; }
