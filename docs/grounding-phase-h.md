@@ -244,3 +244,71 @@ change", for BI-Assessor's wages method.
   - A live dry run proposed a watch-only release (facts unchanged), with the
     SG watch published.
 
+## H-3: ATO Small Business Benchmarks (a reviewed-year reminder)
+
+Status: **built, 2026-09-28.** Bob chose option A (D-H3-1). The roadmap says: "watch, both
+consumers, annual, method-dependent".
+
+- **What the consumers hold** (read-only):
+  - Both cite individual ATO "in detail" benchmark pages
+    (`ato.gov.au/…/small-business-benchmarks/in-detail/<industry>`), captured by
+    hand. The quotes are cost-of-sales ranges by turnover band, mostly as at
+    2026-03-16.
+  - **RiskM8** cites **43 industries** (`library/provenance.js`,
+    `anzsic-gp-benchmarks.js`, the industry modules).
+  - **BI-Assessor's ClaimBench** cites **16**, all among the 43
+    (`claimbench/sources.js`, `benchmarks.js`).
+- **The release pattern:** the ATO's own dataset on data.gov.au ("Small
+  Business Benchmarks", CC BY 2.5 AU, one XLSX per year) shows a new year each
+  March:
+  - 2021–22 on 2024-03-13;
+  - 2022–23 on 2025-03-16;
+  - **2023–24 on 2026-03-15**, which is what the consumers' 2026-03-16 citations
+    reflect.
+- **Access:**
+  - **ato.gov.au refuses Daybook** (HTTP 403 from its CDN, even for robots.txt).
+  - **data.gov.au's robots.txt is `User-agent: *` / `Disallow: /`.** It
+    forbids every automated agent, its API included.
+  - One catalogue search was made there during this review. None is made
+    automatically.
+  - So under G7 neither can be read automatically, and the benchmarks cannot be
+    watched the way CPI or the SG Act are.
+
+### Options (D-H3-1)
+
+- **A. A reviewed-year watch (recommended).**
+  - Daybook records the benchmark year last reviewed: 2023–24, released
+    2026-03-15, read once here.
+  - The watch reads **published** until a year after that release, then turns
+    **stale**. Its detail says that the ATO has released each new year in March
+    since 2024, that the 43 cited industries in the two apps should be checked,
+    and that the review should then be recorded.
+  - No site is read automatically, and no expected date is published (G8):
+    "stale" means only that the review is over a year old.
+  - Watch only, like SG: no figures.
+- **B. Ask for access.** Ask the ATO or data.gov.au whether a daily
+  metadata check would be acceptable. That is slow and uncertain; A can run
+  meanwhile.
+- **C. Skip it.** Leave the benchmarks to the consumers' own annual review.
+
+### Built (H-3)
+
+- **`grounding/sources/ato-sbb.js`,** registered as
+  `ato_small_business_benchmarks_year` (`capture: 'watch'`; never a fact).
+  - `REVIEWED` = the 2023-24 benchmarks, released 2026-03-15, reviewed
+    2026-09-28.
+  - It makes **no request**; a test fails if it ever calls fetch.
+  - It reads **published** until 380 days after the release (2027-03-30),
+    then **stale**. That leaves room for a mid-March release, and the stale
+    state reaches the Morning 5.
+  - Its detail says it is a reminder, not a watch. It publishes no expected
+    date (G8).
+  - **To clear it:** check whether the next year is out, re-check the
+    industries both apps cite, and record the new review in `REVIEWED`.
+- **Tests and checks:**
+  - 5 tests; 106 grounding tests in total.
+  - Three deliberate breakages were each caught: never going stale, going
+    stale a day early, and reading a site.
+  - A live dry run proposed a watch-only release (facts unchanged), with the
+    reminder published.
+

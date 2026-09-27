@@ -25,6 +25,7 @@ const fwoPayGuide = require('./sources/fwo-pay-guide');
 const nswTow = require('./sources/nsw-tow-fees');
 const vicTow = require('./sources/vic-gazette-towing');
 const sg = require('./sources/sg-legislation');
+const sbb = require('./sources/ato-sbb');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -147,5 +148,20 @@ module.exports = [
     streams: ['sme_bi'],
     cadenceHours: 12,
     fetch: sg.watchSg,
+  },
+  // Phase H, H-3: the ATO Small Business Benchmarks, a reviewed-year reminder
+  // (Bob's D-H3-1, option A). Neither the ATO nor data.gov.au allows
+  // automated reading, so it reads nothing and turns stale a year after the
+  // reviewed release, when both apps' 43 cited industries need checking.
+  {
+    seriesId: sbb.SERIES_ID,
+    title: sbb.TITLE,
+    capture: 'watch',
+    publisher: sbb.PUBLISHER,
+    urls: { benchmarks: sbb.BENCHMARKS_URL, dataset: sbb.DATASET_URL },
+    licence: sbb.LICENCE,
+    streams: ['sme_bi', 'risk_review'],
+    cadenceHours: 12,
+    fetch: sbb.watchSbb,
   },
 ];
