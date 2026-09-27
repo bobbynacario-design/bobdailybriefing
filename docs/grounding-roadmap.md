@@ -1,11 +1,13 @@
 # Three-app grounding roadmap: Daybook → BI-Assessor and RiskM8
 
-Status: proposed, revision 2 (2026-09-27). Owner: Bob. This file is the source
-of truth for the integration; each consuming repo records its own slice in its
-own docs when its phase starts.
+Status: **agreed**, revision 2.1 (2026-09-27). Owner: Bob. This file is the
+source of truth for the integration; each consuming repo records its own slice
+in its own docs when its phase starts.
 
-Revision 2 replaces the first draft (commit 7d23353) after a review against the
-code of all three apps. What changed and why is in section 10.
+Revision 2 replaced the first draft (commit 7d23353) after a review against the
+code of all three apps. Revision 2.1 adds six contract amendments from the
+second review. Both are summarised in section 10. Decisions D1–D5 were agreed
+as recommended.
 
 ## 1. The three apps and their jobs
 
@@ -51,14 +53,19 @@ one-way sync.
 ## 3. Trust vocabulary
 
 "Grounded" is not used on its own. Every surface (Daybook UI, the files, the
-consumer importers) uses these four levels, and each implies the ones above it.
+consumer importers) uses these four **attributes**. They are not a ladder: a
+fact can be approved without being cross-checked (a manual award guide has
+nothing to cross-check against).
 
-| Level | Meaning | Who sets it |
+| Attribute | Meaning | Who sets it |
 |---|---|---|
-| **Source-linked** | The URL was among the pages actually fetched or searched. It says nothing about whether a claim is supported. | Producer |
-| **Fact-verified** | A specific value is bound to an exact quote in a specific evidence item, with a bounded number match (section 5.2). | Producer's validator |
-| **Cross-checked** | A second, independent representation (a data table or API) gives the same value. | Producer's validator |
-| **Approved** | A reviewer accepted it in the consuming app, for a stated use. | Consumer only |
+| **Source-linked** | The URL was among the pages actually fetched or searched. It says nothing about whether a claim is supported. | Computed by the validator |
+| **Fact-verified** | A published value is bound to an exact quote in a specific evidence item (section 5.2), or a derived value is bound to its input records and formula. | Computed by the validator |
+| **Cross-checked** (when available) | A second, independent representation (a data table or API) gives the same value. | Computed by the validator |
+| **Consumer-approved** | A reviewer accepted it in the consuming app, for a stated use. **Requires fact-verified**; cross-checking is optional unless the consumer's policy demands it. | Consumer only |
+
+The producer never asserts these in the published files. Each validator
+(producer and consumers alike) recomputes them from the record (section 5.2).
 
 Daybook's existing briefing checks (`functions/briefing-evidence.js`
 `verifyGrounding`: "Source matched", "Link verified") are **source-linked**
@@ -93,13 +100,32 @@ grounding/                              (on the orphan branch grounding-data)
 - **`manifest.json`:**
   `{schema, sequence, previousSequence, generatedAt, producerCommit, files: [{name, sha256, schema, recordCount}]}`.
 - **A release directory is never rewritten.** A correction ships as a new
-  release carrying a new revision of the record. A release is cut only when some
-  content changed.
+  release carrying a new revision of the record. A release is cut only when
+  published content changed: a fact, a watch state, or an insight.
+  Operational timestamps (when a check last ran) live in Firestore and run
+  health, never in the files (section 5.3).
+- **Each file is a complete snapshot,** not a change set. `facts.json` holds
+  every record still worth keeping, including superseded and withdrawn ones for
+  history.
+- **Sequences must agree.** `latest.json.sequence`, `manifest.sequence` and the
+  release directory name are equal. `manifest.previousSequence` is
+  `sequence - 1` (null for release 1).
 - **Consumers must:**
   - verify the manifest digest from `latest.json`, then each file's digest,
     before parsing anything;
-  - reject a sequence lower than the last one imported (the same digest again is
-    a no-op);
+  - reject a sequence lower than the last one imported;
+  - treat the same sequence with the same manifest digest as a no-op, and
+    **reject the same sequence with a different digest**;
+  - skip `facts.json` entirely when its digest equals the last one imported (a
+    release caused by a watch or insight change);
+  - **skip every `recordId` imported before**, logging it as a receipt skip
+    ("duplicate"). Proposals are never recreated;
+  - treat only `current` records, and new `corrected` revisions, as
+    candidate-eligible. `superseded` and `withdrawn` records stay for history
+    and may only close or flag an earlier candidate;
+  - retry briefly (a few attempts over a few minutes) when `latest.json` names a
+    release whose files have not reached the raw-file cache yet, and never read
+    a partial release;
   - allowlist the series, publishers, units and jurisdictions they accept;
   - write an **import receipt**: release sequence, manifest and file digests,
     the consumer's mapping version, the proposal or candidate IDs created, and
@@ -127,6 +153,9 @@ grounding/                              (on the orphan branch grounding-data)
     "period": { "from": "<YYYY-MM-DD>", "to": "<YYYY-MM-DD or null>" }
   },
   "qualifications": [ { "text": "<applicability the source states>", "evidenceId": "<id>" } ],
+  "valueBindings": [
+    { "field": "value", "token": "<exact token in the quote>", "evidenceId": "<id>" }
+  ],
   "observationDate": "<YYYY-MM-DD>",
   "publishedAt": "<YYYY-MM-DD>",
   "effectiveFrom": "<YYYY-MM-DD or null>",
@@ -139,7 +168,6 @@ grounding/                              (on the orphan branch grounding-data)
       "publisher": "<e.g. Australian Bureau of Statistics>",
       "title": "<page, release or file title>",
       "quote": "<verbatim text>",
-      "valueToken": "<the exact token in the quote that states the value>",
       "locator": { "page": "<n>", "paragraph": "<n>", "table": "<id>", "row": "<key>", "selector": "<css>" },
       "asOf": "<YYYY-MM-DD>",
       "tier": "primary | secondary",
@@ -149,28 +177,48 @@ grounding/                              (on the orphan branch grounding-data)
     }
   ],
   "derivation": null,
-  "captureMethod": "api | csv | rss | page | manual",
-  "checks": { "sourceLinked": true, "factVerified": true, "crossChecked": false, "plausible": true }
+  "plausibilityOverride": null,
+  "captureMethod": "api | csv | rss | page | manual"
 }
 ```
 
+A range uses one binding per end:
+`[{"field": "range.min", "token": "24.5", "evidenceId": "table-1"}, {"field": "range.max", "token": "31.0", "evidenceId": "table-1"}]`.
+
+A plausibility override, when a reviewer has cleared a breach, is
+`{"reviewer": "<initials>", "at": "<ISO timestamp>", "reason": "<why>", "failedBound": {"kind": "absolute | change", "limit": "<number>", "observed": "<number>"}}`.
+
 Rules the validator enforces:
 
-- **Bounded number match.** `valueToken` must appear in `quote` with no digit,
-  decimal point or digit-group comma touching either side (so `5` never matches
-  inside `15`, and `1,250` matches `1,250`). The token must also normalise to
-  `value`: grouping commas removed, trailing decimal zeros ignored
-  (`3.60` = `3.6`), and a stated percent sign agreeing with the unit. A shorthand
-  like `1.25k` never matches. Each bound value names its `evidenceId`.
+- **Bounded number match.**
+  - Every published value (`value`, or `range.min` and `range.max`) has a
+    `valueBindings` entry naming its token and evidence item.
+  - The token must appear in that item's `quote` with no digit, decimal point
+    or digit-group comma touching either side (so `5` never matches inside `15`,
+    and `1,250` matches `1,250`).
+  - The token must normalise to the bound value: grouping commas removed,
+    trailing decimal zeros ignored (`3.60` = `3.6`).
+  - A shorthand like `1.25k` never matches.
 - **Prose first, data second.** A `release` evidence item carries the quote; a
   `cross_check` item (a table or API row) must give the same value, or the
   record is `conflict`: it goes to the watch feed and never into facts.
 - **Plausibility bounds** per series (absolute range and maximum change from the
-  previous observation). A breach blocks the record until it is reviewed.
-- **Derived values** carry
-  `derivation: {formula, inputs: [recordIds], rounding}`. A published figure is
-  preferred to a derived one; a derived value is never created without these
-  fields.
+  previous observation). A breach blocks the record unless it carries a
+  `plausibilityOverride` recording who cleared it, when, why, and the bound it
+  failed.
+- **Derived values** carry `derivation: {formula, inputs: [recordIds], rounding}`
+  and no quote bindings. They are fact-verified through their inputs (each must
+  be a fact-verified record in the same snapshot) and the deterministic formula,
+  not through a quote. A published figure is preferred to a derived one, and a
+  consumer may refuse derived records by policy.
+- **The validator computes the trust attributes** (`sourceLinked`,
+  `factVerified`, `crossChecked`, `plausible`) and returns them with its
+  verdict. They are never read from the file.
+- **`contentSha256`** is the SHA-256 of the response body exactly as received
+  (after transfer decoding, before any parsing). For a manual capture it is the
+  digest of the downloaded PDF or Word file. It records what was read for audit;
+  it is not used to detect change, because dynamic pages differ on every fetch.
+  Change is detected from the extracted value and quote.
 - **Qualifications** come from the source's own words. A consumer may add its
   own qualifications at approval (ClaimBench's wage-floor warnings, for
   example); those stay in the consumer.
@@ -187,11 +235,15 @@ Rules the validator enforces:
   "seriesId": "<key>",
   "state": "awaiting_publication | published | overdue | stale | blocked | withdrawn | conflict",
   "expectedBy": "<YYYY-MM-DD only if the source states it, else null>",
-  "lastCheckedAt": "<ISO timestamp>",
+  "stateChangedAt": "<ISO timestamp when this state began>",
   "detail": "<what was seen, e.g. pay guide page updated; parser rejected table>",
   "evidence": { "url": "<where the state was observed>", "retrievedAt": "<ISO timestamp>" }
 }
 ```
+
+A watch record changes, and so causes a release, only when its `state`,
+`expectedBy`, `detail` or `evidence.url` changes. When a check last ran is
+operational data kept in Firestore and run health.
 
 ### 5.4 Insight record
 
@@ -216,8 +268,18 @@ Rules the validator enforces:
 | `seriesId` + `basisCode` | a **BI-Assessor-owned mapping** to `metric`, `basis`, `industryKey` and the `bm_*_vN` id | a RiskM8-owned mapping to a SOURCES id or research topic |
 | `value`/`range`, `unitCode` | `valueType` point or range, `value`/`range`, `unit` (e.g. `aud_per_hour`) | a validated fact added to `allowedFacts` for narrative text |
 | `qualifications`, `effectiveFrom`, `effectiveTo` | the draft `qualifications` (the reviewer edits them), `effectiveFrom`, `effectiveTo` | the text of the dated note |
-| `reviewDueAt` | set by the mapping rule (e.g. `effectiveTo` + 31 days) | not used |
+| `reviewDueAt` | set by the series mapping's review policy (below) | not used |
 | `lifecycle: corrected / superseded` | a `supersede` proposal, version + 1 | a replacement candidate |
+
+**Every ClaimBench series mapping must define:**
+- the `metric`, `basis` and `industryKey` it maps to (or state that it has none);
+- whether `effectiveFrom` is mandatory (it is for every ClaimBench record);
+- a deterministic `reviewDueAt` policy, for example: `effectiveTo` + 31 days
+  when `effectiveTo` is set, otherwise `effectiveFrom` + 12 months;
+- what happens when a required date cannot be established.
+
+An incomplete mapping, or a fact missing a date the mapping needs, produces a
+receipt skip with its reason, **never a partially valid proposal**.
 
 **Known registry gap.** ClaimBench's `METRIC` registry holds cost ratios, GP
 rates, useful lives and `rate_aud`. It has no index or interest metric. CPI or
@@ -274,19 +336,31 @@ this file.
 2. `grounding/validate.js` (plain JS, no dependencies) implements every rule in
    5.2–5.4, plus manifest and digest checks.
 3. **`grounding/fixtures/`**, valid and invalid cases:
-   - a valid CPI fact with cross-check;
-   - a valid manual award-rate fact;
-   - `5` inside `15`, and `1,250` against `1250`;
-   - a cross-check conflict;
-   - a correction (revision 2, supersedes revision 1);
-   - a rollback (lower sequence), and a digest mismatch;
-   - a private field smuggled into a record;
-   - an insight in the facts file;
-   - an unstated `expectedBy`.
-4. Tests for all of them in `grounding/validate.test.js`, run by `npm test`.
-5. Relabel Daybook's briefing source chips to the section 3 vocabulary
+   - **Valid facts:** a CPI fact with cross-check; a manual award-rate fact
+     (not cross-checked, still fact-verified); a range with two bindings; a
+     derived value bound to its inputs.
+   - **Number matching:** `5` inside `15`, and `1,250` against `1250`.
+   - **Evidence failures:** a cross-check conflict; a plausibility breach, with
+     and without a valid override.
+   - **Lifecycle:** a correction (revision 2 supersedes revision 1); a
+     superseded record, which is not candidate-eligible.
+   - **Release checks:** a rollback (lower sequence); the same sequence with a
+     different digest; a digest mismatch; sequences that disagree between
+     `latest.json`, the manifest and the directory.
+   - **Import planning:** an unchanged `facts.json`; a previously imported
+     `recordId`.
+   - **Things that must never get in:** a private field smuggled into a record;
+     an insight in the facts file; a trust attribute written by the producer; an
+     unstated `expectedBy`.
+4. An **import planner** in the same file, the idempotency rules of 5.1 as one
+   function consumers copy: `planImport(lastImported, release)` returns the
+   records to import and every skip with its reason.
+5. Tests for all of the above in `grounding/validate.test.js`, run by
+   `npm test`. A drift test checks that each schema's required fields match the
+   validator's.
+6. Relabel Daybook's briefing source chips to the section 3 vocabulary
    (source-linked). Help text follows.
-6. Keep this file's section 7 current.
+7. Keep this file's section 7 current.
 
 Done when: every fixture passes or fails for the stated reason, and the chips
 say what they actually prove.
@@ -327,7 +401,7 @@ three stashes, untouched unless Bob says otherwise):
 Done when: both importers accept the valid fixtures and reject the invalid ones
 with the stated reason, and a receipt names every skip.
 
-### Phase D: release publishing (Daybook, about 1 day)
+### Phase D: release publishing (Daybook, about 2 days; plus a short follow-up in each consumer)
 
 1. `grounding/` producer module (built like `news/`):
    - a series registry: key, publisher, URLs, method, parser, schedule,
@@ -345,8 +419,10 @@ with the stated reason, and a receipt names every skip.
    - a Morning 5 item when a watch state changes or a new fact lands (old → new,
      source, date, trust level);
    - a folded **Your numbers** panel on Evidence.
-6. The consumers switch from fixtures to the fetched release, with digest
-   verification.
+6. **Consumer follow-up** (a short session in each consumer repo, scheduled as
+   part of this phase): replace the fixture source with network retrieval of
+   `latest.json` and the release. Keep digest verification, the brief retry for
+   the raw-file cache, and `planImport`. The fixture tests stay.
 
 ### Phase E: Pilot 1, ABS CPI → RiskM8 (about 1 day)
 
@@ -407,19 +483,18 @@ Candidates, in suggested order:
   insight feed only, as context and suggestions under G3 and G5.
 - **Automating the July cycle,** once enough manual-plus-watch series exist.
 
-## 9. Decisions for Bob
+## 9. Decisions (agreed 2026-09-27)
 
-- **D1 Transport.** *Recommended:* immutable releases on an orphan
-  `grounding-data` branch of this public repo.
-- **D2 Daybook surface.** *Recommended:* a Morning 5 item on change plus a
-  folded Evidence panel, with no new Today card before the 2026-10-11 usage
-  review.
-- **D3 Pilots.** *Recommended:* CPI → RiskM8, and the FY27 traffic-controller
-  award → ClaimBench.
-- **D4 Manual capture.** *Recommended:* reviewed JSON files in this repo, with
-  no capture UI in v1.
-- **D5 Consumer work.** *Recommended:* a session opened in each repo, from a
-  handover, under that repo's own rules.
+- **D1 Transport:** immutable releases on an orphan `grounding-data` branch of
+  this public repo.
+- **D2 Daybook surface:** a Morning 5 item on change plus a folded Evidence
+  panel, with no new Today card before the 2026-10-11 usage review.
+- **D3 Pilots:** CPI → RiskM8, and the FY27 traffic-controller award →
+  ClaimBench.
+- **D4 Manual capture:** reviewed JSON files in this repo, with no capture UI in
+  v1.
+- **D5 Consumer work:** a session opened in each repo, from a handover, under
+  that repo's own rules.
 
 ## 10. What changed from the first draft
 
@@ -444,6 +519,29 @@ Candidates, in suggested order:
 - **Case law and events moved to separate, later roadmaps.** The first draft's
   3–4 days for them was not credible.
 
+**Revision 2.1** (the second review's contract amendments):
+- The trust levels became independent attributes, not a ladder. Approval
+  requires fact-verified; cross-checking is optional.
+- The validator computes the trust attributes; they are never written by the
+  producer.
+- Watch records carry `stateChangedAt`, not `lastCheckedAt`, so change-only
+  releases stay change-only. Check times live in Firestore and run health.
+- Explicit consumer idempotency: skip an unchanged `facts.json`, skip
+  previously imported `recordId`s, reject the same sequence with a different
+  digest, and retry for the raw-file cache. It is implemented once as
+  `planImport`.
+- `valueBindings` bind each value (both ends of a range) to a token and an
+  evidence item. Derived values are verified through their inputs and formula,
+  and consumers may refuse them.
+- Every ClaimBench mapping defines its dates and a deterministic `reviewDueAt`.
+  An incomplete mapping is a receipt skip, never a partial proposal.
+- A plausibility override records who cleared it, when, why, and the failed
+  bound.
+- Smaller points: files are complete snapshots; only `current` and new
+  `corrected` records are candidate-eligible; `contentSha256` is defined;
+  sequences must agree; Phase D names the consumer follow-up; Phase D is
+  estimated at about 2 days.
+
 ## 11. Sequence at a glance
 
 | Step | Where | Depends on | Effort |
@@ -451,7 +549,7 @@ Candidates, in suggested order:
 | A: boundary fix | BI-Assessor | none | about 0.5 day |
 | B: contracts, validator, fixtures, chip wording | Daybook | D1–D5 | 1–1.5 days |
 | C: fixture importers | BI-Assessor, RiskM8 | B (and A for BI-Assessor) | about 1 day each |
-| D: release publishing and Daybook surfaces | Daybook | B, C | about 1 day |
+| D: release publishing, Daybook surfaces, consumer follow-up | Daybook, both | B, C | about 2 days, plus short consumer sessions |
 | E: Pilot 1, CPI → RiskM8 | Daybook, RiskM8 | D | about 1 day |
 | F: Pilot 2, FY27 award → ClaimBench | Daybook, BI-Assessor | D | 0.5–1 day |
 | G: one update or correction cycle | all | E or F | calendar time plus 0.5 day |
