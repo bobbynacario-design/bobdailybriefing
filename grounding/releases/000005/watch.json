@@ -1,0 +1,90 @@
+{
+  "schema": "daybook-grounding-watch/1",
+  "generatedAt": "2026-09-27T22:37:36.357Z",
+  "records": [
+    {
+      "watchId": "abs_cpi_all_groups_annual_change@series",
+      "seriesId": "abs_cpi_all_groups_annual_change",
+      "state": "published",
+      "expectedBy": "2026-09-30",
+      "stateChangedAt": "2026-09-27T08:03:57.047Z",
+      "detail": "Latest: 3.5% (2026-07), published 2026-08-26. Next: Consumer Price Index, Australia, August 2026, listed by the ABS for 2026-09-30.",
+      "evidence": {
+        "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release",
+        "retrievedAt": "2026-09-27T08:03:57.047Z"
+      }
+    },
+    {
+      "watchId": "fwo_ma000020_cw2_ordinary@series",
+      "seriesId": "fwo_ma000020_cw2_ordinary",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T09:35:01.492Z",
+      "detail": "Latest: $30.39/hour (2026-07-01), published 2026-07-02.",
+      "evidence": {
+        "url": "https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf",
+        "retrievedAt": "2026-09-27T09:35:01.492Z"
+      }
+    },
+    {
+      "watchId": "nsw_tow_accident_towing_light@series",
+      "seriesId": "nsw_tow_accident_towing_light",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T13:59:26.704Z",
+      "detail": "Latest: $320.00 each (2026-07-01), published 2026-07-01.",
+      "evidence": {
+        "url": "https://www.nsw.gov.au/legal-and-justice/consumer-rights-and-protection/services/your-rights-when-your-vehicle-towed/tow-truck-fees-for-light-vehicles",
+        "retrievedAt": "2026-09-27T13:59:26.704Z"
+      }
+    },
+    {
+      "watchId": "nsw_tow_storage_light_daily@series",
+      "seriesId": "nsw_tow_storage_light_daily",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T13:59:26.704Z",
+      "detail": "Latest: $18.00–$34.00/day (2026-07-01), published 2026-07-01.",
+      "evidence": {
+        "url": "https://www.nsw.gov.au/legal-and-justice/consumer-rights-and-protection/services/your-rights-when-your-vehicle-towed/tow-truck-fees-for-light-vehicles",
+        "retrievedAt": "2026-09-27T13:59:26.704Z"
+      }
+    },
+    {
+      "watchId": "vic_atsa_accident_tow_base_fee@series",
+      "seriesId": "vic_atsa_accident_tow_base_fee",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T13:59:26.704Z",
+      "detail": "Latest: $289.60 each (2026-07-01), published 2026-05-22.",
+      "evidence": {
+        "url": "https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf",
+        "retrievedAt": "2026-09-27T13:59:26.704Z"
+      }
+    },
+    {
+      "watchId": "vic_atsa_storage_motor_car_daily@series",
+      "seriesId": "vic_atsa_storage_motor_car_daily",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T13:59:26.704Z",
+      "detail": "Latest: $22.20–$32.80/day (2026-07-01), published 2026-05-22.",
+      "evidence": {
+        "url": "https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf",
+        "retrievedAt": "2026-09-27T13:59:26.704Z"
+      }
+    },
+    {
+      "watchId": "cth_sg_charge_percentage@series",
+      "seriesId": "cth_sg_charge_percentage",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T22:37:36.357Z",
+      "detail": "Reviewed 2026-09-28: compilation 78 (C2026C00272), in force from 2026-07-01. Section 17A(2): \"charge percentage means 12.\" SG now arises on each payment of qualifying earnings (the QE day), as amended by the Treasury Laws Amendment (Payday Superannuation) Act 2025 from 1 July 2026.",
+      "evidence": {
+        "url": "https://www.legislation.gov.au/C2004A04402/latest/text",
+        "retrievedAt": "2026-09-27T22:37:36.357Z"
+      }
+    }
+  ]
+}
