@@ -101,6 +101,14 @@ Everything below was read on 2026-09-27 with Daybook's own user agent
   - The watch is `published`, with `expectedBy` 2026-09-30 from the ABS page.
   - The release also validates for a consumer that has no bounds for the series.
 
+## Live, 2026-09-27
+
+- Dispatch run 36305014270 on 2462fb3 published **release 000002** (`grounding-data` 9249ddb, manifest `97186fc0…ddecf`): July 2026 = 3.5%. GitHub's runner could read both ABS sources.
+- `fetchRelease` against the live URL: ok with Daybook's bounds (plausible) and with none (plausible null, still eligible). A consumer allowlisting the series plans exactly this record.
+- The Firestore mirror is at sequence 2 with the same digest, and `grounding-ops` records the check time.
+- Signed in, Evidence shows the figure with Source-linked · Fact-verified · Cross-checked, and the Morning 5 lists it (fourth of five, source Numbers).
+- Still to do for Phase E: the RiskM8 session (mapping, network import of release 2, Bob accepts into `provenance.js`, the BI row shows the note).
+
 ## Timeline this makes possible
 
 - **July 2026 (3.5%)** can be release 2 as soon as the parser ships.
