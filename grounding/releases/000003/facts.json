@@ -1,0 +1,148 @@
+{
+  "schema": "daybook-grounding-facts/1",
+  "generatedAt": "2026-09-27T09:35:01.492Z",
+  "records": [
+    {
+      "recordId": "abs_cpi_all_groups_annual_change@2026-07#r1",
+      "seriesId": "abs_cpi_all_groups_annual_change",
+      "observationKey": "2026-07",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 3.5,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "3.5",
+          "evidenceId": "release"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "index",
+      "title": "CPI, all groups, annual change (Australia)",
+      "unitCode": "pct",
+      "basisCode": "annual_change",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "All groups CPI",
+        "period": {
+          "from": "2025-08-01",
+          "to": "2026-07-31"
+        }
+      },
+      "observationDate": "2026-07-31",
+      "publishedAt": "2026-08-26",
+      "evidence": [
+        {
+          "evidenceId": "release",
+          "role": "release",
+          "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/jul-2026",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "Consumer Price Index, Australia, July 2026",
+          "quote": "In the 12 months to July 2026: The Consumer Price Index (CPI) rose 3.5%, down from 3.8% in the 12 months to June 2026.",
+          "locator": {
+            "selector": "#key-statistics"
+          },
+          "asOf": "2026-08-26",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T08:03:57.047Z",
+          "contentSha256": "8da989b352cd9de2772a548fe1d8b67726eed5ae68fc042c48be86e727001f59",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Consumer Price Index, Australia, July 2026"
+        },
+        {
+          "evidenceId": "api",
+          "role": "cross_check",
+          "url": "https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0/3.10001.10.50.M?startPeriod=2026-07&endPeriod=2026-07",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "ABS Data API, ABS,CPI,2.0.0, 3.10001.10.50.M (All groups CPI, Australia, % change from previous year)",
+          "quote": "3.5",
+          "locator": {
+            "table": "ABS,CPI,2.0.0/3.10001.10.50.M",
+            "row": "2026-07"
+          },
+          "asOf": "2026-08-26",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T08:03:57.047Z",
+          "contentSha256": "15b942a4c2d4e13538e88b4b7d2064da26c2cdebd4d54d22da238c13f548522e",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Consumer Price Index, Australia, July 2026"
+        }
+      ],
+      "captureMethod": "page"
+    },
+    {
+      "recordId": "fwo_ma000020_cw2_ordinary@2026-07-01#r1",
+      "seriesId": "fwo_ma000020_cw2_ordinary",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 30.39,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "The rates of pay in the tables for weekly hire employees include industry allowance and tool allowance (where applicable).",
+          "evidenceId": "guide"
+        },
+        {
+          "text": "When do the rates in the pay guide apply from? The first full pay period starting on or after 01 July 2026.",
+          "evidenceId": "guide"
+        },
+        {
+          "text": "If our information is inconsistent with the award, then the award applies.",
+          "evidenceId": "guide"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "30.39",
+          "evidenceId": "guide"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "award_wage",
+      "title": "Building and Construction award, CW/ECW 2 (civil, weekly hire), ordinary hourly rate",
+      "unitCode": "aud_per_hour",
+      "basisCode": "award_min_wage",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "Level 2 (CW/ECW 2); Weekly hire - full-time and part-time - Civil construction",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-07-02",
+      "evidence": [
+        {
+          "evidenceId": "guide",
+          "role": "release",
+          "url": "https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf",
+          "publisher": "Fair Work Ombudsman",
+          "title": "Pay Guide - Building and Construction General On-site Award [MA000020], Effective: 01/07/2026, Published: 02/07/2026",
+          "quote": "Weekly hire - full-time and part-time - Civil construction. Table 1 of 3. Classification: Level 2 (CW/ECW 2). Weekly pay rate: $1,154.65. Hourly pay rate: $30.39.",
+          "locator": {
+            "page": "71",
+            "table": "Weekly hire - full-time and part-time - Civil construction, Table 1 of 3, column \"Hourly pay rate\"",
+            "row": "Level 2 (CW/ECW 2)"
+          },
+          "asOf": "2026-07-02",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T09:21:55Z",
+          "contentSha256": "da4e9013a6ed7efe71d77dd3aa63764b50bc99e60fce5250abca80819fccda2e",
+          "licence": "© Fair Work Ombudsman www.fairwork.gov.au. Licensed under CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/legalcode). Pay Guide - Building and Construction General On-site Award [MA000020], https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf"
+        }
+      ],
+      "captureMethod": "manual"
+    }
+  ]
+}

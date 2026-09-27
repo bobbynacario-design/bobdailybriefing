@@ -1,0 +1,30 @@
+{
+  "schema": "daybook-grounding-watch/1",
+  "generatedAt": "2026-09-27T09:35:01.492Z",
+  "records": [
+    {
+      "watchId": "abs_cpi_all_groups_annual_change@series",
+      "seriesId": "abs_cpi_all_groups_annual_change",
+      "state": "published",
+      "expectedBy": "2026-09-30",
+      "stateChangedAt": "2026-09-27T08:03:57.047Z",
+      "detail": "Latest: 3.5% (2026-07), published 2026-08-26. Next: Consumer Price Index, Australia, August 2026, listed by the ABS for 2026-09-30.",
+      "evidence": {
+        "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release",
+        "retrievedAt": "2026-09-27T08:03:57.047Z"
+      }
+    },
+    {
+      "watchId": "fwo_ma000020_cw2_ordinary@series",
+      "seriesId": "fwo_ma000020_cw2_ordinary",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T09:35:01.492Z",
+      "detail": "Latest: $30.39/hour (2026-07-01), published 2026-07-02.",
+      "evidence": {
+        "url": "https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf",
+        "retrievedAt": "2026-09-27T09:35:01.492Z"
+      }
+    }
+  ]
+}
