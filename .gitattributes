@@ -2,3 +2,6 @@
 # line endings must never be converted on checkout (core.autocrlf is on here).
 grounding/fixtures/** -text
 grounding/schema/** eol=lf
+# Consumers copy validate.js unmodified and check its SHA-256, so its bytes must
+# be the same in every checkout.
+grounding/validate.js eol=lf
