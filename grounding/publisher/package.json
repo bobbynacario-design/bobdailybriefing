@@ -1,0 +1,17 @@
+{
+  "name": "daybook-grounding-publisher",
+  "private": true,
+  "description": "Daybook grounding publisher: builds numbered, digest-checked releases for the grounding-data branch and mirrors the latest one to Firestore. The contract itself (../validate.js) has no dependencies; only this runner needs firebase-admin.",
+  "type": "commonjs",
+  "main": "publish.js",
+  "scripts": {
+    "publish": "node publish.js",
+    "dry-run": "node publish.js --dry-run --no-firestore"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.2.0"
+  }
+}

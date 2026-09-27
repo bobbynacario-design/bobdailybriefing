@@ -4,6 +4,7 @@ on:
   schedule:
     # GitHub cron is UTC. PHT is UTC+8.
     - cron: "45 19 * * *"    # News 03:45 PHT daily (lands before the morning briefing even when late)
+    - cron: "15 20 * * *"    # Grounding releases 04:15 PHT daily (after news)
     - cron: "45 21 * * *"    # News catch-up 05:45 PHT daily
     - cron: "0 22 * * 0-4"   # Radar 06:00 PHT Monday-Friday
     - cron: "15 22 * * *"    # Markets 06:15 PHT daily
@@ -16,7 +17,7 @@ on:
         required: true
         default: radar
         type: choice
-        options: [radar, markets, news]
+        options: [radar, markets, news, grounding]
 
 permissions:
   contents: read
@@ -55,6 +56,63 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       - run: npm --prefix news ci
       - run: npm --prefix news run refresh
+
+  # Grounding releases for BI-Assessor and RiskM8 (docs/grounding-roadmap.md,
+  # Phase D). Daily at 04:15 PHT. Each series in grounding/series.js keeps its
+  # own cadence, so the publisher only fetches the series that are due; manual
+  # captures (grounding/manual/) are read every run.
+  #
+  # A release is cut only when published content changed. It is committed to
+  # the orphan grounding-data branch, never to main, so Bob's pushes are never
+  # affected. Releases are immutable: the publisher refuses to overwrite one.
+  # This is the only job with write access, and it uses it for that branch only.
+  grounding:
+    if: github.event.schedule == '15 20 * * *' || github.event.inputs.feed == 'grounding'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: refresh-grounding
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the grounding-data branch (created empty on the first run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads origin grounding-data >/dev/null 2>&1; then
+            git clone --quiet --depth 1 --branch grounding-data "$url" gdata
+          else
+            mkdir gdata
+            git -C gdata init --quiet --initial-branch grounding-data
+            git -C gdata remote add origin "$url"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: grounding/publisher/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix grounding/publisher ci
+      - id: publish
+        run: node grounding/publisher/publish.js --data-dir gdata --defer-mirror --pending-file "$RUNNER_TEMP/grounding-pending.json"
+      - name: Commit and push a new release
+        if: steps.publish.outputs.released == 'true'
+        env:
+          SEQUENCE: ${{ steps.publish.outputs.sequence }}
+        run: |
+          cd gdata
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "Grounding release ${SEQUENCE}"
+          git push --quiet origin HEAD:grounding-data
+      - name: Mirror the published release and record run health
+        run: node grounding/publisher/publish.js --data-dir gdata --mirror-only --pending-file "$RUNNER_TEMP/grounding-pending.json"
 
   radar:
     if: github.event.schedule == '0 22 * * 0-4' || github.event.schedule == '30 0 * * 1-5' || github.event.inputs.feed == 'radar'

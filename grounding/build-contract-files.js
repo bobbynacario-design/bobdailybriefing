@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { SCHEMAS, ENUMS, FIELDS } = require('./validate');
+const { cutRelease, pad6 } = require('./release');
 
 const ROOT = __dirname;
 const sha256 = (text) => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
@@ -239,26 +240,11 @@ const insightQuestion = {
   tags: { streams: ['tp_road'], anzsic: [] }, createdAt: '2026-10-01T04:15:00Z',
 };
 
+// A sample release, cut by the same function the publisher uses.
 function release(sequence, generatedAt, facts, watch, insights) {
-  const dir = String(sequence).padStart(6, '0');
-  const files = {
-    'facts.json': json({ schema: SCHEMAS.facts, generatedAt, records: facts }),
-    'watch.json': json({ schema: SCHEMAS.watch, generatedAt, records: watch }),
-    'insights.json': json({ schema: SCHEMAS.insights, generatedAt, records: insights }),
-  };
-  const manifest = json({
-    schema: SCHEMAS.manifest, sequence, previousSequence: sequence === 1 ? null : sequence - 1, generatedAt, producerCommit: 'fixture',
-    files: [
-      { name: 'facts.json', sha256: sha256(files['facts.json']), schema: SCHEMAS.facts, recordCount: facts.length },
-      { name: 'watch.json', sha256: sha256(files['watch.json']), schema: SCHEMAS.watch, recordCount: watch.length },
-      { name: 'insights.json', sha256: sha256(files['insights.json']), schema: SCHEMAS.insights, recordCount: insights.length },
-    ],
-  });
-  const latest = json({ schema: SCHEMAS.latest, sequence, generatedAt, manifest: { path: 'releases/' + dir + '/manifest.json', sha256: sha256(manifest) } });
+  const cut = cutRelease(sequence, { facts, watch, insights }, { generatedAt, producerCommit: 'fixture' });
   const out = {};
-  out['published-' + dir + '/grounding/latest.json'] = latest;
-  out['published-' + dir + '/grounding/releases/' + dir + '/manifest.json'] = manifest;
-  Object.keys(files).forEach((name) => { out['published-' + dir + '/grounding/releases/' + dir + '/' + name] = files[name]; });
+  Object.keys(cut.files).forEach((rel) => { out['published-' + pad6(sequence) + '/grounding/' + rel] = cut.files[rel]; });
   return out;
 }
 
