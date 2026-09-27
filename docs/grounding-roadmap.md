@@ -414,9 +414,9 @@ point (rather than a separate `refresh-grounding.js`), and the consumers'
 network adapter is `grounding/fetch-release.js`. Release 000001 (empty, as
 intended until E and F) is on `grounding-data`; it passes `fetchRelease`, the
 Firestore mirror matches its digest, and a second run cut no release.
-**Phase D is not yet complete.** It still needs Bob's redeploy of
-`deliverMorningFive` and `testBriefingDelivery`, and the two consumer
-follow-ups, each in its own repo session. See
+The Morning 5 push Functions (`deliverMorningFive`, `testBriefingDelivery`)
+were redeployed the same day. **Phase D is not yet complete.** It still needs
+the two consumer follow-ups, each in its own repo session. See
 [the runbook and consumer handovers](grounding-phase-d.md).
 
 1. `grounding/` producer module (built like `news/`):

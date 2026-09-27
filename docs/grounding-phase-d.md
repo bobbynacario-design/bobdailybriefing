@@ -2,8 +2,8 @@
 
 Updated 2026-09-27. This records the implementation in Daybook; the contract is
 [grounding-roadmap.md](grounding-roadmap.md). No real pilot values are included.
-Daybook's side is live and checked (see "Live result" below); Phase D waits on
-a Functions redeploy and the two consumer follow-ups.
+Daybook's side is live and checked (see "Live result" below), Functions
+included; Phase D waits on the two consumer follow-ups.
 
 ## Implemented in Daybook
 
@@ -93,10 +93,12 @@ which is null for a missing doc, so before release 1 was mirrored the panel
 read was refused (`permission-denied`) and showed "could not load". It exists
 now; if it is ever deleted, the next grounding run writes it again.
 
+**Functions redeployed, 2026-09-27.** Bob deployed `deliverMorningFive` and
+`testBriefingDelivery`, the two that build the Morning 5 push, so the server's
+selection includes Numbers the way the page does. `firebase functions:list`
+shows both on a new source hash (f15333f1) that no other function shares.
+
 **Still to do for Phase D:**
-- Bob redeploys the two Functions that build the Morning 5 push, so the
-  server's selection includes Numbers the way the page does:
-  `deliverMorningFive` and `testBriefingDelivery`.
 - The two consumer follow-ups below, each in its own repo session. Copy
   `grounding/fetch-release.js` from Daybook commit **28a808d**; its SHA-256 is
   `a01354b546c4e83e9c2bbe09c84feb119f465f15baab6a78431c8a4a216a4c8b` (pinned to
