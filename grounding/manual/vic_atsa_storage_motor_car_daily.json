@@ -1,0 +1,81 @@
+{
+  "seriesId": "vic_atsa_storage_motor_car_daily",
+  "title": "VIC storage of accident-damaged motor cars per day (locked yard to under cover), incl GST",
+  "observationKey": "2026-07-01",
+  "kind": "regulated_fee",
+  "basisCode": "regulated_fee_max",
+  "observationDate": "2026-07-01",
+  "publishedAt": "2026-05-22",
+  "effectiveFrom": "2026-07-01",
+  "effectiveTo": "2027-06-30",
+  "derivation": null,
+  "plausibilityOverride": null,
+  "captureMethod": "manual",
+  "value": null,
+  "range": {
+    "min": 22.2,
+    "max": 32.8
+  },
+  "unitCode": "aud_per_day",
+  "scope": {
+    "jurisdiction": "VIC",
+    "classification": "Locked storage of an accident damaged motor car following towing from a road accident scene within a controlled area, per day",
+    "period": {
+      "from": "2026-07-01",
+      "to": "2027-06-30"
+    }
+  },
+  "qualifications": [
+    {
+      "text": "This notice comes into operation on 1 July 2026.",
+      "evidenceId": "notice"
+    },
+    {
+      "text": "All varied charge amounts in this notice are inclusive of GST.",
+      "evidenceId": "notice"
+    },
+    {
+      "text": "(c) 'motor car' means a motor vehicle less than 4 tonnes GVM (gross vehicle mass) other than a motor cycle.",
+      "evidenceId": "notice"
+    },
+    {
+      "text": "9.2 Locked storage charge for a motor cycle – under cover […] resulting in a varied charge amount of $10.80 per day.",
+      "evidenceId": "notice"
+    },
+    {
+      "text": "9.4 Locked storage charge for a motor cycle – in a locked yard […] resulting in a varied charge amount of $6.80 per day.",
+      "evidenceId": "notice"
+    }
+  ],
+  "valueBindings": [
+    {
+      "field": "range.min",
+      "token": "22.20",
+      "evidenceId": "notice"
+    },
+    {
+      "field": "range.max",
+      "token": "32.80",
+      "evidenceId": "notice"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "notice",
+      "role": "release",
+      "url": "https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf",
+      "publisher": "Victoria Government Gazette (Secretary, Department of Transport and Planning)",
+      "title": "Accident Towing Services Act 2007: Variation of charges for 2026–27 for accident towing and storage services under section 212H (Special Gazette No. S 257, 22 May 2026)",
+      "quote": "9.1 Locked storage charge for a motor car – under cover […] resulting in a varied charge amount of $32.80 per day. […] 9.3 Locked storage charge for a motor car – in a locked yard […] resulting in a varied charge amount of $22.20 per day.",
+      "locator": {
+        "page": "3",
+        "paragraph": "9. Locked storage charge"
+      },
+      "asOf": "2026-05-22",
+      "tier": "primary",
+      "retrievedAt": "2026-09-27T13:51:03Z",
+      "contentSha256": "a9468e364310e749269764d376286da48455ea99bbb665ad61ff75dce667bdc2",
+      "licence": "© State of Victoria. The Victoria Government Gazette is subject to copyright (Copyright Act 1968); quoted in part for citation only. Full notice: https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf"
+    }
+  ]
+}

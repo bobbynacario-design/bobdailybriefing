@@ -21,6 +21,8 @@
 //
 const absCpi = require('./sources/abs-cpi');
 const fwoPayGuide = require('./sources/fwo-pay-guide');
+const nswTow = require('./sources/nsw-tow-fees');
+const vicTow = require('./sources/vic-gazette-towing');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -64,5 +66,69 @@ module.exports = [
     bounds: { min: 25, max: 45, maxChange: 3 },
     cadenceHours: 12,
     fetch: fwoPayGuide.watchPayGuide,
+  },
+  // Phase H, H-1 (docs/grounding-phase-h.md), for ClaimBench: NSW regulated
+  // light-vehicle tow and storage fees, read from the NSW Government page each
+  // day (Bob's D-H1: publish now). Ex GST, which the qualifications say.
+  {
+    seriesId: nswTow.TOW.seriesId,
+    title: nswTow.TOW.title,
+    capture: 'page',
+    publisher: nswTow.PUBLISHER,
+    urls: { page: nswTow.PAGE_URL },
+    licence: nswTow.LICENCE,
+    streams: ['tp_road', 'tp_utility'],
+    // An annual schedule (1 July); the page states no next date.
+    freshnessDays: 400,
+    bounds: { min: 200, max: 500, maxChange: 60 },
+    cadenceHours: 12,
+    fetch: nswTow.fetchTow,
+  },
+  {
+    seriesId: nswTow.STORAGE.seriesId,
+    title: nswTow.STORAGE.title,
+    capture: 'page',
+    publisher: nswTow.PUBLISHER,
+    urls: { page: nswTow.PAGE_URL },
+    licence: nswTow.LICENCE,
+    streams: ['tp_road', 'tp_utility'],
+    freshnessDays: 400,
+    // A range (outside to inside Sydney metro): each end is checked against
+    // min and max; max change applies to point values only.
+    bounds: { min: 10, max: 60, maxChange: 10 },
+    cadenceHours: 12,
+    fetch: nswTow.fetchStorage,
+  },
+  // Phase H, H-1, for ClaimBench: VIC regulated accident towing and storage
+  // fees, captured by hand from the section 212H gazette notice (for 2026-27,
+  // Special Gazette S257) with an automated watch on the gazette's search.
+  // GST inclusive. The gazette is not openly licensed: short quotes only, no
+  // copy of the notice kept (Bob's D-H2).
+  {
+    seriesId: vicTow.TOW.seriesId,
+    title: vicTow.TOW.title,
+    capture: 'manual',
+    publisher: vicTow.PUBLISHER,
+    urls: { search: vicTow.SEARCH_URL, notice2026: 'https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf' },
+    licence: vicTow.licenceFor('https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf'),
+    streams: ['tp_road', 'tp_utility'],
+    // The notice appears each May or June, effective 1 July.
+    freshnessDays: 400,
+    bounds: { min: 200, max: 400, maxChange: 40 },
+    cadenceHours: 12,
+    fetch: vicTow.watchTow,
+  },
+  {
+    seriesId: vicTow.STORAGE.seriesId,
+    title: vicTow.STORAGE.title,
+    capture: 'manual',
+    publisher: vicTow.PUBLISHER,
+    urls: { search: vicTow.SEARCH_URL, notice2026: 'https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf' },
+    licence: vicTow.licenceFor('https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf'),
+    streams: ['tp_road', 'tp_utility'],
+    freshnessDays: 400,
+    bounds: { min: 10, max: 60, maxChange: 8 },
+    cadenceHours: 12,
+    fetch: vicTow.watchStorage,
   },
 ];

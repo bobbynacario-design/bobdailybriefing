@@ -118,13 +118,17 @@ test('through the real publisher, the award publishes next to CPI and CPI is unc
   assert.equal(out.result.release.sequence, 2);
   assert.ok(src.calls.includes(fwo.DOWNLOAD_URL), 'the watch read the guide');
   const facts = out.result.snapshot.facts;
-  assert.deepEqual(facts.map((f) => f.recordId).sort(), ['abs_cpi_all_groups_annual_change@2026-07#r1', RECORD_ID]);
+  // Other registered series may publish too; this test is about the award and CPI.
+  const ids = facts.map((f) => f.recordId);
+  assert.ok(ids.includes('abs_cpi_all_groups_annual_change@2026-07#r1') && ids.includes(RECORD_ID), ids.join(', '));
   assert.deepEqual(facts.find((f) => f.seriesId === cpi.SERIES_ID), cpiBefore, 'the CPI record is byte-for-byte the same');
   const watch = Object.fromEntries(out.result.snapshot.watch.map((w) => [w.seriesId, w]));
   assert.equal(watch[fwo.SERIES_ID].state, 'published');
   assert.equal(watch[fwo.SERIES_ID].detail, 'Latest: $30.39/hour (2026-07-01), published 2026-07-02.');
   assert.equal(watch[cpi.SERIES_ID].state, 'published');
-  assert.deepEqual(out.result.changes.map((c) => c.id), [RECORD_ID]);
+  const changed = out.result.changes.map((c) => c.id);
+  assert.ok(changed.includes(RECORD_ID));
+  assert.ok(!changed.some((id) => id.startsWith('abs_cpi_')), 'CPI did not change');
 });
 
 test('a BI-Assessor-shaped plan imports exactly the award, and skips CPI as not allowlisted', async () => {

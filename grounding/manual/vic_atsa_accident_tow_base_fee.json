@@ -1,0 +1,69 @@
+{
+  "seriesId": "vic_atsa_accident_tow_base_fee",
+  "title": "VIC accident towing base fee (first 8 km, under 4 t GVM, controlled areas), incl GST",
+  "observationKey": "2026-07-01",
+  "kind": "regulated_fee",
+  "basisCode": "regulated_fee_max",
+  "observationDate": "2026-07-01",
+  "publishedAt": "2026-05-22",
+  "effectiveFrom": "2026-07-01",
+  "effectiveTo": "2027-06-30",
+  "derivation": null,
+  "plausibilityOverride": null,
+  "captureMethod": "manual",
+  "value": 289.6,
+  "range": null,
+  "unitCode": "aud_per_item",
+  "scope": {
+    "jurisdiction": "VIC",
+    "classification": "Base fee for towing, inclusive of the first 8 kms travelled; motor vehicles under 4.0 tonnes GVM; controlled areas",
+    "period": {
+      "from": "2026-07-01",
+      "to": "2027-06-30"
+    }
+  },
+  "qualifications": [
+    {
+      "text": "This notice comes into operation on 1 July 2026.",
+      "evidenceId": "notice"
+    },
+    {
+      "text": "All varied charge amounts in this notice are inclusive of GST.",
+      "evidenceId": "notice"
+    },
+    {
+      "text": "7. Fee per km travelled by tow truck beyond the first 8 kms […] resulting in a varied charge amount of $4.60.",
+      "evidenceId": "notice"
+    },
+    {
+      "text": "8. After hours surcharge […] resulting in a varied charge amount of $98.80.",
+      "evidenceId": "notice"
+    }
+  ],
+  "valueBindings": [
+    {
+      "field": "value",
+      "token": "289.60",
+      "evidenceId": "notice"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "notice",
+      "role": "release",
+      "url": "https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf",
+      "publisher": "Victoria Government Gazette (Secretary, Department of Transport and Planning)",
+      "title": "Accident Towing Services Act 2007: Variation of charges for 2026–27 for accident towing and storage services under section 212H (Special Gazette No. S 257, 22 May 2026)",
+      "quote": "6. Base fee for towing inclusive of the first 8 kms travelled […] for the base fee for towing accident damaged motor vehicles with a gross vehicle mass of less than 4.0 tonnes from a road accident scene, within an area declared to be a controlled area […] resulting in a varied charge amount of $289.60.",
+      "locator": {
+        "page": "2",
+        "paragraph": "6. Base fee for towing inclusive of the first 8 kms travelled"
+      },
+      "asOf": "2026-05-22",
+      "tier": "primary",
+      "retrievedAt": "2026-09-27T13:51:03Z",
+      "contentSha256": "a9468e364310e749269764d376286da48455ea99bbb665ad61ff75dce667bdc2",
+      "licence": "© State of Victoria. The Victoria Government Gazette is subject to copyright (Copyright Act 1968); quoted in part for citation only. Full notice: https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf"
+    }
+  ]
+}

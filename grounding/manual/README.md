@@ -38,4 +38,6 @@ automatically. See docs/grounding-roadmap.md, section 6.
 
 | File | Source | Value |
 |---|---|---|
+| `vic_atsa_accident_tow_base_fee.json` | Victoria Government Gazette, Special Gazette S257 (22 May 2026), clause 6, page 2. Not kept here: the gazette is not openly licensed (D-H2); its SHA-256 and permanent URL are in the capture | $289.60 per tow, 2026-27, incl GST |
+| `vic_atsa_storage_motor_car_daily.json` | Same notice, clauses 9.1 and 9.3, page 3 | $22.20–$32.80 per day, 2026-27, incl GST |
 | `fwo_ma000020_cw2_ordinary.json` | FWO pay guide MA000020, effective 01/07/2026, published 02/07/2026 (`sources/fwo-ma000020-pay-guide-effective-2026-07-01-G00203138.pdf`), page 71, Weekly hire - full-time and part-time - Civil construction, Level 2 (CW/ECW 2), Hourly pay rate | $30.39/hour, FY2026-27 |
