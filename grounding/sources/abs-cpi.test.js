@@ -74,6 +74,8 @@ test('a real release becomes a fact-verified, cross-checked, plausible record wi
   assert.deepEqual(fact.scope, { jurisdiction: 'AU', classification: 'All groups CPI', period: { from: '2025-08-01', to: '2026-07-31' } });
   assert.equal(fact.observationDate, '2026-07-31');
   assert.equal(fact.evidence[0].publisher, 'Australian Bureau of Statistics');
+  assert.deepEqual(fact.evidence[0].locator, { paragraph: 'Key statistics', selector: '#key-statistics' },
+    'the location in words for a report, and the selector for machines');
   assert.equal(fact.evidence[1].quote, '3.5');
   const checks = r.validation.results.find((x) => x.recordId === fact.recordId).checks;
   assert.deepEqual(checks, { sourceLinked: true, factVerified: true, crossChecked: true, plausible: true });
@@ -92,6 +94,15 @@ test('the same month read again the next day cuts no release', async () => {
   const again = runWith(asPrevious(first), await cpi.fetchCpi({ fetch: source().fetch, now: T2 }), T2);
   assert.equal(again.changed, false);
   assert.equal(again.changes.length, 0);
+});
+
+test('the July figure published with a selector-only locator is not republished for the new words', async () => {
+  // Release 000002 carried { selector: '#key-statistics' } alone. Reading July
+  // again with the readable locator must not cut a release: a locator is not content.
+  const previous = asPrevious(runWith(null, await cpi.fetchCpi({ fetch: source().fetch, now: T1 }), T1));
+  previous.facts[0].evidence[0].locator = { selector: '#key-statistics' };
+  const again = runWith(previous, await cpi.fetchCpi({ fetch: source().fetch, now: T2 }), T2);
+  assert.equal(again.changed, false);
 });
 
 test('when the Data API disagrees, the figure is a conflict and is not published', async () => {

@@ -230,6 +230,11 @@ Rules the validator enforces:
 - **The validator computes the trust attributes** (`sourceLinked`,
   `factVerified`, `crossChecked`, `plausible`) and returns them with its
   verdict. They are never read from the file.
+- **A locator names the place in words as well as for machines.**
+  - Give `page`, `table`, `row` or `paragraph` in words a reader would recognise, for example `paragraph: "Key statistics"`.
+  - A `selector` may accompany them, but it is for machines only, and consumers never print it in a report.
+  - A locator is not content, so improving one cuts no release.
+  - This was found when RiskM8 printed "Trace: selector #key-statistics" on 2026-09-27.
 - **`contentSha256`** is the SHA-256 of the response body exactly as received
   (after transfer decoding, before any parsing). For a manual capture it is the
   digest of the downloaded PDF or Word file. It records what was read for audit;

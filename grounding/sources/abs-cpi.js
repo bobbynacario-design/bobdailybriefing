@@ -181,7 +181,10 @@ function observation(page, apiCell, fetched) {
     evidence: [
       {
         evidenceId: 'release', role: 'release', url: page.permanentUrl, publisher: PUBLISHER, title: page.pageTitle,
-        quote: page.heading + ' ' + page.item, locator: { selector: '#key-statistics' },
+        // "paragraph" is the location in words, for a consumer to print ("Trace:
+        // Key statistics"); "selector" is for machines and is never meant for a
+        // report. A locator is not content, so adding the words cut no release.
+        quote: page.heading + ' ' + page.item, locator: { paragraph: 'Key statistics', selector: '#key-statistics' },
         asOf: page.publishedAt, tier: 'primary', retrievedAt: fetched.at, contentSha256: fetched.pageSha256, licence,
       },
       {
