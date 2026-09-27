@@ -8,3 +8,5 @@ grounding/validate.js eol=lf
 grounding/fetch-release.js eol=lf
 # Verbatim ABS responses used as test data; the CSV arrives with CRLF.
 grounding/sources/fixtures/** -text
+# The source files manual captures were read from; their SHA-256 is in the capture.
+grounding/manual/sources/** binary

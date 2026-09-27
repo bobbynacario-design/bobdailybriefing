@@ -19,9 +19,8 @@
 //                  { state, detail, url, expectedBy }, for example "blocked"
 //                  when a source refuses automated readers.
 //
-// Phase F adds the FY27 traffic-controller award (captured by hand, with an
-// automated watch on its pay guide).
 const absCpi = require('./sources/abs-cpi');
+const fwoPayGuide = require('./sources/fwo-pay-guide');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -43,5 +42,27 @@ module.exports = [
     // not skipped as "not due".
     cadenceHours: 12,
     fetch: absCpi.fetchCpi,
+  },
+  // Phase F pilot, for BI-Assessor's ClaimBench (docs/grounding-phase-f.md).
+  // The award lists "Traffic controller" at CW/ECW 2 (Schedule A, A.2.2); Bob
+  // chose the civil construction full-time weekly-hire ordinary rate, the true
+  // wage floor. The value is captured by hand from the FWO pay guide
+  // (grounding/manual/fwo_ma000020_cw2_ordinary.json, with the guide itself
+  // in grounding/manual/sources/); the pay guide is watched automatically.
+  {
+    seriesId: fwoPayGuide.SERIES_ID,
+    title: fwoPayGuide.TITLE,
+    capture: 'manual',
+    publisher: fwoPayGuide.PUBLISHER,
+    urls: { payGuide: fwoPayGuide.PAY_GUIDE_URL, award: 'https://awards.fairwork.gov.au/MA000020.html' },
+    licence: fwoPayGuide.LICENCE,
+    streams: ['tp_road', 'tp_utility'],
+    // An annual figure (1 July to 30 June); the watch turns it stale as soon
+    // as the FWO issues a different guide.
+    freshnessDays: 400,
+    // The same bounds as BI-Assessor's, so the FY27 figure passes both.
+    bounds: { min: 25, max: 45, maxChange: 3 },
+    cadenceHours: 12,
+    fetch: fwoPayGuide.watchPayGuide,
   },
 ];

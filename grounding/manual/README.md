@@ -27,3 +27,15 @@ automatically. See docs/grounding-roadmap.md, section 6.
   history.
 - **Git history is the audit trail.** Commit each capture with the source it
   came from.
+- **Keep the source file in `sources/`** when the publisher only serves its
+  current edition (the FWO pay guides do: last year's could not be downloaded
+  in September 2026). Name it after what it is, and check that the capture's
+  `contentSha256` is its digest; the series' tests do. Keep the source's
+  licence: FWO pay guides are © Fair Work Ombudsman www.fairwork.gov.au,
+  CC BY-NC 4.0, and are kept here for non-commercial audit only.
+
+## Captures
+
+| File | Source | Value |
+|---|---|---|
+| `fwo_ma000020_cw2_ordinary.json` | FWO pay guide MA000020, effective 01/07/2026, published 02/07/2026 (`sources/fwo-ma000020-pay-guide-effective-2026-07-01-G00203138.pdf`), page 71, Weekly hire - full-time and part-time - Civil construction, Level 2 (CW/ECW 2), Hourly pay rate | $30.39/hour, FY2026-27 |

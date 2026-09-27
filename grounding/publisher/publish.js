@@ -91,7 +91,7 @@ async function fetchWithIdentity(url, init) {
 
 // Run the automated series that are due. A refusal (401/403) is reported as
 // "blocked"; any other failure keeps the previous watch state for that series.
-async function runAutomated(registry, ops, now, fetchImpl) {
+async function runAutomated(registry, ops, now, fetchImpl, manualDir) {
   const observations = [], status = {}, checked = {};
   for (const series of registry) {
     if (typeof series.fetch !== 'function') continue;
@@ -99,7 +99,8 @@ async function runAutomated(registry, ops, now, fetchImpl) {
     const every = (series.cadenceHours || 24) * 3600000;
     if (last && Date.parse(now) - last < every) { status[series.seriesId] = { keep: true }; continue; }
     try {
-      const out = await series.fetch({ fetch: fetchImpl, userAgent: USER_AGENT, now });
+      // manualDir lets a watch compare the source with its reviewed capture.
+      const out = await series.fetch({ fetch: fetchImpl, userAgent: USER_AGENT, now, manualDir });
       (out && out.observations || []).forEach((o) => observations.push(o));
       if (out && out.status) status[series.seriesId] = out.status;
       checked[series.seriesId] = { lastCheckedAt: now, lastError: null };
@@ -185,8 +186,9 @@ async function run(opts) {
     const snap = await db.collection(COLL).doc('grounding-ops').get();
     ops = snap.exists ? (snap.data().series || {}) : {};
   }
-  const manual = loadManual(opts.manualDir || path.join(GROUNDING, 'manual'));
-  const auto = await runAutomated(registry, ops, now, opts.fetchImpl || fetchWithIdentity);
+  const manualDir = opts.manualDir || path.join(GROUNDING, 'manual');
+  const manual = loadManual(manualDir);
+  const auto = await runAutomated(registry, ops, now, opts.fetchImpl || fetchWithIdentity, manualDir);
   const result = produce({
     previous, registry, observations: manual.concat(auto.observations), seriesStatus: auto.status, now, producerCommit: producerCommit(),
   });

@@ -1,0 +1,66 @@
+{
+  "seriesId": "fwo_ma000020_cw2_ordinary",
+  "observationKey": "2026-07-01",
+  "kind": "award_wage",
+  "title": "Building and Construction award, CW/ECW 2 (civil, weekly hire), ordinary hourly rate",
+  "value": 30.39,
+  "range": null,
+  "unitCode": "aud_per_hour",
+  "basisCode": "award_min_wage",
+  "scope": {
+    "jurisdiction": "AU",
+    "classification": "Level 2 (CW/ECW 2); Weekly hire - full-time and part-time - Civil construction",
+    "period": {
+      "from": "2026-07-01",
+      "to": "2027-06-30"
+    }
+  },
+  "qualifications": [
+    {
+      "text": "The rates of pay in the tables for weekly hire employees include industry allowance and tool allowance (where applicable).",
+      "evidenceId": "guide"
+    },
+    {
+      "text": "When do the rates in the pay guide apply from? The first full pay period starting on or after 01 July 2026.",
+      "evidenceId": "guide"
+    },
+    {
+      "text": "If our information is inconsistent with the award, then the award applies.",
+      "evidenceId": "guide"
+    }
+  ],
+  "valueBindings": [
+    {
+      "field": "value",
+      "token": "30.39",
+      "evidenceId": "guide"
+    }
+  ],
+  "observationDate": "2026-07-01",
+  "publishedAt": "2026-07-02",
+  "effectiveFrom": "2026-07-01",
+  "effectiveTo": "2027-06-30",
+  "evidence": [
+    {
+      "evidenceId": "guide",
+      "role": "release",
+      "url": "https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf",
+      "publisher": "Fair Work Ombudsman",
+      "title": "Pay Guide - Building and Construction General On-site Award [MA000020], Effective: 01/07/2026, Published: 02/07/2026",
+      "quote": "Weekly hire - full-time and part-time - Civil construction. Table 1 of 3. Classification: Level 2 (CW/ECW 2). Weekly pay rate: $1,154.65. Hourly pay rate: $30.39.",
+      "locator": {
+        "page": "71",
+        "table": "Weekly hire - full-time and part-time - Civil construction, Table 1 of 3, column \"Hourly pay rate\"",
+        "row": "Level 2 (CW/ECW 2)"
+      },
+      "asOf": "2026-07-02",
+      "tier": "primary",
+      "retrievedAt": "2026-09-27T09:21:55Z",
+      "contentSha256": "da4e9013a6ed7efe71d77dd3aa63764b50bc99e60fce5250abca80819fccda2e",
+      "licence": "© Fair Work Ombudsman www.fairwork.gov.au. Licensed under CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/legalcode). Pay Guide - Building and Construction General On-site Award [MA000020], https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf"
+    }
+  ],
+  "derivation": null,
+  "plausibilityOverride": null,
+  "captureMethod": "manual"
+}
