@@ -486,6 +486,16 @@ RiskM8's source library. RiskM8 is deployed with the BI note. See
 
 ### Phase F: Pilot 2, FY27 traffic-controller award → ClaimBench (about 0.5–1 day)
 
+**Status, 2026-09-27: done.** The award lists traffic controllers at CW/ECW 2,
+so the series is `fwo_ma000020_cw2_ordinary`: the civil weekly-hire ordinary
+rate, captured by hand from the FWO pay guide, with an automated watch on the
+guide. Daybook published it in release 000003.
+
+BI-Assessor mapped it, re-copied the 2136a5a validator, and deployed. Bob
+applied the proposal (overlay revision 1). ClaimBench now reports
+`bm_rate_traffic_controller_award_fy27_au_v2` at $30.39/h for FY27 dates. See
+[grounding-phase-f.md](grounding-phase-f.md).
+
 - **Watch (automated):** the Fair Work Ombudsman pay guide for the Building and
   Construction General On-site Award (MA000020), the source ClaimBench's FY26
   record uses.

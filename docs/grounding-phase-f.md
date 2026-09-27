@@ -236,6 +236,22 @@ already changed in 2136a5a, but only in `planImport` and `nextImportState`:
   capture.
 - The Firestore mirror is at sequence 3.
 
+## Applied in BI-Assessor, 2026-09-27
+
+BI-Assessor's own record is `docs/CLAIMBENCH_DAYBOOK.md`, main db5ac27, pushed.
+- **323b0f3:** mapped the series as published (CW/ECW 2) and deployed it.
+- **9b14f84:** adopted the 2136a5a validator (a mapping change re-plans a
+  release).
+- **The first press after that deploy** re-planned 000003. It found the award
+  already proposed, correctly a duplicate, so it saved an empty job, which the
+  card then showed instead of the waiting proposal.
+- **88c7a19:** makes the card show a proposal still waiting in a release's
+  earlier job.
+- **Bob applied it at 13:08 UTC:** job `daybook-000003`, overlay
+  `config/claimbenchRuntime` revision 1. `_fy27_au_v2` is $30.39/h, 2026-07-01
+  to 2027-06-30, review due 2027-07-31. FY26 dates still resolve to
+  `_fy26_au_v1` ($29.74).
+
 ## Change to BI-Assessor's contract table
 
 Its mapping must change before its smoke test:
