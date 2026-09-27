@@ -109,7 +109,10 @@ test('through the real publisher with every series, a ClaimBench-shaped plan imp
   const facts = out.result.snapshot.facts.map((f) => f.recordId).sort();
   assert.deepEqual(facts, ['abs_cpi_all_groups_annual_change@2026-07#r1', 'fwo_ma000020_cw2_ordinary@2026-07-01#r1',
     'nsw_tow_accident_towing_light@2026-07-01#r1', 'nsw_tow_storage_light_daily@2026-07-01#r1', TOW_ID, STORAGE_ID]);
-  assert.ok(out.result.snapshot.watch.every((w) => w.state === 'published'), JSON.stringify(out.result.snapshot.watch.map((w) => [w.seriesId, w.state])));
+  // The four fee series this test is about (other series' sources are not served here).
+  const fees = out.result.snapshot.watch.filter((w) => /^(nsw_tow_|vic_atsa_)/.test(w.seriesId));
+  assert.equal(fees.length, 4);
+  assert.ok(fees.every((w) => w.state === 'published'), JSON.stringify(fees.map((w) => [w.seriesId, w.state])));
   const rel = out.result.release, d = rel.dir, f = rel.files;
   const release = V.validateRelease({ latestText: f['latest.json'], manifestText: f[d + '/manifest.json'],
     fileTexts: { 'facts.json': f[d + '/facts.json'], 'watch.json': f[d + '/watch.json'], 'insights.json': f[d + '/insights.json'] }, directorySequence: rel.sequence }, { bounds });

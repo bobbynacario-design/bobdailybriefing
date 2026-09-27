@@ -54,7 +54,8 @@ figure is held for the day. None of these can publish a wrong figure.
 ## When the real release arrives (routine, not a phase)
 
 - **1 October, 04:15 PHT, automatic.** Daybook publishes the next release with
-  the real August figure. It is 000005, because Phase H-1 took 000004. The Morning 5 shows "CPI … 3.5% → x% (2026-07 → 2026-08)"
+  the real August figure, under whatever sequence number is next (Phase H releases
+  come in between). The Morning 5 shows "CPI … 3.5% → x% (2026-07 → 2026-08)"
   under Numbers.
 - **RiskM8, when Bob sees that item.** Run the network import. The review file
   says exactly what to do: accept the replacement into

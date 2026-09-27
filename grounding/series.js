@@ -6,7 +6,8 @@
 //
 //   seriesId       lower_snake_case; stable forever, because consumers map it
 //   title          plain name, as Daybook shows it
-//   capture        'manual' (a reviewed file in grounding/manual/) or 'api' | 'csv' | 'rss' | 'page'
+//   capture        'manual' (a reviewed file in grounding/manual/), 'api' | 'csv' | 'rss' | 'page',
+//                  or 'watch' (a watch state only; the series never publishes a fact)
 //   freshnessDays  after this many days without a new figure, the series is "stale"
 //   bounds         { min, max, maxChange } plausibility bounds; a breach is held back
 //   cadenceHours   how often an automated series is checked (manual files are read every run)
@@ -23,6 +24,7 @@ const absCpi = require('./sources/abs-cpi');
 const fwoPayGuide = require('./sources/fwo-pay-guide');
 const nswTow = require('./sources/nsw-tow-fees');
 const vicTow = require('./sources/vic-gazette-towing');
+const sg = require('./sources/sg-legislation');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -130,5 +132,20 @@ module.exports = [
     bounds: { min: 10, max: 60, maxChange: 8 },
     cadenceHours: 12,
     fetch: vicTow.watchStorage,
+  },
+  // Phase H, H-2: the Superannuation Guarantee charge percentage, watch only
+  // (roadmap: "Legislated at 12%; watch for change"). BI-Assessor's wages
+  // method holds the rate in code; this tells Bob when the Act changes. It
+  // reads the Federal Register's API: the ATO refuses automated readers.
+  {
+    seriesId: sg.SERIES_ID,
+    title: sg.TITLE,
+    capture: 'watch',
+    publisher: sg.PUBLISHER,
+    urls: { api: sg.API_URL, text: sg.TEXT_URL },
+    licence: sg.LICENCE,
+    streams: ['sme_bi'],
+    cadenceHours: 12,
+    fetch: sg.watchSg,
   },
 ];

@@ -190,3 +190,54 @@ The VIC FY26 records' own figures were re-set by S151 (20 March 2026) to a
 $279.10 base, $4.40/km, $95.20 after hours and $31.60 / $21.40 storage.
 Reviewing the FY26 records is BI-Assessor's call.
 
+## H-2: the Superannuation Guarantee charge percentage (watch only)
+
+Status: **built, 2026-09-28.** The roadmap says "Legislated at 12%; watch for
+change", for BI-Assessor's wages method.
+
+- **What BI-Assessor holds** (read-only):
+  - `public/app/screen1-wages-method1-contract.js` has `SG_RATE_BY_FY`:
+    10.5% (FY23), 11% (FY24), 11.5% (FY25), and 12% "from 1 Jul 2025 onwards
+    (legislated terminal rate)".
+  - The rate is resolved by date of loss, and "No manual override".
+  - So a fact would not be consumed. What it needs is to hear when the law
+    changes: a watch.
+- **Sources:**
+  - The ATO refuses automated readers (HTTP 403 from its CDN, even for
+    robots.txt).
+  - The Federal Register of Legislation allows robots (`Crawl-delay: 10`).
+  - Its public API, `api.prod.legislation.gov.au/v1` (no robots file), answers
+    Daybook.
+  - `versions/find(titleId='C2004A04402',asAtSpecification='Latest')` gives the
+    latest compilation of the *Superannuation Guarantee (Administration) Act
+    1992*: compilation 78 (C2026C00272), in force from 2026-07-01, registered
+    2026-07-08, amended by the *Treasury Laws Amendment (Payday Superannuation)
+    Act 2025*.
+- **Reviewed (in a real browser, reading the compilation's text):**
+  - section 17A, "When an individual superannuation guarantee amount arises",
+    subsection (2): **"charge percentage means 12."** It is a flat
+    definition; Payday Super replaced the old year-by-year table.
+  - From 1 July 2026, SG arises on each payment of **qualifying earnings** (the
+    "QE day"), not quarterly on ordinary time earnings.
+  - BI-Assessor's 12% stands; the base has changed, which is for BI-Assessor to
+    weigh in its wages method.
+- **Built:** `grounding/sources/sg-legislation.js`, registered as
+  `cth_sg_charge_percentage` with `capture: 'watch'`. It never publishes a fact.
+  - **The reviewed compilation** (`REVIEWED` in the module) reads as
+    **published**, with the finding.
+  - **A newer compilation,** including one registered ahead of its start date,
+    turns it **stale**, naming it and its amending Acts. That reaches the
+    Morning 5.
+  - **An unreadable answer** is **blocked**.
+  - **To clear a stale:** read section 17A of the new compilation, update
+    BI-Assessor if the rate changed, and record the new review in `REVIEWED`.
+  - **Detail length:** capped at 500 characters. A long list of amending Acts
+    becomes a count; a test found the first version could exceed the cap.
+- **Licence:** the compilation states none. Only compilation details and the
+  five-word definition are published, for citation.
+- **Tests and checks:**
+  - 6 new tests; 101 grounding tests in total, and the full suite passes.
+  - Four deliberate breakages were each caught.
+  - A live dry run proposed a watch-only release (facts unchanged), with the
+    SG watch published.
+
