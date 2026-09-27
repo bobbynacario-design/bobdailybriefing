@@ -246,7 +246,9 @@ change", for BI-Assessor's wages method.
 
 ## H-3: ATO Small Business Benchmarks (a reviewed-year reminder)
 
-Status: **built, 2026-09-28.** Bob chose option A (D-H3-1). The roadmap says: "watch, both
+Status: **live, 2026-09-28**, in release 000006 (dispatch on 30d50e3). It is a
+watch-only release: `facts.json` is byte-identical to release 000005. Bob chose
+option A (D-H3-1). The roadmap says: "watch, both
 consumers, annual, method-dependent".
 
 - **What the consumers hold** (read-only):
