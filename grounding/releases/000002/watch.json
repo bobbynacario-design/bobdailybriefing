@@ -1,0 +1,18 @@
+{
+  "schema": "daybook-grounding-watch/1",
+  "generatedAt": "2026-09-27T08:03:57.047Z",
+  "records": [
+    {
+      "watchId": "abs_cpi_all_groups_annual_change@series",
+      "seriesId": "abs_cpi_all_groups_annual_change",
+      "state": "published",
+      "expectedBy": "2026-09-30",
+      "stateChangedAt": "2026-09-27T08:03:57.047Z",
+      "detail": "Latest: 3.5% (2026-07), published 2026-08-26. Next: Consumer Price Index, Australia, August 2026, listed by the ABS for 2026-09-30.",
+      "evidence": {
+        "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release",
+        "retrievedAt": "2026-09-27T08:03:57.047Z"
+      }
+    }
+  ]
+}
