@@ -1,0 +1,2 @@
+# Digests cover exact bytes: never convert line endings.
+* -text
