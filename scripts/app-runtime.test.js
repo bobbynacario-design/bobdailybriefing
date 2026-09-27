@@ -139,6 +139,26 @@ test('absent Command dependency produces a recovery action, not initial placehol
   assert.match(element('command-five').innerHTML,/Reload app/);
   assert.match(element('command-queue').textContent,/source tabs remain available/);
 });
+// The phone header pins only its section row by sticking at minus the top row's
+// height. That offset is plain CSS arithmetic, so it breaks silently if the
+// padding, the row height or the row gap changes without it, or if the rule
+// moves above the older phone rule that would then override it.
+test('the phone header offset matches the top row it hides', () => {
+  const block=html.indexOf('/* Phones: the brand and the controls share the top row');
+  assert.ok(block>0,'phone header block');
+  const rules=html.slice(block,html.indexOf('\n}',block));
+  const sticky=/\.nav\{row-gap:([^;]+);top:calc\(-([^ ]+) - (\d+)px - ([^)]+)\)\}/.exec(rules);
+  assert.ok(sticky,'the nav sticks at a calculated negative offset');
+  const [,rowGap,pad,height,gap]=sticky;
+  assert.equal(gap,rowGap,'the offset uses the row gap');
+  assert.match(rules,new RegExp('\\.nav-brand\\{[^}]*height:'+height+'px'),'the brand row is the height the offset hides');
+  assert.match(rules,new RegExp('\\.nav-right\\{[^}]*height:'+height+'px'),'and so are the controls');
+  assert.match(rules,/\.nav-center\{flex-wrap:nowrap\}/,'the sections stay on one row');
+  const older=/@media\(max-width:768px\)\{\.nav-center\{display:flex\}\.nav-brand\{font-size:13px\}\.nav\{padding:([^;}]+)\}/.exec(html);
+  assert.ok(older,'the older phone rule');
+  assert.equal(pad,older[1],'the offset uses the nav padding');
+  assert.ok(block>older.index,'the block comes after the older phone rule, so it wins');
+});
 test('each Command item shows once, and marks itself where it is shown', () => {
   const day='2026-09-27', now='2026-09-27T01:00:00.000Z';
   const mk=(i,source)=>({id:'n-'+i,source,title:'Item '+i,detail:'Detail '+i,urgency:'act',confidence:'high',score:90-i,scoreBreakdown:['base'],kind:'signal'});
@@ -663,6 +683,8 @@ test('usage names come from attributes, handlers or ids, never from text',()=>{
   assert.equal(context.usageNameFor(fakeEl({'data-card-act':'deeper'})),'card_deeper');
   assert.equal(context.usageNameFor(fakeEl({'data-account':'QBE'})),'account_brief','the account name is not recorded');
   assert.equal(context.usageNameFor(fakeEl({onclick:"openEvidenceItem('a','b')"})),'fn_openevidenceitem');
+  assert.equal(context.usageNameFor(fakeEl({onclick:"event.stopPropagation();commandTogglePin('n-1')"})),'fn_commandtogglepin','a handler that first stops the tap is still named');
+  assert.equal(context.usageNameFor(fakeEl({onclick:'event.stopPropagation()'})),'','stopping the tap alone names nothing');
   assert.equal(context.usageNameFor(fakeEl({id:'meeting-run'})),'btn_meeting-run');
   assert.equal(context.usageNameFor(fakeEl({'data-track':'mirror_try'})),'mirror_try');
   assert.equal(context.usageNameFor(fakeEl({},'SUMMARY')),'','nothing to name it by: not counted');

@@ -64,12 +64,13 @@ function setSyncStatus(status, msg) {
   // Theme colours, so the status stays readable in light mode too.
   var colors = {syncing:'var(--gold)',ok:'var(--green)',error:'var(--red)',offline:'var(--txt3)'};
   var icons  = {syncing:'⟳',ok:'✓',error:'✗',offline:'○'};
-  // Icon and message apart: on a phone only the icon shows, unless it is an error.
+  // Icon and message apart: on a phone only the icon shows, unless it is an
+  // error, and a screen reader still reads the message (the icon is decoration).
   var icon = document.createElement('span'), text = document.createElement('span');
-  icon.className = 'sync-icon'; icon.textContent = icons[status]||'○';
+  icon.className = 'sync-icon'; icon.textContent = icons[status]||'○'; icon.setAttribute('aria-hidden','true');
   text.className = 'sync-msg'; text.textContent = ' '+msg;
   el.replaceChildren(icon, text);
-  el.dataset.state = status; el.title = msg;
+  el.dataset.state = status;
   el.style.color = colors[status]||'var(--txt3)';
 }
 
@@ -2073,7 +2074,8 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
   .nav-brand span{min-width:0;overflow:hidden;text-overflow:ellipsis}.nav-brand .nav-mark{flex:none}
   .nav-right{width:auto;flex:none;height:32px;margin-left:auto;overflow:visible}
   .nav-center{flex-wrap:nowrap}
-  #sync-status:not([data-state="error"]) .sync-msg,.nav-btn-label{display:none}
+  #sync-status:not([data-state="error"]) .sync-msg{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .nav-btn-label{display:none}
 }
 @media(max-width:480px){
   .nav-center{justify-content:space-between;gap:0}
@@ -2227,7 +2229,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </div>
   <div class="nav-right">
     <div class="nav-clock" id="nav-clock">--:--</div>
-    <div id="sync-status" data-state="offline" title="Loading..."><span class="sync-icon">○</span><span class="sync-msg"> Loading...</span></div>
+    <div id="sync-status" data-state="offline"><span class="sync-icon" aria-hidden="true">○</span><span class="sync-msg"> Loading...</span></div>
     <button class="lock-btn unlocked" id="lock-btn" onclick="lockSession()" title="Lock session"><svg class="ico" aria-hidden="true"><use href="#i-unlock"/></svg></button>
     <button class="theme-btn" id="theme-btn" aria-label="Display: theme and text size" aria-haspopup="true" aria-expanded="false" aria-controls="display-menu" onclick="toggleDisplayMenu()"><svg class="ico" aria-hidden="true"><use href="#i-contrast"/></svg></button>
     <button class="nav-btn" id="intel-search-open" onclick="openIntelligenceSearch()" title="Search all intelligence (Ctrl+K)" aria-label="Search">⌕<span class="nav-btn-label"> Search</span></button>
@@ -3937,7 +3939,8 @@ function usageNameFor(el) {
     var spec = USAGE_ATTRS[i];
     if (el.hasAttribute(spec[0])) return usageKey(spec[2] ? spec[1] : spec[1] + el.getAttribute(spec[0]));
   }
-  var handler = /^\s*(?:return\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(el.getAttribute('onclick') || '');
+  // A handler may first stop the tap there (the Morning 5 card buttons do).
+  var handler = /^\s*(?:event\.stopPropagation\(\);\s*)?(?:return\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(el.getAttribute('onclick') || '');
   if (handler) return usageKey('fn_' + handler[1]);
   if (el.id) return usageKey('btn_' + el.id);
   var details = el.tagName === 'SUMMARY' && el.parentElement;
@@ -3992,11 +3995,15 @@ var USAGE_LABELS = {
   'btn_boost-past-use':'From your past: use today', 'btn_boost-tuck':'Tuck the spark away', fn_openevidenceitem:'Evidence: open source',
   fn_openevidenceasdecision:'Evidence: open as decision', fn_setdecisionverdict:'Called it? verdict', fn_editdecision:'Edit a decision',
   fn_closeoutdecision:'Close out a decision', fn_copyastext:'Copy briefing', fn_exportpdf:'Export PDF', fn_opendecisionformmanual:'Log a decision',
-  mirror_try:'Weekly read: try this', mirror_decision:'Weekly read: open as decision', mirror_answer:'Weekly read: write my answer'
+  mirror_try:'Weekly read: try this', mirror_decision:'Weekly read: open as decision', mirror_answer:'Weekly read: write my answer',
+  fn_setcommandreviewstate:'Morning 5: mark handled', fn_savecommandevidence:'Morning 5: save', fn_commandtogglepin:'Morning 5: pin',
+  fn_commanddismiss:'Morning 5: dismiss', fn_commandopenurl:'Morning 5: open article', command_why:'Morning 5: why this rank',
+  fn_completecommandreviewday:'Morning 5: close review', 'open_command-week':'Morning 5: weekly discipline'
 };
 // The features worth knowing about when unused: shown under "Not used lately".
 var USAGE_WATCH = ['card_deeper', 'aha_save', 'aha_decision', 'aha_check', 'account_brief', 'call_badge', 'btn_meeting-run', 'fn_setdecisionverdict',
-  'btn_boost-mirror-run', 'btn_boost-goals-edit', 'btn_boost-trial-save', 'card_remind', 'card_more', 'dossier_decision', 'page_command', 'page_timeline', 'mirror_try'];
+  'btn_boost-mirror-run', 'btn_boost-goals-edit', 'btn_boost-trial-save', 'card_remind', 'card_more', 'dossier_decision', 'page_command', 'page_timeline', 'mirror_try',
+  'fn_savecommandevidence', 'fn_commandtogglepin', 'fn_commanddismiss', 'command_why'];
 function usageSummary(days, today, span) {
   span = span || 30;
   var since = new Date(Date.parse(today + 'T00:00:00Z') - (span - 1) * 86400000).toISOString().slice(0, 10), totals = {}, daysUsed = {}, active = 0;
@@ -6044,7 +6051,7 @@ function commandItemHtml(item, rank, featured) {
     (item.source === 'Reliability' ? '' :
       '<button class="command-item-btn' + (item.pinned ? ' pinned' : '') + '" onclick="event.stopPropagation();commandTogglePin(\'' + encodedId + '\')">' + (item.pinned ? 'Pinned' : 'Pin') + '</button>' +
       '<button class="command-item-btn" onclick="event.stopPropagation();commandDismiss(\'' + encodedId + '\')">Dismiss</button>') + '</div>';
-  var explanation = '<details class="command-explain" onclick="event.stopPropagation()"><summary>Why this rank?</summary><div class="command-explain-body">' +
+  var explanation = '<details class="command-explain" onclick="event.stopPropagation()"><summary data-track="command_why">Why this rank?</summary><div class="command-explain-body">' +
     esc((item.scoreBreakdown || []).join(' · ')) + ' · final ' + (item.pinned ? 'pinned' : Math.round(item.score)) +
     (featured ? ' · Morning 5 also favors source diversity' : '') + '</div></details>';
   var handled = !!(review && review.state !== 'pending');
