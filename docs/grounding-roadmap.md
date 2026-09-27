@@ -507,6 +507,17 @@ applied the proposal (overlay revision 1). ClaimBench now reports
 
 ### Phase G: one real update or correction cycle (calendar time plus about 0.5 day)
 
+**Status, 2026-09-27: closed by rehearsal, at Bob's request.**
+- The production publisher cut a release 4 in scratch, from the live release 3
+  and a test August figure; nothing was pushed.
+- RiskM8's own importer, run on its real import state, produced a replacement
+  candidate for August and flagged July as superseded, with a receipt. It was a
+  no-op when run again.
+- BI-Assessor's plan imported nothing: the award is a duplicate.
+
+The real August release (due 30 September) is routine operation from here. See
+[grounding-phase-g.md](grounding-phase-g.md).
+
 The next CPI release (a new observation), or a documented correction (a new
 revision). Verify that the lifecycle, the consumers' supersede handling and the
 receipts trace end to end.
