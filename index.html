@@ -2071,7 +2071,6 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .metric-detail{font-size:12px;line-height:1.5;margin-top:.5rem;color:var(--txt2)}.metric-detail summary{cursor:pointer}.metric-detail div{padding-top:.5rem}.tick-val{font-size:21px;overflow-wrap:anywhere}.tick-move{font-size:12px}.tick{min-width:0}
 .card-body{font-size:15px;line-height:1.7}.card-hl{font-size:18px}.src{font-size:12px}.command-open-item{font:inherit;color:inherit;text-align:left;border:0;background:none;padding:0;cursor:pointer}.command-open-item:hover{text-decoration:underline}
 .search-coverage{padding:.6rem 1rem;display:flex;gap:.7rem;align-items:center;justify-content:space-between;font-size:12px;color:var(--txt2)}
-#grounding-panel summary{cursor:pointer;list-style:revert}
 #grounding-numbers .command-item{padding:.8rem 0;border-top:1px solid var(--border);line-height:1.7;overflow-wrap:anywhere}
 #grounding-numbers a{color:var(--amber)}
 #grounding-line{font:13px/1.5 var(--sans);margin-top:.7rem}#command-load-status{font-size:13px;color:var(--txt2);margin-bottom:.7rem}
@@ -2364,8 +2363,8 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="command-stat"><div class="command-stat-value" id="evidence-source-count">—</div><div class="command-stat-label">Sources represented</div></div>
     <div class="command-stat"><div class="command-stat-value" id="evidence-note-count">—</div><div class="command-stat-label">Items with notes</div></div>
   </div>
-  <details class="command-panel" id="grounding-panel">
-    <summary class="command-panel-head"><span class="command-panel-title">Your numbers</span><span class="command-panel-meta">Published figures and watch states</span></summary>
+  <details class="command-panel command-week" id="grounding-panel">
+    <summary><span class="command-panel-title">Your numbers</span><span class="command-week-line">Published figures and watch states</span></summary>
     <div class="meeting-intro">Source-linked means the source was read. Fact-verified means the value is bound to evidence. Cross-checked means a second representation agrees. Approval happens in the consuming app.</div>
     <div id="grounding-numbers" class="meeting-intro" role="status">Open Evidence to load published numbers.</div>
   </details>
@@ -4064,7 +4063,7 @@ var USAGE_LABELS = {
   mirror_try:'Weekly read: try this', mirror_decision:'Weekly read: open as decision', mirror_answer:'Weekly read: write my answer',
   fn_setcommandreviewstate:'Morning 5: mark handled', fn_savecommandevidence:'Morning 5: save', fn_commandtogglepin:'Morning 5: pin',
   fn_commanddismiss:'Morning 5: dismiss', fn_commandopenurl:'Morning 5: open article', command_why:'Morning 5: why this rank',
-  fn_completecommandreviewday:'Morning 5: close review', 'open_command-week':'Morning 5: weekly discipline'
+  fn_completecommandreviewday:'Morning 5: close review', 'open_command-week':'Morning 5: weekly discipline', 'open_grounding-panel':'Evidence: your numbers'
 };
 // The features worth knowing about when unused: shown under "Not used lately".
 var USAGE_WATCH = ['card_deeper', 'aha_save', 'aha_decision', 'aha_check', 'account_brief', 'call_badge', 'btn_meeting-run', 'fn_setdecisionverdict',
