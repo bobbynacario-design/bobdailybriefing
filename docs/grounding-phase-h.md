@@ -151,7 +151,25 @@ notice. NSW is current.
 - GitHub's runner read the NSW page and the gazette search: `grounding-ops`
   records both checks with no error. The mirror is at sequence 4.
 
-### For BI-Assessor (next, in its own session)
+### Applied in BI-Assessor, 2026-09-28: H-1 done
+
+BI-Assessor's own record is `docs/CLAIMBENCH_DAYBOOK.md`: 39f6f31 (the mapping,
+deployed with `deploy:safe`) and 672dd5a (the record). `check:claimbench-daybook`
+passes 244; I re-ran it here.
+- **The card:** "Check Daybook release" showed exactly the two VIC supersedes,
+  and Bob applied both. ClaimBench now reports `bm_rate_accident_tow_vic_au_v2`
+  ($289.60 per tow) and `bm_rate_vehicle_storage_vic_au_v2` ($22.20–$32.80 a
+  day) for FY27.
+- **NSW** matched the approved records and was skipped as identical, so it
+  stays on `_v1` (D-H1 as intended).
+- **S151 (FY26 re-determination):** Bob decided on no correction record.
+  ClaimBench resolves rates by today's date, so an FY26 record would never be
+  shown. The exposure is per-claim rate snapshots frozen between S151's start
+  and the `_v2` apply; an assessor re-checks any such TP claim with a VIC tow or
+  storage line. If ClaimBench ever resolves by service date, Daybook captures
+  S151 as its own dated observation.
+
+### What the BI-Assessor brief asked (kept for the record)
 
 | Daybook series | ClaimBench record | Action |
 |---|---|---|
