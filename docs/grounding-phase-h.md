@@ -316,7 +316,9 @@ consumers, annual, method-dependent".
 
 ## H-4: ATO Taxation Statistics (a reviewed-edition reminder)
 
-Status: **built, 2026-09-28.** It uses the same approach Bob chose for H-3.
+Status: **live, 2026-09-28**, in release 000007 (dispatch on bd9fb9a). It is a
+watch-only release: `facts.json` is byte-identical to release 000006. It uses the
+same approach Bob chose for H-3.
 
 - **What RiskM8 holds** (read-only):
   - `library/anzsic-gp-benchmarks.js` holds **261 ANZSIC gross-profit rates**,
