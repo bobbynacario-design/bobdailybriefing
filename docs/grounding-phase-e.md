@@ -114,7 +114,7 @@ Everything below was read on 2026-09-27 with Daybook's own user agent
   - Bob accepted it into `library/provenance.js` (d4291bd).
   - Deployed from 03b96d8. The session rendered a report with the production copy of `report-content.js`, and it drew the July CPI note with its source.
   - On my re-run, `check:daybook-grounding` passes 50.
-- **Left for Bob:** rebuild one report as a signed-in broker and look at the note on the BI row. Drafts reviewed before the deploy are flagged out of date at sign-off.
+- **Checked by Bob, 2026-09-27:** a report rebuilt as a signed-in broker shows the note on the BI row. **Phase E is done.**
 
 ## Timeline this makes possible
 

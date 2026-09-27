@@ -465,8 +465,7 @@ corrected validator from 2a162d7. See
 
 ### Phase E: Pilot 1, ABS CPI → RiskM8 (about 1 day)
 
-**Status, 2026-09-27: done, apart from Bob's own look at the note in a signed-in
-report.** Daybook publishes July 2026 CPI (release 000002). RiskM8 imported it
+**Status, 2026-09-27: done.** Bob checked the note in a signed-in report. Daybook publishes July 2026 CPI (release 000002). RiskM8 imported it
 (receipt for release 2, one candidate, no skips), and Bob accepted it into
 RiskM8's source library. RiskM8 is deployed with the BI note. See
 [grounding-phase-e.md](grounding-phase-e.md).
