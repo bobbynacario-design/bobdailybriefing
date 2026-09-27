@@ -406,6 +406,19 @@ with the stated reason, and a receipt names every skip.
 
 ### Phase D: release publishing (Daybook, about 2 days; plus a short follow-up in each consumer)
 
+**Status, 2026-09-27: Daybook's side is live.** The producer, the immutable
+release writer, per-series cadence, the post-push Firestore mirror, health
+reporting, Morning 5 changes and the folded Evidence panel shipped in 28a808d,
+3258147 and b2a00c8. `grounding/publisher/publish.js` is the refresh entry
+point (rather than a separate `refresh-grounding.js`), and the consumers'
+network adapter is `grounding/fetch-release.js`. Release 000001 (empty, as
+intended until E and F) is on `grounding-data`; it passes `fetchRelease`, the
+Firestore mirror matches its digest, and a second run cut no release.
+**Phase D is not yet complete.** It still needs Bob's redeploy of
+`deliverMorningFive` and `testBriefingDelivery`, and the two consumer
+follow-ups, each in its own repo session. See
+[the runbook and consumer handovers](grounding-phase-d.md).
+
 1. `grounding/` producer module (built like `news/`):
    - a series registry: key, publisher, URLs, method, parser, schedule,
      freshness, bounds, licence, stream tags;
