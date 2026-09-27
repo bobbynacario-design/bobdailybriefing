@@ -32,10 +32,18 @@ The contract Daybook publishes to BI-Assessor and RiskM8. The specification is
    idempotency rules:
    - skips an unchanged `facts.json` and every `recordId` imported before;
    - refuses a rollback or a reused sequence;
-   - flags records later superseded or withdrawn, once each.
+   - flags records later superseded or withdrawn, once each;
+   - when your `policy.mappingVersion` differs from the one your stored state
+     was made with, plans the whole release again (even the same release), so
+     a record you skipped as not allowlisted imports as soon as you map it.
+     Records imported before are still skipped as duplicates.
 4. **Map and record:** map `toImport` through **your own** mapping table to
    proposals or candidates. Fill `receipt.imported`, store the receipt, and store
-   `nextImportState(...)`.
+   `nextImportState(last, release, imported, flagged, policy)`. Pass the same
+   `policy`, so the state records its mapping version; a state made without it
+   keeps the old shortcuts. A re-plan of the same release produces a second
+   receipt for that sequence, so name receipts so that it does not overwrite
+   the first.
 5. **Approve:** nothing is approved automatically. Your existing approval path
    decides.
 

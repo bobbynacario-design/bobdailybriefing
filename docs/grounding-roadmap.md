@@ -114,10 +114,17 @@ grounding/                              (on the orphan branch grounding-data)
   - verify the manifest digest from `latest.json`, then each file's digest,
     before parsing anything;
   - reject a sequence lower than the last one imported;
-  - treat the same sequence with the same manifest digest as a no-op, and
+  - treat the same sequence with the same manifest digest as a no-op (unless
+    their mapping changed since; see below), and
     **reject the same sequence with a different digest**;
   - skip `facts.json` entirely when its digest equals the last one imported (a
-    release caused by a watch or insight change);
+    release caused by a watch or insight change), **and their mapping is
+    unchanged**;
+  - record their mapping version in the import state. When it changes, they
+    plan the release in full, even one already imported, so a record skipped
+    as not allowlisted imports once it is mapped; records imported before stay
+    duplicates (amended at the start of Phase F, after BI-Assessor found that a
+    mapping fix waited for the next change to `facts.json`);
   - **skip every `recordId` imported before**, logging it as a receipt skip
     ("duplicate"). Proposals are never recreated;
   - treat only `current` records, and new `corrected` revisions, as

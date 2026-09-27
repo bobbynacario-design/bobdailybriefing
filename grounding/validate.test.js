@@ -400,6 +400,51 @@ test('a release caused only by a watch or insight change skips facts entirely', 
   assert.equal(plan.action, 'import'); assert.equal(plan.toImport.length, 0);
   assert.deepEqual(plan.skips, [{ recordId: null, reason: 'facts unchanged' }]);
 });
+// Found by BI-Assessor in its Phase F review: a record skipped because the
+// consumer did not map it yet stayed skipped after the mapping was fixed, until
+// facts.json happened to change (a month, for a monthly series).
+test('a changed mapping re-plans the same release, and a release with unchanged facts, importing what it skipped', () => {
+  const noAward = Object.assign({}, POLICY, { mappingVersion: 'map-1', allow: Object.assign({}, POLICY.allow, { series: POLICY.allow.series.filter((x) => x !== 'fixture_award_cw1_ordinary') }) });
+  const withAward = Object.assign({}, POLICY, { mappingVersion: 'map-2' });
+  const r1 = validated(1);
+  const first = V.planImport(null, r1, noAward, NOW);
+  assert.equal(first.skips.find((x) => x.recordId === AWARD).reason, 'series not allowlisted');
+  const state = V.nextImportState(null, r1, first.toImport.map((x) => x.recordId), [], noAward);
+  assert.equal(state.mappingVersion, 'map-1');
+  // Same mapping: the old shortcuts hold.
+  assert.equal(V.planImport(state, r1, noAward, NOW).action, 'noop');
+  // Mapping fixed: the same release is planned in full; only the award is new.
+  const again = V.planImport(state, r1, withAward, NOW);
+  assert.equal(again.action, 'import');
+  assert.match(again.reason, /^mapping changed \(map-1 → map-2\), so the whole release was planned: 1 to import/);
+  assert.deepEqual(again.toImport.map((x) => x.recordId), [AWARD]);
+  assert.equal(again.skips.filter((x) => x.reason === 'duplicate').length, first.toImport.length);
+  assert.equal(again.receipt.mappingVersion, 'map-2');
+  // A later release with unchanged facts (a watch-only change) is planned in full too.
+  const o = release1Objects();
+  o.watch.records[0].detail = 'Fixture pay guide re-checked; unchanged.';
+  const watchOnly = V.validateRelease(makeRelease(2, o.facts, o.watch, o.insights), { bounds: FIXTURE_BOUNDS });
+  const w1 = V.nextImportState(null, V.validateRelease(makeRelease(1, release1Objects().facts, release1Objects().watch, release1Objects().insights), { bounds: FIXTURE_BOUNDS }), first.toImport.map((x) => x.recordId), [], noAward);
+  assert.deepEqual(V.planImport(w1, watchOnly, noAward, NOW).skips, [{ recordId: null, reason: 'facts unchanged' }]);
+  assert.deepEqual(V.planImport(w1, watchOnly, withAward, NOW).toImport.map((x) => x.recordId), [AWARD]);
+  // Once imported under the new mapping, the shortcuts hold again.
+  const after = V.nextImportState(state, r1, [AWARD], [], withAward);
+  assert.equal(after.mappingVersion, 'map-2');
+  assert.equal(V.planImport(after, r1, withAward, NOW).action, 'noop');
+  // Rollback and a reused sequence are refused whatever the mapping.
+  assert.equal(V.planImport(after, Object.assign({}, r1, { manifestSha256: 'f'.repeat(64) }), noAward, NOW).action, 'reject');
+});
+test('a state made without a policy keeps the old shortcuts, so existing consumers are unchanged', () => {
+  const r1 = validated(1);
+  const state = V.nextImportState(null, r1, [], []);
+  assert.equal('mappingVersion' in state, false);
+  assert.equal(V.planImport(state, r1, Object.assign({}, POLICY, { mappingVersion: 'anything' }), NOW).action, 'noop');
+  // A recorded null is a recorded version: moving to a named one re-plans.
+  const nullState = V.nextImportState(null, r1, [], [], {});
+  assert.equal(nullState.mappingVersion, null);
+  assert.equal(V.planImport(nullState, r1, {}, NOW).action, 'noop');
+  assert.equal(V.planImport(nullState, r1, POLICY, NOW).action, 'import');
+});
 test('an invalid release is refused outright', () => {
   const r = publishedRelease(1);
   r.fileTexts['facts.json'] = r.fileTexts['facts.json'].replace('3.1%', '3.2%');

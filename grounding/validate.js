@@ -663,12 +663,21 @@ function validateRelease(input, opts) {
 
 // ── consumer import planning ─────────────────────────────────────────────────
 // The idempotency rules of roadmap 5.1, once, for every consumer.
-//   lastImported: null, or { sequence, manifestSha256, factsSha256, recordIds: [], flagged: [] }
+//   lastImported: null, or { sequence, manifestSha256, factsSha256, recordIds: [], flagged: [], mappingVersion? }
 //   release:      the result of validateRelease
 //   policy:       { allow: { series: [], publishers: [], units: [], jurisdictions: [] }, refuseDerived, mappingVersion }
 // Returns { action: 'import' | 'noop' | 'reject', reason, toImport, skips, flags, receipt }.
 // The consumer maps toImport to proposals or candidates, fills receipt.imported
 // with the IDs it created, and stores nextImportState(...) for the next run.
+//
+// The two "unchanged" shortcuts (the same release again; a release whose
+// facts.json is unchanged) only hold while the consumer's own mapping is
+// unchanged too. A record skipped because it was not allowlisted must be
+// reconsidered once the mapping allows it, without waiting for new facts. So
+// when the state records the mappingVersion it was made with and the policy's
+// differs, the release is planned in full; records imported before are still
+// skipped as duplicates. A state without a recorded mappingVersion (made by a
+// four-argument nextImportState) keeps the old shortcuts.
 function planImport(lastImported, release, policy, now) {
   policy = policy || {};
   const allow = policy.allow || {};
@@ -685,14 +694,15 @@ function planImport(lastImported, release, policy, now) {
   };
   if (!release || !release.ok) { plan.reason = 'release failed validation'; return plan; }
   const last = lastImported || null;
+  const mapping = policy.mappingVersion || null;
+  const mappingChanged = !!last && last.mappingVersion !== undefined && (last.mappingVersion || null) !== mapping;
   if (last) {
     if (release.sequence < last.sequence) { plan.reason = 'rollback: release ' + release.sequence + ' is older than the last imported ' + last.sequence; return plan; }
     if (release.sequence === last.sequence) {
-      if (release.manifestSha256 === last.manifestSha256) { plan.action = 'noop'; plan.reason = 'release ' + release.sequence + ' already imported'; return plan; }
-      plan.reason = 'sequence ' + release.sequence + ' was reused with a different manifest digest';
-      return plan;
+      if (release.manifestSha256 !== last.manifestSha256) { plan.reason = 'sequence ' + release.sequence + ' was reused with a different manifest digest'; return plan; }
+      if (!mappingChanged) { plan.action = 'noop'; plan.reason = 'release ' + release.sequence + ' already imported'; return plan; }
     }
-    if (release.fileSha256.facts === last.factsSha256) {
+    if (!mappingChanged && release.fileSha256.facts === last.factsSha256) {
       plan.action = 'import';
       plan.reason = 'facts.json unchanged since release ' + last.sequence;
       plan.skips.push({ recordId: null, reason: 'facts unchanged' });
@@ -726,22 +736,27 @@ function planImport(lastImported, release, policy, now) {
     plan.toImport.push(rec);
   });
   plan.action = 'import';
-  plan.reason = plan.toImport.length + ' to import, ' + plan.skips.length + ' skipped, ' + plan.flags.length + ' flagged';
+  plan.reason = (mappingChanged ? 'mapping changed (' + (last.mappingVersion || 'none') + ' → ' + (mapping || 'none') + '), so the whole release was planned: ' : '') +
+    plan.toImport.length + ' to import, ' + plan.skips.length + ' skipped, ' + plan.flags.length + ' flagged';
   return plan;
 }
 
 // The state to store after an import. Only records actually imported (and
 // flags actually raised) are remembered, so a record skipped today for an
-// allowlist reason can still import once the consumer allows it.
-function nextImportState(lastImported, release, importedRecordIds, flaggedRecordIds) {
+// allowlist reason can still import once the consumer allows it. Pass the same
+// policy given to planImport: the state then records its mappingVersion, and a
+// later change of mapping re-plans instead of taking the "unchanged" shortcuts.
+function nextImportState(lastImported, release, importedRecordIds, flaggedRecordIds, policy) {
   const last = lastImported || { recordIds: [], flagged: [] };
-  return {
+  const state = {
     sequence: release.sequence,
     manifestSha256: release.manifestSha256,
     factsSha256: release.fileSha256.facts,
     recordIds: Array.from(new Set((last.recordIds || []).concat(importedRecordIds || []))),
     flagged: Array.from(new Set((last.flagged || []).concat(flaggedRecordIds || []))),
   };
+  if (policy) state.mappingVersion = policy.mappingVersion || null;
+  return state;
 }
 
 module.exports = {
