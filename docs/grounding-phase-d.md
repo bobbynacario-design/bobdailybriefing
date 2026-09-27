@@ -116,7 +116,7 @@ button goes live only after its `deploy:safe`; nobody has clicked it in a browse
 yet. RiskM8's change is a script outside the Firebase bundle, so it needs no
 deploy.
 
-**Fixed at the start of Phase E (commit COMMIT_HASH; roadmap 5.2).** Plausibility is
+**Fixed at the start of Phase E (commit 2a162d7; roadmap 5.2).** Plausibility is
 now judged per record against each evaluator's own bounds and never rejects a
 release, and `fetchRelease` retries only a missing file, a network error or a
 digest mismatch. The new SHA-256s are `validate.js` `6cca646b1e2840bc1b9bf4a2440cd4996b9d8a8bbc758713781db277df2f2074`
