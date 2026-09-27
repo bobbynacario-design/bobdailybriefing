@@ -314,3 +314,42 @@ consumers, annual, method-dependent".
   - A live dry run proposed a watch-only release (facts unchanged), with the
     reminder published.
 
+## H-4: ATO Taxation Statistics (a reviewed-edition reminder)
+
+Status: **built, 2026-09-28.** It uses the same approach Bob chose for H-3.
+
+- **What RiskM8 holds** (read-only):
+  - `library/anzsic-gp-benchmarks.js` holds **261 ANZSIC gross-profit rates**,
+    seeded 2026-07-14 from *Taxation Statistics 2020-21*'s company financial
+    ratios (Table 1C: fine industry by business status; "Gross profit ratio";
+    all; total; average ratio).
+  - `library/gp-turnover-bands.json` (built by `scripts/build-gp-turnover-bands.js`)
+    holds the same table's income-range bands (Table 2C).
+  - The module says to regenerate from a newer release rather than hand-edit.
+  - BI-Assessor does not use this release.
+- **What the ATO publishes** (read in a real browser; ato.gov.au refuses
+  automated readers, and data.gov.au's robots.txt disallows every agent):
+  - *Taxation statistics 2022-23* was published 2025-06-27, and **2023-24 on
+    2026-06-17**.
+  - 2023-24's "Industry benchmarks" (last updated 17 June 2026) produce
+    company ratios "for each of the following 3 levels of industry: broad
+    industry, fine industry, business industry code".
+  - Some tables are split by business status and others by business income
+    ranges, each with the number of entities, the average ratio and the median
+    ratio.
+  - They include "Gross profit ratio = (Total business income − Cost of sales)
+    ÷ Total business income".
+  - This is the same product RiskM8's 2020-21 tables came from. **RiskM8 is
+    three editions behind.**
+- **Built:** `grounding/sources/ato-taxstats.js`, registered as
+  `ato_taxation_statistics_edition` (`capture: 'watch'`; never a fact; it
+  makes no request).
+  - `REVIEWED` = edition 2023-24, released 2026-06-17, with the finding above.
+  - It reads **published** until 380 days after the release (2027-07-02), then
+    **stale**. It publishes no expected date (G8).
+  - **To clear it:** check the next edition, tell RiskM8, and update `REVIEWED`.
+- **Tests:** 4 tests; 110 grounding tests in total. Three deliberate breakages
+  were each caught.
+- **For RiskM8 now:** regenerating its two tables from the 2023-24 industry
+  benchmarks is its own owner-run step (a separate session).
+

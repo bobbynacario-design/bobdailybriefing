@@ -26,6 +26,7 @@ const nswTow = require('./sources/nsw-tow-fees');
 const vicTow = require('./sources/vic-gazette-towing');
 const sg = require('./sources/sg-legislation');
 const sbb = require('./sources/ato-sbb');
+const taxStats = require('./sources/ato-taxstats');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -163,5 +164,19 @@ module.exports = [
     streams: ['sme_bi', 'risk_review'],
     cadenceHours: 12,
     fetch: sbb.watchSbb,
+  },
+  // Phase H, H-4: ATO Taxation Statistics, a reviewed-edition reminder like
+  // H-3. RiskM8's GP table and turnover bands come from the 2020-21 edition's
+  // company industry benchmarks; each June edition has the same layout.
+  {
+    seriesId: taxStats.SERIES_ID,
+    title: taxStats.TITLE,
+    capture: 'watch',
+    publisher: taxStats.PUBLISHER,
+    urls: { editions: taxStats.EDITIONS_URL },
+    licence: taxStats.LICENCE,
+    streams: ['risk_review', 'sme_bi'],
+    cadenceHours: 12,
+    fetch: taxStats.watchTaxStats,
   },
 ];
