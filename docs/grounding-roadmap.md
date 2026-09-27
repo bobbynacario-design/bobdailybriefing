@@ -1,336 +1,458 @@
 # Three-app grounding roadmap: Daybook → BI-Assessor and RiskM8
 
-Status: proposed, 2026-09-27. Owner: Bob. This file is the source of truth for
-the integration; each consuming repo records its own slice in its own docs when
-its phase starts.
+Status: proposed, revision 2 (2026-09-27). Owner: Bob. This file is the source
+of truth for the integration; each consuming repo records its own slice in its
+own docs when its phase starts.
+
+Revision 2 replaces the first draft (commit 7d23353) after a review against the
+code of all three apps. What changed and why is in section 10.
 
 ## 1. The three apps and their jobs
 
 | App | Job | Firebase project | Where its knowledge lives today |
 |---|---|---|---|
-| **Daybook** (this repo) | Watches the world for Bob's work: briefing, news feeds, dossiers, accounts, decisions. The source of **creativity and grounding**. | `pokerhq-a67e4` (hosting on GitHub Pages) | `news/` RSS module, briefing prompt core, Firestore `briefings-bob/*` |
-| **BI-Assessor** (`../BI-Assessor/model-neutral-build`) | Actual claim processing: BI, third-party (TP) property damage, UAA. Intake → RFI → QA workbook → report, under APES 215. | `bi-assessor` | **ClaimBench** (`functions/claimbench/`): `sources.js`, `rates.js`, `useful-life.js`, admin refresh with proposals → `config/claimbenchRuntime` |
-| **RiskM8** (`../riskm8`) | Broker-facing pre-placement and renewal risk reviews for Australian SMEs (plus a Philippines pilot): risk register, coverage gaps, BI sum insured basis, report. | `riskm8` | `functions/library/provenance.js` SOURCES, `peril-content.js`, `financial-benchmarks.js`, ATO GP bands, industry research queue |
+| **Daybook** (this repo) | Watches the world for Bob's work: briefing, news feeds, dossiers, accounts, decisions. The producer of public facts, watch signals and ideas. | `pokerhq-a67e4` (hosting on GitHub Pages; the repo is public) | `news/` RSS module, briefing prompt core, Firestore `briefings-bob/*` |
+| **BI-Assessor** (`../BI-Assessor/model-neutral-build`) | Actual claim processing: BI, third-party (TP) property damage, UAA. Intake → RFI → QA workbook → report, under APES 215. | `bi-assessor` | **ClaimBench** (`functions/claimbench/`): benchmark records (`benchmarks.js`, `rates.js`, `useful-life.js`), sources, and admin proposals approved into `config/claimbenchRuntime` |
+| **RiskM8** (`../riskm8`) | Broker-facing pre-placement and renewal risk reviews for Australian SMEs (plus a Philippines pilot): risk register, coverage gaps, BI sum insured basis, report. | `riskm8` | `functions/library/provenance.js` SOURCES, `peril-content.js`, `financial-benchmarks.js`, ATO GP bands (2020-21), industry research queue |
 
 Daybook produces; the other two consume. They never share code or a runtime:
 both consumer repos already state "copy patterns, never import code" and plan a
 one-way sync.
 
-## 2. Ground rules (every phase must satisfy all of them)
+## 2. Ground rules
 
-- **G1 One way.** Records flow Daybook → BI-Assessor and Daybook → RiskM8. No
+- **G1 One way.** Data flows Daybook → BI-Assessor and Daybook → RiskM8. No
   claim, claimant, client or broker data ever flows into Daybook. Daybook's view
   of Bob's work stays the hand-maintained, aggregate-only work profile.
-- **G2 Only fetched public sources ground anything.** A grounding record needs a
-  URL, publisher, title, a **verbatim quote that contains every figure it
-  carries**, the source's own date (`asOf`, YYYY-MM-DD) and a tier
-  (`primary` = the official publisher, `secondary` = a reputable reporter of it).
-  This matches ClaimBench `validateCitation` and RiskM8 SOURCES field for field.
-- **G3 Daybook's AI writing is never grounding.** Briefing text, dossiers, ahas
-  and summaries may only produce `idea` records (questions, "what could go
-  wrong" prompts). Ideas carry no figures and no tier, and consumers treat them
-  as suggestions a person accepts.
-- **G4 The consumer decides.** Every record enters a consumer as a candidate. Only
-  that app's existing approval path makes it report-eligible: ClaimBench admin
-  approval into `config/claimbenchRuntime`, and RiskM8 owner review into its
-  source library (which is source code there).
-- **G5 Events are context and questions, never scores or values.** RiskM8 has
-  already rejected BoM storm and ICA catastrophe counts as scored inputs
-  (`docs/location-risk-*-investigation.md`); this roadmap keeps that finding.
-- **G6 No coupling.** A published file is the contract. Each consumer copies a
+- **G2 Only evidence makes a fact.** A value becomes a fact only when it is bound
+  to an exact quote in a fetched public source (section 3). Nothing a model
+  writes is ever a fact.
+- **G3 Ideas travel separately.** AI-assisted text, events, emerging risks and
+  questions go in their own file (the insight feed). They can never be imported
+  as evidence.
+- **G4 The consumer decides.** Every fact enters a consumer as a candidate. Only
+  that app's approval path makes it report-eligible: ClaimBench admin approval,
+  and RiskM8 owner review (its source library is source code).
+- **G5 Events are context, never scores or values.** RiskM8 has already rejected
+  BoM storm and ICA catastrophe counts as scored inputs
+  (`docs/location-risk-*-investigation.md`).
+- **G6 No coupling.** Published files are the contract. Each consumer copies a
   small validator and importer and follows its own repo rules: three-phase work
   (read-only diagnostic → Bob's approval → apply), a `check:` gate wired into
   `check:deploy-candidate`, no new dependencies, and no `firebase.json` edits.
 - **G7 Honest fetching.** Identify as Daybook (the `news/` USER_AGENT), respect
-  robots rules and blocks, and never disguise the client. A source that blocks
-  automated reading becomes `manual`: Bob enters the figure with its URL and
-  quote, and the same validator checks it.
-- **G8 Never estimate.** A figure or date not yet published is recorded as
-  `not_yet_published`, never guessed. (This matches RiskM8 C4 "unresolved is a
-  first-class state" and ClaimBench's pending records.)
+  robots rules, source terms and blocks, and never disguise the client. A source
+  that cannot be read automatically is captured by hand under the same
+  validator (section 6).
+- **G8 Fail closed; never estimate.** An unpublished figure is a watch state, not
+  a guess. A conflict between two representations blocks the fact. An expected
+  date appears only when the source itself states it.
 
-## 3. The contract: grounding record v1
+## 3. Trust vocabulary
 
-Published as one JSON file. `schema` changes only with a new major version, and
-both importers must be updated before a breaking change ships.
+"Grounded" is not used on its own. Every surface (Daybook UI, the files, the
+consumer importers) uses these four levels, and each implies the ones above it.
+
+| Level | Meaning | Who sets it |
+|---|---|---|
+| **Source-linked** | The URL was among the pages actually fetched or searched. It says nothing about whether a claim is supported. | Producer |
+| **Fact-verified** | A specific value is bound to an exact quote in a specific evidence item, with a bounded number match (section 5.2). | Producer's validator |
+| **Cross-checked** | A second, independent representation (a data table or API) gives the same value. | Producer's validator |
+| **Approved** | A reviewer accepted it in the consuming app, for a stated use. | Consumer only |
+
+Daybook's existing briefing checks (`functions/briefing-evidence.js`
+`verifyGrounding`: "Source matched", "Link verified") are **source-linked**
+only. Phase B relabels them so that the UI never suggests more.
+
+## 4. Three products
+
+| Product | File | Holds | Importable as evidence? |
+|---|---|---|---|
+| **Facts registry** | `facts.json` | Fact-verified numeric, rate, fee, wage and regulatory observations, with revisions | **Yes**, as candidates for consumer approval |
+| **Watch-state feed** | `watch.json` | Per series: awaiting publication, published, overdue, stale, blocked, withdrawn, conflict | No. It drives Daybook alerts and consumer reminders |
+| **Insight suggestions** | `insights.json` | Events, emerging risks, questions, AI-assisted ideas; source-linked at most | No. Consumers may show these as suggestions |
+
+## 5. The contract
+
+### 5.1 Releases (immutable)
+
+```
+grounding/                              (on the orphan branch grounding-data)
+  latest.json
+  releases/
+    000001/
+      manifest.json
+      facts.json
+      watch.json
+      insights.json
+    000002/
+      ...
+```
+
+- **`latest.json`:** `{schema, sequence, generatedAt, manifest: {path, sha256}}`.
+- **`manifest.json`:**
+  `{schema, sequence, previousSequence, generatedAt, producerCommit, files: [{name, sha256, schema, recordCount}]}`.
+- **A release directory is never rewritten.** A correction ships as a new
+  release carrying a new revision of the record. A release is cut only when some
+  content changed.
+- **Consumers must:**
+  - verify the manifest digest from `latest.json`, then each file's digest,
+    before parsing anything;
+  - reject a sequence lower than the last one imported (the same digest again is
+    a no-op);
+  - allowlist the series, publishers, units and jurisdictions they accept;
+  - write an **import receipt**: release sequence, manifest and file digests,
+    the consumer's mapping version, the proposal or candidate IDs created, and
+    every skipped record with its reason.
+
+### 5.2 Fact record
 
 ```json
 {
-  "schema": "daybook-grounding/1",
-  "generatedAt": "<ISO timestamp>",
-  "records": [
+  "recordId": "<seriesId>@<observationKey>#r<revision>",
+  "seriesId": "<stable key, e.g. abs_cpi_all_groups_annual_change>",
+  "observationKey": "<period or effective date, e.g. 2026-08 or 2026-07-01>",
+  "revision": 1,
+  "lifecycle": "current | corrected | superseded | withdrawn",
+  "supersedes": "<recordId or null>",
+  "kind": "index | rate | regulated_fee | award_wage | regulatory",
+  "title": "<plain name>",
+  "value": "<number, or null when range is used>",
+  "range": "<{min, max}, or null>",
+  "unitCode": "pct | pct_pa | aud_per_hour | aud_per_day | aud_per_item | index_points",
+  "basisCode": "annual_change | policy_rate_target | award_min_wage | regulated_fee_max | market_rate",
+  "scope": {
+    "jurisdiction": "AU | NSW | VIC | QLD | SA | WA | TAS | NT | ACT | PH",
+    "classification": "<source-stated, e.g. CW1 ordinary hours; or null>",
+    "period": { "from": "<YYYY-MM-DD>", "to": "<YYYY-MM-DD or null>" }
+  },
+  "qualifications": [ { "text": "<applicability the source states>", "evidenceId": "<id>" } ],
+  "observationDate": "<YYYY-MM-DD>",
+  "publishedAt": "<YYYY-MM-DD>",
+  "effectiveFrom": "<YYYY-MM-DD or null>",
+  "effectiveTo": "<YYYY-MM-DD or null>",
+  "evidence": [
     {
-      "id": "<series>_<asOf>",
-      "series": "<stable series key, e.g. rba_cash_rate_target>",
-      "kind": "index | rate | ruling | regulatory | event | emerging_risk | idea",
-      "status": "published | not_yet_published | conflict",
-      "title": "<plain name>",
-      "value": "<number, or null>",
-      "range": "<{min, max}, or null>",
-      "unit": "<e.g. % p.a., AUD per hour, index points>",
-      "asOf": "<YYYY-MM-DD from the source>",
-      "effectiveFrom": "<YYYY-MM-DD, or null>",
-      "jurisdiction": "AU | NSW | VIC | QLD | SA | WA | TAS | NT | ACT | PH",
-      "citation": {
-        "url": "<official page>",
-        "publisher": "<e.g. Reserve Bank of Australia>",
-        "title": "<page or release title>",
-        "quote": "<verbatim sentence containing the value>",
-        "asOf": "<YYYY-MM-DD>",
-        "tier": "primary | secondary"
-      },
-      "crossCheck": { "url": "<data series (API or CSV)>", "value": "<number>" },
-      "previous": { "value": "<number>", "asOf": "<YYYY-MM-DD>" },
-      "tags": { "streams": ["tp_utility", "tp_road", "hv_loi", "sme_bi", "risk_review"], "anzsic": ["<code>"] },
-      "fetch": { "method": "api | csv | rss | page | manual", "sourceId": "<registry key>", "fetchedAt": "<ISO timestamp>" }
+      "evidenceId": "<id>",
+      "role": "release | table | cross_check | correction",
+      "url": "<source page or file>",
+      "publisher": "<e.g. Australian Bureau of Statistics>",
+      "title": "<page, release or file title>",
+      "quote": "<verbatim text>",
+      "valueToken": "<the exact token in the quote that states the value>",
+      "locator": { "page": "<n>", "paragraph": "<n>", "table": "<id>", "row": "<key>", "selector": "<css>" },
+      "asOf": "<YYYY-MM-DD>",
+      "tier": "primary | secondary",
+      "retrievedAt": "<ISO timestamp>",
+      "contentSha256": "<digest of the fetched body>",
+      "licence": "<terms or attribution string from the series registry>"
     }
-  ]
+  ],
+  "derivation": null,
+  "captureMethod": "api | csv | rss | page | manual",
+  "checks": { "sourceLinked": true, "factVerified": true, "crossChecked": false, "plausible": true }
 }
 ```
 
 Rules the validator enforces:
 
-- The value token (or both range tokens) must appear in `citation.quote`,
-  exactly as ClaimBench's `validateProposal` checks.
-- Prose first, data second. Where a series has both a release page and a data
-  file (ABS, RBA), the quote comes from the release sentence and the data file
-  fills `crossCheck`. If the two disagree, the record is `conflict` and is not
-  published.
-- `idea` records have no `value`, `range` or `tier`. `event` records have no
-  `value`.
-- **No private fields.** The file is public (see D1), so it never carries
-  Bob's accounts, notes, decisions or any client name. Stream tags are generic.
+- **Bounded number match.** `valueToken` must appear in `quote` with no digit,
+  decimal point or digit-group comma touching either side (so `5` never matches
+  inside `15`, and `1,250` matches `1,250`). The token must also normalise to
+  `value`: grouping commas removed, trailing decimal zeros ignored
+  (`3.60` = `3.6`), and a stated percent sign agreeing with the unit. A shorthand
+  like `1.25k` never matches. Each bound value names its `evidenceId`.
+- **Prose first, data second.** A `release` evidence item carries the quote; a
+  `cross_check` item (a table or API row) must give the same value, or the
+  record is `conflict`: it goes to the watch feed and never into facts.
+- **Plausibility bounds** per series (absolute range and maximum change from the
+  previous observation). A breach blocks the record until it is reviewed.
+- **Derived values** carry
+  `derivation: {formula, inputs: [recordIds], rounding}`. A published figure is
+  preferred to a derived one; a derived value is never created without these
+  fields.
+- **Qualifications** come from the source's own words. A consumer may add its
+  own qualifications at approval (ClaimBench's wage-floor warnings, for
+  example); those stay in the consumer.
+- **No private fields.** The files are public, so an allowlist of fields is
+  enforced, and a test proves that accounts, notes, decisions and client names
+  cannot enter.
+- **`captureMethod` is never `ai`.**
 
-Where each field lands:
+### 5.3 Watch record
 
-| Record field | BI-Assessor (ClaimBench) | RiskM8 |
+```json
+{
+  "watchId": "<seriesId>@<observationKey>",
+  "seriesId": "<key>",
+  "state": "awaiting_publication | published | overdue | stale | blocked | withdrawn | conflict",
+  "expectedBy": "<YYYY-MM-DD only if the source states it, else null>",
+  "lastCheckedAt": "<ISO timestamp>",
+  "detail": "<what was seen, e.g. pay guide page updated; parser rejected table>",
+  "evidence": { "url": "<where the state was observed>", "retrievedAt": "<ISO timestamp>" }
+}
+```
+
+### 5.4 Insight record
+
+```json
+{
+  "insightId": "<id>",
+  "kind": "event | emerging_risk | question | idea",
+  "title": "<short>",
+  "text": "<body>",
+  "aiAssisted": true,
+  "sources": [ { "url": "<source-linked page>", "publisher": "<name>" } ],
+  "tags": { "streams": ["tp_utility", "tp_road", "hv_loi", "sme_bi", "risk_review"], "anzsic": ["<code>"] },
+  "createdAt": "<ISO timestamp>"
+}
+```
+
+### 5.5 Where facts land in each consumer
+
+| Fact field | BI-Assessor (ClaimBench proposal) | RiskM8 |
 |---|---|---|
-| `citation` | `citations[]` of a proposal (the same shape, plus `jurisdiction`) | a SOURCES entry `{url, publisher, title, quote, asOf, tier}` |
-| `value`/`range`, `unit` | `record.value`/`range`, `unit`, with `valueType` point or range | a validated fact added to `allowedFacts` for narrative text |
-| `series` → consumer key | an importer-owned mapping to `metric`, `basis`, `industryKey` and `bm_*_vN` id | an importer-owned mapping to a SOURCES id or research topic |
-| `status: not_yet_published` | keeps the pending record pending and notes "checked" | stays unresolved (C4) |
+| `evidence[]` (release and table roles) | `citations[]` in `validateCitation` shape (`url, publisher, title, quote, asOf, tier, jurisdiction`) | a SOURCES candidate `{url, publisher, title, quote, asOf, tier}`. Its free-text `asOf` accepts an ISO date unchanged |
+| `seriesId` + `basisCode` | a **BI-Assessor-owned mapping** to `metric`, `basis`, `industryKey` and the `bm_*_vN` id | a RiskM8-owned mapping to a SOURCES id or research topic |
+| `value`/`range`, `unitCode` | `valueType` point or range, `value`/`range`, `unit` (e.g. `aud_per_hour`) | a validated fact added to `allowedFacts` for narrative text |
+| `qualifications`, `effectiveFrom`, `effectiveTo` | the draft `qualifications` (the reviewer edits them), `effectiveFrom`, `effectiveTo` | the text of the dated note |
+| `reviewDueAt` | set by the mapping rule (e.g. `effectiveTo` + 31 days) | not used |
+| `lifecycle: corrected / superseded` | a `supersede` proposal, version + 1 | a replacement candidate |
 
-## 4. Phases
+**Known registry gap.** ClaimBench's `METRIC` registry holds cost ratios, GP
+rates, useful lives and `rate_aud`. It has no index or interest metric. CPI or
+the cash rate cannot enter ClaimBench until BI-Assessor decides to add one; that
+is its own decision, recorded in Phase C.
 
-Rough effort is in working days of one focused session. Phases 2 and 3 can run
-in parallel once the pack has run cleanly for a week.
+## 6. Capture methods
 
-### Phase 0: groundwork (Daybook, about 0.5 day; docs and tests only)
+- **Automated** (`api`, `csv`, `rss`, `page`): for series that publish often and
+  in a stable, machine-readable form.
+- **Manual** (`manual`): for figures published once a year in PDF or Word guides
+  with conditions attached (award rates, gazetted fees). Daybook automates the
+  **watch** ("the FY27 pay guide is out"). The value is captured in a reviewed
+  file in this repo (`grounding/manual/<seriesId>.json`: value, quote,
+  valueToken, locator, URL) and the same validator checks it. Git history is the
+  audit trail. There is no UI in v1.
 
-1. **Contract files:** `grounding/schema.json` and `grounding/validate.js` (plain JS,
-   no dependencies), with tests for each rule above. Consumers copy these files
-   rather than importing them.
-2. **Source feasibility sweep.** For each candidate series, confirm an official
-   route exists that allows automated reading with an honest user agent, and
-   mark it `api`, `csv`, `rss`, `page` or `manual`. Candidates (all to verify):
-   - ABS Data API: CPI, PPI (output of the construction industries; electricity
-     supply), Wage Price Index.
-   - RBA cash rate target (statistical table F1 and the Board decision release).
-   - Fair Work Commission Annual Wage Review decision, and the FWO pay guide for
-     MA000020 (the traffic-controller award floor ClaimBench already uses).
-   - Tow and storage fees: VIC Government Gazette, NSW Fair Trading.
-   - FWC: the Endeavour Energy workplace determination (a status watch until it
-     publishes).
-   - AER: electricity distribution determinations (WACC, STPIS parameters).
-   - ATO: Superannuation Guarantee rate; Small Business Benchmarks updates; the
-     Taxation Statistics release (RiskM8's GP bands are 2020-21).
-   - AIP terminal gate prices (diesel), for heavy-vehicle loss of income.
-   - Phase 4 sources: court judgment feeds (AustLII or JADE, by court),
-     disaster declarations (Disaster Recovery Funding Arrangements activations),
-     distributor outage notices, BoM warnings, outbreak.gov.au emerging risks,
-     and Philippine Insurance Commission circulars.
-3. **Decisions D1–D4** (section 6) agreed with Bob.
+## 7. Threat and licence note (short by design)
 
-Done when: the validator passes its tests, and the sweep table is in this file
-with every source marked.
+| Risk | Control |
+|---|---|
+| A parser misreads a figure | Bounded match to an exact quote; cross-check; plausibility bounds; fail closed; human approval in the consumer |
+| Stale data shown as current | Freshness rule per series; watch states `stale` and `overdue`; `asOf` shown everywhere |
+| A source changes format or URL | The parser fails closed; the feed-health alert becomes a Morning 5 reliability item |
+| Rollback, partial or corrupt publication | Sequence numbers and digests; consumers reject a lower sequence or a digest mismatch |
+| A publisher corrects a figure | New revision, `lifecycle` and `supersedes`; consumers raise a supersede proposal or replacement candidate |
+| AI text leaks into evidence | Separate insight file; `captureMethod` never `ai`; facts need a bound quote |
+| Private data published | Field allowlist and a test; public files carry public facts only |
+| Bob's GitHub account is compromised | Out of scope for digests (they prove integrity, not authorship); human approval and import receipts make any bad import traceable and reversible |
+| Licence breach | Each series registry entry records the source's terms and attribution string, checked in the feasibility row before the series ships |
 
-### Phase 1: Daybook numbers watcher and the pack (Daybook, about 2–3 days)
+## 8. Phases
 
-1. **`grounding/` module, built like `news/`:**
-   - `config.js`: a series registry (key, publisher, URLs, method, parser,
-     jurisdiction, stream tags, cadence).
-   - One parser per method.
-   - `refresh-grounding.js`: fetch → parse → build records → validate → write.
-2. **Where it writes:**
-   - Firestore `briefings-bob/grounding-latest` and `grounding-<date>`, for
-     Daybook's own UI.
-   - The public pack: `grounding/pack.json` on an orphan `grounding-data` branch
-     (see D1). This never touches `main`, so Bob's pushes are unaffected.
-3. **Schedule:** a new job in `refresh-intelligence.yml`, daily at 04:15 PHT,
-   after the news job. Its health goes through `recordRunHealth` as feed
-   `grounding`, so a failure becomes a Morning 5 reliability item.
-4. **The first series** comes from both apps' waiting lists:
-   - For ClaimBench: FY27 traffic-controller award floor (after the FWC Annual
-     Wage Review 2026), VIC and NSW tow and storage fees, the Endeavour Energy
-     determination (status), and the Superannuation Guarantee rate.
-   - For both: CPI, PPI (construction; electricity), WPI, the RBA cash rate, ATO
-     Small Business Benchmarks (release status) and Taxation Statistics
-     (release status).
-5. **Daybook UI (kept light, in line with the density plan):**
-   - A **Morning 5 item only when a number changes or publishes**, e.g.
-     "Cash rate target changed" with old → new, source and date.
-   - A folded **Your numbers** panel on Evidence, next to Your accounts.
-   - Usage tracked by the existing counter.
-6. **Briefing link (optional, later in the phase):** a "NUMBERS PUBLISHED THIS
-   WEEK" block in the briefing prompt, closed-world like the fetched news list,
-   so the briefing can cite verified figures and never invent them.
-7. **Tests:** a parser fixture per source, validator runs on the built pack, a
-   test that no private field can enter the pack, and the existing
-   `check:site`.
+Effort is rough, in working days of one focused session. Phases C (each
+consumer) run in a session opened in that repo, from a handover written from
+this file.
 
-Done when:
-- the pack validates;
-- every figure's value appears in its quote;
-- a blocked source shows as `manual`, not missing;
-- a changed figure raises one Morning 5 item;
-- a week of runs has passed with no `conflict`.
+### Phase A: close the BI-Assessor boundary (BI-Assessor, about 0.5 day)
 
-### Phase 2: BI-Assessor imports into ClaimBench (a BI-Assessor session, about 1–2 days)
+- **The gap:** `functions/llm-router.js` `applyOverride` (line 57) applies the
+  admin override from `config/llm` to every task. That includes the tasks
+  `prompts.js` keeps Claude-only under APES 215, and in `forced` mode claimant
+  evidence would go to the override provider.
+- **The fix:** Claude-only tasks ignore a non-Claude override provider, the
+  router records that in its journal, and a test plus a `check:` gate cover it.
+- **Also:** verify whether `storage.rules` covers `uaa_claims` documents.
+- A separate task has already been raised for this. Phase C for BI-Assessor
+  waits on it.
 
-Prerequisite: the APES 215 provider-override gap is fixed first (see section 5).
+### Phase B: contracts, validator and fixtures (Daybook, about 1–1.5 days)
 
-1. **Diagnostic (read-only):** confirm the ClaimBench registries (METRIC,
-   BASIS, INDUSTRY_KEYS), the `rates.js` records and their research queue, the
-   `config/claimbenchRuntime` overlay, and where admins pick proposals.
-2. **Importer:** `functions/claimbench/daybook-import.js` (with a copied
-   `validate.js`) and an admin task `admin_claimbench_import_daybook`, or the
-   planned local `scripts/sync-claimbench-sources.js`.
-   - It fetches the pack and maps `series` to ClaimBench records through a
-     mapping table owned by BI-Assessor.
-   - It builds `add` or `supersede` (version + 1) proposals through the existing
-     `validateProposal`.
-   - Unmapped series are ignored. `not_yet_published` updates the pending
-     record's "last checked" note only.
-   - It never approves anything by itself.
-3. **Review:** proposals appear in the existing ClaimBench refresh review,
-   labelled "from Daybook".
-4. **Gate:** `check:claimbench-daybook` wired into `check:deploy-candidate` and
-   `DEPLOY_GATE.md`. Tests cover a fixture pack → proposals, the quote-token
-   rule, supersede version maths, unmapped series, and that no claim data is
-   read or sent.
-5. **Optional:** compare the ClaimBench deep-research spend in the month before
-   and after, since the plain fetches may replace part of it.
+1. `grounding/schema/` holds `facts`, `watch`, `insights` and `manifest`
+   schemas (plain JSON Schema).
+2. `grounding/validate.js` (plain JS, no dependencies) implements every rule in
+   5.2–5.4, plus manifest and digest checks.
+3. **`grounding/fixtures/`**, valid and invalid cases:
+   - a valid CPI fact with cross-check;
+   - a valid manual award-rate fact;
+   - `5` inside `15`, and `1,250` against `1250`;
+   - a cross-check conflict;
+   - a correction (revision 2, supersedes revision 1);
+   - a rollback (lower sequence), and a digest mismatch;
+   - a private field smuggled into a record;
+   - an insight in the facts file;
+   - an unstated `expectedBy`.
+4. Tests for all of them in `grounding/validate.test.js`, run by `npm test`.
+5. Relabel Daybook's briefing source chips to the section 3 vocabulary
+   (source-linked). Help text follows.
+6. Keep this file's section 7 current.
 
-Done when: a changed traffic-controller rate appears as a supersede proposal
-with a valid citation and becomes report-eligible only after admin approval.
+Done when: every fixture passes or fails for the stated reason, and the chips
+say what they actually prove.
 
-### Phase 3: RiskM8 imports into its sources and BI basis (a RiskM8 session, about 2 days)
+### Phase C: consumer importers against fixtures (a session in each repo, about 1 day each; no network)
 
-Note the uncommitted `CLAUDE.md` and PH roadmap edits and the three stashes in
-that repo. Leave them untouched unless Bob says otherwise.
+**BI-Assessor:**
+1. Diagnostic: the ClaimBench registries, the pending
+   `bm_rate_traffic_controller_award_fy27_au_v1`, the proposal review flow, and
+   where the runtime overlay is read.
+2. `functions/claimbench/daybook-import.js`, with a copied validator and a
+   mapping table:
+   - Input: a fixture release.
+   - Output: proposal drafts through the existing `validateProposal`, and an
+     import receipt.
+   - Nothing is approved automatically.
+3. Tighten `validateProposal`'s number check to the bounded match. It currently
+   uses a plain substring (`evidenceText.includes(token)`).
+4. Record the index-metric decision (section 5.5): add one, or keep CPI and
+   rates out of ClaimBench.
+5. Gate: `check:claimbench-daybook` in `check:deploy-candidate` and
+   `DEPLOY_GATE.md`.
 
-1. **Diagnostic (read-only):** confirm the SOURCES shape, `allowedFacts` and
-   `validateNarrativeOutput`, `domain/financial-basis.js`, the industry research
-   job, and the owner review path.
-2. **Importer:** `scripts/import-daybook-grounding.js` writes a candidate review
-   file. Bob accepts entries into `library/provenance.js` through a normal
-   reviewed commit, because the grounded library is source code. There are no
-   runtime writes.
-3. **Escalation note on the BI sum insured:** an optional, dated indexation note
-   in the financial basis (e.g. the CPI or PPI change over the last 12 months,
-   with source and date). It is added as a validated fact, illustrates rather
-   than changes the calculation, and respects C2 (the model never produces
-   facts) and C5 (scores are for communication).
-4. **Staleness flag:** when the ATO publishes Taxation Statistics newer than
-   2020-21, open an industry research task. Nothing is swapped automatically.
-5. **PH lane:** Insurance Commission circular watch (status only), for the
-   `ph-market-evidence.js` figures tagged "re-confirm".
-6. **Gate:** `check:daybook-grounding`, with the same kinds of tests as Phase 2.
+**RiskM8** (leave the uncommitted `CLAUDE.md` and PH roadmap edits, and the
+three stashes, untouched unless Bob says otherwise):
+1. Diagnostic: SOURCES, `allowedFacts` and `validateNarrativeOutput`,
+   `domain/financial-basis.js`, and the owner review path.
+2. `scripts/import-daybook-grounding.js`:
+   - Input: a fixture release.
+   - Output: a candidate review file and an import receipt.
+   - Accepted entries go into `library/provenance.js` by a normal reviewed
+     commit.
+3. Render path for the dated CPI note on the BI sum insured, fed as a validated
+   fact through `allowedFacts`. It illustrates rather than changes the
+   calculation (C2, C5).
+4. Gate: `check:daybook-grounding`.
 
-Done when: a new CPI release appears as a candidate SOURCES entry with a valid
-quote, and after Bob accepts it, the BI section can show the dated note.
+Done when: both importers accept the valid fixtures and reject the invalid ones
+with the stated reason, and a receipt names every skip.
 
-### Phase 4: Daybook knowledge watchers (Daybook, about 3–4 days, staged)
+### Phase D: release publishing (Daybook, about 1 day)
 
-- **4a Case-law watch.**
-  - Scope: new judgments from feasible court feeds, filtered to the issues Bob
-    argues: betterment and like-for-like, overheads and on-costs, loss of use,
-    idle fleet and mitigation, credit hire, and quantum expert evidence.
-  - Output: a weekly Daybook digest and `ruling` records.
-  - The quote must be an exact substring of the fetched judgment text (checked
-    in code). Any summary is AI-written and labelled as such.
-- **4b "What's about to land on your desk".**
-  - Scope: disaster declarations, distributor outages and severe-weather
-    warnings.
-  - Output: a Today card (what, where, how many customers, all from sources,
-    plus one labelled "Expect:" line), and `event` records that are context
-    only.
-- **4c Emerging risks by industry.** Cited news and regulator items become
-  `emerging_risk` records tagged with ANZSIC codes.
-- **4d Question bank.** Dossier "questions to ask" and weekly-read prompts
-  become `idea` records tagged by stream: RFI ideas for pole and road damage,
-  heavy-vehicle loss of income and small-business BI; broker questions for
-  RiskM8.
+1. `grounding/` producer module (built like `news/`):
+   - a series registry: key, publisher, URLs, method, parser, schedule,
+     freshness, bounds, licence, stream tags;
+   - `refresh-grounding.js` builds facts, watch and insights, then validates
+     them;
+   - it cuts a release only when content changed.
+2. Publish to the orphan `grounding-data` branch (`latest.json` plus
+   `releases/`). `main` is never touched.
+3. Mirror the latest release to Firestore (`briefings-bob/grounding-latest`)
+   for Daybook's UI. Health goes through `recordRunHealth` as feed `grounding`.
+4. **Schedules are per series**, not one daily job. Each registry entry states
+   its own cadence, and the job checks only the series that are due.
+5. **Daybook surfaces:**
+   - a Morning 5 item when a watch state changes or a new fact lands (old → new,
+     source, date, trust level);
+   - a folded **Your numbers** panel on Evidence.
+6. The consumers switch from fixtures to the fetched release, with digest
+   verification.
 
-### Phase 5: the consumers take the knowledge records (each repo)
+### Phase E: Pilot 1, ABS CPI → RiskM8 (about 1 day)
 
-- **BI-Assessor:**
-  - `ruling` → a reviewer reference list, never inserted into report prose
-    automatically.
-  - `event` → a QA note when an incident date falls inside a declared event
-    window. This supports Rev 8's "verify incident date within BoM event
-    window".
-  - AER parameters → a cross-check note beside `extract_stpis_workbook_inputs`.
-  - `idea` → suggestions in the RFI planners that the assessor adds by hand.
-- **RiskM8:**
-  - `ruling` and `regulatory` → provenance candidates (Appendix E "Basis &
-    sources").
-  - `event` → client questions ("Was the site affected by …?"), never scores.
-  - `emerging_risk` → industry research demand and a validated context record
-    for the narrative.
-  - `idea` → client-question candidates.
+- **Feasibility row:**
+  - which CPI measure is used (monthly or quarterly, all groups, weighted
+    average of the eight capitals);
+  - the release page to quote from, and the ABS Data API series to cross-check
+    against (the API is described as beta, so a mismatch must fail closed);
+  - the licence and attribution;
+  - the release schedule, freshness rule and bounds.
+- **Parser** for the release sentence, and cross-check against the table or
+  API.
+- **Done when:** a real CPI release appears in RiskM8 as a candidate SOURCES
+  entry with an import receipt. After Bob accepts it, the BI section shows the
+  dated note.
 
-### Phase 6: the loop
+### Phase F: Pilot 2, FY27 traffic-controller award → ClaimBench (about 0.5–1 day)
 
-- **The July cycle.** The FWC wage review, tow fees and the SG rate all change
-  on 1 July. Daybook raises a watch list in late June, and each consumer's
-  annual update procedure runs off the pack.
-- **Quarterly contract review.** Which series were used and approved, which
-  never were, and whether the sources still work. Bob reports usage by hand, so
-  nothing flows back automatically (G1).
-- **Cost check.** ClaimBench deep-research spend against the plain fetches.
+- **Watch (automated):** the Fair Work Ombudsman pay guide for the Building and
+  Construction General On-site Award (MA000020), the source ClaimBench's FY26
+  record uses.
+- **Value (manual):** `grounding/manual/fwo_ma000020_cw1_ordinary.json`, with
+  the CW1 ordinary hourly rate, the quote, the page locator and the URL,
+  validated.
+- **Done when:** ClaimBench shows a proposal labelled "from Daybook" that
+  resolves the pending FY27 record. It becomes report-eligible only after
+  admin approval, and its receipt names the release.
 
-## 5. Found while mapping (fix before Phase 2)
+### Phase G: one real update or correction cycle (calendar time plus about 0.5 day)
 
-- **BI-Assessor provider override (confirmed in code).** `functions/llm-router.js`
-  `applyOverride` (line 57) applies the admin override from `config/llm` to every
-  task, with no exemption for the tasks `prompts.js` keeps Claude-only under
-  APES 215. In `forced` mode, claimant evidence would go to the override provider.
-  A separate task was raised to diagnose and fix it. Whether an override is
-  active in production was not checked.
-- **BI-Assessor storage rules (unverified).** `storage.rules` may cover
-  `tp_claims` documents but not `uaa_claims`. Raised in the same task.
-- **RiskM8 data residency.** Client data sits in the US (the app already
-  discloses APP 8). This integration moves no client data, so it changes
-  nothing here.
+The next CPI release (a new observation), or a documented correction (a new
+revision). Verify that the lifecycle, the consumers' supersede handling and the
+receipts trace end to end.
 
-## 6. Decisions for Bob
+### Phase H: further series, one at a time (about 0.5–1 day each)
 
-- **D1 Transport.**
-  - *Recommended:* a public JSON file on an orphan `grounding-data` branch of
-    this public repo, read by the consumers' importers. It contains only public
-    facts, and nothing touches `main`.
-  - *Alternatives:* GitHub Pages (needs a publish run after each refresh), or a
-    private channel (needs cross-project credentials).
-- **D2 Daybook surface.** *Recommended:* a Morning 5 item on change plus a folded
-  panel on Evidence, rather than a new Today card (the density plan holds
-  until the 2026-10-11 usage review).
-- **D3 First series.** *Recommended:* the Phase 1 list, taken from both apps'
-  waiting lists.
-- **D4 Who builds the consumer phases.** *Recommended:* a session opened in each
-  repo, working from a handover written from this file, under that repo's own
-  rules.
+Each series needs its own feasibility row, parser or manual file, schedule,
+freshness rule, bounds, licence and consumer mapping before it ships.
+Candidates, in suggested order:
 
-## 7. Sequence at a glance
+| Series | Method | Consumer | Note |
+|---|---|---|---|
+| VIC and NSW tow and storage fees | manual + watch | ClaimBench (records exist, `regulated_fee_max`) | 1 July cycle |
+| Superannuation Guarantee rate | watch only | BI-Assessor wages method | Legislated at 12%; watch for change |
+| ATO Small Business Benchmarks | watch | both | Annual; method-dependent |
+| ATO Taxation Statistics release | watch | RiskM8 | Its GP bands are 2020-21 |
+| RBA cash rate target | automated | Daybook; a consumer only once one needs it (interest needs a ClaimBench metric) | |
+| PPI (construction; electricity), WPI | automated | RiskM8 | After CPI proves the ABS path |
+| AER distribution determinations | manual + watch | BI-Assessor STPIS cross-check | Needs its own design |
+| Diesel terminal gate prices | automated | Daybook only for now | Heavy-vehicle LOI context |
+
+### Not scheduled here: separate roadmaps when their time comes
+
+- **Case law.** It needs neutral citations, paragraph locators, jurisdiction and
+  court hierarchy, subsequent-history tracking (appeals, overturned decisions)
+  and its own review model. It is not a Phase-H series.
+- **Events, emerging risks and the question bank.** These come through the
+  insight feed only, as context and suggestions under G3 and G5.
+- **Automating the July cycle,** once enough manual-plus-watch series exist.
+
+## 9. Decisions for Bob
+
+- **D1 Transport.** *Recommended:* immutable releases on an orphan
+  `grounding-data` branch of this public repo.
+- **D2 Daybook surface.** *Recommended:* a Morning 5 item on change plus a
+  folded Evidence panel, with no new Today card before the 2026-10-11 usage
+  review.
+- **D3 Pilots.** *Recommended:* CPI → RiskM8, and the FY27 traffic-controller
+  award → ClaimBench.
+- **D4 Manual capture.** *Recommended:* reviewed JSON files in this repo, with
+  no capture UI in v1.
+- **D5 Consumer work.** *Recommended:* a session opened in each repo, from a
+  handover, under that repo's own rules.
+
+## 10. What changed from the first draft
+
+- **One pack became three files** (facts, watch, insights), so the trust
+  boundary is structural and only facts can be imported as evidence.
+- **One mutable file became immutable, numbered, digest-checked releases,** with
+  a consumer import receipt for every proposal or candidate.
+- **The fact record gained** revisions, lifecycle, `evidence[]` with roles and
+  locators, content digests, derivations, plausibility bounds and a bounded
+  number match. The old `<series>_<asOf>` id collided on corrections, and a plain
+  substring let `5` match `15`.
+- **"Grounded" was split into four trust levels.** Daybook's existing chips are
+  source-linked only.
+- **The order is now consumer-first.** Fixture importers come before any live
+  fetcher. The review showed the first draft could not produce a valid
+  ClaimBench proposal as specified, and that ClaimBench has no metric for
+  indices at all.
+- **The first series list shrank to two pilots with real consumers,** plus
+  per-series schedules.
+- **Yearly PDF-published figures are watched automatically and captured by hand**
+  under the validator.
+- **Case law and events moved to separate, later roadmaps.** The first draft's
+  3–4 days for them was not credible.
+
+## 11. Sequence at a glance
 
 | Step | Where | Depends on | Effort |
 |---|---|---|---|
-| Fix the APES override gap | BI-Assessor | none | about 0.5 day |
-| Phase 0: contract and feasibility | Daybook | D1–D4 | about 0.5 day |
-| Phase 1: numbers watcher and pack | Daybook | Phase 0 | 2–3 days |
-| A week of clean pack runs | Daybook | Phase 1 | calendar time |
-| Phase 2: ClaimBench import | BI-Assessor | the override fix, Phase 1 | 1–2 days |
-| Phase 3: RiskM8 import and BI note | RiskM8 | Phase 1 | about 2 days |
-| Phase 4: case law, events, emerging risks, questions | Daybook | Phase 1 | 3–4 days, staged |
-| Phase 5: consumers take Phase 4 records | both | Phase 4 | 1–2 days each |
-| Phase 6: July cycle and quarterly review | all | running | ongoing |
+| A: boundary fix | BI-Assessor | none | about 0.5 day |
+| B: contracts, validator, fixtures, chip wording | Daybook | D1–D5 | 1–1.5 days |
+| C: fixture importers | BI-Assessor, RiskM8 | B (and A for BI-Assessor) | about 1 day each |
+| D: release publishing and Daybook surfaces | Daybook | B, C | about 1 day |
+| E: Pilot 1, CPI → RiskM8 | Daybook, RiskM8 | D | about 1 day |
+| F: Pilot 2, FY27 award → ClaimBench | Daybook, BI-Assessor | D | 0.5–1 day |
+| G: one update or correction cycle | all | E or F | calendar time plus 0.5 day |
+| H: further series, one at a time | per series | G | 0.5–1 day each |
