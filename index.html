@@ -572,6 +572,17 @@ window.fbLoadDecisionDrift = async function() {
   }
 };
 
+// Load the grounding mirror (briefings-bob/grounding-latest) written by
+// grounding/publisher/publish.js after each pushed release. One doc, no uid.
+window.fbLoadGrounding = async function(strict) {
+  try {
+    var snap = await getDoc(doc(db, COLL, 'grounding-latest'));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) {
+    if (strict) throw e;
+    return null;
+  }
+};
 // Load the shared feed-health doc written by the local refresh scripts
 // (lib/feed-health.js). One small doc, no uid. Null on any failure — the strip
 // then falls back to reporting what it can and says so.
@@ -2060,6 +2071,9 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .metric-detail{font-size:12px;line-height:1.5;margin-top:.5rem;color:var(--txt2)}.metric-detail summary{cursor:pointer}.metric-detail div{padding-top:.5rem}.tick-val{font-size:21px;overflow-wrap:anywhere}.tick-move{font-size:12px}.tick{min-width:0}
 .card-body{font-size:15px;line-height:1.7}.card-hl{font-size:18px}.src{font-size:12px}.command-open-item{font:inherit;color:inherit;text-align:left;border:0;background:none;padding:0;cursor:pointer}.command-open-item:hover{text-decoration:underline}
 .search-coverage{padding:.6rem 1rem;display:flex;gap:.7rem;align-items:center;justify-content:space-between;font-size:12px;color:var(--txt2)}
+#grounding-panel summary{cursor:pointer;list-style:revert}
+#grounding-numbers .command-item{padding:.8rem 0;border-top:1px solid var(--border);line-height:1.7;overflow-wrap:anywhere}
+#grounding-numbers a{color:var(--amber)}
 #grounding-line{font:13px/1.5 var(--sans);margin-top:.7rem}#command-load-status{font-size:13px;color:var(--txt2);margin-bottom:.7rem}
 .source-highlight{outline:3px solid var(--gold)!important;outline-offset:5px;scroll-margin-top:180px}
 .return-to-source{position:fixed;bottom:20px;right:20px;z-index:110;padding:.75rem 1rem;border-radius:10px;background:var(--bg2);color:var(--gold);border:1px solid var(--gold);cursor:pointer}
@@ -2350,6 +2364,11 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="command-stat"><div class="command-stat-value" id="evidence-source-count">—</div><div class="command-stat-label">Sources represented</div></div>
     <div class="command-stat"><div class="command-stat-value" id="evidence-note-count">—</div><div class="command-stat-label">Items with notes</div></div>
   </div>
+  <details class="command-panel" id="grounding-panel">
+    <summary class="command-panel-head"><span class="command-panel-title">Your numbers</span><span class="command-panel-meta">Published figures and watch states</span></summary>
+    <div class="meeting-intro">Source-linked means the source was read. Fact-verified means the value is bound to evidence. Cross-checked means a second representation agrees. Approval happens in the consuming app.</div>
+    <div id="grounding-numbers" class="meeting-intro" role="status">Open Evidence to load published numbers.</div>
+  </details>
   <section class="command-panel accounts-panel" id="accounts-panel" aria-labelledby="accounts-title">
     <div class="command-panel-head"><div><div class="command-panel-title" id="accounts-title">Your accounts</div><div class="command-panel-meta">The organisations your files involve</div></div><button type="button" class="tool-chip" id="accounts-edit" onclick="editAccounts()">Edit</button></div>
     <p class="meeting-intro" id="accounts-intro"></p>
@@ -2987,6 +3006,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li><b>Saved dossiers, ahas and meeting briefs</b> read as documents: the summary, then labelled parts (how it came about, the numbers, the BI angle, questions, sources as links). Long ones open folded; <b>Show all</b> opens the rest.</li>
         <li><b>Open source</b> takes you to where it came from: a story's card in its briefing (older briefings too), highlighted, with a saved dossier opened under it; a meeting brief back in its panel. <b>← Back to Evidence</b> returns you and puts today's briefing back. If that briefing was deleted, it says so, and the copy saved here is what remains.</li>
         <li><b>Source ↗</b> opens the original article. <b>Open as decision</b> starts a journal draft from the item; nothing is saved until you tap <b>Save decision</b>.</li>
+        <li><b>Your numbers</b> (folded) — the published figures Daybook sends to BI-Assessor and RiskM8, each with its source, dates and what was checked: <b>Source-linked</b> (the page was read), <b>Fact-verified</b> (the value is bound to an exact quote from the source) and <b>Cross-checked</b> (a second form of it, such as the data table, agrees). It also shows each series’ watch state, such as awaiting publication, stale or blocked; a watch state is never evidence. A new figure or a changed state is on the Morning 5 for seven days as <b>Numbers</b>. Nothing here is approved: the other app decides. It stays empty until the first sources are added.</li>
       </ul>
     </div>
 
@@ -3226,6 +3246,8 @@ function clearPrivateSession() {
   if (key) { try { localStorage.removeItem(key); } catch (e) {} }
   if (window._feedHealthTimer) { clearInterval(window._feedHealthTimer); window._feedHealthTimer = null; }
   window._briefingHistory = []; window._reportFeed = []; window._feedHealthData = null;
+  groundingLoadToken++;
+  setText('grounding-numbers','Sign in to load published numbers.');
   decisionEntries = []; decisionEditingId = null; decisionLinkedSignal = null; decisionDatedCache = {};
   decisionRadarJournal = null; decisionRadarLive = null; decisionRefPrice = {};
   _currentData = null; commandLoadToken++; commandCenterData = null; commandCenterInputs = null;
@@ -3918,9 +3940,53 @@ function saveEvidenceSets(message) {
   return evidenceSetState.saveChain;
 }
 function renderEvidencePage() {
+  loadGroundingNumbers();
   if (!evidenceSetState.loaded) loadEvidenceSets(); else paintEvidencePage();
   loadMeetingBriefs();
   renderAccountsPanel(); loadAccounts().then(renderAccountsPanel);
+}
+
+var groundingLoadToken = 0;
+async function loadGroundingNumbers() {
+  var token = ++groundingLoadToken;
+  var el = document.getElementById('grounding-numbers');
+  if (!el) return;
+  // Signed out, the read is refused: say so rather than "could not load".
+  // Signing in re-opens this page (navFromHash), which loads it again.
+  if (!window._firebaseUid) { el.textContent = 'Sign in to load published numbers.'; return; }
+  el.textContent = 'Loading published numbers…';
+  try {
+    if (!window.fbLoadGrounding) throw new Error('Loader unavailable');
+    var data = await window.fbLoadGrounding(true);
+    if (token !== groundingLoadToken) return;
+    el.innerHTML = groundingNumbersHtml(data);
+  } catch (e) {
+    if (token !== groundingLoadToken) return;
+    el.innerHTML = 'Numbers could not load. <button class="tool-chip" onclick="loadGroundingNumbers()">Retry</button>';
+  }
+}
+function groundingNumbersHtml(data) {
+  if (!data) return 'No release published yet. Figures will appear after a source is captured and verified.';
+  if (data.schema !== 'daybook-grounding-mirror/1') return 'This numbers release cannot be displayed. Refresh after the app is updated.';
+  var facts = Array.isArray(data.facts) ? data.facts : [];
+  var watches = Array.isArray(data.watch) ? data.watch : [];
+  var source = function(url, label) {
+    return /^https?:\/\//i.test(String(url || '')) ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label || 'Source') + ' ↗</a>' : esc(label || 'No source link');
+  };
+  var rows = facts.map(function(fact) {
+    var checks = fact.checks || {};
+    var trust = [checks.sourceLinked ? 'Source-linked' : '', checks.factVerified ? 'Fact-verified' : 'Not fact-verified', checks.crossChecked ? 'Cross-checked' : 'Not cross-checked'].filter(Boolean).join(' · ');
+    var watch = watches.find(function(w) { return w.seriesId === fact.seriesId; });
+    return '<div class="command-item"><div><b>' + esc(fact.title) + ': ' + esc(fact.display) + '</b>' +
+      '<div>' + esc(fact.observationKey) + ' · Published ' + esc(fact.publishedAt) + (fact.effectiveFrom ? ' · Effective ' + esc(fact.effectiveFrom) : '') + '</div>' +
+      '<div>' + source(fact.url, fact.publisher) + '</div><div>' + esc(trust) + ' · Consumer approval required</div>' +
+      (watch ? '<div>' + esc(watch.state.replace(/_/g, ' ')) + ': ' + esc(watch.detail) + '</div>' : '') + '</div></div>';
+  });
+  watches.filter(function(w) { return !facts.some(function(f) { return f.seriesId === w.seriesId; }); }).forEach(function(w) {
+    rows.push('<div class="command-item"><div><b>' + esc(w.title || w.seriesId) + '</b><div>' + esc(w.state.replace(/_/g, ' ')) + ': ' + esc(w.detail) + '</div>' +
+      (w.expectedBy ? '<div>Expected ' + esc(w.expectedBy) + '</div>' : '') + '<div>' + source(w.url) + ' · Watch state, not evidence</div></div></div>');
+  });
+  return '<p>Release ' + esc(data.sequence) + '</p>' + (rows.join('') || 'No figures captured yet. The first sources will be added in the pilot releases.');
 }
 
 // ── What you use ──
@@ -5614,7 +5680,8 @@ var FEED_SPEC = [
   { key: 'radar',    label: 'Radar',    maxAgeH: 30,   cadence: '06:00 + 08:30 catch-up' },
   { key: 'miro',     label: 'Markets',  maxAgeH: 30,   cadence: '06:15' },
   { key: 'ph',       label: 'PSE',      maxAgeH: 30,   cadence: '06:00 + 16:30 after close' },
-  { key: 'sports',   label: 'Sports',   maxAgeH: 18,   cadence: 'NBA/PBA/tennis, twice daily' }
+  { key: 'sports',   label: 'Sports',   maxAgeH: 18,   cadence: 'NBA/PBA/tennis, twice daily' },
+  { key: 'grounding', label: 'Numbers', maxAgeH: 30, cadence: 'daily; sources checked when due' }
 ];
 
 function feedAge(t) {
@@ -5704,7 +5771,7 @@ var commandPrefsAvailable = false;
 var commandFilter = 'all';
 var commandLoadToken = 0;
 var commandCenterInputs = null;
-var commandSources = ['Briefing','News','Radar','Markets','Decisions','Sports'];
+var commandSources = ['Briefing','News','Numbers','Radar','Markets','Decisions','Sports'];
 var commandPreferences = {sourceWeights:{}, quietSources:[], daily:{date:'',pinned:[],dismissed:[]}, delivery:{enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}}, deliveryState:{audit:[]}, review:{days:{}}};
 var commandPreferenceSaveChain = Promise.resolve();
 var commandPreferenceRevision = 0;
@@ -6033,7 +6100,7 @@ function commandItemHtml(item, rank, featured) {
   var sourceClass = esc(item.source).replace(/[^A-Za-z0-9_-]/g, '');
   var encodedId = encodeURIComponent(item.id).replace(/'/g, '%27');
   var review = commandReviewItem(item.id);
-  var quickState = ['Reliability','Briefing','News'].indexOf(item.source) >= 0 ? 'reviewed' : 'acted';
+  var quickState = ['Reliability','Briefing','News','Numbers'].indexOf(item.source) >= 0 ? 'reviewed' : 'acted';
   var quickLabel = quickState === 'reviewed' ? 'Reviewed' : 'Acted';
   var body = '<div><button class="command-item-title command-open-item" onclick="commandOpenItem(\'' + encodedId + '\')">' + esc(item.title) + '</button>' +
     '<div class="command-item-detail">' + esc(item.detail || 'Open source for detail.') + '</div></div>';
@@ -6161,10 +6228,10 @@ function renderCommandCenter() {
   return Promise.all([
     read(window.fbLoadRadar), read(window.fbLoadMiro), read(window.fbLoadSports),
     read(window.fbLoadDecisions), read(window.fbLoadFeedHealth), read(window.fbLoadCommandPrefs),
-    read(window.fbLoadNews)
+    read(window.fbLoadNews), read(window.fbLoadGrounding)
   ]).then(function (data) {
     if (token !== commandLoadToken) return;
-    var names = ['Radar','Markets','Sports','Decisions','Feed health','Preferences','News'];
+    var names = ['Radar','Markets','Sports','Decisions','Feed health','Preferences','News','Numbers'];
     var failed = data.map(function(result,i) { return result.ok ? '' : names[i]; }).filter(Boolean);
     setText('command-load-status',failed.length ? 'Partial results — unavailable: ' + failed.join(', ') + '. Refresh to retry.' : 'All sources loaded.');
     commandPrefsAvailable = data[5].ok;
@@ -6178,6 +6245,7 @@ function renderCommandCenter() {
       sports: data[2],
       decisions: data[3],
       news: data[6],
+      grounding: data[7],
       health: window._feedHealthData,
       sportsFollows: commandSportsFollows(data[2])
     };

@@ -38,6 +38,20 @@ function environment(names, extra={}) {
   names.forEach(name=>vm.runInContext(handler(name),context));
   return {context,element};
 }
+
+test('numbers escape source content and separate fact trust from watch states',()=>{
+  const {context}=environment(['groundingNumbersHtml'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')});
+  assert.match(context.groundingNumbersHtml(null),/No release published/);
+  const out=context.groundingNumbersHtml({schema:'daybook-grounding-mirror/1',sequence:2,facts:[
+    {seriesId:'cpi',title:'<script>bad</script>',display:'3.1%',observationKey:'2026-08',publishedAt:'2026-09-01',url:'javascript:alert(1)',publisher:'Test',checks:{factVerified:true,sourceLinked:true,crossChecked:false}}
+  ],watch:[{seriesId:'award',state:'awaiting_publication',detail:'Not yet',url:'https://example.org'}]});
+  assert.ok(!out.includes('<script>'));
+  assert.ok(!out.includes('javascript:'));
+  assert.match(out,/Fact-verified/);
+  assert.match(out,/Not cross-checked/);
+  assert.match(out,/Watch state, not evidence/);
+  assert.match(out,/Consumer approval required/);
+});
 test('aha actions preserve sources and invalidation when saved or scheduled',()=>{
   const data={date:'2026-09-26',aha:{title:'A useful connection',insight:'A provisional reading',chain:['First observation'],wrong_if:'The delay is temporary',links:['Source headline']}};
   let evidence, check, trial, decision;
