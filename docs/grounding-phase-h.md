@@ -357,8 +357,8 @@ same approach Bob chose for H-3.
 
 ## H-5: the RBA cash rate target (automated, Daybook only)
 
-Status: **built, 2026-09-29.** Bob agreed D-H5-1 to D-H5-4 as recommended, and
-approved publishing (see "Built (H-5)" at the end). Everything below was read on
+Status: **live, 2026-09-29**, in release 000009 (see "Live" at the end). Bob
+agreed D-H5-1 to D-H5-4 as recommended, and approved publishing. Everything below was read on
 that date with Daybook's own user agent. The
 roadmap row says: automated; Daybook only, until a consumer needs it
 (ClaimBench has no interest metric).
@@ -488,3 +488,25 @@ as the series' first update: a live end-to-end cycle.
   = 4.35 (source-linked, fact-verified, cross-checked, plausible). The watch
   reads published, with the next decision expected on 2026-09-29. Every other
   series was unchanged.
+
+### Live, 2026-09-29
+
+- **Published:** dispatch run 36500384227 on b9d34ae (23:54 UTC on the 28th)
+  published **release 000009**, manifest
+  `405cdf58bbbc32b66cd4fd92e83bff7a1c1633abc1bc34b773c923abf49f805f`.
+- **What changed:** compared with 000008, it adds only
+  `rba_cash_rate_target@2026-08-12#r1` = 4.35. No record is altered, and the
+  only watch record that changed is the new series' own.
+- **GitHub's runner can read rba.gov.au:** the page, the statement and the
+  schedule all answered.
+- **`fetchRelease` against the live URL:** ok. The fact is source-linked,
+  fact-verified, cross-checked and plausible. The watch reads published, with
+  `expectedBy` 2026-09-29.
+- **The Firestore mirror** is at sequence 9, with the same manifest. The
+  Morning 5 change reads "RBA cash rate target: 4.35% p.a. (2026-08-12)".
+- **Help** (f6b322d, cache v129): the "Your numbers" card names the cash rate.
+  The live site serves both.
+- **Next:** the Board decides at 2:30 pm AEST today. The scheduled run at 06:15
+  AEST on 30 September should publish it as the series' first update, with
+  `expectedBy` moving to 2026-11-03. If the RBA's page has not moved by then,
+  the series reads **overdue** instead.
