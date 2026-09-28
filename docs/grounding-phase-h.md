@@ -355,3 +355,136 @@ same approach Bob chose for H-3.
 - **For RiskM8 now:** regenerating its two tables from the 2023-24 industry
   benchmarks is its own owner-run step (a separate session).
 
+## H-5: the RBA cash rate target (automated, Daybook only)
+
+Status: **built, 2026-09-29.** Bob agreed D-H5-1 to D-H5-4 as recommended, and
+approved publishing (see "Built (H-5)" at the end). Everything below was read on
+that date with Daybook's own user agent. The
+roadmap row says: automated; Daybook only, until a consumer needs it
+(ClaimBench has no interest metric).
+
+- **Contract:** nothing to change. `kind: 'rate'`, `unitCode: 'pct_pa'` and
+  `basisCode: 'policy_rate_target'` are already in the contract. `validate.js`
+  keeps its SHA-256, so neither consumer re-copies anything. Neither consumer
+  maps the series: both skip it as not allowlisted.
+- **Access:** rba.gov.au answers Daybook (HTTP 200) on every page used here.
+  `robots.txt` disallows only `/assets/`, `/search/`, `/s/`, the image library
+  and two single pages.
+
+### Sources
+
+| Page | What it gives | Seen 2026-09-29 |
+|---|---|---|
+| `/statistics/cash-rate/` ("Cash Rate Target \| RBA") | Table "Interest Rate Decisions": Effective Date, Change (% points), Cash rate target (%), and links to each decision's Statement and Minutes. It lists every decision, holds included (Change 0.00) | Top row: **12 Aug 2026, 0.00, 4.35**, Statement `mr-26-19` |
+| `/media-releases/2026/mr-26-19.html` | "Statement by the Monetary Policy Board: Monetary Policy Decision". `datePublished` `2026-08-11T14:30+10:00`. First paragraph: "At its meeting today, the Board decided to leave the cash rate target unchanged at 4.35 per cent." | |
+| `/schedules-events/board-meeting-schedules.html` | Monetary Policy Board meetings for 2026 and 2027. The decision comes on the second day, at 2:30 pm AEST | **Next: 28–29 September 2026, so a decision is due today.** Then 2–3 November and 7–8 December |
+| `/statistics/tables/csv/f1-data.csv` (F1, daily) | `FIRMMCRTD` "Cash Rate Target on date": 4.35 on 12-Aug-2026, and 4.35 with a change of 0.25 on 06-May-2026 | Latest full row is 28-Sep-2026; a date's row arrives a day or more later. **F1.1 is monthly averages, so it is unusable as a cross-check** |
+
+The statement's wording, across a hold, a rise and a cut (mr-26-19, mr-26-12,
+mr-25-22), is one pattern: "the Board decided to **leave** the cash rate
+target **unchanged at** 4.35 per cent" / "to **increase** … **by 25 basis
+points to** 4.35 per cent" / "to **lower** … by 25 basis points to 3.60 per
+cent".
+
+### Proposed design
+
+- **Series** `rba_cash_rate_target`, "RBA cash rate target", publisher "Reserve
+  Bank of Australia", jurisdiction AU, `capture: 'page'`, streams `sme_bi` and
+  `risk_review`.
+- **One observation per Board decision (D-H5-1).**
+  - The observation key and `effectiveFrom` are the table's Effective Date.
+    `effectiveTo` is null. `publishedAt` is the statement's date.
+  - A hold is a new observation at the same value, so the Morning 5 reads
+    "4.35% p.a. → 4.35% p.a. (2026-08-12 → 2026-09-30)".
+- **Evidence (D-H5-2).**
+  - The `release` evidence is the **statement's decision sentence**, which the
+    value is bound to.
+  - The `cross_check` evidence is the **cash-rate table's value cell** for the
+    same row. The table links to that statement, so the parser follows the
+    link from the top row.
+  - Both are available the same afternoon, so a decision publishes at the next
+    morning run (06:15 AEST).
+  - F1 is not used: it lags a day or more, and it carries ASX and FENICS
+    columns (Third Party Material).
+- **Fails closed** (blocked, with what it saw) on anything unrecognised:
+  - different table headers;
+  - a top row without a Statement link;
+  - a statement that isn't a Monetary Policy Board decision, or whose sentence
+    doesn't match the pattern;
+  - a statement figure that differs from the table (a conflict);
+  - a verb or basis-point change that disagrees with the table's Change;
+  - a statement dated on or after the effective date.
+  - A failed statement fetch holds the figure for the day, as for the CPI.
+- **Watch and expected date (G8).**
+  - `expectedBy` is the decision day of the next scheduled meeting after the
+    latest statement.
+  - If the Sydney date passes it while the page still shows the older
+    decision, the series is **overdue**.
+  - A schedule the parser can't read means no expected date; it does not block
+    the figure.
+  - Freshness: 75 days. The longest scheduled gap is December to February,
+    about 63 days.
+- **Bounds (D-H5-3):**
+  - min 0, max 10. Since 1996 the target has been 0.10 to 7.25.
+  - maxChange 1.0. The largest single move since 1990 was −1.00 in October
+    2008.
+  - A breach is held for a reviewed override, as for every series.
+- **Licence (D-H5-4).** The statements are RBA Material under CC BY 4.0. The
+  cash rate target itself is **RBA Financial Data** (copyright notice, section
+  5). That is not the administered "Cash Rate", which is the interbank
+  overnight rate. It may be used personally or commercially if:
+  - it is attributed ("Source: Reserve Bank of Australia [year]");
+  - no RBA endorsement is implied;
+  - it is not commercially exploited improperly.
+
+  The licence string says so in under 300 characters.
+- **Fixtures:** verbatim fragments of the cash-rate page, the three statements
+  and the schedule, with a source and licence header, as for the ABS. No F1
+  data is kept.
+- **Help (in its own lane):** the "Your numbers" card still names only the
+  CPI. One sentence adds the cash rate. It is an index.html change, so the
+  cache version is bumped and the push deploys it.
+
+### Decisions for Bob
+
+- **D-H5-1 Observation model.** (a) One per Board decision, holds included, as
+  the RBA's own table does (recommended). (b) One per change only; a hold then
+  only refreshes the watch's detail, and freshness can't be used.
+- **D-H5-2 Evidence.** The statement as `release` and the table cell as
+  `cross_check` (recommended; same day). Or F1 as the cross-check, which
+  publishes a day or two after each decision and carries third-party columns.
+- **D-H5-3 Bounds.** 0 to 10, max change 1.0 (recommended).
+- **D-H5-4 Licence and fixtures.** Accept the RBA Financial Data terms with
+  attribution, and keep verbatim excerpts as test fixtures (recommended).
+
+**Timing.** Published before 2:30 pm AEST today, the first fact is the 12 August
+decision. The 06:15 AEST run on 30 September then publishes today's decision
+as the series' first update: a live end-to-end cycle.
+
+### Built (H-5)
+
+- **`grounding/sources/rba-cash-rate.js`**, registered as `rba_cash_rate_target`
+  (`capture: 'page'`, freshness 75 days, bounds 0 to 10 with max change 1,
+  cadence 12 hours). Each run it reads the cash-rate page's top row, follows its
+  Statement link, and reads the meeting schedule.
+  - The value is bound to the statement's decision sentence. Only that
+    sentence is quoted, so a long first paragraph cannot exceed the quote cap.
+    The table's value cell is the cross-check.
+  - `publishedAt` is the statement's `datePublished`. Some statements give a
+    date with no time (`2026-05-05`), and both forms are read.
+  - Found while building: a parser that took the first `<time>` or the first
+    table row would have misread the full pages. It reads the `rss-mr-date`
+    element and the schedule's table body.
+- **Fixtures:** verbatim fragments of the cash-rate page (three rows), the
+  August 2026 hold, the May 2026 rise, the August 2025 cut and the 2026–2027
+  schedule. Each parses exactly as the full page does.
+- **Tests:** 9 new; 121 grounding tests in total.
+  - Eight deliberate breakages were each caught: no statement–table check,
+    overdue on the decision day, the value taken from the table, no page-title
+    check, the schedule's first meeting day, the current decision as the
+    "next", no headline check, and a statement dated on the effective day.
+- **Live dry run** over release 000008 with every real source: it proposed
+  release 000009 with exactly one change, `rba_cash_rate_target@2026-08-12#r1`
+  = 4.35 (source-linked, fact-verified, cross-checked, plausible). The watch
+  reads published, with the next decision expected on 2026-09-29. Every other
+  series was unchanged.

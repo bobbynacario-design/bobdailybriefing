@@ -27,6 +27,7 @@ const vicTow = require('./sources/vic-gazette-towing');
 const sg = require('./sources/sg-legislation');
 const sbb = require('./sources/ato-sbb');
 const taxStats = require('./sources/ato-taxstats');
+const rbaCash = require('./sources/rba-cash-rate');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -178,5 +179,25 @@ module.exports = [
     streams: ['risk_review', 'sme_bi'],
     cadenceHours: 12,
     fetch: taxStats.watchTaxStats,
+  },
+  // Phase H, H-5: the RBA cash rate target (D-H5-1 to D-H5-4), for Daybook
+  // only until a consumer maps it (ClaimBench has no interest metric). One
+  // observation per Monetary Policy Board decision, holds included.
+  {
+    seriesId: rbaCash.SERIES_ID,
+    title: rbaCash.TITLE,
+    capture: 'page',
+    publisher: rbaCash.PUBLISHER,
+    urls: { table: rbaCash.CASH_RATE_URL, schedule: rbaCash.SCHEDULE_URL },
+    licence: rbaCash.licence('[year]'),
+    streams: ['sme_bi', 'risk_review'],
+    // Eight scheduled decisions a year; the longest gap (December to February)
+    // is about 63 days. Overdue comes from the RBA's own schedule, not this.
+    freshnessDays: 75,
+    // Since 1996 the target has been 0.10 to 7.25; the largest single move
+    // since 1990 was -1.00 (October 2008).
+    bounds: { min: 0, max: 10, maxChange: 1 },
+    cadenceHours: 12,
+    fetch: rbaCash.fetchCashRate,
   },
 ];
