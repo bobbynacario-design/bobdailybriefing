@@ -77,7 +77,7 @@ test('a changed figure for the same period is a correction that supersedes the o
   assert.equal(byId['test_award_cw1@2026-07-01#r2'].supersedes, 'test_award_cw1@2026-07-01#r1');
   assert.equal(second.changes[0].summary, 'Test award, CW1 hourly corrected: $31.15/hour → $31.25/hour (2026-07-01)');
 });
-test('a new period supersedes the previous one; an older period is refused', () => {
+test('a new period supersedes the previous one; an older period from an automated source is refused', () => {
   const first = run(null, [cpi('2026-08', 3.1)], T1);
   const second = run(asPrevious(first), [cpi('2026-09', 2.9)], T2);
   const byId = Object.fromEntries(second.snapshot.facts.map((f) => [f.recordId, f]));
@@ -87,6 +87,36 @@ test('a new period supersedes the previous one; an older period is refused', () 
   const third = run(asPrevious(second), [cpi('2026-07', 3.0)], T3);
   assert.equal(third.changed, false);
   assert.match(third.skipped[0].reason, /older than the latest observation \(2026-09\)/);
+});
+test('a reviewed manual capture adds an earlier period as its own current record; the newer one is untouched', () => {
+  const period = (value, from, to) => Object.assign(award(value), { observationKey: from, observationDate: from, publishedAt: from.slice(0, 4) + '-06-20',
+    effectiveFrom: from, effectiveTo: to, scope: { jurisdiction: 'AU', classification: 'CW1', period: { from, to } } });
+  const fy26 = period(30.10, '2025-07-01', '2026-06-30');
+  const first = run(null, [award(31.15)], T1);
+  // The publisher loads the whole manual file, so the FY27 capture comes again.
+  const second = run(asPrevious(first), [fy26, award(31.15)], T2);
+  assert.equal(second.release.sequence, 2);
+  const byId = Object.fromEntries(second.snapshot.facts.map((f) => [f.recordId, f]));
+  assert.deepEqual(byId['test_award_cw1@2026-07-01#r1'], first.snapshot.facts[0], 'the FY27 record is unchanged');
+  const earlier = byId['test_award_cw1@2025-07-01#r1'];
+  assert.equal(earlier.lifecycle, 'current'); assert.equal(earlier.supersedes, null); assert.equal(earlier.revision, 1);
+  assert.deepEqual(second.changes.map((c) => [c.kind, c.summary]),
+    [['earlier', 'Test award, CW1 hourly: $30.10/hour (2025-07-01), an earlier period; the latest is still $31.15/hour (2026-07-01)']]);
+  assert.equal(second.snapshot.watch[1].detail, 'Latest: $31.15/hour (2026-07-01), published 2026-06-20.');
+  assert.equal(second.snapshot.watch[1].stateChangedAt, T1, 'the watch record is kept whole');
+  // A consumer that imported FY27 before imports just the earlier period.
+  const rel = second.release, d = rel.dir;
+  const release = V.validateRelease({ latestText: rel.files['latest.json'], manifestText: rel.files[d + '/manifest.json'], fileTexts: { 'facts.json': rel.files[d + '/facts.json'], 'watch.json': rel.files[d + '/watch.json'], 'insights.json': rel.files[d + '/insights.json'] }, directorySequence: rel.sequence }, { bounds: { test_award_cw1: REGISTRY[1].bounds } });
+  assert.equal(release.ok, true, release.errors.join('; '));
+  const policy = { mappingVersion: 'test', allow: { series: ['test_award_cw1'], publishers: ['Test Wage Office (not a real source)'], units: ['aud_per_hour'], jurisdictions: ['AU'] } };
+  const before = { sequence: 1, manifestSha256: 'a'.repeat(64), factsSha256: 'b'.repeat(64), recordIds: ['test_award_cw1@2026-07-01#r1'], flagged: [], mappingVersion: 'test' };
+  assert.deepEqual(V.planImport(before, release, policy, T2).toImport.map((x) => x.recordId), ['test_award_cw1@2025-07-01#r1']);
+  // The same file the next day changes nothing.
+  assert.equal(run(asPrevious(second), [fy26, award(31.15)], T3).changed, false);
+  // FY28 then supersedes FY27, the latest; FY26 stays current, the figure for its own period.
+  const fy28 = run(asPrevious(second), [fy26, award(31.15), period(32.00, '2027-07-01', '2028-06-30')], T3);
+  const after = Object.fromEntries(fy28.snapshot.facts.map((f) => [f.recordId, f.lifecycle]));
+  assert.deepEqual(after, { 'test_award_cw1@2026-07-01#r1': 'superseded', 'test_award_cw1@2025-07-01#r1': 'current', 'test_award_cw1@2027-07-01#r1': 'current' });
 });
 test('a plausibility breach is not published: the last good figure stays and the watch says why', () => {
   const first = run(null, [cpi('2026-08', 3.1)], T1);

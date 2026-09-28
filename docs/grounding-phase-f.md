@@ -175,6 +175,8 @@ already changed in 2136a5a, but only in `planImport` and `nextImportState`:
   controller". The 2025 edition could not be obtained:
   - the calculator serves only the current guide;
   - the Internet Archive holds only its "download will start shortly" page.
+    (Found later, on 2026-09-28: the Archive also holds a capture of the
+    direct download URL, with the 2025 guide in it. See "FY26 capture" below.)
 
   Recomputed exactly from the award's rounding rules, no FY26 row gives $29.74.
   Bob then chose **Level 2 (CW/ECW 2), Weekly hire - full-time and part-time -
@@ -271,3 +273,83 @@ The title in its target mapping should say CW/ECW 2, not CW1. Its approved FY26
 record ("CW1, $29.74", from Harrison Barratt) is the wrong level by the award,
 and no award arithmetic reproduces its value. Reviewing it is BI-Assessor's
 call. Its supersede of `_fy27_au_v1` to `_v2` is still the right move.
+
+## FY26 capture (2026-09-29)
+
+BI-Assessor's approved FY26 record, `bm_rate_traffic_controller_award_fy26_au_v1`
+("CW1, $29.74", cited only to Harrison Barratt), is to be corrected through
+Daybook (Bob, 2026-09-27). This adds the FY26 observation of the same series.
+
+- **Source:** the FWO pay guide effective 1 July 2025, published 17 July 2025:
+  `G00202880.pdf`, 117 pages, 2,037,625 bytes, SHA-256 `f76e74d6…fb4a04b`. It
+  is kept as
+  `grounding/manual/sources/fwo-ma000020-pay-guide-effective-2025-07-01-G00202880.pdf`.
+- **Retrieved from the Internet Archive.** The FWO serves only the current
+  guide, and a past `effectiveDate` returns an empty body. The BI-Assessor
+  session downloaded it with Bob's approval on 2026-09-28 at 22:47:15 UTC. It is
+  the Archive's capture of the FWO's own download URL, taken 2025-11-23
+  05:07:47 UTC in the National Library of Australia's AU crawl, fetched in its
+  unmodified `id_` form.
+- **How the evidence records the route.** The contract has no field for it, so:
+  - `url` is the Archive capture, which contains the FWO's download URL and
+    serves the exact bytes the SHA-256 covers;
+  - `title` is the guide's own, plus "(Internet Archive copy of the FWO
+    download, captured 23/11/2025)";
+  - `publisher` stays "Fair Work Ombudsman", which wrote the guide
+    (BI-Assessor accepts no other), with tier `primary`;
+  - `licence` is the FWO's attribution, word for word as FY27's. The
+    validator caps it at 300 characters.
+- **Value:** page 83, "Weekly hire - full-time and part-time - Civil
+  construction", Table 1 of 3, row "Level 2 (CW/ECW 2)": weekly $1,102.30,
+  hourly **$29.01**. It is effective 2025-07-01 to 2026-06-30, with the guide's
+  own three qualifications.
+  - It was read from the rendered page and from the raw text stream, which
+    agree.
+  - `pdftotext -layout` shifts this table's hourly column up a row and leaves
+    Level 2's blank, so it was not used.
+- **The guide now states the figures section 3 approximated:** CW/ECW 2 $29.01
+  and CW/ECW 1 (level d) $28.47. None of FY26's CW/ECW 1 levels ($27.15 to
+  $28.47), nor CW/ECW 2, is $29.74. The value published is the guide's, not the
+  approximation.
+
+### The publisher change
+
+Before this, the producer refused any period older than a series' latest live
+one, so the FY26 capture would have been skipped. Now:
+- An older period from an **automated** source is still refused, so a stale
+  page cannot rewrite history.
+- An older period that was never published, from a **reviewed manual
+  capture**, is added as its own `current` record. It is revision 1 and
+  supersedes nothing, and the FY27 record is untouched.
+- The change reads "… $29.01/hour (2025-07-01), an earlier period; the latest
+  is still $30.39/hour (2026-07-01)".
+- **Why `current`, not `superseded`:** a consumer's `planImport` skips
+  historical records, so a superseded FY26 would never reach ClaimBench.
+  - The validator already allows one live revision per observation, so two
+    live periods in one series pass as they are.
+  - No contract file changes: `validate.js` and `fetch-release.js` keep their
+    SHA-256s, so the consumers re-copy nothing.
+- **Later:** when FY28 publishes, it supersedes FY27 as before. FY26 stays
+  current, as the figure for its own period.
+
+### Checked
+
+- **Tests:** 112 grounding tests, up from 110. Eight deliberate breakages were
+  each caught: a refused manual backfill, an allowed automated one, FY26 as
+  historical, FY26 retiring FY27, a mistyped value, a wrong digest, another
+  publisher, and a wrong period.
+- **Offline replay over live release 000007:** the real publisher, registry and
+  manual folder, with automated fetches stubbed out.
+  - It cuts release 000008, which adds exactly
+    `fwo_ma000020_cw2_ordinary@2025-07-01#r1` = 29.01 (current,
+    source-linked, fact-verified, plausible under BI-Assessor's bounds,
+    eligible).
+  - No existing record changes, and the watch file is byte-identical.
+- **BI-Assessor's own importer**, run read-only from its main checkout
+  (2fd042f), over 000007 and then 000008: one proposal, a supersede of
+  `_fy26_au_v1` to `_fy26_au_v2`. It is $29.01/h, 2025-07-01 to 2026-06-30,
+  cited to the Fair Work Ombudsman at the Archive URL, and labelled "from
+  Daybook".
+  - Its review date (`effectiveTo` + 31 days) is 2026-07-31, already past, as
+    `_v1`'s is. ClaimBench warns on a past review date and does not exclude the
+    record.

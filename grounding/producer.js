@@ -7,8 +7,12 @@
 // What it decides:
 //   - An observation of a new period becomes revision 1. If it is newer than the
 //     series' latest live observation, it supersedes that one (FY27 replaces
-//     FY26, September's CPI replaces August's). An older period is refused: it
-//     would rewrite history out of order.
+//     FY26, September's CPI replaces August's). An older period from an
+//     automated source is refused: it would rewrite history out of order.
+//   - An older period that was never published, from a reviewed manual capture
+//     (last year's award rate, captured from an archived guide), is added as
+//     its own current record. It supersedes nothing and leaves the newer record
+//     as it is, so consumers can import it for its own period.
 //   - A changed observation of the same period becomes the next revision,
 //     "corrected", superseding the revision it replaces.
 //   - An unchanged observation changes nothing. When and how a page was fetched
@@ -92,7 +96,9 @@ function applyObservation(working, obs) {
     .sort((a, b) => (a.observationKey < b.observationKey ? 1 : -1));
   const latestLive = live[0] || null;
   if (latestLive && obs.observationKey < latestLive.observationKey) {
-    return { skip: 'older than the latest observation (' + latestLive.observationKey + ')' };
+    if (obs.captureMethod !== 'manual') return { skip: 'older than the latest observation (' + latestLive.observationKey + ')' };
+    const earlier = withIdentity(obs, 1, 'current', null);
+    return { facts: working.concat([earlier]), change: { kind: 'earlier', record: earlier, prior: latestLive } };
   }
   const next = withIdentity(obs, 1, 'current', latestLive ? latestLive.recordId : null);
   const facts = working.map((r) => (r === latestLive ? Object.assign({}, r, { lifecycle: 'superseded' }) : r)).concat([next]);
@@ -227,6 +233,7 @@ function produce(input) {
     const rec = step.change.record, prior = step.change.prior;
     const summary = step.change.kind === 'new' ? rec.title + ': ' + formatValue(rec) + ' (' + rec.observationKey + ')'
       : step.change.kind === 'update' ? rec.title + ': ' + formatValue(prior) + ' → ' + formatValue(rec) + ' (' + prior.observationKey + ' → ' + rec.observationKey + ')'
+        : step.change.kind === 'earlier' ? rec.title + ': ' + formatValue(rec) + ' (' + rec.observationKey + '), an earlier period; the latest is still ' + formatValue(prior) + ' (' + prior.observationKey + ')'
         : rec.title + ' corrected: ' + formatValue(prior) + ' → ' + formatValue(rec) + ' (' + rec.observationKey + ')';
     changes.push({ id: rec.recordId, kind: step.change.kind, seriesId: rec.seriesId, title: rec.title, summary, at: now, url: firstEvidenceUrl(rec), publisher: firstPublisher(rec) });
   });

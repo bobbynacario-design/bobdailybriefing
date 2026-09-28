@@ -14,9 +14,14 @@ const cpi = require('./abs-cpi');
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const MANUAL_DIR = path.join(__dirname, '..', 'manual');
-const CAPTURE = JSON.parse(fs.readFileSync(path.join(MANUAL_DIR, fwo.SERIES_ID + '.json'), 'utf8'));
-// The pay guide the capture was read from, kept beside it (FWO, CC BY-NC 4.0).
+const CAPTURES = JSON.parse(fs.readFileSync(path.join(MANUAL_DIR, fwo.SERIES_ID + '.json'), 'utf8'));
+const CAPTURE = CAPTURES.find((o) => o.observationKey === '2026-07-01');
+const FY26 = CAPTURES.find((o) => o.observationKey === '2025-07-01');
+// The pay guides the captures were read from, kept beside them (FWO, CC BY-NC 4.0).
 const GUIDE = fs.readFileSync(path.join(MANUAL_DIR, 'sources', 'fwo-ma000020-pay-guide-effective-2026-07-01-G00203138.pdf'));
+const GUIDE_FY26 = fs.readFileSync(path.join(MANUAL_DIR, 'sources', 'fwo-ma000020-pay-guide-effective-2025-07-01-G00202880.pdf'));
+const FY26_ID = 'fwo_ma000020_cw2_ordinary@2025-07-01#r1';
+const FY26_SUMMARY = fwo.TITLE + ': $29.01/hour (2025-07-01), an earlier period; the latest is still $30.39/hour (2026-07-01)';
 const CPI_PAGE = fs.readFileSync(path.join(__dirname, 'fixtures/abs-cpi-latest-2026-07.html'), 'utf8');
 const CPI_CSV = fs.readFileSync(path.join(__dirname, 'fixtures/abs-cpi-api-2026-07.csv'), 'utf8');
 const NOW = '2026-09-28T20:15:00Z';
@@ -47,24 +52,41 @@ function tempManual(capture) {
   return dir;
 }
 
-test('the capture is exactly the contract BI-Assessor maps (roadmap Phase F; D-F1, D-F2)', () => {
-  assert.equal(CAPTURE.seriesId, 'fwo_ma000020_cw2_ordinary');
-  assert.equal(CAPTURE.kind, 'award_wage'); assert.equal(CAPTURE.basisCode, 'award_min_wage'); assert.equal(CAPTURE.unitCode, 'aud_per_hour');
-  assert.equal(CAPTURE.scope.jurisdiction, 'AU');
-  assert.equal(CAPTURE.scope.classification, 'Level 2 (CW/ECW 2); Weekly hire - full-time and part-time - Civil construction');
-  assert.equal(CAPTURE.value, 30.39); assert.equal(CAPTURE.range, null); assert.equal(CAPTURE.derivation, null);
-  assert.equal(CAPTURE.effectiveFrom, '2026-07-01'); assert.equal(CAPTURE.effectiveTo, '2027-06-30');
-  assert.ok(CAPTURE.evidence.every((ev) => ev.publisher === 'Fair Work Ombudsman'), 'every evidence item names the FWO');
-  assert.equal(CAPTURE.captureMethod, 'manual');
-  assert.ok(!('recordId' in CAPTURE) && !('revision' in CAPTURE) && !('lifecycle' in CAPTURE), 'identity fields are the publisher\'s');
+test('each capture is exactly the contract BI-Assessor maps (roadmap Phase F; D-F1, D-F2)', () => {
+  assert.equal(CAPTURES.length, 2);
+  [[CAPTURE, 30.39, '2026-07-01', '2027-06-30'], [FY26, 29.01, '2025-07-01', '2026-06-30']].forEach(([c, value, from, to]) => {
+    assert.equal(c.seriesId, 'fwo_ma000020_cw2_ordinary');
+    assert.equal(c.kind, 'award_wage'); assert.equal(c.basisCode, 'award_min_wage'); assert.equal(c.unitCode, 'aud_per_hour');
+    assert.equal(c.scope.jurisdiction, 'AU');
+    assert.equal(c.scope.classification, 'Level 2 (CW/ECW 2); Weekly hire - full-time and part-time - Civil construction');
+    assert.equal(c.value, value); assert.equal(c.range, null); assert.equal(c.derivation, null);
+    assert.equal(c.observationKey, from); assert.equal(c.effectiveFrom, from); assert.equal(c.effectiveTo, to);
+    assert.ok(c.evidence.every((ev) => ev.publisher === 'Fair Work Ombudsman'), 'every evidence item names the FWO');
+    assert.equal(c.captureMethod, 'manual');
+    assert.ok(!('recordId' in c) && !('revision' in c) && !('lifecycle' in c), 'identity fields are the publisher\'s');
+  });
 });
 
-test('the capture records the digest of the pay guide kept beside it, and that guide is the 1 July 2026 edition', () => {
+test('each capture records the digest of the pay guide kept beside it, and each guide is its year\'s edition', () => {
   assert.equal(CAPTURE.evidence[0].contentSha256, sha(GUIDE));
   assert.deepEqual(fwo.pdfFacts(GUIDE), { createdOn: '2026-07-01' });
   // The sanity check against the award (clauses 19.1(a) and 22.1(a) from 1 July
   // 2026): (CW/ECW 2 weekly minimum + civil industry allowance) / 38 hours.
   assert.equal(Math.round(((1087.50 + 67.15) / 38) * 100) / 100, CAPTURE.value);
+
+  // FY26: G00202880.pdf, "Effective: 01/07/2025 Published: 17/07/2025". The FWO
+  // serves only the current guide, so it came from the Internet Archive's
+  // capture of the FWO download. The URL (which carries the FWO's own) and the
+  // title say so; the licence is the FWO's attribution, as for FY27.
+  assert.equal(FY26.evidence[0].contentSha256, sha(GUIDE_FY26));
+  assert.equal(GUIDE_FY26.length, 2037625);
+  assert.deepEqual(fwo.pdfFacts(GUIDE_FY26), { createdOn: '2025-07-16' });
+  assert.equal(FY26.evidence[0].url, 'https://web.archive.org/web/20251123050747id_/' + fwo.DOWNLOAD_URL);
+  assert.match(FY26.evidence[0].title, /Effective: 01\/07\/2025, Published: 17\/07\/2025 \(Internet Archive copy of the FWO download, captured 23\/11\/2025\)$/);
+  assert.equal(FY26.evidence[0].licence, fwo.LICENCE);
+  // The same row's weekly rate over 38 hours agrees with its hourly rate: a
+  // check on the transcription, not where the value came from.
+  assert.equal(Math.round((1102.30 / 38) * 100) / 100, FY26.value);
 });
 
 test('the capture validates, passes Daybook\'s bounds and BI-Assessor\'s (25 to 45, change 3) without an override, and publishes', () => {
@@ -111,9 +133,9 @@ test('through the real publisher, the award publishes next to CPI and CPI is unc
   const awaiting = before.result.snapshot.watch.find((w) => w.seriesId === fwo.SERIES_ID);
   assert.equal(awaiting.state, 'awaiting_publication');
   assert.match(awaiting.detail, /^The FWO pay guide is out \(G00203138\.pdf, created 2026-07-01/);
-  // Then the reviewed capture lands.
+  // Then the reviewed FY27 capture lands, alone, as it did in release 000003.
   const src = sources();
-  const out = await run({ dataDir: data, manualDir: MANUAL_DIR, registry: REGISTRY, firestore: false, now: NOW, fetchImpl: src.fetch });
+  const out = await run({ dataDir: data, manualDir: tempManual(CAPTURE), registry: REGISTRY, firestore: false, now: NOW, fetchImpl: src.fetch });
   assert.equal(out.result.changed, true);
   assert.equal(out.result.release.sequence, 2);
   assert.ok(src.calls.includes(fwo.DOWNLOAD_URL), 'the watch read the guide');
@@ -129,6 +151,46 @@ test('through the real publisher, the award publishes next to CPI and CPI is unc
   const changed = out.result.changes.map((c) => c.id);
   assert.ok(changed.includes(RECORD_ID));
   assert.ok(!changed.some((id) => id.startsWith('abs_cpi_')), 'CPI did not change');
+
+  // Then the repository's file, which adds FY26 beside FY27. The live guide is
+  // still FY27's, so the watch still reads published.
+  const later = '2026-09-29T20:15:00Z';
+  const next = await run({ dataDir: data, manualDir: MANUAL_DIR, registry: REGISTRY, firestore: false, now: later, fetchImpl: sources().fetch });
+  assert.equal(next.result.release.sequence, 3);
+  const award = next.result.snapshot.facts.filter((f) => f.seriesId === fwo.SERIES_ID);
+  assert.deepEqual(award.find((f) => f.recordId === RECORD_ID), facts.find((f) => f.recordId === RECORD_ID), 'the FY27 record is untouched');
+  const fy26 = award.find((f) => f.recordId === FY26_ID);
+  assert.equal(fy26.lifecycle, 'current'); assert.equal(fy26.supersedes, null); assert.equal(fy26.value, 29.01);
+  // (The folder's other captures, the VIC fees, publish here too.)
+  assert.deepEqual(next.result.changes.filter((c) => c.seriesId === fwo.SERIES_ID).map((c) => [c.id, c.kind, c.summary]), [[FY26_ID, 'earlier', FY26_SUMMARY]]);
+  assert.deepEqual(next.result.snapshot.watch.find((w) => w.seriesId === fwo.SERIES_ID), watch[fwo.SERIES_ID], 'the watch record is kept whole');
+  assert.deepEqual(next.result.snapshot.facts.find((f) => f.seriesId === cpi.SERIES_ID), cpiBefore);
+});
+
+test('from the live history, a BI-Assessor-shaped plan that imported FY27 imports exactly FY26', () => {
+  // Release 1 holds FY27 alone, as the live releases have since 000003.
+  const first = produce({ previous: null, registry: REGISTRY, observations: [CAPTURE], now: NOW, producerCommit: 'test' });
+  const f1 = first.release.files, d1 = first.release.dir;
+  const previous = { sequence: 1, facts: JSON.parse(f1[d1 + '/facts.json']).records, watch: JSON.parse(f1[d1 + '/watch.json']).records, insights: [], fileTexts: { 'facts.json': f1[d1 + '/facts.json'], 'watch.json': f1[d1 + '/watch.json'], 'insights.json': f1[d1 + '/insights.json'] } };
+  const r = produce({ previous, registry: REGISTRY, observations: CAPTURES, now: NOW, producerCommit: 'test' });
+  assert.deepEqual(r.skipped, []);
+  const result = r.validation.results.find((x) => x.recordId === FY26_ID);
+  assert.deepEqual(result.checks, { sourceLinked: true, factVerified: true, crossChecked: false, plausible: true });
+  assert.equal(result.overrideVerdict, null);
+  const d = r.release.dir, f = r.release.files;
+  const release = V.validateRelease({ latestText: f['latest.json'], manifestText: f[d + '/manifest.json'],
+    fileTexts: { 'facts.json': f[d + '/facts.json'], 'watch.json': f[d + '/watch.json'], 'insights.json': f[d + '/insights.json'] }, directorySequence: 2 },
+  { bounds: { fwo_ma000020_cw2_ordinary: { min: 25, max: 45, maxChange: 3 } } });
+  assert.equal(release.ok, true, release.errors.join('; '));
+  assert.equal(release.facts.results.find((x) => x.recordId === FY26_ID).eligible, true);
+  const policy = { mappingVersion: 'test', refuseDerived: true,
+    allow: { series: ['fwo_ma000020_cw2_ordinary'], publishers: ['Fair Work Ombudsman'], units: ['aud_per_hour'], jurisdictions: ['AU'] } };
+  const state = V.nextImportState(null, V.validateRelease({ latestText: f1['latest.json'], manifestText: f1[d1 + '/manifest.json'],
+    fileTexts: previous.fileTexts, directorySequence: 1 }, { bounds: {} }), [RECORD_ID], [], policy);
+  const plan = V.planImport(state, release, policy, NOW);
+  assert.deepEqual(plan.toImport.map((x) => x.recordId), [FY26_ID]);
+  assert.deepEqual(plan.skips, [{ recordId: RECORD_ID, reason: 'duplicate' }]);
+  assert.deepEqual(plan.flags, []);
 });
 
 test('a BI-Assessor-shaped plan imports exactly the award, and skips CPI as not allowlisted', async () => {
