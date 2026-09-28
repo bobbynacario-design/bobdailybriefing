@@ -353,3 +353,25 @@ one, so the FY26 capture would have been skipped. Now:
   - Its review date (`effectiveTo` + 31 days) is 2026-07-31, already past, as
     `_v1`'s is. ClaimBench warns on a past review date and does not exclude the
     record.
+
+### Live, 2026-09-29
+
+- **Published:** Bob approved the capture and the publish. Dispatch run
+  36496698348 on 218e071 (23:12 UTC on the 28th) published **release 000008**,
+  manifest `287b57aff5ffe5c79a8c115465fa0bc404abc192f0bea54b5be2b26b5998eb72`.
+- **What changed:** compared with 000007, it adds only
+  `fwo_ma000020_cw2_ordinary@2025-07-01#r1` = 29.01. No record is altered and
+  the watch file is byte-identical, as the replay predicted.
+- **`fetchRelease` against the live URL:** ok.
+  - FY26 is current, source-linked, fact-verified, plausible under
+    BI-Assessor's bounds, and eligible.
+  - A plan from a state that has imported FY27 imports exactly FY26.
+- **The watch** still reads published: GitHub's runner found that the live
+  guide matches the FY27 capture.
+- **The Firestore mirror** is at sequence 8, with the same manifest. It shows
+  both periods with their dates. The Morning 5 change reads "… $29.01/hour
+  (2025-07-01), an earlier period; the latest is still $30.39/hour
+  (2026-07-01)".
+- **Next, in BI-Assessor:** Bob presses Check Daybook release on the Admin
+  ClaimBench card, and applies the "from Daybook" supersede of `_fy26_au_v1`
+  to `_fy26_au_v2` ($29.01/h) in the same sitting.
