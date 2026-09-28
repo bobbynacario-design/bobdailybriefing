@@ -372,6 +372,26 @@ one, so the FY26 capture would have been skipped. Now:
   both periods with their dates. The Morning 5 change reads "… $29.01/hour
   (2025-07-01), an earlier period; the latest is still $30.39/hour
   (2026-07-01)".
-- **Next, in BI-Assessor:** Bob presses Check Daybook release on the Admin
-  ClaimBench card, and applies the "from Daybook" supersede of `_fy26_au_v1`
-  to `_fy26_au_v2` ($29.01/h) in the same sitting.
+
+### Applied in BI-Assessor, 2026-09-29
+
+Bob pressed Check Daybook release on the Admin ClaimBench card and applied the
+proposal. The card said "1 update(s) applied. Historical claim snapshots were
+not changed." It showed:
+- **Traffic controller (CW/ECW 2) — award minimum wage, ordinary time,
+  FY2025-26**, 29.01 aud_per_hour, labelled "supersede · from Daybook";
+- the rationale "From Daybook release 000008", naming
+  `fwo_ma000020_cw2_ordinary@2025-07-01#r1` and its classification;
+- the citation "Fair Work Ombudsman: Pay Guide - Building and Construction
+  General On-site Award [MA000020], Effective: 01/07/2025, Published:
+  17/07/2025 (Internet Archive copy of the FWO download, captured
+  23/11/2025)", as at 2025-07-17.
+
+So `_fy26_au_v2` ($29.01/h, 2025-07-01 to 2026-06-30) replaces `_fy26_au_v1`
+("CW1, $29.74", from Harrison Barratt). Claims already assessed keep their
+rate snapshots.
+
+The card did not show the job id, the overlay revision, or what the resolver
+returns for an FY26 date. They are in BI-Assessor's own project, which Daybook
+does not read. A BI-Assessor session is to confirm them and record them in
+its `docs/CLAIMBENCH_DAYBOOK.md`.
