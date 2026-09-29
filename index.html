@@ -2071,8 +2071,24 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .metric-detail{font-size:12px;line-height:1.5;margin-top:.5rem;color:var(--txt2)}.metric-detail summary{cursor:pointer}.metric-detail div{padding-top:.5rem}.tick-val{font-size:21px;overflow-wrap:anywhere}.tick-move{font-size:12px}.tick{min-width:0}
 .card-body{font-size:15px;line-height:1.7}.card-hl{font-size:18px}.src{font-size:12px}.command-open-item{font:inherit;color:inherit;text-align:left;border:0;background:none;padding:0;cursor:pointer}.command-open-item:hover{text-decoration:underline}
 .search-coverage{padding:.6rem 1rem;display:flex;gap:.7rem;align-items:center;justify-content:space-between;font-size:12px;color:var(--txt2)}
-#grounding-numbers .command-item{padding:.8rem 0;border-top:1px solid var(--border);line-height:1.7;overflow-wrap:anywhere}
 #grounding-numbers a{color:var(--amber)}
+#grounding-numbers{max-width:760px}
+.gn-head{display:flex;flex-wrap:wrap;gap:.2rem 1rem;font-size:12px;color:var(--txt3);margin:.1rem 0 .2rem}
+.gn-head .gn-ok{color:var(--green)}.gn-head .gn-attn{color:var(--amber);font-weight:600}
+.gn-group{font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3);margin:1rem 0 .15rem}
+.gn-row{border-top:1px solid var(--border)}
+.gn-row>summary{display:grid;grid-template-columns:minmax(0,1fr) auto 5.5rem;gap:.15rem 1rem;align-items:center;padding:.55rem 0;cursor:pointer;list-style:none}
+.gn-row>summary::-webkit-details-marker{display:none}
+.gn-name-wrap{display:flex;flex-direction:column;min-width:0}
+.gn-name{font-size:13.5px;font-weight:600;color:var(--txt);line-height:1.35}
+.gn-sub{font-size:11.5px;color:var(--txt3);line-height:1.4;margin-top:.1rem;overflow-wrap:anywhere}
+.gn-value{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--txt);text-align:right;white-space:nowrap}
+.gn-chip{justify-self:end;font-family:var(--mono);font-size:10px;padding:.15rem .5rem;border-radius:999px;border:1px solid var(--line);color:var(--txt2);white-space:nowrap}
+.gn-chip.warn{color:var(--amber)}.gn-chip.bad{color:var(--red);background:var(--red-dim);border-color:transparent}
+.gn-caret{justify-self:end;font-family:var(--mono);font-size:13px;color:var(--txt3)}.gn-caret::before{content:'+'}.gn-row[open] .gn-caret::before{content:'−'}
+.gn-body{font-size:12.5px;line-height:1.65;color:var(--txt2);margin:0 0 .75rem;padding-left:.7rem;border-left:2px solid var(--line);overflow-wrap:anywhere}
+.gn-body .gn-title{color:var(--txt)}.gn-body .gn-warn{color:var(--amber)}
+@media(max-width:620px){.gn-row>summary{grid-template-columns:minmax(0,1fr) auto}.gn-name-wrap{grid-column:1/-1}.gn-value{text-align:left}.gn-chip{justify-self:end}}
 #grounding-line{font:13px/1.5 var(--sans);margin-top:.7rem}#command-load-status{font-size:13px;color:var(--txt2);margin-bottom:.7rem}
 .source-highlight{outline:3px solid var(--gold)!important;outline-offset:5px;scroll-margin-top:180px}
 .return-to-source{position:fixed;bottom:20px;right:20px;z-index:110;padding:.75rem 1rem;border-radius:10px;background:var(--bg2);color:var(--gold);border:1px solid var(--gold);cursor:pointer}
@@ -2365,7 +2381,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </div>
   <details class="command-panel command-week" id="grounding-panel">
     <summary><span class="command-panel-title">Your numbers</span><span class="command-week-line">Published figures and watch states</span></summary>
-    <div class="meeting-intro">Source-linked means the source was read. Fact-verified means the value is bound to evidence. Cross-checked means a second representation agrees. Approval happens in the consuming app.</div>
+    <div class="meeting-intro">Tap a row for its source, dates and checks. Nothing here is approved: the app that uses a figure decides.</div>
     <div id="grounding-numbers" class="meeting-intro" role="status">Open Evidence to load published numbers.</div>
   </details>
   <section class="command-panel accounts-panel" id="accounts-panel" aria-labelledby="accounts-title">
@@ -3964,6 +3980,37 @@ async function loadGroundingNumbers() {
     el.innerHTML = 'Numbers could not load. <button class="tool-chip" onclick="loadGroundingNumbers()">Retry</button>';
   }
 }
+// Your numbers reads as one short row per series, grouped (Economy, Wages,
+// Fees, then Reminders), with the value in its own column. A row opens to its
+// full title, checks, dates, source and watch words. Earlier periods of a
+// series (last year's award rate) sit inside its latest row, and only a series
+// that needs attention carries a chip and opens by itself.
+function groundingShortName(title) {
+  var t = String(title || '');
+  var cuts = [t.indexOf(' ('), t.indexOf(': ')].filter(function(i) { return i > 0; });
+  return cuts.length ? t.slice(0, Math.min.apply(null, cuts)) : t;
+}
+function groundingDay(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return m ? Number(m[3]) + ' ' + months[Number(m[2]) - 1] + ' ' + m[1] : String(iso || '');
+}
+// "FY2026-27" for a 1 July to 30 June figure, "from 12 Aug 2026" for an open
+// one, "Jul 2026" for a monthly one.
+function groundingPeriod(fact) {
+  var from = fact.effectiveFrom, to = fact.effectiveTo;
+  var fy = from && to && /^(\d{4})-07-01$/.exec(from);
+  if (fy && to === (Number(fy[1]) + 1) + '-06-30') return 'FY' + fy[1] + '-' + String(Number(fy[1]) + 1).slice(2);
+  if (from && to) return groundingDay(from) + ' to ' + groundingDay(to);
+  if (from) return 'from ' + groundingDay(from);
+  var m = /^(\d{4})-(\d{2})$/.exec(String(fact.observationKey || ''));
+  return m ? groundingDay(m[1] + '-' + m[2] + '-01').replace(/^1 /, '') : String(fact.observationKey || '');
+}
+function groundingStatus(watch) {
+  if (!watch || watch.state === 'published') return null;
+  var label = watch.state === 'awaiting_publication' ? 'Awaiting' : watch.state.charAt(0).toUpperCase() + watch.state.slice(1).replace(/_/g, ' ');
+  return { label: label, cls: watch.state === 'awaiting_publication' ? '' : watch.state === 'stale' || watch.state === 'overdue' ? 'warn' : 'bad' };
+}
 function groundingNumbersHtml(data) {
   if (!data) return 'No release published yet. Figures will appear after a source is captured and verified.';
   if (data.schema !== 'daybook-grounding-mirror/1') return 'This numbers release cannot be displayed. Refresh after the app is updated.';
@@ -3972,20 +4019,69 @@ function groundingNumbersHtml(data) {
   var source = function(url, label) {
     return /^https?:\/\//i.test(String(url || '')) ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(label || 'Source') + ' ↗</a>' : esc(label || 'No source link');
   };
-  var rows = facts.map(function(fact) {
+  var watchOf = function(seriesId) { return watches.find(function(w) { return w.seriesId === seriesId; }) || null; };
+  var groupOf = { index: 'Economy', rate: 'Economy', award_wage: 'Wages', regulated_fee: 'Fees', regulatory: 'Rules' };
+  var order = ['Economy', 'Wages', 'Fees', 'Rules', 'Other', 'Reminders'];
+  var groups = {};
+  var add = function(name, html) { (groups[name] = groups[name] || []).push(html); };
+  var attention = 0;
+  var row = function(status, summary, body) {
+    if (status) attention++;
+    return '<details class="gn-row"' + (status ? ' open' : '') + '><summary>' + summary +
+      (status ? '<span class="gn-chip ' + status.cls + '">' + esc(status.label) + '</span>' : '<span class="gn-caret" aria-hidden="true"></span>') + '</summary><div class="gn-body">' + body + '</div></details>';
+  };
+  var watchLines = function(w, status) {
+    if (!w) return '';
+    if (status) return '<div class="gn-warn">' + esc(status.label) + ': ' + esc(w.detail) + '</div>';
+    var next = /Next: (.*)$/.exec(String(w.detail || ''));
+    return next ? '<div>Next: ' + esc(next[1]) + '</div>' : '';
+  };
+
+  // One row per series with a figure: its latest period, and any earlier ones inside.
+  var seriesIds = [];
+  facts.forEach(function(f) { if (seriesIds.indexOf(f.seriesId) < 0) seriesIds.push(f.seriesId); });
+  seriesIds.forEach(function(id) {
+    var periods = facts.filter(function(f) { return f.seriesId === id; })
+      .sort(function(a, b) { return a.observationKey < b.observationKey ? 1 : a.observationKey > b.observationKey ? -1 : 0; });
+    var fact = periods[0], earlier = periods.slice(1);
+    var w = watchOf(id), status = groundingStatus(w);
     var checks = fact.checks || {};
-    var trust = [checks.sourceLinked ? 'Source-linked' : '', checks.factVerified ? 'Fact-verified' : 'Not fact-verified', checks.crossChecked ? 'Cross-checked' : 'Not cross-checked'].filter(Boolean).join(' · ');
-    var watch = watches.find(function(w) { return w.seriesId === fact.seriesId; });
-    return '<div class="command-item"><div><b>' + esc(fact.title) + ': ' + esc(fact.display) + '</b>' +
-      '<div>' + esc(fact.observationKey) + ' · Published ' + esc(fact.publishedAt) + (fact.effectiveFrom ? ' · Effective ' + esc(fact.effectiveFrom) : '') + '</div>' +
-      '<div>' + source(fact.url, fact.publisher) + '</div><div>' + esc(trust) + ' · Consumer approval required</div>' +
-      (watch ? '<div>' + esc(watch.state.replace(/_/g, ' ')) + ': ' + esc(watch.detail) + '</div>' : '') + '</div></div>';
+    var trust = [checks.sourceLinked ? 'Source-linked' : 'Not source-linked', checks.factVerified ? 'Fact-verified' : 'Not fact-verified', checks.crossChecked ? 'Cross-checked' : 'Not cross-checked'].join(' · ');
+    var sub = [groundingPeriod(fact), groundingShortName(fact.publisher), earlier.length ? earlier.length + ' earlier period' + (earlier.length > 1 ? 's' : '') : '',
+      w && w.expectedBy && !status ? 'next ' + groundingDay(w.expectedBy).replace(/ \d{4}$/, '') : ''].filter(Boolean).join(' · ');
+    var summary = '<span class="gn-name-wrap"><span class="gn-name">' + esc(groundingShortName(fact.title)) + '</span><span class="gn-sub">' + esc(sub) + '</span></span>' +
+      '<span class="gn-value">' + esc(fact.display) + '</span>';
+    var body = (groundingShortName(fact.title) !== fact.title ? '<div class="gn-title">' + esc(fact.title) + '</div>' : '') +
+      '<div>' + source(fact.url, fact.publisher) + ' · published ' + esc(groundingDay(fact.publishedAt)) + ' · ' + (fact.effectiveFrom ? 'effective ' : 'period ') + esc(groundingPeriod(fact)) + '</div>' +
+      '<div>' + esc(trust) + '</div>' +
+      watchLines(w, status) +
+      earlier.map(function(e) {
+        return '<div>Earlier: <b>' + esc(e.display) + '</b> · ' + esc(groundingPeriod(e)) + ' · published ' + esc(groundingDay(e.publishedAt)) + ' · ' + source(e.url, 'source') + '</div>';
+      }).join('');
+    add(groupOf[fact.kind] || 'Other', row(status, summary, body));
   });
-  watches.filter(function(w) { return !facts.some(function(f) { return f.seriesId === w.seriesId; }); }).forEach(function(w) {
-    rows.push('<div class="command-item"><div><b>' + esc(w.title || w.seriesId) + '</b><div>' + esc(w.state.replace(/_/g, ' ')) + ': ' + esc(w.detail) + '</div>' +
-      (w.expectedBy ? '<div>Expected ' + esc(w.expectedBy) + '</div>' : '') + '<div>' + source(w.url) + ' · Watch state, not evidence</div></div></div>');
+  // Series that only watch (reminders to review something by hand): never evidence.
+  watches.filter(function(w) { return seriesIds.indexOf(w.seriesId) < 0; }).forEach(function(w) {
+    var status = groundingStatus(w);
+    var firstSentence = /^(.*?\.)(?:\s|$)/.exec(String(w.detail || ''));
+    var first = firstSentence ? firstSentence[1] : String(w.detail || '');
+    var summary = '<span class="gn-name-wrap"><span class="gn-name">' + esc(groundingShortName(w.title || w.seriesId)) + '</span><span class="gn-sub">' + esc(first) + '</span></span><span class="gn-value"></span>';
+    var body = (groundingShortName(w.title) !== (w.title || '') ? '<div class="gn-title">' + esc(w.title) + '</div>' : '') + '<div>' + esc(w.detail) + '</div>' +
+      (w.expectedBy ? '<div>Expected ' + esc(groundingDay(w.expectedBy)) + '</div>' : '') + '<div>' + source(w.url) + ' · Watch state, not evidence</div>';
+    add('Reminders', row(status, summary, body));
   });
-  return '<p>Release ' + esc(data.sequence) + '</p>' + (rows.join('') || 'No figures captured yet. The first sources will be added in the pilot releases.');
+
+  var figures = seriesIds.length, reminders = (groups.Reminders || []).length;
+  if (!figures && !reminders) return '<p>Release ' + esc(data.sequence) + '</p>No figures captured yet. The first sources will be added in the pilot releases.';
+  // The day it was updated where the reader is, in the same form as the rows.
+  var at = data.updatedAt && !isNaN(Date.parse(data.updatedAt)) ? new Date(data.updatedAt) : null;
+  var updated = at ? groundingDay(at.getFullYear() + '-' + String(at.getMonth() + 1).padStart(2, '0') + '-' + String(at.getDate()).padStart(2, '0')).replace(/ \d{4}$/, '') : '';
+  var head = '<div class="gn-head"><span>Release ' + esc(data.sequence) + (updated ? ' · updated ' + esc(updated) : '') + '</span>' +
+    '<span>' + figures + ' figure' + (figures === 1 ? '' : 's') + (reminders ? ' · ' + reminders + ' reminder' + (reminders === 1 ? '' : 's') : '') + '</span>' +
+    '<span class="' + (attention ? 'gn-attn' : 'gn-ok') + '">' + (attention ? attention + (attention === 1 ? ' needs' : ' need') + ' attention' : 'All up to date') + '</span></div>';
+  return head + order.filter(function(name) { return groups[name]; }).map(function(name) {
+    return '<div class="gn-group">' + esc(name) + (name === 'Reminders' ? ' · reviewed by hand, not figures' : '') + '</div>' + groups[name].join('');
+  }).join('');
 }
 
 // ── What you use ──

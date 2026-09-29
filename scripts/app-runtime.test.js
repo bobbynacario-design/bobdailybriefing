@@ -39,18 +39,43 @@ function environment(names, extra={}) {
   return {context,element};
 }
 
+const NUMBERS=['groundingShortName','groundingDay','groundingPeriod','groundingStatus','groundingNumbersHtml'];
+const escHtml=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 test('numbers escape source content and separate fact trust from watch states',()=>{
-  const {context}=environment(['groundingNumbersHtml'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')});
+  const {context}=environment(NUMBERS,{esc:escHtml});
   assert.match(context.groundingNumbersHtml(null),/No release published/);
   const out=context.groundingNumbersHtml({schema:'daybook-grounding-mirror/1',sequence:2,facts:[
-    {seriesId:'cpi',title:'<script>bad</script>',display:'3.1%',observationKey:'2026-08',publishedAt:'2026-09-01',url:'javascript:alert(1)',publisher:'Test',checks:{factVerified:true,sourceLinked:true,crossChecked:false}}
+    {seriesId:'cpi',kind:'index',title:'<script>bad</script>',display:'3.1%',observationKey:'2026-08',publishedAt:'2026-09-01',url:'javascript:alert(1)',publisher:'Test',checks:{factVerified:true,sourceLinked:true,crossChecked:false}}
   ],watch:[{seriesId:'award',state:'awaiting_publication',detail:'Not yet',url:'https://example.org'}]});
   assert.ok(!out.includes('<script>'));
   assert.ok(!out.includes('javascript:'));
   assert.match(out,/Fact-verified/);
   assert.match(out,/Not cross-checked/);
   assert.match(out,/Watch state, not evidence/);
-  assert.match(out,/Consumer approval required/);
+  assert.match(out,/<details class="gn-row" open><summary>.*Awaiting/, 'a series that needs attention opens by itself, with a chip');
+});
+test('numbers read as one row per series, grouped, with earlier periods inside the latest',()=>{
+  const {context}=environment(NUMBERS,{esc:escHtml});
+  const fact=(o)=>Object.assign({checks:{sourceLinked:true,factVerified:true,crossChecked:false},publisher:'Fair Work Ombudsman',url:'https://example.org'},o);
+  const out=context.groundingNumbersHtml({schema:'daybook-grounding-mirror/1',sequence:9,updatedAt:'2026-09-29T02:00:00Z',facts:[
+    fact({seriesId:'award',kind:'award_wage',title:'Building award, CW/ECW 2 (civil, weekly hire), ordinary hourly rate',display:'$30.39/hour',observationKey:'2026-07-01',publishedAt:'2026-07-02',effectiveFrom:'2026-07-01',effectiveTo:'2027-06-30'}),
+    fact({seriesId:'rba',kind:'rate',title:'RBA cash rate target',display:'4.35% p.a.',observationKey:'2026-08-12',publishedAt:'2026-08-11',effectiveFrom:'2026-08-12',effectiveTo:null,publisher:'Reserve Bank of Australia'}),
+    fact({seriesId:'award',kind:'award_wage',title:'Building award, CW/ECW 2 (civil, weekly hire), ordinary hourly rate',display:'$29.01/hour',observationKey:'2025-07-01',publishedAt:'2025-07-17',effectiveFrom:'2025-07-01',effectiveTo:'2026-06-30'}),
+  ],watch:[
+    {seriesId:'award',state:'published',detail:'Latest: $30.39/hour (2026-07-01), published 2026-07-02.'},
+    {seriesId:'rba',state:'published',expectedBy:'2026-09-29',detail:'Latest: 4.35% p.a. (2026-08-12), published 2026-08-11. Next: a Monetary Policy Board decision, scheduled by the RBA for 2026-09-29.'},
+    {seriesId:'sg',title:'Superannuation guarantee charge percentage (the Act)',state:'published',detail:'Reviewed 2026-09-28: compilation 78. More words.',url:'https://example.org/sg'},
+  ]});
+  assert.equal((out.match(/class="gn-row"/g)||[]).length,3,'the award is one row, not two');
+  assert.deepEqual([...out.matchAll(/class="gn-group">([^<]*)</g)].map(m=>m[1]),['Economy','Wages','Reminders · reviewed by hand, not figures']);
+  assert.match(out,/All up to date/);
+  assert.match(out,/2 figures · 1 reminder/);
+  assert.match(out,/<span class="gn-name">Building award, CW\/ECW 2<\/span><span class="gn-sub">FY2026-27 · Fair Work Ombudsman · 1 earlier period<\/span><\/span><span class="gn-value">\$30\.39\/hour</);
+  assert.match(out,/Earlier: <b>\$29\.01\/hour<\/b> · FY2025-26 · published 17 Jul 2025/);
+  assert.match(out,/from 12 Aug 2026 · Reserve Bank of Australia · next 29 Sep/);
+  assert.match(out,/Next: a Monetary Policy Board decision/);
+  assert.match(out,/<span class="gn-sub">Reviewed 2026-09-28: compilation 78\.<\/span>/);
+  assert.ok(!/ open>/.test(out),'nothing opens by itself when all is well');
 });
 test('aha actions preserve sources and invalidation when saved or scheduled',()=>{
   const data={date:'2026-09-26',aha:{title:'A useful connection',insight:'A provisional reading',chain:['First observation'],wrong_if:'The delay is temporary',links:['Source headline']}};
