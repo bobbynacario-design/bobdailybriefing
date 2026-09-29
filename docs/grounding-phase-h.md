@@ -513,9 +513,9 @@ as the series' first update: a live end-to-end cycle.
 
 ## H-6: wages (WPI) and construction prices (PPI), for labour and materials
 
-Status: **built, 2026-09-29.** Bob agreed D-H6-1 to D-H6-4 as recommended (the
-three WPI series; PPI deferred), and approved publishing (see "Built (H-6)" at
-the end). Everything below was read on that date with Daybook's own user agent.
+Status: **live, 2026-09-29**, in release 000010 (see "Live" at the end). Bob
+agreed D-H6-1 to D-H6-4 as recommended (the three WPI series; PPI deferred), and
+approved publishing. Everything below was read on that date with Daybook's own user agent.
 The roadmap row says: "PPI (construction; electricity), WPI — automated —
 RiskM8 — after CPI proves the ABS path". CPI has proved it.
 
@@ -620,3 +620,23 @@ RiskM8 — after CPI proves the ABS path". CPI has proved it.
   - It also carried the RBA's decision of the same afternoon, **4.35 → 4.6
     (effective 2026-09-30)**, read by H-5's parser as its first live update.
     The watch now expects 2026-11-03.
+
+### Live, 2026-09-29
+
+- **Published:** dispatch run 36541828449 on dbee07f (08:18 UTC) published
+  **release 000010**, manifest
+  `196557796008aa3f49f319689a2d1e2f6aa7f50d7836dfc34f9faceeb8e8f5b7`.
+- **What changed:** compared with 000009, it adds exactly the three WPI
+  records (3.2, 3.3 and 3.6 for 2026-Q2). No record is altered. `fetchRelease`
+  against the live URL: ok. All three are source-linked, fact-verified,
+  cross-checked, plausible and eligible. GitHub's runner read the ABS page and
+  the Data API.
+- **The mirror** is at sequence 10, with the same manifest.
+- **Help** (6c02585, cache v132): the Your numbers card names the WPI.
+  Quarters now read "Jun qtr 2026". The live site serves both.
+- **The RBA's decision was not in this release, correctly.** The cash rate is
+  checked every 12 hours, and it was last checked at 23:54 UTC for release
+  000009, only 8½ hours earlier (`grounding-ops`). The dry run had no ops
+  record, so it checked everything. The scheduled run at 20:15 UTC (06:15 AEST
+  on 30 September) is due to publish it: 4.35 → 4.6 from 2026-09-30,
+  expecting 2026-11-03 next.
