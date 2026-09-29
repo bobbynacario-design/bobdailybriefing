@@ -510,3 +510,113 @@ as the series' first update: a live end-to-end cycle.
   AEST on 30 September should publish it as the series' first update, with
   `expectedBy` moving to 2026-11-03. If the RBA's page has not moved by then,
   the series reads **overdue** instead.
+
+## H-6: wages (WPI) and construction prices (PPI), for labour and materials
+
+Status: **built, 2026-09-29.** Bob agreed D-H6-1 to D-H6-4 as recommended (the
+three WPI series; PPI deferred), and approved publishing (see "Built (H-6)" at
+the end). Everything below was read on that date with Daybook's own user agent.
+The roadmap row says: "PPI (construction; electricity), WPI — automated —
+RiskM8 — after CPI proves the ABS path". CPI has proved it.
+
+- **Who would use it.** Neither consumer can take these today.
+  - RiskM8 has one Daybook target, `bi_price_index`: the CPI note on the BI row,
+    which is context only.
+  - ClaimBench has no index metric (roadmap, "Known registry gap").
+  - So, like the cash rate, these would be Daybook-only until a consumer maps
+    them.
+  - The fit with Bob's files is direct. About half are third-party damage to
+    poles and road assets, where labour rates (~46%) and materials are
+    recurring quantum issues. First-party BI runs on wages.
+- **Contract:** nothing to change. `kind: 'index'`, `unitCode: 'pct'`,
+  `basisCode: 'annual_change'` (and `index_points` / `index_level`) exist.
+
+### What the ABS offers (Data API dataflows WPI 1.2.0 and PPI 1.1.3)
+
+| | WPI (Wage Price Index) | PPI (Producer Price Indexes by Industry) |
+|---|---|---|
+| Release page | "Wage Price Index, Australia, June 2026". Key statistics: "The WPI rose 3.2% over the twelve months to the June quarter 2026." Tables: "All sector WPI, quarterly and annual movement (%), seasonally adjusted" and "Annual and quarterly movement - industries" (Construction 3.3, Electricity, gas, water and waste services 3.6) | "Producer Price Indexes, Australia, June 2026". Key statistics give only final demand and building. Road and bridge (+4.5%) and heavy and civil (+2.3%) appear in commentary prose as **quarterly** moves. **The construction index numbers are not on the page** |
+| Data API | Percentage changes: key `3.THRPEB.7.<industry>.<tsest>.AUS.Q` (3 = change from the same quarter a year earlier). June 2026: all industries SA 3.2; Construction 3.3; Electricity etc. 3.6. They agree with the page | **Index numbers only** (measure 1). 3101 Road and bridge 154.9 (Mar 148.2), 3109 other heavy and civil 149.2, 31 heavy and civil 150.3. No percentage change is published, so an annual change would be derived, and consumers refuse derived figures |
+| Next release | 18/11/2026 (September quarter) | 30/10/2026 (September quarter) |
+| History (annual, since 1998) | 0.8 to 6.5 across the three; largest quarter-to-quarter move 2.1 (electricity, 2007) | from 1997 (road and bridge) |
+
+- **"PPI electricity"** as the roadmap wrote it is the price of electricity
+  supply, not the cost of repairing the network. The wage of utility workers
+  (WPI, Electricity, gas, water and waste services) is closer to Bob's quantum
+  questions.
+
+### Proposed design (the CPI pattern)
+
+- **Three WPI series,** each the annual change in total hourly rates of pay
+  excluding bonuses, all sectors, Australia, quarterly:
+  - all industries, seasonally adjusted (the headline);
+  - Construction, original;
+  - Electricity, gas, water and waste services, original.
+- **Evidence:** the value is quoted from the release page's table; the
+  cross-check is the Data API's value cell. The expected date comes from the
+  page's own "Next Release", and the series is overdue if that passes.
+  Anything unrecognised fails closed.
+- **Bounds:** min −2, max 10, max change 2.5. One observation per quarter.
+- **Licence:** ABS, CC BY 4.0, as for the CPI.
+- **PPI deferred.** It would be index numbers quoted from the Data API alone,
+  with no second form to cross-check. An annual change would be a derived
+  figure. Worth doing when a consumer wants cost escalation by index ratio.
+
+### Decisions for Bob
+
+- **D-H6-1 Scope.**
+  - (a) The three WPI series now; PPI deferred (recommended).
+  - (b) The same, plus PPI road-and-bridge and heavy-civil index numbers
+    (API-only, not cross-checked).
+  - (c) Only the headline WPI.
+- **D-H6-2 Industries.** Construction, and Electricity, gas, water and waste
+  services, next to the headline (recommended); or others.
+- **D-H6-3 Bounds.** Min −2, max 10, max change 2.5 (recommended).
+- **D-H6-4 Licence and fixtures.** ABS CC BY 4.0, with verbatim page fragments
+  as test data (recommended), as for the CPI.
+
+### Built (H-6)
+
+- **`grounding/sources/abs-wpi.js`**, registered as three series (capture
+  `page`, freshness 110 days, bounds −2 to 10 with max change 2.5, cadence 12
+  hours). The observation key is the ABS quarter (`2026-Q2`):
+  - `abs_wpi_all_industries_annual_change`: the headline table ("All sector
+    WPI, quarterly and annual movement (%), seasonally adjusted"), the row
+    for the release's quarter (`Jun-26`), column "Annual (%)"; API
+    `3.THRPEB.7.TOT.20.AUS.Q`.
+  - `abs_wpi_construction_annual_change` and
+    `abs_wpi_electricity_gas_water_waste_annual_change`: the industries
+    table, column "Annual change (%)"; API `3.THRPEB.7.E.10` / `.D.10`. They
+    carry the page's own note, "Index series is original, total hourly rates of
+    pay excluding bonuses.", as a qualification.
+- **One page read and one API read per run** serve all three (the Data API
+  takes `TOT+E+D` and `10+20` in one key).
+- **Fails closed:**
+  - a title, period or permanent address that disagrees;
+  - a headline table whose last row is not the release's quarter;
+  - changed columns;
+  - a missing table or industry row;
+  - the "original" note gone.
+
+  An API that disagrees is a conflict for that series; an API that is down or
+  lagging holds all three for the day. Overdue comes from the page's "Next
+  Release": not on the release day itself (the ABS publishes at 11:30), but
+  from the next morning.
+- **Found on the way:** the industries table is in original terms. Its "All
+  industries" row gives 0.6 for the quarter, where the seasonally adjusted
+  headline gives 0.8, so each series is cross-checked against the matching
+  estimate.
+- **Tests:** 8 new; 129 grounding tests in total.
+  - Six deliberate breakages were caught: no "original" check, the headline
+    row not tied to the quarter, the quarterly figure taken as annual, the
+    wrong estimate in the cross-check, one read per series, and overdue on the
+    release day.
+  - The last one got through the first version of the tests, and a case was
+    added.
+- **Live dry run** over release 000009 with every real source: it proposed
+  release 000010 with the three WPI figures (3.2, 3.3 and 3.6 for 2026-Q2;
+  source-linked, fact-verified, cross-checked, plausible; next expected
+  2026-11-18).
+  - It also carried the RBA's decision of the same afternoon, **4.35 → 4.6
+    (effective 2026-09-30)**, read by H-5's parser as its first live update.
+    The watch now expects 2026-11-03.

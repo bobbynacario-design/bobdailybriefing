@@ -28,6 +28,7 @@ const sg = require('./sources/sg-legislation');
 const sbb = require('./sources/ato-sbb');
 const taxStats = require('./sources/ato-taxstats');
 const rbaCash = require('./sources/rba-cash-rate');
+const absWpi = require('./sources/abs-wpi');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -200,4 +201,25 @@ module.exports = [
     cadenceHours: 12,
     fetch: rbaCash.fetchCashRate,
   },
-];
+  // Phase H, H-6: the ABS Wage Price Index, annual change (D-H6-1 to D-H6-4),
+  // for Daybook only until a consumer maps it. Three series from one quarterly
+  // release: the headline (seasonally adjusted), and Construction and
+  // Electricity, gas, water and waste services (original), for labour-rate
+  // questions. The page and the Data API are read once per run for all three.
+].concat(absWpi.SERIES.map((s) => ({
+  seriesId: s.seriesId,
+  title: s.title,
+  capture: 'page',
+  publisher: absWpi.PUBLISHER,
+  urls: { release: absWpi.LATEST_URL, crossCheck: absWpi.API_BASE },
+  licence: absWpi.licence('<quarter>'),
+  streams: s.industry === 'TOT' ? ['sme_bi', 'risk_review'] : s.industry === 'E' ? ['tp_road', 'tp_utility'] : ['tp_utility'],
+  // Quarterly. Overdue comes from the ABS's own "Next Release" date; this only
+  // catches a series that has stopped altogether.
+  freshnessDays: 110,
+  // Since 1998 the three have run from 0.8 to 6.5; the largest move between
+  // quarters was 2.1 points (Electricity etc., 2007).
+  bounds: { min: -2, max: 10, maxChange: 2.5 },
+  cadenceHours: 12,
+  fetch: absWpi.fetchFor(s),
+})));
