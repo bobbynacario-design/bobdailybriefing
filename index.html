@@ -3022,7 +3022,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li><b>Saved dossiers, ahas and meeting briefs</b> read as documents: the summary, then labelled parts (how it came about, the numbers, the BI angle, questions, sources as links). Long ones open folded; <b>Show all</b> opens the rest.</li>
         <li><b>Open source</b> takes you to where it came from: a story's card in its briefing (older briefings too), highlighted, with a saved dossier opened under it; a meeting brief back in its panel. <b>← Back to Evidence</b> returns you and puts today's briefing back. If that briefing was deleted, it says so, and the copy saved here is what remains.</li>
         <li><b>Source ↗</b> opens the original article. <b>Open as decision</b> starts a journal draft from the item; nothing is saved until you tap <b>Save decision</b>.</li>
-        <li><b>Your numbers</b> (folded) — the published figures Daybook sends to BI-Assessor and RiskM8, each with its source, dates and what was checked: <b>Source-linked</b> (the page was read), <b>Fact-verified</b> (the value is bound to an exact quote from the source) and <b>Cross-checked</b> (a second form of it, such as the data table, agrees). It also shows each series’ watch state, such as awaiting publication, stale or blocked; a watch state is never evidence. A new figure or a changed state is on the Morning 5 for seven days as <b>Numbers</b>. Nothing here is approved: the other app decides. The first is the ABS monthly CPI (all groups, change over 12 months), for RiskM8: it is checked every morning, a new month appears the morning after the ABS publishes it, and the ABS’s own next release date is shown, turning <b>overdue</b> if it passes. The <b>RBA cash rate target</b> is here for you only (neither app uses it yet): each Monetary Policy Board decision, a hold included, appears the morning after it is announced, bound to the Board’s statement and checked against the RBA’s own table, with the next scheduled decision day shown, turning <b>overdue</b> if the RBA’s page has not moved by the next morning.</li>
+        <li><b>Your numbers</b> (folded) — the published figures Daybook sends to BI-Assessor and RiskM8, each with its source, dates and what was checked: <b>Source-linked</b> (the page was read), <b>Fact-verified</b> (the value is bound to an exact quote from the source) and <b>Cross-checked</b> (a second form of it, such as the data table, agrees). It also shows each series’ watch state, such as awaiting publication, stale or blocked; a watch state is never evidence. A new figure or a changed state is on the Morning 5 for seven days as <b>Numbers</b>. Nothing here is approved: the other app decides. The first is the ABS monthly CPI (all groups, change over 12 months), for RiskM8: it is checked every morning, a new month appears the morning after the ABS publishes it, and the ABS’s own next release date is shown, turning <b>overdue</b> if it passes. The <b>RBA cash rate target</b> is here for you only (neither app uses it yet): each Monetary Policy Board decision, a hold included, appears the morning after it is announced, bound to the Board’s statement and checked against the RBA’s own table, with the next scheduled decision day shown, turning <b>overdue</b> if the RBA’s page has not moved by the next morning. The <b>Wage Price Index</b> is here for you too: each quarter’s wage growth over the year for all industries, Construction, and Electricity, gas, water and waste services, read from the ABS release and checked against its data service.</li>
       </ul>
     </div>
 
@@ -4004,8 +4004,11 @@ function groundingPeriod(fact) {
   if (fy && to === (Number(fy[1]) + 1) + '-06-30') return 'FY' + fy[1] + '-' + String(Number(fy[1]) + 1).slice(2);
   if (from && to) return groundingDay(from) + ' to ' + groundingDay(to);
   if (from) return 'from ' + groundingDay(from);
-  var m = /^(\d{4})-(\d{2})$/.exec(String(fact.observationKey || ''));
-  return m ? groundingDay(m[1] + '-' + m[2] + '-01').replace(/^1 /, '') : String(fact.observationKey || '');
+  var key = String(fact.observationKey || '');
+  var q = /^(\d{4})-Q([1-4])$/.exec(key);
+  if (q) return groundingDay(q[1] + '-' + String(Number(q[2]) * 3).padStart(2, '0') + '-01').replace(/^1 (\w+) /, '$1 qtr ');
+  var m = /^(\d{4})-(\d{2})$/.exec(key);
+  return m ? groundingDay(m[1] + '-' + m[2] + '-01').replace(/^1 /, '') : key;
 }
 function groundingStatus(watch) {
   if (!watch || watch.state === 'published') return null;

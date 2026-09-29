@@ -76,6 +76,12 @@ test('numbers read as one row per series, grouped, with earlier periods inside t
   assert.match(out,/Next: a Monetary Policy Board decision/);
   assert.match(out,/<span class="gn-sub">Reviewed 2026-09-28: compilation 78\.<\/span>/);
   assert.ok(!/ open>/.test(out),'nothing opens by itself when all is well');
+  // Periods read as words: a quarter, a month, a financial year, an open start.
+  assert.equal(context.groundingPeriod({observationKey:'2026-Q2'}),'Jun qtr 2026');
+  assert.equal(context.groundingPeriod({observationKey:'2026-Q4'}),'Dec qtr 2026');
+  assert.equal(context.groundingPeriod({observationKey:'2026-07'}),'Jul 2026');
+  assert.equal(context.groundingPeriod({effectiveFrom:'2025-07-01',effectiveTo:'2026-06-30'}),'FY2025-26');
+  assert.equal(context.groundingPeriod({effectiveFrom:'2026-09-30',effectiveTo:null}),'from 30 Sep 2026');
 });
 test('aha actions preserve sources and invalidation when saved or scheduled',()=>{
   const data={date:'2026-09-26',aha:{title:'A useful connection',insight:'A provisional reading',chain:['First observation'],wrong_if:'The delay is temporary',links:['Source headline']}};
