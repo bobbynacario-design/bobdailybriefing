@@ -83,13 +83,15 @@
         },
         "kind": {
           "type": "string",
-          "enum": [
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$",
+          "examples": [
             "index",
             "rate",
             "regulated_fee",
             "award_wage",
             "regulatory"
-          ]
+          ],
+          "description": "Known in this contract version: index, rate, regulated_fee, award_wage, regulatory. A validator that does not know a value treats the record as unsupported (not eligible), not the file as invalid."
         },
         "title": {
           "type": "string",
@@ -117,18 +119,22 @@
         },
         "unitCode": {
           "type": "string",
-          "enum": [
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$",
+          "examples": [
             "pct",
             "pct_pa",
             "aud_per_hour",
             "aud_per_day",
             "aud_per_item",
-            "index_points"
-          ]
+            "index_points",
+            "aud_cents_per_litre"
+          ],
+          "description": "Known in this contract version: pct, pct_pa, aud_per_hour, aud_per_day, aud_per_item, index_points, aud_cents_per_litre. A validator that does not know a value treats the record as unsupported (not eligible), not the file as invalid."
         },
         "basisCode": {
           "type": "string",
-          "enum": [
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$",
+          "examples": [
             "annual_change",
             "index_level",
             "policy_rate_target",
@@ -136,7 +142,8 @@
             "award_min_wage",
             "regulated_fee_max",
             "market_rate"
-          ]
+          ],
+          "description": "Known in this contract version: annual_change, index_level, policy_rate_target, statutory_rate, award_min_wage, regulated_fee_max, market_rate. A validator that does not know a value treats the record as unsupported (not eligible), not the file as invalid."
         },
         "scope": {
           "$ref": "#/$defs/scope"
@@ -230,7 +237,8 @@
       "properties": {
         "jurisdiction": {
           "type": "string",
-          "enum": [
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$",
+          "examples": [
             "AU",
             "NSW",
             "VIC",
@@ -241,7 +249,8 @@
             "NT",
             "ACT",
             "PH"
-          ]
+          ],
+          "description": "Known in this contract version: AU, NSW, VIC, QLD, SA, WA, TAS, NT, ACT, PH. A validator that does not know a value treats the record as unsupported (not eligible), not the file as invalid."
         },
         "classification": {
           "anyOf": [

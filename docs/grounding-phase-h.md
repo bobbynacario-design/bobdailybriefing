@@ -1220,3 +1220,52 @@ Daybook's own user agent.
 - **D-H8-4 Bounds, licence and fixtures** as above (recommended): 100–450,
   maxChange 80, freshness 10 days; short quotes with "© Australian Institute
   of Petroleum" attribution; trimmed page fragments as test data.
+
+### Decisions (Bob, 2026-09-30)
+
+- **D-H8-1 (a):** add `aud_cents_per_litre`, and make vocabulary a validator
+  does not know an unsupported record, not a failed release.
+- **D-H8-2:** one observation per completed week.
+- **D-H8-3 (a):** all seven capitals, folded into one Morning 5 item per run.
+  Bob redeploys `deliverMorningFive` and `testBriefingDelivery`.
+- **D-H8-4:** bounds 100–450 c/L with maxChange 80, freshness 10 days; short
+  quotes with © AIP attribution; trimmed page fragments as test data.
+
+### Built (H-8, lane 1: the contract)
+
+- **`validate.js`:**
+  - `aud_cents_per_litre` joins `unitCode`.
+  - `kind`, `unitCode`, `basisCode` and `scope.jurisdiction` are an open
+    vocabulary. A well-formed value this copy does not know goes to the
+    record's `unsupported` list ("unitCode \"aud_per_tonne\" is not in this
+    contract version"). The record is not eligible, and the file stays valid.
+  - `planImport` skips such a record before any allowlist, with the reason
+    "vocabulary this contract version does not know: …".
+  - A malformed value, or an unknown value in any other field, is still an
+    error that fails the release.
+- **The producer** refuses to publish an unsupported record: the series reads
+  blocked, "Not published: unitCode … is not in this contract version." A
+  snapshot whose history holds one stops the run.
+- **`schema/facts.schema.json`** (generated) describes the four fields as a
+  pattern with the known values as `examples`. The sample releases are
+  unchanged.
+- **The roadmap's rules** (section 5.2) say so.
+- **Tests:** 4 new; 139 grounding tests in total. Eight deliberate breakages
+  were each caught:
+  - unknown vocabulary as an error again;
+  - an unsupported record still eligible;
+  - no planner reason;
+  - any token accepted as vocabulary;
+  - `lifecycle` made open too;
+  - the new unit left out;
+  - the producer publishing an unsupported record;
+  - no guard on history.
+- **New SHA-256s for consumers to copy** (LF, pinned by `.gitattributes`):
+  - `validate.js`
+    `fe1e7e68329d64f9489f4b5592b2a9ad913c96e41526a138967f652ba0aa67b6`;
+  - `schema/facts.schema.json`
+    `54b421f5770016b44732ff1dad393f3c725bff8b67e1acadf49fb1d111087caa`;
+  - `fetch-release.js` and the fixtures are unchanged (`27374faf…4eb4854`).
+- **Nothing is published by this lane.** No record uses the new unit, so the
+  next run's snapshot is unchanged. The diesel series is registered only after
+  both consumers have re-copied.

@@ -32,11 +32,15 @@ const S = {
   num: { type: 'number' },
   nullable: (schema) => ({ anyOf: [schema, { type: 'null' }] }),
   enumOf: (list) => ({ type: 'string', enum: list }),
+  // An open vocabulary (validate.js, header): the values this version knows,
+  // and the form a later version's values take.
+  vocab: (list) => ({ type: 'string', pattern: '^[A-Za-z][A-Za-z0-9_]{0,39}$', examples: list,
+    description: 'Known in this contract version: ' + list.join(', ') + '. A validator that does not know a value treats the record as unsupported (not eligible), not the file as invalid.' }),
   obj: (spec, properties) => ({ type: 'object', additionalProperties: false, required: spec.required.slice(), properties }),
 };
 const DEFS = {
   scope: S.obj(FIELDS.scope, {
-    jurisdiction: S.enumOf(ENUMS.jurisdiction),
+    jurisdiction: S.vocab(ENUMS.jurisdiction),
     classification: S.nullable(S.text),
     period: S.nullable(S.obj(FIELDS.period, { from: S.date, to: S.nullable(S.date) })),
   }),
@@ -59,8 +63,8 @@ const DEFS = {
   fact: S.obj(FIELDS.fact, {
     recordId: S.text, seriesId: { type: 'string', pattern: '^[a-z0-9][a-z0-9_]{2,80}$' }, observationKey: S.text,
     revision: { type: 'integer', minimum: 1 }, lifecycle: S.enumOf(ENUMS.lifecycle), supersedes: S.nullable(S.text),
-    kind: S.enumOf(ENUMS.factKind), title: S.text, value: S.nullable(S.num), range: S.nullable({ $ref: '#/$defs/range' }),
-    unitCode: S.enumOf(ENUMS.unitCode), basisCode: S.enumOf(ENUMS.basisCode), scope: { $ref: '#/$defs/scope' },
+    kind: S.vocab(ENUMS.factKind), title: S.text, value: S.nullable(S.num), range: S.nullable({ $ref: '#/$defs/range' }),
+    unitCode: S.vocab(ENUMS.unitCode), basisCode: S.vocab(ENUMS.basisCode), scope: { $ref: '#/$defs/scope' },
     qualifications: { type: 'array', items: { $ref: '#/$defs/qualification' } },
     valueBindings: { type: 'array', items: { $ref: '#/$defs/binding' } },
     observationDate: S.date, publishedAt: S.date, effectiveFrom: S.nullable(S.date), effectiveTo: S.nullable(S.date),

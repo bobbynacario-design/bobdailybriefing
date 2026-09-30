@@ -189,8 +189,11 @@ function produce(input) {
     const check = V.validateFactsFile(factsFile(step.facts, now), { bounds });
     const mine = check.results.find((r) => r.recordId === step.change.record.recordId);
     const fileErrors = check.errors;
-    if (fileErrors.length || !mine || !mine.ok) {
-      const errors = fileErrors.concat(mine ? mine.errors : []);
+    // Vocabulary the validator does not know is readable for a consumer, but
+    // Daybook never publishes it: it would be a typo, or a contract change made
+    // in the wrong order.
+    if (fileErrors.length || !mine || !mine.ok || mine.unsupported.length) {
+      const errors = fileErrors.concat(mine ? mine.errors.concat(mine.unsupported) : []);
       const conflict = errors.some((e) => /cross-check conflict/.test(e));
       issues[obs.seriesId] = {
         state: conflict ? 'conflict' : 'blocked',
@@ -240,6 +243,8 @@ function produce(input) {
 
   const final = V.validateFactsFile(factsFile(working, now), { bounds });
   if (!final.ok) throw new Error('producer built an invalid snapshot: ' + final.errors.concat(...final.results.map((r) => r.errors)).slice(0, 3).join('; '));
+  const unknown = final.results.filter((r) => r.unsupported.length);
+  if (unknown.length) throw new Error('producer built a snapshot with vocabulary this contract version does not know: ' + unknown[0].unsupported[0]);
 
   // Watch: one record per registered series.
   const prevWatch = {};

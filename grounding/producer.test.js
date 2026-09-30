@@ -197,6 +197,22 @@ test('an unregistered series is skipped, not published', () => {
   assert.equal(r.snapshot.facts.length, 0);
   assert.match(r.skipped[0].reason, /not registered/);
 });
+test('vocabulary the contract does not know is never published: a consumer could read it, Daybook refuses it', () => {
+  const r = run(null, [cpi('2026-08', 3.1, { unitCode: 'aud_per_tonne' }), award(31.15)], T1);
+  assert.deepEqual(r.snapshot.facts.map((f) => f.recordId), ['test_award_cw1@2026-07-01#r1']);
+  assert.match(r.skipped[0].reason, /unitCode "aud_per_tonne" is not in this contract version/);
+  const w = r.snapshot.watch.find((x) => x.seriesId === 'test_cpi_annual_change');
+  assert.equal(w.state, 'blocked');
+  assert.equal(w.detail, 'Not published: unitCode "aud_per_tonne" is not in this contract version.');
+  // The unit H-8 added is known, and publishes.
+  const ok = run(null, [cpi('2026-08', 3.1, { unitCode: 'aud_cents_per_litre' })], T1);
+  assert.equal(ok.snapshot.facts.length, 1);
+  // History carrying a value this version does not know (vocabulary is never
+  // removed, so only a wrong edit could cause it) stops the run.
+  const prev = asPrevious(ok);
+  prev.facts[0].unitCode = 'aud_per_tonne';
+  assert.throws(() => run(prev, [award(31.15)], T2), /vocabulary this contract version does not know: .*unitCode "aud_per_tonne"/);
+});
 test('each release passes the consumers\' validator and numbers follow on', () => {
   const r1 = run(null, [cpi('2026-08', 3.1), award(31.15)], T1);
   const r2 = run(asPrevious(r1), [cpi('2026-09', 2.9), award(31.15)], T2);

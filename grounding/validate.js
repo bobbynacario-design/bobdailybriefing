@@ -18,7 +18,14 @@
 // the evaluator's own bounds (Daybook's registry, or a consumer's). So it only
 // ever decides one record's eligibility for that evaluator, never whether the
 // release is readable. Everything else is the same for every evaluator, and any
-// failure there rejects the release.
+// failure there rejects the release, with one exception: vocabulary.
+//
+// Vocabulary grows. A later contract version may add a unit, kind, basis or
+// jurisdiction (H-8 added aud_cents_per_litre). A record whose value there is
+// well formed but unknown to this copy of the validator is "unsupported": it is
+// not eligible and the import planner skips it, but the release stays readable,
+// so a consumer that has not re-copied still imports everything else. The
+// producer refuses to publish an unsupported record, so a typo never gets out.
 
 const SCHEMAS = Object.freeze({
   latest: 'daybook-grounding-latest/1',
@@ -32,7 +39,7 @@ const FILE_NAMES = Object.freeze({ facts: 'facts.json', watch: 'watch.json', ins
 const ENUMS = Object.freeze({
   factKind: ['index', 'rate', 'regulated_fee', 'award_wage', 'regulatory'],
   lifecycle: ['current', 'corrected', 'superseded', 'withdrawn'],
-  unitCode: ['pct', 'pct_pa', 'aud_per_hour', 'aud_per_day', 'aud_per_item', 'index_points'],
+  unitCode: ['pct', 'pct_pa', 'aud_per_hour', 'aud_per_day', 'aud_per_item', 'index_points', 'aud_cents_per_litre'],
   basisCode: ['annual_change', 'index_level', 'policy_rate_target', 'statutory_rate', 'award_min_wage', 'regulated_fee_max', 'market_rate'],
   jurisdiction: ['AU', 'NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT', 'PH'],
   evidenceRole: ['release', 'table', 'cross_check', 'correction'],
@@ -113,6 +120,15 @@ function checkShape(obj, spec, where, errors) {
 }
 function checkEnum(value, list, where, errors) {
   if (list.indexOf(value) < 0) errors.push(where + ': must be one of ' + list.join(', '));
+}
+// For the vocabulary fields (see the header): a well-formed value this version
+// does not know is noted as unsupported, not an error. Anything else is an error.
+const VOCAB_TOKEN = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
+function checkVocab(value, list, where, errors, unsupported) {
+  if (list.indexOf(value) >= 0) return;
+  const field = where.replace(/^facts\[\d+\][^.]*\./, '');
+  if (typeof value === 'string' && VOCAB_TOKEN.test(value)) unsupported.push(where + ': ' + field + ' "' + value + '" is not in this contract version');
+  else errors.push(where + ': must be one of ' + list.join(', '));
 }
 
 // ── numbers ──────────────────────────────────────────────────────────────────
@@ -215,18 +231,20 @@ function applyFormula(formula, inputs) {
 }
 
 // ── fact records ─────────────────────────────────────────────────────────────
-// Structural checks on one fact, without the rest of the snapshot.
-function checkFactShape(rec, where) {
+// Structural checks on one fact, without the rest of the snapshot. Vocabulary
+// this version does not know goes to `unsupported` (when given), not errors.
+function checkFactShape(rec, where, unsupported) {
   const errors = [];
+  unsupported = unsupported || [];
   if (!checkShape(rec, FIELDS.fact, where, errors)) return errors;
   if (!/^[a-z0-9][a-z0-9_]{2,80}$/.test(String(rec.seriesId))) errors.push(where + ': seriesId must be lower_snake_case');
   if (!isText(rec.observationKey, 40) || /[@#\s]/.test(rec.observationKey)) errors.push(where + ': observationKey is invalid');
   if (!Number.isInteger(rec.revision) || rec.revision < 1) errors.push(where + ': revision must be an integer from 1');
   if (rec.recordId !== rec.seriesId + '@' + rec.observationKey + '#r' + rec.revision) errors.push(where + ': recordId must be <seriesId>@<observationKey>#r<revision>');
   checkEnum(rec.lifecycle, ENUMS.lifecycle, where + '.lifecycle', errors);
-  checkEnum(rec.kind, ENUMS.factKind, where + '.kind', errors);
-  checkEnum(rec.unitCode, ENUMS.unitCode, where + '.unitCode', errors);
-  checkEnum(rec.basisCode, ENUMS.basisCode, where + '.basisCode', errors);
+  checkVocab(rec.kind, ENUMS.factKind, where + '.kind', errors, unsupported);
+  checkVocab(rec.unitCode, ENUMS.unitCode, where + '.unitCode', errors, unsupported);
+  checkVocab(rec.basisCode, ENUMS.basisCode, where + '.basisCode', errors, unsupported);
   checkEnum(rec.captureMethod, ENUMS.captureMethod, where + '.captureMethod', errors);
   if (!isText(rec.title, 240)) errors.push(where + ': title is required');
   if (rec.supersedes != null && typeof rec.supersedes !== 'string') errors.push(where + ': supersedes must be a recordId or null');
@@ -240,7 +258,7 @@ function checkFactShape(rec, where) {
   }
 
   if (checkShape(rec.scope, FIELDS.scope, where + '.scope', errors)) {
-    checkEnum(rec.scope.jurisdiction, ENUMS.jurisdiction, where + '.scope.jurisdiction', errors);
+    checkVocab(rec.scope.jurisdiction, ENUMS.jurisdiction, where + '.scope.jurisdiction', errors, unsupported);
     if (rec.scope.classification != null && !isText(rec.scope.classification, 160)) errors.push(where + ': scope.classification must be text or null');
     if (rec.scope.period != null && checkShape(rec.scope.period, FIELDS.period, where + '.scope.period', errors)) {
       if (!isIsoDate(rec.scope.period.from)) errors.push(where + ': scope.period.from must be YYYY-MM-DD');
@@ -382,7 +400,9 @@ function sameBound(a, b) {
 
 // Validate a facts file: every record, then the relations between them.
 //   opts.bounds: { [seriesId]: { min, max, maxChange } }
-// Returns { ok, errors, results: [{ recordId, record, ok, errors, checks, eligible, historical, overrideVerdict }] }.
+// Returns { ok, errors, results: [{ recordId, record, ok, errors, unsupported, checks, eligible, historical, overrideVerdict }] }.
+// unsupported lists vocabulary this version does not know (see the header): such a
+// record is never eligible, and it does not make the file invalid.
 //
 // overrideVerdict says what these bounds make of a record's plausibilityOverride
 // (null when it has none):
@@ -407,8 +427,9 @@ function validateFactsFile(file, opts) {
   const byId = {};
   const results = file.records.map((rec, i) => {
     const where = 'facts[' + i + ']' + (isObj(rec) && rec.recordId ? ' ' + rec.recordId : '');
-    const shapeErrors = checkFactShape(rec, where);
-    const result = { recordId: isObj(rec) ? rec.recordId : null, record: rec, where, errors: shapeErrors };
+    const unsupported = [];
+    const shapeErrors = checkFactShape(rec, where, unsupported);
+    const result = { recordId: isObj(rec) ? rec.recordId : null, record: rec, where, errors: shapeErrors, unsupported };
     if (isObj(rec) && typeof rec.recordId === 'string') {
       if (byId[rec.recordId]) errors.push('facts: duplicate recordId ' + rec.recordId);
       byId[rec.recordId] = result;
@@ -508,7 +529,7 @@ function validateFactsFile(file, opts) {
     r.ok = r.errors.length === 0;
     const rec = r.record;
     r.historical = isObj(rec) && (rec.lifecycle === 'superseded' || rec.lifecycle === 'withdrawn');
-    r.eligible = r.ok && !r.historical && r.checks.factVerified && r.checks.plausible !== false;
+    r.eligible = r.ok && !r.unsupported.length && !r.historical && r.checks.factVerified && r.checks.plausible !== false;
     delete r.factVerified;
   });
   const recordErrors = results.reduce((n, r) => n + r.errors.length, 0);
@@ -722,6 +743,11 @@ function planImport(lastImported, release, policy, now) {
       return;
     }
     if (r.historical) { plan.skips.push({ recordId: rec.recordId, reason: 'historical (' + rec.lifecycle + ')' }); return; }
+    if (r.unsupported.length) {
+      const what = r.unsupported.map((u) => u.replace(/^.*?: /, '').replace(/ is not in this contract version$/, ''));
+      plan.skips.push({ recordId: rec.recordId, reason: 'vocabulary this contract version does not know: ' + what.join('; ') });
+      return;
+    }
     if (!r.eligible) {
       plan.skips.push({ recordId: rec.recordId, reason: r.checks.plausible !== false ? 'not fact-verified'
         : r.overrideVerdict === 'unmatched' ? 'plausibility breach (its override records a different bound)' : 'plausibility breach' });

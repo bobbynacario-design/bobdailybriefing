@@ -365,6 +365,43 @@ test('policy can refuse derived records and anything not allowlisted', () => {
   assert.equal(reasons[STORAGE], 'jurisdiction not allowlisted');
   assert.equal(plan.toImport.length, 4);
 });
+
+// ── vocabulary grows (H-8) ───────────────────────────────────────────────────
+test('vocabulary a later version adds makes one record unsupported, never the release', () => {
+  const o = release1Objects();
+  const storage = o.facts.records.find((r) => r.recordId === STORAGE);
+  storage.unitCode = 'aud_per_tonne'; storage.scope.jurisdiction = 'NZ';
+  const out = V.validateRelease(makeRelease(1, o.facts, o.watch, o.insights), { bounds: FIXTURE_BOUNDS });
+  assert.equal(out.ok, true, out.errors.join('; '));
+  const r = byId(out.facts, STORAGE);
+  assert.equal(r.ok, true); assert.equal(r.eligible, false);
+  assert.deepEqual(r.unsupported.map((u) => u.replace(/^.*?: /, '')),
+    ['unitCode "aud_per_tonne" is not in this contract version', 'scope.jurisdiction "NZ" is not in this contract version']);
+  // The planner says why, before any allowlist; everything else still imports.
+  const policy = Object.assign({}, POLICY, { allow: Object.assign({}, POLICY.allow, { units: POLICY.allow.units.concat(['aud_per_tonne']), jurisdictions: ['AU', 'NSW', 'NZ'] }) });
+  const plan = V.planImport(null, out, policy, NOW);
+  const reasons = Object.fromEntries(plan.skips.map((s) => [s.recordId, s.reason]));
+  assert.equal(reasons[STORAGE], 'vocabulary this contract version does not know: unitCode "aud_per_tonne"; scope.jurisdiction "NZ"');
+  assert.equal(plan.toImport.length, 5);
+});
+test('a malformed vocabulary value, or an unknown value elsewhere, still fails the release', () => {
+  for (const [mutate, pattern] of [
+    [(r) => { r.unitCode = 'aud per litre'; }, /unitCode: must be one of/],
+    [(r) => { r.kind = 7; }, /kind: must be one of/],
+    [(r) => { r.captureMethod = 'guess'; }, /captureMethod: must be one of/],
+    [(r) => { r.lifecycle = 'draft'; }, /lifecycle: must be one of/],
+  ]) {
+    const o = release1Objects();
+    mutate(o.facts.records.find((r) => r.recordId === STORAGE));
+    const out = V.validateRelease(makeRelease(1, o.facts, o.watch, o.insights), { bounds: FIXTURE_BOUNDS });
+    assert.equal(out.ok, false, String(pattern)); assert.match(out.errors.join('\n'), pattern);
+  }
+});
+test('cents per litre is in this version\'s vocabulary', () => {
+  const r = byId(factsWith((records) => { records.find((x) => x.recordId === STORAGE).unitCode = 'aud_cents_per_litre'; }), STORAGE);
+  assert.deepEqual(r.unsupported, []); assert.equal(r.eligible, true);
+  assert.ok(V.ENUMS.unitCode.includes('aud_cents_per_litre'));
+});
 test('the same release again is a no-op; a reused sequence or an older release is refused', () => {
   const r1 = validated(1);
   const first = V.planImport(null, r1, POLICY, NOW);

@@ -152,7 +152,7 @@ grounding/                              (on the orphan branch grounding-data)
   "title": "<plain name>",
   "value": "<number, or null when range is used>",
   "range": "<{min, max}, or null>",
-  "unitCode": "pct | pct_pa | aud_per_hour | aud_per_day | aud_per_item | index_points",
+  "unitCode": "pct | pct_pa | aud_per_hour | aud_per_day | aud_per_item | index_points | aud_cents_per_litre",
   "basisCode": "annual_change | index_level | policy_rate_target | statutory_rate | award_min_wage | regulated_fee_max | market_rate",
   "scope": {
     "jurisdiction": "AU | NSW | VIC | QLD | SA | WA | TAS | NT | ACT | PH",
@@ -222,6 +222,25 @@ Rules the validator enforces:
   - **Daybook is stricter about its own overrides:** it publishes a new override
     only when its registry bounds make it `cleared`. Published history is never
     re-judged, so changing a series' bounds later cannot stop the publisher.
+- **Vocabulary grows without breaking consumers** (amended for Phase H-8,
+  which added `aud_cents_per_litre`).
+  - `kind`, `unitCode`, `basisCode` and `scope.jurisdiction` may gain values
+    in a later contract version.
+  - A validator that meets a well-formed value it does not know marks that
+    record **unsupported**. The record is not eligible, and the planner skips
+    it: "vocabulary this contract version does not know: unitCode …". The
+    release stays readable, so a consumer that has not re-copied the new
+    validator still imports everything else.
+  - A malformed value (not a word of letters, digits and underscores), or an
+    unknown value in any other field (`lifecycle`, `captureMethod`, `role`,
+    `tier` and so on), is still an error, and fails the release.
+  - **Daybook never publishes vocabulary its own validator does not know,**
+    and a snapshot whose history holds any stops the run. So a typo cannot get
+    out.
+  - Values are only ever added, never removed or renamed.
+  - This works from the copy of `validate.js` that introduced it. A consumer
+    running an older copy still fails the whole release on a new value, so the
+    first re-copy must come before the first record that uses one.
 - **Derived values** carry `derivation: {formula, inputs: [recordIds], rounding}`
   and no quote bindings. They are fact-verified through their inputs (each must
   be a fact-verified record in the same snapshot) and the deterministic formula,
