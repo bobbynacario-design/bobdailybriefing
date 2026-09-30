@@ -298,6 +298,19 @@ async function runLookups({firstBody, call, lookup}) {
   return {json, lookups};
 }
 
+// What the app is told when OpenAI refuses a request. A refused key is a
+// server setting, not something to retry, and OpenAI's own message echoes a
+// fragment of the key, so it is never passed on (1 Oct: the OPENAI_API_KEY
+// secret's newest version held another provider's key).
+function providerError(status, message) {
+  if (status === 401 || status === 403) {
+    return {code: "failed-precondition", message: "OpenAI refused the server's API key. Put the right key in the OPENAI_API_KEY secret, then redeploy askDaybook."};
+  }
+  // Not resource-exhausted: the app reads that as his own twenty-a-day limit.
+  if (status === 429) return {code: "aborted", message: "OpenAI is rate-limiting or out of credit. Try again in a few minutes."};
+  return {code: "internal", message: clip(String(message || "OpenAI request failed.").replace(/sk-[A-Za-z0-9_*-]+/g, "[key]"), 300)};
+}
+
 // The stored map keeps the latest twenty answers, oldest dropped first.
 function keepAnswers(items, id, answer) {
   const next = Object.assign({}, items || {});
@@ -310,5 +323,5 @@ function keepAnswers(items, id, answer) {
 
 module.exports = {
   cleanQuestion, cleanThread, originOf, buildAskPrompt, buildAskInput, cleanPlan, newRegistry, lookupOutput, cleanAnswer,
-  askIndexInput, runLookups, keepAnswers, SYSTEM, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
+  askIndexInput, runLookups, providerError, keepAnswers, SYSTEM, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
 };

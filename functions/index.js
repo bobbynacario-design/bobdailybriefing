@@ -844,8 +844,9 @@ async function openaiResponse(body, label, timeoutMs) {
   }
   if (!response.ok) {
     const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
-    logger.error("OpenAI API error (" + label + ")", {status: response.status, message: msg});
-    throw new HttpsError("internal", msg);
+    const told = Ask.providerError(response.status, msg);
+    logger.error("OpenAI API error (" + label + ")", {status: response.status, message: told.message});
+    throw new HttpsError(told.code, told.message);
   }
   return json;
 }

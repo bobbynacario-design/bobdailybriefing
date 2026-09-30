@@ -116,6 +116,14 @@ test("the lookup loop answers each lookup, stops at three, and then makes the mo
   assert.equal(direct.lookups, 0, "an answer with no lookups ends the loop at once");
 });
 
+test("a refused key is reported plainly, and no key fragment ever reaches the app", () => {
+  const refused = Ask.providerError(401, "Incorrect API key provided: sk-ant-a*****************Ab12. You can find your API key at https://platform.openai.com/account/api-keys.");
+  assert.equal(refused.code, "failed-precondition");
+  assert.match(refused.message, /refused the server's API key/); assert.doesNotMatch(refused.message, /sk-/);
+  assert.equal(Ask.providerError(429, "Rate limit").code, "aborted", "not resource-exhausted, which the app reads as the daily limit");
+  const other = Ask.providerError(500, "Upstream error for key sk-proj-abc123 at gateway");
+  assert.equal(other.code, "internal"); assert.equal(other.message, "Upstream error for key [key] at gateway");
+});
 test("the stored map keeps the latest twenty answers", () => {
   let items = {};
   for (let i = 0; i < 25; i++) items = Ask.keepAnswers(items, "a" + i, {generatedAt: new Date(now + i * 1000).toISOString()});
