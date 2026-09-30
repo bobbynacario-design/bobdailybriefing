@@ -2118,6 +2118,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .command-queue-item .command-explain{grid-column:auto;margin-top:.45rem}
 .command-hidden-note{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:.3rem}
 .command-delivery{margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--rim)}
+.command-head-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.4rem}#command-delivery-quick{white-space:nowrap}#command-delivery-quick[hidden]{display:none}#command-delivery-quick[aria-pressed="true"]{color:var(--green);border-color:var(--green)}
 .command-delivery-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.65rem}
 .command-delivery-title{font-family:var(--mono);font-size:10px;color:var(--txt);letter-spacing:.05em;text-transform:uppercase}
 .command-delivery-status{font-family:var(--mono);font-size:9px;color:var(--txt3)}
@@ -2567,7 +2568,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </div>
   <div class="command-layout">
     <section class="command-panel">
-      <div class="command-panel-head"><div><div class="command-panel-title">Morning 5</div><div class="command-panel-meta">Source-diverse, highest priority first · mark each one</div></div><button class="tool-chip" onclick="renderCommandCenter()">Refresh</button></div>
+      <div class="command-panel-head"><div><div class="command-panel-title">Morning 5</div><div class="command-panel-meta">Source-diverse, highest priority first · mark each one</div></div><div class="command-head-actions"><button type="button" class="tool-chip" id="command-delivery-quick" hidden aria-pressed="false" onclick="toggleCommandDelivery(this)">Morning push · off</button><button class="tool-chip" onclick="renderCommandCenter()">Refresh</button></div></div>
       <div class="command-five" id="command-five"><div class="command-empty">Open Command Center to build today's priority stack.</div></div>
       <div id="command-review-today"></div>
     </section>
@@ -3192,7 +3193,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
       <p>Top to bottom: your <b>daily spark</b> (a small idea and a 2- or 10-minute quest), then <b>Your experiments</b> and <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> when something is due, then the <b>briefing</b>. Once the spark is done, or you tap <b>Tuck away · briefing first</b>, it shrinks to one line so the briefing comes first; it opens again tomorrow.</p>
       <p><b>Waiting on the AI</b> — Go deeper, the briefing, the weekly read, a meeting brief and deep research all show a turning ring and a timer counting up while they work. Past the usual time for that job the line adds <b>longer than usual</b>; it does not invent progress steps, because the server does not report any.</p>
-      <p><b>Morning 5</b> (Home → Command) — the five items that matter most today, each with <b>Acted</b>, <b>Reviewed</b> and <b>Ignored</b> on its card; tap the lit one again to clear it. The <b>Attention Queue</b> holds everything beyond those five, so nothing shows twice. Items you dismissed, or that have dropped off today’s feeds, wait under <b>Also on today’s list</b>; <b>Close review</b> marks anything left as ignored. <b>Weekly discipline</b> is folded at the bottom.</p>
+      <p><b>Morning 5</b> (Home → Command) — the five items that matter most today, each with <b>Acted</b>, <b>Reviewed</b> and <b>Ignored</b> on its card; tap the lit one again to clear it. The <b>Attention Queue</b> holds everything beyond those five, so nothing shows twice. Items you dismissed, or that have dropped off today’s feeds, wait under <b>Also on today’s list</b>; <b>Close review</b> marks anything left as ignored. <b>Weekly discipline</b> is folded at the bottom. <b>Morning push</b>, next to Refresh, turns the Morning 5 notification on for this device or mutes it; its settings stay under <b>Personal priority controls</b>.</p>
       <p><b>On a phone</b> only the row of sections stays at the top while you scroll; scroll back up for search, the theme and the lock. The sync mark shows just its icon (✓ saved, ⟳ working) and spells out a problem only when there is one.</p>
       <p class="help-key">Nothing here is a streak to keep. A missed day is just a missed day.</p>
     </div>
@@ -6478,6 +6479,18 @@ function renderCommandDeliveryControls() {
   if (actions) actions.innerHTML = delivery.enabled
     ? '<button class="tool-chip" onclick="testCommandDelivery()">Send test</button><button class="tool-chip" onclick="muteCommandDelivery()">Mute delivery</button>'
     : '<button class="tool-chip" onclick="enableCommandDelivery()">Enable on this device</button>';
+  // The same switch, in view on the Morning 5 panel. Hidden until preferences
+  // load, since a save without them would overwrite the stored ones.
+  var quick = document.getElementById('command-delivery-quick');
+  if (quick) {
+    quick.hidden = !commandPrefsAvailable;
+    quick.disabled = false;
+    quick.textContent = 'Morning push · ' + (delivery.enabled ? 'on' : 'off');
+    quick.setAttribute('aria-pressed', delivery.enabled ? 'true' : 'false');
+    quick.title = delivery.enabled
+      ? 'The Morning 5 is sent to your devices between 06:00 and 11:30 PHT when it changes. Tap to mute. Send test, quiet hours and thresholds are under Personal priority controls.'
+      : 'Tap to get the Morning 5 as a notification on this device, between 06:00 and 11:30 PHT, when it changes.';
+  }
   var audit = document.getElementById('command-delivery-audit');
   var entries = commandPreferences.deliveryState.audit || [];
   if (audit) audit.innerHTML = entries.length ? entries.slice(0, 8).map(function (entry) {
@@ -6519,6 +6532,13 @@ async function enableCommandDelivery() {
     if (status) status.textContent = error.message || 'Could not enable delivery';
     showToast(error.message || 'Could not enable notifications', 'warn');
   }
+}
+
+// The Morning 5 panel's switch: turns delivery on for this device, or mutes it.
+async function toggleCommandDelivery(button) {
+  if (button) { button.disabled = true; button.textContent = 'Morning push · …'; }
+  try { await (commandPreferences.delivery.enabled ? muteCommandDelivery() : enableCommandDelivery()); }
+  finally { renderCommandDeliveryControls(); }
 }
 
 async function muteCommandDelivery() {

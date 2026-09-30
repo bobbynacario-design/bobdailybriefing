@@ -125,6 +125,25 @@ test('a member gets the member view: the AI controls hide, the notes show, nothi
   assert.match(html,/function onSignedIn\(\) \{\n  applyDaybookRole\(\);/);
   assert.match(html,/function clearPrivateSession\(\) \{\n  window\.daybookMember = false;\n  document\.documentElement\.removeAttribute\('data-daybook-role'\);/);
 });
+test('Command: the Morning push switch shows the delivery state, and waits for preferences to load',async()=>{
+  const calls=[];
+  const {context,element}=environment(['renderCommandDeliveryControls','toggleCommandDelivery'],{esc:v=>String(v ?? ''),commandSources:['Radar'],commandAuditTime:()=>'',commandPrefsAvailable:false,
+    commandPreferences:{delivery:{enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}},deliveryState:{audit:[]}}});
+  context.enableCommandDelivery=async()=>{calls.push('enable');context.commandPreferences.delivery.enabled=true;};
+  context.muteCommandDelivery=async()=>{calls.push('mute');context.commandPreferences.delivery.enabled=false;};
+  const quick=element('command-delivery-quick'); quick.attrs={}; quick.setAttribute=(k,v)=>{quick.attrs[k]=v;}; quick.hidden=true;
+  context.renderCommandDeliveryControls();
+  assert.equal(quick.hidden,true,'hidden until preferences load, so a save cannot overwrite them');
+  context.commandPrefsAvailable=true; context.renderCommandDeliveryControls();
+  assert.equal(quick.hidden,false); assert.equal(quick.textContent,'Morning push · off'); assert.equal(quick.attrs['aria-pressed'],'false');
+  assert.match(quick.title,/^Tap to get the Morning 5 as a notification on this device/);
+  await context.toggleCommandDelivery(quick);
+  assert.deepEqual(calls,['enable']); assert.equal(quick.textContent,'Morning push · on'); assert.equal(quick.attrs['aria-pressed'],'true'); assert.equal(quick.disabled,false);
+  assert.match(quick.title,/Tap to mute/);
+  await context.toggleCommandDelivery(quick);
+  assert.deepEqual(calls,['enable','mute']); assert.equal(quick.textContent,'Morning push · off');
+  assert.ok(html.includes('<button type="button" class="tool-chip" id="command-delivery-quick" hidden aria-pressed="false" onclick="toggleCommandDelivery(this)">Morning push · off</button><button class="tool-chip" onclick="renderCommandCenter()">Refresh</button>'),'next to Refresh on the Morning 5 panel');
+});
 test('feed health: a member sees no Briefing pill, since their account has no briefings',()=>{
   const specStart=html.indexOf('var FEED_SPEC = [');
   const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[]});
