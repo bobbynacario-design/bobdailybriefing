@@ -171,6 +171,73 @@ test('search results for the personal sources open where they live',async()=>{
   assert.match(calls[0],/^toast:The briefing that dossier came from is no longer in your archive/);
   assert.ok(html.includes("  if (item.source === 'Dossier') return openDossierResult(item.ref);"),'wired into the opener search uses');
 });
+// Ask Daybook (functions/ask-daybook.js), in the Search overlay.
+const ASK_FNS=['askAnswerHtml','paintAskHistory','runAskDaybook','askError','showAskAnswer','newAskQuestion','openAskSource','saveAskAnswer','askCostText','paintAskCost'];
+function askEnvironment(extra={}){
+  const env=environment(ASK_FNS,{esc:escHtml,_firebaseUid:'bob',aiWorkingHtml:text=>'<working>'+text,runIntelligenceSearch:()=>{},...extra});
+  vm.runInContext(html.match(/var _askThread = [^\n]*;/)[0],env.context);
+  env.element('intel-search-input').focus=()=>{};
+  return env;
+}
+test('Ask Daybook: an answer shows its refs as buttons and links, escaped, and drops any it did not find',()=>{
+  const {context}=askEnvironment();
+  const out=context.askAnswerHtml({question:'Why <ETH>?',answer:'You took ETH [S1] & it rose [W1]; see [S9] [W4].',not_found:'No price since July.',
+    sources:[{ref:'S1',source:'Decisions',title:'ETH',date:'2026-07-21'}],web_sources:[{ref:'W1',title:'CoinDesk',url:'https://coindesk.com/eth'}],
+    follow_ups:['What would change it?'],looked_up:3,lookups:2,web:true,generatedAt:'2026-10-01T02:00:00Z'},true);
+  assert.match(out,/<p class="ask-q">Following up · Why &lt;ETH>\?<\/p>/);
+  assert.match(out,/You took ETH <button type="button" class="ask-ref" data-ask-ref="S1" title="Decisions: ETH">S1<\/button> &amp; it rose <a class="ask-ref" href="https:\/\/coindesk.com\/eth" target="_blank" rel="noopener noreferrer" title="CoinDesk">W1<\/a>; see\.<\/p>/,'a dropped ref takes its space with it');
+  assert.match(out,/<p class="ask-gap">No price since July\.<\/p>/);
+  assert.match(out,/<li><button type="button" class="ask-ref" data-ask-ref="S1">S1<\/button><span>Decisions · ETH · 2026-07-21<\/span><\/li>/);
+  assert.match(out,/data-ask-follow="What would change it\?"/);
+  assert.match(out,/3 of your items looked at · 2 lookups · with the web/);
+  assert.equal(context.askAnswerHtml(null),'');
+  assert.equal(context.askCostText(false),'About $0.05–0.10 a question'); assert.equal(context.askCostText(true),'About $0.30–0.35 with the web');
+});
+test('Ask Daybook: a question goes to the server, a follow-up carries the thread, and New question clears it',async()=>{
+  const sent=[]; let opened=null, closed=0, n=0;
+  const answer=q=>({question:q,answer:'Answer '+(n)+' [S1]',sources:[{ref:'S1',source:'Evidence',title:'Saved',id:'evidence:set1:k1',page:'evidence',appRef:'set1'}],generatedAt:'2026-10-01T0'+n+':00:00Z'});
+  const {context,element}=askEnvironment({fbAskDaybook:async(q,thread,web)=>{sent.push({q,thread:JSON.parse(JSON.stringify(thread)),web});n++;return {id:'a'+n,answer:answer(q)};},
+    closeIntelligenceSearch:()=>{closed++;},openIndexedIntelligenceItem:item=>{opened=item;}});
+  element('intel-search-input').value='hi';
+  await context.runAskDaybook();
+  assert.match(element('ask-out').innerHTML,/Type a question in the box first/); assert.equal(sent.length,0,'too short: nothing is sent');
+  element('intel-search-input').value='What have I got on QBE?';
+  await context.runAskDaybook();
+  assert.deepEqual(sent[0],{q:'What have I got on QBE?',thread:[],web:false});
+  assert.match(element('ask-out').innerHTML,/<p class="ask-q">What have I got on QBE\?<\/p>/);
+  element('ask-web').checked=true;
+  await context.runAskDaybook('and Suncorp?');
+  assert.deepEqual(sent[1],{q:'and Suncorp?',thread:[{q:'What have I got on QBE?',a:'Answer 1 [S1]'}],web:true},'the follow-up carries the thread, and the web tick');
+  assert.match(element('ask-out').innerHTML,/Following up · and Suncorp\?/);
+  assert.equal(element('ask-history').hidden,false); assert.match(element('ask-history').innerHTML,/Earlier questions \(2\)/);
+  context.openAskSource('S1');
+  assert.equal(closed,1); assert.deepEqual({...opened},{id:'evidence:set1:k1',source:'Evidence',title:'Saved',page:'evidence',ref:'set1'},'a ref opens its record');
+  context.newAskQuestion();
+  assert.equal(element('ask-out').hidden,true); assert.equal(element('intel-search-input').value,'');
+  element('ask-web').checked=false;
+  await context.runAskDaybook('Fresh question?');
+  assert.deepEqual(sent[2].thread,[],'New question starts afresh');
+  context.showAskAnswer('a1');
+  await context.runAskDaybook('more on that?');
+  assert.deepEqual(sent[3].thread,[{q:'What have I got on QBE?',a:'Answer 1 [S1]'}],'an earlier answer can be followed up');
+});
+test('Ask Daybook: errors are plain, and a saved answer keeps its sources but not its ref marks',async()=>{
+  let saved=null;
+  const {context,element}=askEnvironment({fbAskDaybook:async()=>{throw Object.assign(new Error('x'),{code:'functions/resource-exhausted'});},openEvidencePicker:item=>{saved=item;}});
+  element('intel-search-input').value='What about IAG?';
+  await context.runAskDaybook();
+  assert.match(element('ask-out').innerHTML,/That is twenty questions today/);
+  assert.match(context.askError({code:'functions/not-found'}),/needs a functions deploy/);
+  assert.match(context.askError({code:'functions/permission-denied'}),/owner’s account only/);
+  vm.runInContext("_askAnswers.a1={question:'Why ETH?',answer:'Staking yield [S1], up since [W1].',not_found:'',sources:[{ref:'S1',source:'Decisions',title:'ETH',date:'2026-07-21'}],web_sources:[{ref:'W1',title:'CoinDesk',url:'https://coindesk.com/eth'}],generatedAt:'2026-10-01T02:00:00Z'}; _askShown='a1';",context);
+  context.saveAskAnswer();
+  assert.equal(saved.id,'ask:a1:answer','an :answer id keeps its long text in Evidence'); assert.equal(saved.source,'Ask'); assert.equal(saved.title,'Ask: Why ETH?');
+  assert.equal(saved.detail,'Staking yield, up since.\nSources:\nS1 Decisions · ETH · 2026-07-21\nW1 CoinDesk https://coindesk.com/eth');
+  // Members never see it: the bar, the answer and the Ctrl+Enter hint are owner-only, and so is the key.
+  ['<div class="ask-bar owner-only" id="ask-bar">','<div class="ask-out owner-only" id="ask-out" hidden','<span class="owner-only"> · Ctrl+Enter ask</span>','<div class="help-card owner-only">\n      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg> Ask Daybook']
+    .forEach(s=>assert.ok(html.includes(s),s));
+  assert.ok(html.includes("if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !window.daybookMember) { event.preventDefault(); runAskDaybook(); return; }"));
+});
 test('feed health: a member sees no Briefing pill, since their account has no briefings',()=>{
   const specStart=html.indexOf('var FEED_SPEC = [');
   const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[]});

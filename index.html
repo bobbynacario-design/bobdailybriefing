@@ -456,6 +456,25 @@ window.fbLoadMeetingBriefs = async function(uid) {
     throw e;
   }
 };
+// Ask Daybook (functions/ask-daybook.js): a question answered from his own
+// material, and the answers already given to this account (latest twenty).
+window.fbAskDaybook = async function(question, thread, web) {
+  if (!getUid()) throw new Error('Sign in first');
+  var ask = httpsCallable(functions, 'askDaybook', { timeout: 250000 });
+  var res = await ask({ question: question, thread: thread || [], web: web === true, requestId: crypto.randomUUID() });
+  return res.data;
+};
+window.fbLoadAsks = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'ask-' + uid));
+    return snap.exists() ? (snap.data().items || {}) : {};
+  } catch (e) {
+    // No answer yet: the shared rule reads a missing doc as denied.
+    if (e && e.code === 'permission-denied') return {};
+    throw e;
+  }
+};
 window.fbLoadWeeklyMirror = async function(uid) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
   try {
@@ -2242,6 +2261,22 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .briefing-actions{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}.import-panel{margin:1rem 0;border:1px solid var(--rim);border-radius:10px;padding:.8rem}.import-panel>summary{cursor:pointer;color:var(--txt2)}
 .metric-detail{font-size:12px;line-height:1.5;margin-top:.5rem;color:var(--txt2)}.metric-detail summary{cursor:pointer}.metric-detail div{padding-top:.5rem}.tick-val{font-size:21px;overflow-wrap:anywhere}.tick-move{font-size:12px}.tick{min-width:0}
 .card-body{font-size:15px;line-height:1.7}.card-hl{font-size:18px}.src{font-size:12px}.command-open-item{font:inherit;color:inherit;text-align:left;border:0;background:none;padding:0;cursor:pointer}.command-open-item:hover{text-decoration:underline}
+.ask-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem .8rem;padding:.55rem 1rem;border-bottom:1px solid var(--rim)}
+.ask-web{display:flex;align-items:center;gap:.35rem;font-size:12px;color:var(--txt2);cursor:pointer}
+.ask-cost{font-family:var(--mono);font-size:10px;color:var(--txt3)}
+#ask-history{margin-left:auto;max-width:15rem;background:var(--bg3);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:.25rem .4rem;font-size:12px}
+#ask-history[hidden],#ask-out[hidden]{display:none}
+.ask-out{padding:.85rem 1rem;border-bottom:1px solid var(--rim);max-height:48vh;overflow:auto}
+.ask-q{font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--txt3);margin:0 0 .4rem}
+.ask-text{font-size:14px;line-height:1.7;color:var(--txt);margin:0 0 .6rem}
+.ask-ref{display:inline-block;font-family:var(--mono);font-size:10px;line-height:1.4;padding:0 .3rem;margin-left:.15rem;border:1px solid var(--gold-dim);border-radius:5px;color:var(--gold);background:transparent;cursor:pointer;text-decoration:none;vertical-align:1px}
+.ask-ref:hover{border-color:var(--gold)}
+.ask-gap{font-size:12px;color:var(--txt2);margin:0 0 .6rem}
+.ask-sources{list-style:none;margin:0 0 .7rem;padding:0;display:grid;gap:.3rem;font-size:12px;line-height:1.5;color:var(--txt2)}
+.ask-sources li{display:flex;gap:.45rem;align-items:baseline}
+.ask-actions{display:flex;flex-wrap:wrap;gap:.4rem}
+.ask-status{font-size:13px;color:var(--txt2);margin:0}.ask-status.is-warn{color:var(--amber)}
+.ask-meta{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:.55rem}
 .search-coverage{padding:.6rem 1rem;display:flex;gap:.7rem;align-items:center;justify-content:space-between;font-size:12px;color:var(--txt2)}
 #grounding-numbers a{color:var(--amber)}
 .gn-grid{display:grid;grid-template-columns:minmax(0,1fr);column-gap:3rem;align-items:start}
@@ -2496,10 +2531,12 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 <div class="intel-search-overlay" id="intel-search-overlay" hidden onclick="if(event.target===this)closeIntelligenceSearch()">
   <section class="intel-search-dialog" role="dialog" aria-modal="true" aria-labelledby="intel-search-label">
     <div class="intel-search-head"><span class="intel-search-icon">⌕</span><input class="intel-search-input" id="intel-search-input" aria-label="Search all intelligence" placeholder="Search briefings, evidence, notes, decisions, your numbers, Radar…" autocomplete="off" oninput="runIntelligenceSearch(this.value)" onkeydown="intelligenceSearchKey(event)"><button class="intel-search-close" onclick="closeIntelligenceSearch()">ESC</button></div>
+    <div class="ask-bar owner-only" id="ask-bar"><button type="button" class="tool-chip ask-run" id="ask-run" onclick="runAskDaybook()" title="Answer the question in the box from your Daybook (Ctrl+Enter)">Ask Daybook</button><label class="ask-web"><input type="checkbox" id="ask-web" onchange="paintAskCost()"> Also check the web</label><span class="ask-cost" id="ask-cost">About $0.05–0.10 a question</span><select id="ask-history" aria-label="Earlier questions" hidden onchange="showAskAnswer(this.value)"></select></div>
+    <div class="ask-out owner-only" id="ask-out" hidden aria-live="polite"></div>
     <div class="intel-search-status" id="intel-search-status"><span id="intel-search-label">Unified intelligence search</span></div>
     <div class="search-coverage"><span id="intel-search-coverage" role="status">Coverage not loaded</span><button class="tool-chip" onclick="loadIntelligenceSearchData()">Refresh sources</button></div>
     <div class="intel-search-results" id="intel-search-results" role="status"><div class="intel-search-empty">Type at least two characters to search the loaded intelligence archive.</div></div>
-    <div class="intel-search-foot"><span>↑↓ select · Enter open · Esc close</span><span>Local ranking · no model cost</span></div>
+    <div class="intel-search-foot"><span>↑↓ select · Enter open<span class="owner-only"> · Ctrl+Enter ask</span> · Esc close</span><span>Local ranking · no model cost</span></div>
   </section>
 </div>
 
@@ -3249,6 +3286,18 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       </ul>
     </div>
 
+    <div class="help-card owner-only">
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg> Ask Daybook — a question, answered from your own material</div>
+      <ul>
+        <li>Open <b>Search</b> (Ctrl+K), type a question in plain English and tap <b>Ask Daybook</b> (or Ctrl+Enter). For example: “What have I got on QBE since August?”, “Why did I make the ETH call?”, “What is the NSW field-worker labour rate?”</li>
+        <li>It looks things up in your Daybook up to three times, choosing its own words, sources and dates: briefings, news, reports, decisions, notes, evidence, dossiers, meeting briefs, weekly reads, Your numbers and the feeds. Your accounts’ other names count as lookup words.</li>
+        <li>Every claim carries a ref: <b>S1</b> opens that record where it lives; <b>W1</b> opens a web page. A claim with no ref it found is dropped, and when your Daybook has nothing on it, it says so rather than guessing.</li>
+        <li>It keeps straight whose words are whose, as the meeting brief does: <b>you noted</b> only for your notes, decisions and the note on a saved page. A dossier, meeting brief or weekly read is AI-written; a briefing story is something you were shown.</li>
+        <li><b>Also check the web</b> is off unless you tick it. About $0.05–0.10 a question from your Daybook, about $0.30–0.35 with the web; up to twenty a day. Nothing is sent until you tap, and it never gives trading advice.</li>
+        <li>A follow-up (or one of its suggested questions) carries the last three exchanges, so “and Suncorp?” works. <b>New question</b> starts afresh. The latest twenty answers are kept under <b>Earlier questions</b>; <b>＋ Evidence</b> saves one with its sources.</li>
+      </ul>
+    </div>
+
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-decisions"/></svg> Called it? &amp; the meeting brief</div>
       <ul>
@@ -3293,7 +3342,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <div class="llm-grid">
         <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
         <div class="llm-notes">
-          <p>Every OpenAI call across the app (the daily <b>briefing</b>, <b>Go deeper</b> dossiers, the <b>weekly read</b>, <b>meeting briefs</b>, on-demand <b>deep-research</b> reports, the <b>radar</b> catalyst tagger, and the <b>Markets</b> persona panel) records its token usage to a shared ledger. The table ranks the spend by feature, in USD, using OpenAI's published rates — raw API cost, no markup.</p>
+          <p>Every OpenAI call across the app (the daily <b>briefing</b>, <b>Ask Daybook</b> questions, <b>Go deeper</b> dossiers, the <b>weekly read</b>, <b>meeting briefs</b>, on-demand <b>deep-research</b> reports, the <b>radar</b> catalyst tagger, and the <b>Markets</b> persona panel) records its token usage to a shared ledger. The table ranks the spend by feature, in USD, using OpenAI's published rates — raw API cost, no markup.</p>
           <p class="help-key">The ledger stores tokens only; cost is computed from a single rate table, so the figure is auditable (see the "rates as of" line). Deep-research models are shown <i>unpriced</i> until their rates are confirmed — the tracker never guesses.</p>
         </div>
       </div>
@@ -3751,6 +3800,9 @@ function clearPrivateSession() {
   _currentReportUrl = null;
   resetIntelligenceSearch(); resetEvidenceSets();
   _meetingBriefs = {}; _meetingFor = null; _meetingShown = '';
+  _askThread = []; _askAnswers = {}; _askFor = null; _askShown = '';
+  var askOut = document.getElementById('ask-out'); if (askOut) { askOut.hidden = true; askOut.innerHTML = ''; }
+  var askHistory = document.getElementById('ask-history'); if (askHistory) { askHistory.hidden = true; askHistory.innerHTML = ''; }
   _accounts = null; _accountsFor = null; _callsCache = null; _callsLoading = false;
   clearTimeout(_usage.timer); _usage = {day: '', counts: {}, timer: null, pruned: false};
   if (window.fbAcceptEvidenceBase) window.fbAcceptEvidenceBase(null);
@@ -4136,6 +4188,7 @@ function openIntelligenceSearch() {
   input.select();
   if (!intelligenceSearchState.loaded || Date.now() - (intelligenceSearchState.loadedAt || 0) > 300000) loadIntelligenceSearchData();
   else runIntelligenceSearch(input.value);
+  loadAsks();
 }
 
 function closeIntelligenceSearch() {
@@ -4173,7 +4226,9 @@ function paintIntelligenceSearchResults() {
   if (!out) return;
   var results = intelligenceSearchState.results;
   if (!results.length) {
-    out.innerHTML = '<div class="intel-search-empty">No matching intelligence found.<br>Try fewer or broader terms.</div>';
+    // A question rarely matches every word; for the owner, point at Ask Daybook.
+    out.innerHTML = window.daybookMember ? '<div class="intel-search-empty">No matching intelligence found.<br>Try fewer or broader terms.</div>'
+      : '<div class="intel-search-empty">No record has every one of these words.<br>For a question, tap Ask Daybook (Ctrl+Enter); for a search, try fewer words.</div>';
     return;
   }
   out.innerHTML = results.map(function (item, index) {
@@ -4194,6 +4249,7 @@ function intelligenceSearchKey(event) {
   if (event.key === 'Escape') { event.preventDefault(); closeIntelligenceSearch(); return; }
   if (event.key === 'ArrowDown') { event.preventDefault(); intelligenceSearchMove(1); return; }
   if (event.key === 'ArrowUp') { event.preventDefault(); intelligenceSearchMove(-1); return; }
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !window.daybookMember) { event.preventDefault(); runAskDaybook(); return; }
   if (event.key === 'Enter' && intelligenceSearchState.results.length) {
     event.preventDefault(); openIntelligenceSearchResult(intelligenceSearchState.active);
   }
@@ -4279,6 +4335,135 @@ function openWeeklyReadResult() {
   switchPage('today', document.querySelector('.ntab[data-page="today"]'));
   if (window.openWeeklyRead) window.openWeeklyRead();
 }
+
+// ── Ask Daybook (functions/ask-daybook.js) ──
+// A question answered from his own material: the server looks it up, up to
+// three times, on the same index as this Search box, and every claim carries a
+// ref to what it found. Nothing is sent until he taps Ask Daybook, and the web
+// only when he ticks it. Follow-ups carry the last three exchanges.
+var _askThread = [], _askAnswers = {}, _askFor = null, _askShown = '', _askRunning = false;
+function askCostText(web) { return web ? 'About $0.30–0.35 with the web' : 'About $0.05–0.10 a question'; }
+function paintAskCost() { setText('ask-cost', askCostText(!!(document.getElementById('ask-web') || {}).checked)); }
+function askError(error) {
+  var code = String(error && error.code || '').replace(/^functions\//, '');
+  if (code === 'resource-exhausted') return 'That is twenty questions today. Ask Daybook will be ready again tomorrow.';
+  if (code === 'invalid-argument') return (error && error.message) || 'Type a question first.';
+  if (code === 'unauthenticated' || code === 'permission-denied') return 'Ask Daybook is on the owner’s account only.';
+  if (code === 'deadline-exceeded' || code === 'unavailable') return 'That took too long. Try again in a minute.';
+  if (code === 'not-found' || (code === 'internal' && String(error && error.message || '').toLowerCase() === 'internal')) {
+    return 'Could not reach Ask Daybook. If it was just added it needs a functions deploy; otherwise try again in a minute.';
+  }
+  return (error && error.message) || 'Could not answer that. Try again in a minute.';
+}
+// The answer with each ref as a button to its record ([S1]) or a link to the
+// page ([W1]). Refs arrive already checked by the server; any other is dropped.
+function askAnswerHtml(a, following) {
+  if (!a || !a.answer) return '';
+  var refs = {};
+  (a.sources || []).forEach(function(s) { refs[s.ref] = s; });
+  (a.web_sources || []).forEach(function(w) { refs[w.ref] = w; });
+  var body = esc(a.answer).replace(/(\s*)\[([SW])(\d+)\]/g, function(match, space, kind, n) {
+    var ref = kind + n, s = refs[ref];
+    if (!s) return '';
+    return space + (kind === 'S' ? '<button type="button" class="ask-ref" data-ask-ref="' + ref + '" title="' + esc(s.source + ': ' + s.title) + '">' + ref + '</button>'
+      : '<a class="ask-ref" href="' + esc(s.url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(s.title) + '">' + ref + '</a>');
+  });
+  var html = '<div class="ask-answer"><p class="ask-q">' + (following ? 'Following up · ' : '') + esc(a.question || '') + '</p><p class="ask-text">' + body + '</p>';
+  if (a.not_found) html += '<p class="ask-gap">' + esc(a.not_found) + '</p>';
+  var list = (a.sources || []).map(function(s) {
+    return '<li><button type="button" class="ask-ref" data-ask-ref="' + esc(s.ref) + '">' + esc(s.ref) + '</button><span>' + esc([s.source, s.title, s.date].filter(Boolean).join(' · ')) + '</span></li>';
+  }).concat((a.web_sources || []).map(function(w) {
+    return '<li><a class="ask-ref" href="' + esc(w.url) + '" target="_blank" rel="noopener noreferrer">' + esc(w.ref) + '</a><span>' + esc(w.title) + '</span></li>';
+  }));
+  if (list.length) html += '<ol class="ask-sources">' + list.join('') + '</ol>';
+  html += '<div class="ask-actions">' + (a.follow_ups || []).map(function(q) {
+    return '<button type="button" class="tool-chip" data-ask-follow="' + esc(q) + '">' + esc(q) + '</button>';
+  }).join('') + '<button type="button" class="tool-chip" id="ask-save" onclick="saveAskAnswer()">＋ Evidence</button><button type="button" class="tool-chip" id="ask-new" onclick="newAskQuestion()">New question</button></div>';
+  var at = a.generatedAt ? new Date(a.generatedAt) : null;
+  html += '<div class="ask-meta">' + esc([(a.looked_up || 0) + ' of your items looked at', a.lookups ? a.lookups + (a.lookups === 1 ? ' lookup' : ' lookups') : '',
+    a.web ? 'with the web' : 'your Daybook only', at && !isNaN(at) ? at.toLocaleString('en-AU', {day:'numeric', month:'short', hour:'numeric', minute:'2-digit'}) : ''].filter(Boolean).join(' · ')) + '</div></div>';
+  return html;
+}
+function paintAskHistory() {
+  var select = document.getElementById('ask-history');
+  if (!select) return;
+  var ids = Object.keys(_askAnswers).sort(function(x, y) { return String(_askAnswers[y].generatedAt || '').localeCompare(String(_askAnswers[x].generatedAt || '')); });
+  select.hidden = !ids.length;
+  select.innerHTML = '<option value="">Earlier questions (' + ids.length + ')</option>' + ids.map(function(id) {
+    var q = String(_askAnswers[id].question || ''); return '<option value="' + esc(id) + '"' + (id === _askShown ? ' selected' : '') + '>' + esc(q.length > 60 ? q.slice(0, 59) + '…' : q) + '</option>';
+  }).join('');
+}
+async function loadAsks() {
+  var uid = window._firebaseUid || null;
+  if (!uid || window.daybookMember || typeof window.fbLoadAsks !== 'function' || _askFor === uid) return;
+  _askFor = uid;
+  try { _askAnswers = (await window.fbLoadAsks(uid)) || {}; } catch (e) { _askAnswers = {}; _askFor = null; }
+  paintAskHistory();
+}
+// Picking an earlier answer shows it, and a follow-up continues from it.
+function showAskAnswer(id) {
+  var a = _askAnswers[id], out = document.getElementById('ask-out');
+  if (!a || !out) return;
+  _askShown = id; _askThread = [{q: a.question, a: a.answer}];
+  out.hidden = false; out.innerHTML = askAnswerHtml(a, false);
+}
+function newAskQuestion() {
+  _askThread = []; _askShown = '';
+  var out = document.getElementById('ask-out'), input = document.getElementById('intel-search-input');
+  if (out) { out.hidden = true; out.innerHTML = ''; }
+  paintAskHistory();
+  if (input) { input.value = ''; input.focus(); runIntelligenceSearch(''); }
+}
+async function runAskDaybook(question) {
+  var input = document.getElementById('intel-search-input'), out = document.getElementById('ask-out'), button = document.getElementById('ask-run');
+  var q = String(question || (input && input.value) || '').trim();
+  if (!out || _askRunning) return;
+  out.hidden = false;
+  if (!window._firebaseUid || typeof window.fbAskDaybook !== 'function') { out.innerHTML = '<p class="ask-status is-warn">Sign in to ask your Daybook.</p>'; return; }
+  if (q.length < 3) { out.innerHTML = '<p class="ask-status is-warn">Type a question in the box first.</p>'; if (input) input.focus(); return; }
+  var web = !!(document.getElementById('ask-web') || {}).checked, following = _askThread.length > 0;
+  _askRunning = true;
+  if (button) button.disabled = true;
+  out.innerHTML = '<p class="ask-status">' + aiWorkingHtml('Looking through your Daybook' + (web ? ' and the web' : ''), {slow: web ? 120 : 60}) + '</p>';
+  try {
+    var res = await window.fbAskDaybook(q, _askThread.slice(-3), web);
+    _askAnswers[res.id] = res.answer; _askShown = res.id;
+    _askThread = _askThread.concat([{q: q, a: res.answer.answer}]).slice(-3);
+    paintAskHistory();
+    out.innerHTML = askAnswerHtml(res.answer, following);
+  } catch (error) {
+    console.error('Ask Daybook failed:', error);
+    out.innerHTML = '<p class="ask-status is-warn">' + esc(askError(error)) + '</p>';
+  }
+  _askRunning = false;
+  if (button) button.disabled = false;
+}
+// A ref opens the record it points at, where it lives in the app.
+function openAskSource(ref) {
+  var a = _askAnswers[_askShown], s = a && (a.sources || []).find(function(x) { return x.ref === ref; });
+  if (!s) return;
+  closeIntelligenceSearch();
+  openIndexedIntelligenceItem({id: s.id, source: s.source, title: s.title, page: s.page, ref: s.appRef});
+}
+// Saved to Evidence as a document: the answer without its ref marks, then the
+// sources it cited.
+function saveAskAnswer() {
+  var a = _askAnswers[_askShown];
+  if (!a) return;
+  var sources = (a.sources || []).map(function(s) { return s.ref + ' ' + [s.source, s.title, s.date].filter(Boolean).join(' · '); })
+    .concat((a.web_sources || []).map(function(w) { return w.ref + ' ' + w.title + ' ' + w.url; }));
+  openEvidencePicker({id: 'ask:' + _askShown + ':answer', source: 'Ask', title: 'Ask: ' + a.question,
+    detail: [String(a.answer).replace(/\s*\[[SW]\d+\]/g, '')].concat(a.not_found ? [a.not_found] : [], sources.length ? ['Sources:'].concat(sources) : []).join('\n'),
+    meta: 'Ask Daybook · ' + String(a.generatedAt || '').slice(0, 10), page: 'evidence', ref: _askShown});
+}
+document.addEventListener('click', function(event) {
+  var target = event.target && event.target.closest ? event.target.closest('#ask-out [data-ask-ref], #ask-out [data-ask-follow]') : null;
+  if (!target) return;
+  if (target.hasAttribute('data-ask-ref')) { openAskSource(target.getAttribute('data-ask-ref')); return; }
+  var q = target.getAttribute('data-ask-follow'), input = document.getElementById('intel-search-input');
+  if (input) input.value = q;
+  runAskDaybook(q);
+});
 
 function saveIntelligenceSearchResult(index) {
   var item = intelligenceSearchState.results[index];
@@ -4633,7 +4818,7 @@ var _usage = {day: '', counts: {}, timer: null, pruned: false};
 function usageKey(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60); }
 var USAGE_ATTRS = [['data-card-act', 'card_'], ['data-aha-act', 'aha_'], ['data-dossier-act', 'dossier_'], ['data-aha-link', 'aha_link', true],
   ['data-account', 'account_brief', true], ['data-account-timeline', 'account_timeline', true], ['data-call', 'call_badge', true],
-  ['data-evidence-more', 'evidence_show_all', true], ['data-track', '']];
+  ['data-evidence-more', 'evidence_show_all', true], ['data-ask-ref', 'ask_ref', true], ['data-ask-follow', 'ask_follow', true], ['data-track', '']];
 function usageNameFor(el) {
   if (!el || !el.getAttribute) return '';
   for (var i = 0; i < USAGE_ATTRS.length; i++) {
@@ -4683,6 +4868,7 @@ document.addEventListener('visibilitychange', function() { if (document.visibili
 
 // Plain names for what the Help readout shows; anything else shows its key.
 var USAGE_LABELS = {
+  fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence',
   page_today:'Today', page_command:'Morning 5', page_evidence:'Evidence', page_decisions:'Decisions', page_research:'Research', page_timeline:'Timeline',
   page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_pse:'PSE', page_trends:'Trends',
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
