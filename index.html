@@ -1220,6 +1220,11 @@ body.light .btn-google{box-shadow:inset 0 0 0 1px #747775}
 body.light .login-eyebrow,body.light .login-card-kicker,body.light .login-benefit-index,body.light .login-mode-btn.active{color:var(--gold)}
 /* `hidden` must win over the display these controls set (Forgot password in Create account mode). */
 .login-card [hidden],#invites-card[hidden]{display:none!important}
+/* Invited members share the feeds; the AI features run on the owner's account
+   (GENERATION_OWNERS in functions/index.js), so their controls hide for members. */
+html[data-daybook-role="member"] .owner-only,html[data-daybook-role="member"] [data-card-act="deeper"],html[data-daybook-role="member"] .acct-row [data-account]{display:none!important}
+html:not([data-daybook-role="member"]) .member-only{display:none!important}
+.member-note{font-family:var(--sans);font-size:13px;line-height:1.6;color:var(--txt2);max-width:560px;margin:-1.5rem auto 2rem;text-align:center}
 .invite-form{display:flex;flex-wrap:wrap;gap:8px;margin:.75rem 0 .25rem}
 .invite-form input{flex:1 1 180px;min-width:0;background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:.55rem .75rem;font-family:var(--sans);font-size:13px;color:var(--txt)}
 .invite-form input:focus{border-color:var(--gold);outline:none}
@@ -2610,7 +2615,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div id="accounts-editor" hidden></div>
     <div class="meeting-status" id="accounts-status" role="status"></div>
   </section>
-  <section class="command-panel meeting-panel" id="meeting-panel" aria-labelledby="meeting-title">
+  <section class="command-panel meeting-panel owner-only" id="meeting-panel" aria-labelledby="meeting-title">
     <div class="command-panel-head"><div><div class="command-panel-title" id="meeting-title">Meeting brief</div><div class="command-panel-meta">One page before a call</div></div><select id="meeting-history" aria-label="Earlier briefs" hidden onchange="showMeetingBrief(this.value)"></select></div>
     <p class="meeting-intro">Name the client, insurer or topic. The brief gathers your last six weeks on it (briefing stories, dossiers, saved evidence, notes and decisions), reads what is new on the web, and ends with three questions to ask. Your matched items go to OpenAI for this brief only. Up to five a day.</p>
     <div class="meeting-form"><input id="meeting-topic" maxlength="120" placeholder="Suncorp, cold-chain in the Visayas, strata mould claims…" aria-label="Meeting topic" onkeydown="if(event.key==='Enter')runMeetingBrief()"><button type="button" class="tool-chip" id="meeting-run" onclick="runMeetingBrief()">Build brief</button></div>
@@ -2657,7 +2662,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 
   <section class="start-here" id="boost-start" hidden aria-live="polite" aria-label="Start here"><div class="start-here-text"><div class="boost-kicker" id="boost-start-kicker">Start here</div><div class="start-here-main" id="boost-start-main"></div><div class="start-here-then" id="boost-start-then"></div></div><div class="start-here-actions"><button type="button" class="btn-sec" id="boost-start-go">Start ↓</button><button type="button" class="tool-chip" id="boost-start-skip" title="Show the next thing instead, for this visit">Not now</button></div></section>
   <section class="daily-boost" id="boost-panel" aria-labelledby="boost-heading">
-    <div class="boost-compact"><div><div class="boost-kicker" id="boost-compact-kicker">Today’s spark</div><strong id="boost-compact-title"></strong><p id="boost-compact-note"></p></div><div class="boost-compact-actions"><button type="button" class="tool-chip" id="boost-compact-week" hidden>Read my week back</button><button class="tool-chip" id="boost-open" aria-keyshortcuts="T">Open today’s spark</button></div></div>
+    <div class="boost-compact"><div><div class="boost-kicker" id="boost-compact-kicker">Today’s spark</div><strong id="boost-compact-title"></strong><p id="boost-compact-note"></p></div><div class="boost-compact-actions"><button type="button" class="tool-chip owner-only" id="boost-compact-week" hidden>Read my week back</button><button class="tool-chip" id="boost-open" aria-keyshortcuts="T">Open today’s spark</button></div></div>
     <div class="boost-intro"><div><div class="hero-eyebrow">A little momentum. A new perspective.</div><h1 id="boost-heading">Make today a little more interesting.</h1><p>You don’t have to keep up with everything. Find one idea worth taking into your day.</p></div><button class="tool-chip" id="boost-tuck" aria-keyshortcuts="T" title="Collapse today’s spark so the briefing comes first. It reopens tomorrow.">Tuck away · briefing first ↓</button></div>
     <div class="boost-intent"><label for="boost-intention">What do you need today?</label><select id="boost-intention"><option value="">Surprise me</option><option value="motivation">Motivation</option><option value="clarity">Clarity</option><option value="curiosity">Curiosity</option><option value="calm">Calm</option><option value="challenge">A challenge</option></select><span id="boost-intention-hint" class="boost-kicker"></span></div>
     <div class="boost-grid">
@@ -2666,7 +2671,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
     <section class="boost-past" id="boost-past" hidden aria-labelledby="boost-past-kicker"><div class="boost-kicker" id="boost-past-kicker">From your past</div><blockquote class="boost-past-text" id="boost-past-text"></blockquote><p class="boost-past-sub" id="boost-past-sub"></p><div class="boost-past-actions" id="boost-past-actions"><button type="button" class="tool-chip" id="boost-past-use">Use today</button><button type="button" class="tool-chip" id="boost-past-later" title="Bring it back in about two weeks">Later</button><button type="button" class="tool-chip" id="boost-past-dismiss" title="Don’t show this one again">Dismiss</button></div><p class="boost-kicker" id="boost-past-status" role="status"></p></section>
     <div class="boost-lookback" id="boost-lookback" hidden><h3>Your week in notes</h3><p class="boost-kicker" id="boost-lookback-count"></p><div id="boost-lookback-list"></div><div id="boost-lookback-stories" hidden><h4 class="boost-week-stories-title">Stories from your week</h4><div id="boost-lookback-story-list"></div></div></div>
-    <details class="boost-history boost-mirror" id="boost-mirror-panel"><summary id="boost-mirror-summary">Your week, read back</summary><p class="boost-mirror-intro">Reads your last seven days — notes, quests, the stories you opened and voted on, experiments and decisions — and reflects back what keeps coming up, where what you said and did part ways, one new thing to try and one question to sit with. Nothing is sent until you tap the button.</p><div class="boost-mirror-actions"><button class="tool-chip" id="boost-mirror-run">Read my week back</button><select id="boost-mirror-week" aria-label="Earlier reads" hidden></select><span class="boost-kicker" id="boost-mirror-status" role="status"></span></div><div class="boost-mirror-body" id="boost-mirror-body" hidden aria-live="polite"></div></details>
+    <details class="boost-history boost-mirror owner-only" id="boost-mirror-panel"><summary id="boost-mirror-summary">Your week, read back</summary><p class="boost-mirror-intro">Reads your last seven days — notes, quests, the stories you opened and voted on, experiments and decisions — and reflects back what keeps coming up, where what you said and did part ways, one new thing to try and one question to sit with. Nothing is sent until you tap the button.</p><div class="boost-mirror-actions"><button class="tool-chip" id="boost-mirror-run">Read my week back</button><select id="boost-mirror-week" aria-label="Earlier reads" hidden></select><span class="boost-kicker" id="boost-mirror-status" role="status"></span></div><div class="boost-mirror-body" id="boost-mirror-body" hidden aria-live="polite"></div></details>
     <details class="boost-history boost-goals" id="boost-goals-panel"><summary id="boost-goals-summary">Your goals</summary><p class="boost-goals-intro">One to three things you are working towards. Give each one a concrete next move and optional target date; when it is due, <b>Start here</b> brings it forward. Your spark leans towards the goal themes, your weekly read measures the week against them, and ticking <b>Moved a goal today?</b> under the quest counts the days you moved one.</p><div id="boost-goals-list"></div><div id="boost-goals-editor" hidden></div><div class="boost-goals-actions"><button type="button" class="tool-chip" id="boost-goals-edit">Set your goals</button><span class="boost-kicker" id="boost-goals-status" role="status"></span></div></details>
     <details class="boost-history" id="boost-library"><summary id="boost-library-summary">Browse all sparks · Find your inspiration</summary><div class="boost-library-controls"><label>Theme<select id="boost-theme"><option value="">All themes</option><option>Curiosity</option><option>Perspective</option><option>Creativity</option><option>Momentum</option><option>Confidence</option><option value="Reset">Rest &amp; reset</option><option>Connection</option><option value="Craft">Work craft</option><option value="Review">Weekly look-back</option></select></label><label>Search sparks<input id="boost-search" type="search" placeholder="Try beginner, figure, or quiet…"></label></div><label><input id="boost-favourites-only" type="checkbox"> Favourites only</label><p id="boost-library-count" role="status"></p><div id="boost-library-list"></div></details>
     <div class="boost-reflect"><label for="boost-note">What clicked for you?</label><p>A new question, a tiny win, or something you want to try. One sentence is plenty.</p><textarea id="boost-note" aria-keyshortcuts="N" maxlength="1200" rows="2" placeholder="Today I noticed…" aria-describedby="boost-note-state"></textarea><div class="boost-note-bar"><span id="boost-note-state" class="boost-note-state" aria-live="polite"></span><button type="button" class="tool-chip boost-note-done" id="boost-note-done" hidden aria-keyshortcuts="Control+Enter Meta+Enter" title="Your note saves as you type. Done sends it now and closes the keyboard (Ctrl+Enter).">Done ✓</button></div><div id="boost-noted" hidden aria-label="Stories noted today"></div><div id="boost-status" class="boost-kicker" role="status">Sign in to save your small wins.</div></div>
@@ -2731,7 +2736,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 
   <div id="auto-load-banner"></div>
 
-  <div class="briefing-actions"><button class="btn-sec" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button><button class="nav-btn" onclick="copyAsText()">Copy briefing</button><button class="nav-btn" onclick="exportPDF()">Export PDF</button><button class="nav-btn" onclick="commandGo('command')">Open Morning 5</button></div>
+  <div class="briefing-actions"><button class="btn-sec owner-only" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button><button class="nav-btn" onclick="copyAsText()">Copy briefing</button><button class="nav-btn" onclick="exportPDF()">Export PDF</button><button class="nav-btn" onclick="commandGo('command')">Open Morning 5</button></div>
   <details class="import-panel"><summary>Import / advanced</summary>
   <div class="paste-zone">
     <div class="paste-label">Generate or Paste Briefing JSON Here</div>
@@ -2803,7 +2808,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </div>
 
   <div id="today-out">
-    <div class="empty-state">AWAITING BRIEFING INPUT</div>
+    <div class="empty-state">AWAITING BRIEFING INPUT</div><p class="member-only member-note">Daily briefings are written for Daybook&rsquo;s owner, so Today has none on your account. Command, Radar, Markets, PSE, Sports and Your numbers are shared with you and refresh every day.</p>
   </div>
 </div>
 
@@ -2871,11 +2876,11 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
 
     <div class="digest-btn-wrap" style="display:flex;gap:.5rem;flex-wrap:wrap">
-      <button class="btn-primary" onclick="toggleResearchGen()"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg> GENERATE DEEP RESEARCH</button>
+      <button class="btn-primary owner-only" onclick="toggleResearchGen()"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg> GENERATE DEEP RESEARCH</button>
       <button class="btn-sec" onclick="toggleResearchImport()">＋ ADD REPORT</button>
     </div>
 
-    <div class="paste-zone" id="research-gen" style="display:none;border-color:rgba(155,111,232,.4)">
+    <div class="paste-zone owner-only" id="research-gen" style="display:none;border-color:rgba(155,111,232,.4)">
       <div class="paste-label">Generate Deep Research — autonomous web research → rich report (paid OpenAI run)</div>
       <div class="research-preset-row">
         <button class="filter-chip" onclick="setGenPreset(this,'forensic')">Forensic BI</button>
@@ -3161,6 +3166,15 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </div>
 
   <div class="help-body">
+    <div class="help-card help-wide member-only" id="member-access-card">
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg> Your access — what an invited account gets</div>
+      <ul>
+        <li><b>Shared with you</b> — Command and its Morning 5, Radar, Markets, PSE, Sports and Your numbers (on Evidence). Daybook&rsquo;s daily jobs refresh them, and every account reads the same copy.</li>
+        <li><b>Yours alone</b> — your sparks, notes, goals, experiments, decisions, evidence sets, accounts and any report you add. Only your account can open them in Daybook.</li>
+        <li><b>Not included</b> — the AI features (the daily briefing, Go deeper, the weekly read, meeting briefs and deep research) run on the owner&rsquo;s account, so their buttons are not shown here and Today has no briefing of its own.</li>
+        <li><b>Morning delivery</b> — you can turn on the Morning 5 notification on Command, on each device you use.</li>
+      </ul>
+    </div>
     <div class="help-card help-wide" id="invites-card" hidden>
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg> Invites — who can use Daybook</div>
       <p>Daybook is invite-only. Add someone here, then send them the link to Daybook: they choose <b>Create account</b> with this email (or <b>Continue with Google</b> if it is a Google address) and verify it. Each account sees only its own saved work and the shared feeds (Radar, Markets, Sports and Your numbers). The AI features (the briefing, Go deeper, the weekly read, the meeting brief and deep research) stay yours. Removing someone stops their access to Daybook&rsquo;s data at once.</p>
@@ -3273,7 +3287,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       </ul>
     </div>
 
-    <div class="help-card help-wide">
+    <div class="help-card help-wide owner-only">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-coins"/></svg> LLM usage &amp; cost — where the AI spend goes</div>
       <div class="llm-grid">
         <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
@@ -3644,7 +3658,17 @@ async function removeInvite(btn) {
   }
 }
 
+// Invited members share the feeds but not the AI features, which run on the
+// owner's account (GENERATION_OWNERS in functions/index.js). The attribute lets
+// the CSS hide those controls (.owner-only) and show the member notes.
+function applyDaybookRole() {
+  var member = !(window.fbIsDaybookOwner && window.fbIsDaybookOwner());
+  window.daybookMember = member;
+  document.documentElement.setAttribute('data-daybook-role', member ? 'member' : 'owner');
+}
+
 function onSignedIn() {
+  applyDaybookRole();  // first: Daily Boost reads it to decide on the weekly read
   if (window.renderDailyBoost) window.renderDailyBoost();
   if (window.renderWeeklyMirror) window.renderWeeklyMirror();
   setApplicationLocked(false);
@@ -3706,7 +3730,10 @@ async function handleAuth() {
   if (!result.ok && result.code !== 'redirect') errorEl.textContent = authMessageFor(result.code);
 }
 
+var TODAY_EMPTY_HTML = '<div class="empty-state">AWAITING BRIEFING INPUT</div><p class="member-only member-note">Daily briefings are written for Daybook&rsquo;s owner, so Today has none on your account. Command, Radar, Markets, PSE, Sports and Your numbers are shared with you and refresh every day.</p>';
 function clearPrivateSession() {
+  window.daybookMember = false;
+  document.documentElement.removeAttribute('data-daybook-role');
   if (window.resetDailyBoost) window.resetDailyBoost();
   var key = briefingCacheKey();
   if (key) { try { localStorage.removeItem(key); } catch (e) {} }
@@ -3754,7 +3781,7 @@ function lockSession() {
   }
   document.getElementById('auth-error').textContent = '';
   // Reset UI
-  document.getElementById('today-out').innerHTML = '<div class="empty-state">AWAITING BRIEFING INPUT</div>';
+  document.getElementById('today-out').innerHTML = TODAY_EMPTY_HTML;
   document.getElementById('hero-date').textContent = 'Paste briefing to begin';
   document.getElementById('hero-timestamp').textContent = '';
   var sb = document.getElementById('score-bar'); if (sb) sb.style.display = 'none';
@@ -4713,12 +4740,14 @@ function openCallAssets() {
 // organisation the story is not about (the prompt forbids it, but a prompt rule
 // is a request, not a guarantee), so a badge can only come from the story.
 function storyText(st) { return [st && st.headline, st && st.body].join(' '); }
+// A member has no meeting brief (owner-only), so their badges open the timeline.
+function accountOpensLabel() { return window.daybookMember ? 'the timeline' : 'a meeting brief'; }
 function accountBadgesHtml(st, calls) {
   var core = window.BriefingPromptCore;
   var names = core.accountsInText(storyText(st), activeAccounts());
   var hitCalls = core.accountsInText(storyText(st), (calls || []).map(function(asset) { return {name: asset, aliases: []}; }));
   if (!names.length && !hitCalls.length) return '';
-  return '<div class="acct-badges">' + names.map(function(name) { return '<button type="button" class="acct-badge" data-account="' + esc(name) + '" title="One of your accounts: open a meeting brief on it">' + esc(name) + '</button>'; }).join('') +
+  return '<div class="acct-badges">' + names.map(function(name) { return '<button type="button" class="acct-badge" data-account="' + esc(name) + '" title="One of your accounts: open ' + accountOpensLabel() + ' on it">' + esc(name) + '</button>'; }).join('') +
     hitCalls.map(function(asset) { return '<button type="button" class="acct-badge is-call" data-call="' + esc(asset) + '" title="One of your open calls: open it in Decisions">Your call: ' + esc(asset) + '</button>'; }).join('') + '</div>';
 }
 // Runs after every render and again when the list or the calls arrive.
@@ -4774,7 +4803,7 @@ function renderAccountsPanel() {
   }).join('') : '<p class="acct-quiet">None of your accounts has been named in a briefing in the last 30 days.</p>';
   var all = Object.keys(ACCOUNT_KIND_LABELS).filter(function(kind) { return groups[kind]; }).map(function(kind) {
     return '<div class="acct-group"><div class="acct-group-label">' + ACCOUNT_KIND_LABELS[kind] + '</div><div class="acct-chips">' + groups[kind].map(function(a) {
-      return '<button type="button" class="acct-badge" data-account="' + esc(a.name) + '" title="Open a meeting brief on ' + esc(a.name) + '">' + esc(a.name) + '</button>';
+      return '<button type="button" class="acct-badge" data-account="' + esc(a.name) + '" title="Open ' + accountOpensLabel() + ' on ' + esc(a.name) + '">' + esc(a.name) + '</button>';
     }).join('') + '</div></div>';
   }).join('');
   list.innerHTML = rows + '<details class="acct-more"><summary>All accounts (' + accounts.length + ')</summary>' + all + '</details>';
@@ -4838,7 +4867,8 @@ function openCallFromBadge(asset) {
 document.addEventListener('click', function(event) {
   var target = event.target && event.target.closest ? event.target.closest('[data-account],[data-account-timeline],[data-call]') : null;
   if (!target) return;
-  if (target.hasAttribute('data-account')) openAccountBrief(target.getAttribute('data-account'));
+  // The meeting brief is owner-only, so a member's account badge opens its timeline.
+  if (target.hasAttribute('data-account')) (window.daybookMember ? openAccountTimeline : openAccountBrief)(target.getAttribute('data-account'));
   else if (target.hasAttribute('data-account-timeline')) openAccountTimeline(target.getAttribute('data-account-timeline'));
   else openCallFromBadge(target.getAttribute('data-call'));
 });
@@ -6291,7 +6321,8 @@ function renderFeedHealth(health) {
   if (!el) return;
   var feeds = (health && health.feeds) || {};
   var pills = [], whys = [];
-  FEED_SPEC.forEach(function (spec) {
+  // A member has no briefings of their own, so a Briefing pill would only ever warn.
+  FEED_SPEC.filter(function (spec) { return !(window.daybookMember && spec.key === 'briefing'); }).forEach(function (spec) {
     var rec = spec.key === 'briefing' ? briefingHealthRec() : (feeds[spec.key] || null);
     var st = feedStatus(spec, rec);
     var age = st.age != null ? feedAgeText(st.age) : (spec.maxAgeH == null ? 'none' : '—');
@@ -9539,7 +9570,7 @@ function llmUsd(v) {
 function llmInt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
 function renderLlmUsage() {
   var out = document.getElementById('llm-usage-out');
-  if (!out) return;
+  if (!out || window.daybookMember) return;  // the owner's AI spend; its card is hidden for members
   if (!window.fbLoadLlmUsage) { out.innerHTML = '<div class="rel-none-txt">Usage unavailable.</div>'; return; }
   out.innerHTML = '<div class="rel-none-txt">Loading usage…</div>';
   window.fbLoadLlmUsage().then(function (d) {
@@ -10718,7 +10749,7 @@ function clearBriefing() {
   document.getElementById('raw-input').value='';
   document.getElementById('hero-date').textContent='Paste briefing to begin';
   document.getElementById('hero-timestamp').textContent='';
-  document.getElementById('today-out').innerHTML='<div class="empty-state">AWAITING BRIEFING INPUT</div>';
+  document.getElementById('today-out').innerHTML=TODAY_EMPTY_HTML;
   document.getElementById('score-bar').style.display='none';
   ['t-psei','t-usdphp','t-asx','t-sp','t-weather'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent='—'; });
   ['t-psei-m','t-usdphp-m','t-asx-m','t-sp-m','t-weather-m'].forEach(function(id){ var e=document.getElementById(id); if(e){e.textContent='—';e.className='tick-move tick-flat';} });

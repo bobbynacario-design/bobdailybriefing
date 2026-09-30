@@ -97,6 +97,44 @@ test('invites: addresses are normalised, and the list puts the owner first with 
   assert.match(rows,/Alice &lt;A>/); assert.match(rows,/alice@example\.com · invited 30 Sep 2026/);
   assert.equal(context.inviteRowsHtml([]),'<p class="invite-empty">No invites yet.</p>');
 });
+// An invited member shares the feeds but not the AI features (GENERATION_OWNERS).
+test('a member gets the member view: the AI controls hide, the notes show, nothing owner-only loads',()=>{
+  const root={attrs:{},setAttribute(k,v){this.attrs[k]=v;},removeAttribute(k){delete this.attrs[k];}};
+  let owner=false, usageReads=0;
+  const {context,element}=environment(['applyDaybookRole','accountOpensLabel','renderLlmUsage'],{fbIsDaybookOwner:()=>owner,fbLoadLlmUsage:async()=>{usageReads++;return null;}});
+  context.document.documentElement=root;
+  context.applyDaybookRole();
+  assert.equal(root.attrs['data-daybook-role'],'member'); assert.equal(context.daybookMember,true);
+  assert.equal(context.accountOpensLabel(),'the timeline','an account badge opens the timeline, not a meeting brief');
+  element('llm-usage-out').innerHTML='untouched'; context.renderLlmUsage();
+  assert.equal(usageReads,0,'the owner’s AI spend is not read'); assert.equal(element('llm-usage-out').innerHTML,'untouched');
+  owner=true; context.applyDaybookRole();
+  assert.equal(root.attrs['data-daybook-role'],'owner'); assert.equal(context.daybookMember,false);
+  assert.equal(context.accountOpensLabel(),'a meeting brief');
+  context.renderLlmUsage(); assert.equal(usageReads,1);
+  // Every control the server refuses for a member is marked owner-only.
+  ['btn-sec owner-only" id="openai-generate-btn"','tool-chip owner-only" id="boost-compact-week"','boost-mirror owner-only" id="boost-mirror-panel"',
+    'meeting-panel owner-only" id="meeting-panel"','paste-zone owner-only" id="research-gen"','btn-primary owner-only" onclick="toggleResearchGen()"',
+    'help-card help-wide owner-only">\n      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-coins"/></svg> LLM usage'].forEach(s=>assert.ok(html.includes(s),s));
+  assert.ok(html.includes('html[data-daybook-role="member"] .owner-only,html[data-daybook-role="member"] [data-card-act="deeper"],html[data-daybook-role="member"] .acct-row [data-account]{display:none!important}'));
+  assert.ok(html.includes('html:not([data-daybook-role="member"]) .member-only{display:none!important}'));
+  assert.ok(html.includes('class="help-card help-wide member-only" id="member-access-card"'));
+  assert.match(html,/var TODAY_EMPTY_HTML = '<div class="empty-state">AWAITING BRIEFING INPUT<\/div><p class="member-only member-note">/);
+  assert.equal((html.match(/'today-out'\)\.innerHTML ?= ?TODAY_EMPTY_HTML;/g)||[]).length,2,'sign-out and Clear both restore the member note');
+  // The role is set before anything renders, and cleared with the session.
+  assert.match(html,/function onSignedIn\(\) \{\n  applyDaybookRole\(\);/);
+  assert.match(html,/function clearPrivateSession\(\) \{\n  window\.daybookMember = false;\n  document\.documentElement\.removeAttribute\('data-daybook-role'\);/);
+});
+test('feed health: a member sees no Briefing pill, since their account has no briefings',()=>{
+  const specStart=html.indexOf('var FEED_SPEC = [');
+  const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[]});
+  vm.runInContext(html.slice(specStart,html.indexOf('\n];',specStart)+3),context);
+  const health={feeds:{radar:{lastOkAt:new Date().toISOString(),status:'ok'}}};
+  context.renderFeedHealth(health);
+  assert.match(element('feed-health').innerHTML,/Briefing <span/); assert.match(element('feed-health').innerHTML,/Briefing has no run recorded yet/);
+  context.daybookMember=true; context.renderFeedHealth(health);
+  assert.doesNotMatch(element('feed-health').innerHTML,/Briefing/); assert.match(element('feed-health').innerHTML,/Radar <span/);
+});
 
 const NUMBERS=['groundingShortName','groundingDay','groundingPeriod','groundingStatus','groundingNumbersHtml'];
 const escHtml=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
