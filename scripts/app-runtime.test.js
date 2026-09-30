@@ -144,6 +144,33 @@ test('Command: the Morning push switch shows the delivery state, and waits for p
   assert.deepEqual(calls,['enable','mute']); assert.equal(quick.textContent,'Morning push · off');
   assert.ok(html.includes('<button type="button" class="tool-chip" id="command-delivery-quick" hidden aria-pressed="false" onclick="toggleCommandDelivery(this)">Morning push · off</button><button class="tool-chip" onclick="renderCommandCenter()">Refresh</button>'),'next to Refresh on the Morning 5 panel');
 });
+test('search results for the personal sources open where they live',async()=>{
+  const calls=[];
+  const story={headline:'Allianz flood claims',date:'Saturday, September 26, 2026',section:'insurance'};
+  const archived={key:'Saturday--September-26--2026',data:{date:story.date,sections:{insurance:[{headline:'Other'},{headline:'Allianz flood claims'}]}}};
+  const {context,element}=environment(['openIndexedIntelligenceItem','openEvidencePageResult','openDossierResult','openWeeklyReadResult','openNewsRecord','openReflectionDay'],{
+    _briefingHistory:[],intelligenceSearchState:{briefings:[archived]},_meetingBriefs:{m1:{topic:'Suncorp'}},
+    switchPage:page=>calls.push('page:'+page),selectEvidenceSet:id=>calls.push('set:'+id),evidenceEncode:v=>encodeURIComponent(v),
+    loadMeetingBriefs:async()=>{},showMeetingBrief:id=>calls.push('brief:'+id),showToast:msg=>calls.push('toast:'+msg),
+    savedDossiers:async()=>({dk1:{story}}),loadBriefing:key=>calls.push('load:'+key),
+    highlightSourceTitle:(title,page,id)=>calls.push('highlight:'+id),openSavedDossierOn:t=>calls.push('dossier:'+t.section+'/'+t.index),
+    openWeeklyRead:()=>calls.push('weekly')});
+  context.document.querySelector=()=>null;
+  ['meeting-panel','grounding-panel'].forEach(id=>{element(id).scrollIntoView=()=>calls.push('scroll:'+id);});
+  await context.openIndexedIntelligenceItem({source:'Evidence',ref:'set 1'});
+  await context.openIndexedIntelligenceItem({source:'Meeting',ref:'m1'});
+  await context.openIndexedIntelligenceItem({source:'Numbers',ref:'nsw-labour'});
+  assert.equal(element('grounding-panel').open,true,'Your numbers opens');
+  context.openIndexedIntelligenceItem({source:'Weekly read',ref:'2026-09-27'});
+  await context.openDossierResult('dk1');
+  assert.deepEqual(calls,['page:evidence','set:set%201','page:evidence','brief:m1','scroll:meeting-panel','page:evidence','scroll:grounding-panel',
+    'page:today','weekly','load:Saturday--September-26--2026','highlight:briefing-insurance-1','dossier:insurance/1']);
+  assert.equal(context._briefingHistory[0].key,archived.key,'the archived briefing is put where Today can open it');
+  calls.length=0; await context.openDossierResult('missing'); assert.deepEqual(calls,[],'an unknown dossier does nothing');
+  context.intelligenceSearchState.briefings=[]; context._briefingHistory=[]; await context.openDossierResult('dk1');
+  assert.match(calls[0],/^toast:The briefing that dossier came from is no longer in your archive/);
+  assert.ok(html.includes("  if (item.source === 'Dossier') return openDossierResult(item.ref);"),'wired into the opener search uses');
+});
 test('feed health: a member sees no Briefing pill, since their account has no briefings',()=>{
   const specStart=html.indexOf('var FEED_SPEC = [');
   const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[]});
@@ -385,6 +412,7 @@ test('search shows partial source coverage and retry can recover', async () => {
   vm.runInContext(readFileSync(new URL('../lib/app-reliability.js',import.meta.url),'utf8'),context);
   vm.runInContext(readFileSync(new URL('../lib/intelligence-search-core.js',import.meta.url),'utf8'),context);
   ['SearchBriefings','Reports','Decisions','Miro','Sports','News'].forEach(name=>{context['fbLoad'+name]=async()=>[];});
+  context.evidenceSetState={data:{sets:[]}}; context.loadEvidenceSets=async()=>{}; context.savedDossiers=async()=>({}); context.fbLoadGrounding=async()=>null;
   context.fbLoadRadar=async()=>{throw Error('Denied');};
   await context.loadIntelligenceSearchData();
   assert.match(element('intel-search-coverage').textContent,/Unavailable: Radar/);
@@ -801,8 +829,9 @@ test('a meeting brief gathers his own recent material on the topic, capped per k
   const core=searchCore();
   const index=core.buildIndex({decisions:[{id:'d1',asset:'Suncorp reserving call',reason:'BI reserves look light',status:'open',createdDate:'2026-09-20',saved:now-7*86400000}]})
     .concat(Array.from({length:9},(_,i)=>({id:'n'+i,source:'News',title:'Suncorp story '+i,detail:'d',searchText:core.normalized('News Suncorp story '+i),saved:now-i*86400000,entities:[]})))
-    .concat([{id:'old',source:'News',title:'Suncorp ancient',detail:'',searchText:core.normalized('News Suncorp ancient'),saved:now-90*86400000,entities:[]}]);
-  const {context}=environment(['meetingTokens','meetingMatches','meetingMaterial'],{IntelligenceSearchCore:core,MEETING_DAYS:42,MEETING_MAX:24,Date:class extends Date{static now(){return now;}},
+    .concat([{id:'old',source:'News',title:'Suncorp ancient',detail:'',searchText:core.normalized('News Suncorp ancient'),saved:now-90*86400000,entities:[]}])
+    .concat(['Meeting','Weekly read','Numbers','Evidence','Dossier'].map((source,i)=>({id:'skip'+i,source,title:'Suncorp '+source+' row',detail:'',searchText:core.normalized(source+' Suncorp row'),saved:now-86400000,entities:[]})));
+  const {context}=environment(['meetingTokens','meetingMatches','meetingMaterial'],{IntelligenceSearchCore:core,MEETING_DAYS:42,MEETING_MAX:24,MEETING_SKIP_SOURCES:vm.runInNewContext(html.match(/var MEETING_SKIP_SOURCES = (\[[^\]]*\]);/)[1]),Date:class extends Date{static now(){return now;}},
     intelligenceSearchState:{loaded:true,loadedAt:now,index},loadIntelligenceSearchData:async()=>{},dailyBoostSearchEntries:()=>[],
     evidenceSetState:{data:{sets:[{items:[{title:'Suncorp lifts reserves',detail:'Summary line.\n- bullet',note:'check the APRA data',url:'https://example.com/s',capturedAt:day(2)},{title:'Unrelated',detail:'Nothing here',capturedAt:day(1)},
       {id:'briefing:x:insurance:0:dossier',title:'Dossier: Storm claims test Suncorp',detail:'Dossier · Storm claims test Suncorp\nClaims rise.',note:'Raise this with the broker',url:'https://abc.net.au/x',capturedAt:day(3)}]}]}},
@@ -814,6 +843,7 @@ test('a meeting brief gathers his own recent material on the topic, capped per k
   const kept=found.items.find(item=>item.kind==='Dossier');
   assert.equal(kept.title,'Storm claims test Suncorp'); assert.match(kept.text,/His note: Raise this with the broker/,'the copy with his note wins');
   assert.ok(!found.items.some(item=>/ancient/.test(item.title)),'older than six weeks stays out');
+  assert.ok(!found.items.some(item=>/ row$/.test(item.title)),'the Evidence, Dossier, Meeting, Weekly read and Numbers rows in Search are not material (it adds evidence and dossiers itself)');
   const ev=found.items.find(item=>item.kind==='Evidence');
   assert.match(ev.text,/Summary line\..*His note: check the APRA data/); assert.equal(ev.url,'https://example.com/s');
   assert.equal(kept.url,'https://abc.net.au/x');

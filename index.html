@@ -2495,7 +2495,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 
 <div class="intel-search-overlay" id="intel-search-overlay" hidden onclick="if(event.target===this)closeIntelligenceSearch()">
   <section class="intel-search-dialog" role="dialog" aria-modal="true" aria-labelledby="intel-search-label">
-    <div class="intel-search-head"><span class="intel-search-icon">⌕</span><input class="intel-search-input" id="intel-search-input" aria-label="Search all intelligence" placeholder="Search briefings, reports, decisions, Radar, Markets, Sports…" autocomplete="off" oninput="runIntelligenceSearch(this.value)" onkeydown="intelligenceSearchKey(event)"><button class="intel-search-close" onclick="closeIntelligenceSearch()">ESC</button></div>
+    <div class="intel-search-head"><span class="intel-search-icon">⌕</span><input class="intel-search-input" id="intel-search-input" aria-label="Search all intelligence" placeholder="Search briefings, evidence, notes, decisions, your numbers, Radar…" autocomplete="off" oninput="runIntelligenceSearch(this.value)" onkeydown="intelligenceSearchKey(event)"><button class="intel-search-close" onclick="closeIntelligenceSearch()">ESC</button></div>
     <div class="intel-search-status" id="intel-search-status"><span id="intel-search-label">Unified intelligence search</span></div>
     <div class="search-coverage"><span id="intel-search-coverage" role="status">Coverage not loaded</span><button class="tool-chip" onclick="loadIntelligenceSearchData()">Refresh sources</button></div>
     <div class="intel-search-results" id="intel-search-results" role="status"><div class="intel-search-empty">Type at least two characters to search the loaded intelligence archive.</div></div>
@@ -3244,7 +3244,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <ul>
         <li><b>Synced and private</b> — notes, reminders, read marks and experiments follow your sign-in to every device and are visible only to you.</li>
         <li><b>Two devices at once</b> — edits to different parts of a day both keep. If the same note changed in both places, the other wording is kept under <b>Recovered reflection versions</b> to use or dismiss.</li>
-        <li><b>Find anything</b> — <b>Ctrl+K</b> searches your notes alongside briefings, research and decisions; a result opens that day.</li>
+        <li><b>Find anything</b> — <b>Ctrl+K</b> searches your notes alongside briefings, research, decisions, evidence sets, Go deeper dossiers, meeting briefs, weekly reads and Your numbers; a result opens where it lives. Words match from their start, so <b>eth</b> finds ETH and Ethereum but not “together”.</li>
         <li><b>Nothing is thrown away</b> — the latest 90 days stay on the page; older ones move to a yearly archive that search and <b>Copy all reflections</b> still reach.</li>
       </ul>
     </div>
@@ -4094,8 +4094,16 @@ function loadIntelligenceSearchData() {
   var state = intelligenceSearchState;
   state.loading = true;
   setText('intel-search-status','Loading account archive and feed snapshots…');
-  var names = ['Briefings','Research','Decisions','Radar','Markets','Sports','News'];
-  var loaders = [window.fbLoadSearchBriefings,window.fbLoadReports,window.fbLoadDecisions,window.fbLoadRadar,window.fbLoadMiro,window.fbLoadSports,window.fbLoadNews];
+  var names = ['Briefings','Research','Decisions','Radar','Markets','Sports','News','Evidence','Dossiers','Meeting briefs','Weekly reads','Your numbers'];
+  var uid = window._firebaseUid || null;
+  // Your own saved work, besides the archive: evidence sets, Go deeper dossiers,
+  // meeting briefs, weekly reads (the owner's only) and Your numbers.
+  var loaders = [window.fbLoadSearchBriefings,window.fbLoadReports,window.fbLoadDecisions,window.fbLoadRadar,window.fbLoadMiro,window.fbLoadSports,window.fbLoadNews,
+    function() { return loadEvidenceSets().then(function() { return evidenceSetState.data; }); },
+    function() { return savedDossiers(); },
+    function() { return uid && window.fbLoadMeetingBriefs ? window.fbLoadMeetingBriefs(uid) : {}; },
+    function() { return uid && !window.daybookMember && window.fbLoadWeeklyMirror ? window.fbLoadWeeklyMirror(uid) : {}; },
+    window.fbLoadGrounding];
   state.promise = Promise.all(loaders.map(function(loader,i) { return intelligenceSearchRead(loader,i < 3 ? [] : null); })).then(function(results) {
     if (state !== intelligenceSearchState) return [];
     var data = results.map(function(result) { return result.value; });
@@ -4104,7 +4112,8 @@ function loadIntelligenceSearchData() {
     state.reports = data[1] || [];
     window._reportFeed = state.reports;
     var builtins = typeof BUILTIN_REPORTS !== 'undefined' ? BUILTIN_REPORTS : [];
-    state.index = window.IntelligenceSearchCore.buildIndex({briefings:state.briefings,reports:builtins.concat(state.reports),decisions:data[2],radar:data[3],markets:data[4],sports:data[5],news:data[6]});
+    state.index = window.IntelligenceSearchCore.buildIndex({briefings:state.briefings,reports:builtins.concat(state.reports),decisions:data[2],radar:data[3],markets:data[4],sports:data[5],news:data[6],
+      evidence:data[7],dossiers:data[8],meetingBriefs:data[9],mirrors:data[10],grounding:data[11]});
     state.loaded = true; state.loading = false; state.loadedAt = Date.now(); state.promise = null;
     setText('intel-search-coverage',(state.failures.length ? 'Unavailable: ' + state.failures.join(', ') + '. Results are partial. ' : 'All sources loaded. ') + 'Archive: ' + state.briefings.length + ' briefings (up to 100).');
     runIntelligenceSearch((document.getElementById('intel-search-input') || {}).value || '');
@@ -4215,6 +4224,9 @@ function openIndexedIntelligenceItem(item) {
   if (!item) return;
   if (item.source === 'News' && openNewsRecord(item.ref)) return;
   if (item.source === 'Reflections') { openReflectionDay(item.ref); return; }
+  if (item.source === 'Dossier') return openDossierResult(item.ref);
+  if (item.source === 'Weekly read') { openWeeklyReadResult(); return; }
+  if (item.source === 'Evidence' || item.source === 'Meeting' || item.source === 'Numbers') return openEvidencePageResult(item);
   if (item.source === 'Briefing') {
     var archived = intelligenceSearchState.briefings.find(function (entry) { return entry.key === item.ref; });
     if (archived && !(window._briefingHistory || []).some(function (entry) { return entry.key === archived.key; })) window._briefingHistory.push(archived);
@@ -4225,6 +4237,47 @@ function openIndexedIntelligenceItem(item) {
   var button = document.querySelector('.ntab[data-page="' + item.page + '"]');
   switchPage(item.page, button);
   if (item.source === 'Research') openReport(item.ref);
+}
+
+// Evidence, meeting briefs and Your numbers all live on the Evidence page.
+async function openEvidencePageResult(item) {
+  switchPage('evidence', document.querySelector('.ntab[data-page="evidence"]'));
+  if (item.source === 'Evidence') { selectEvidenceSet(evidenceEncode(item.ref)); return; }
+  var panel;
+  if (item.source === 'Meeting') {
+    await loadMeetingBriefs();
+    if (!_meetingBriefs[item.ref]) { showToast('That brief is no longer kept (the latest twenty are).', 'info'); return; }
+    showMeetingBrief(item.ref); panel = document.getElementById('meeting-panel');
+  } else {
+    panel = document.getElementById('grounding-panel');
+    if (panel) panel.open = true;
+  }
+  if (panel) panel.scrollIntoView({block:'start', behavior:'smooth'});
+}
+// A dossier opens under its story, on the briefing it was built from. This
+// only reopens the saved copy: it never starts a new (paid) build.
+async function openDossierResult(key) {
+  var d = (await savedDossiers())[key], story = d && d.story;
+  if (!story) return;
+  var wildcard = story.section === 'wildcard';
+  var holds = function(data) {
+    if (!data || data.date !== story.date) return false;
+    return wildcard ? !!(data.wildcard && data.wildcard.headline === story.headline)
+      : ((data.sections || {})[story.section] || []).some(function(st) { return st && st.headline === story.headline; });
+  };
+  var entry = (window._briefingHistory || []).concat(intelligenceSearchState.briefings || []).find(function(b) { return b && holds(b.data); });
+  if (!entry) { showToast('The briefing that dossier came from is no longer in your archive.', 'info'); return; }
+  if (!(window._briefingHistory || []).some(function(b) { return b.key === entry.key; })) window._briefingHistory.push(entry);
+  loadBriefing(entry.key);
+  var index = wildcard ? '0' : String(entry.data.sections[story.section].findIndex(function(st) { return st && st.headline === story.headline; }));
+  var target = {title:story.headline, section:story.section, index:index, commandId:wildcard ? '' : 'briefing-' + story.section + '-' + index};
+  highlightSourceTitle(target.title, 'today', target.commandId);
+  openSavedDossierOn(target);
+}
+// The weekly read sits in the expanded spark panel on Today.
+function openWeeklyReadResult() {
+  switchPage('today', document.querySelector('.ntab[data-page="today"]'));
+  if (window.openWeeklyRead) window.openWeeklyRead();
 }
 
 function saveIntelligenceSearchResult(index) {
@@ -4881,6 +4934,7 @@ document.addEventListener('click', function(event) {
 // he taps Build brief.
 var _meetingBriefs = {}, _meetingFor = null, _meetingRunning = false;
 var MEETING_DAYS = 42, MEETING_MAX = 24;
+var MEETING_SKIP_SOURCES = ['Evidence', 'Dossier', 'Meeting', 'Weekly read', 'Numbers'];
 function meetingTokens(topic) {
   return window.IntelligenceSearchCore.normalized(topic).split(/[^a-z0-9]+/).filter(function(token) { return token.length >= 2; });
 }
@@ -4895,6 +4949,7 @@ async function meetingMaterial(topic) {
   if (!intelligenceSearchState.loaded || Date.now() - (intelligenceSearchState.loadedAt || 0) > 300000) await loadIntelligenceSearchData();
   var reflections = core.buildIndex({reflections: window.dailyBoostSearchEntries ? window.dailyBoostSearchEntries() : []});
   core.search((intelligenceSearchState.index || []).concat(reflections), topic, {limit: 80}).forEach(function(item) {
+    if (MEETING_SKIP_SOURCES.indexOf(item.source) >= 0) return;
     if (item.saved && item.saved < since) return;
     rows.push({kind: item.source, at: item.saved || 0, title: item.title, text: item.detail || item.excerpt || '', url: ''});
   });
