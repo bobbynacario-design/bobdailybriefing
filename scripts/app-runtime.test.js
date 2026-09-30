@@ -233,10 +233,42 @@ test('Ask Daybook: errors are plain, and a saved answer keeps its sources but no
   context.saveAskAnswer();
   assert.equal(saved.id,'ask:a1:answer','an :answer id keeps its long text in Evidence'); assert.equal(saved.source,'Ask'); assert.equal(saved.title,'Ask: Why ETH?');
   assert.equal(saved.detail,'Staking yield, up since.\nSources:\nS1 Decisions · ETH · 2026-07-21\nW1 CoinDesk https://coindesk.com/eth');
-  // Members never see it: the bar, the answer and the Ctrl+Enter hint are owner-only, and so is the key.
-  ['<div class="ask-bar owner-only" id="ask-bar">','<div class="ask-out owner-only" id="ask-out" hidden','<span class="owner-only"> · Ctrl+Enter ask</span>','<div class="help-card owner-only">\n      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg> Ask Daybook']
+  // Members never see it: the bar, the answer and the key hint are owner-only.
+  ['<div class="ask-bar owner-only" id="ask-bar">','<div class="ask-out owner-only" id="ask-out" hidden','<span class="owner-only"> · a question + Enter asks</span>','<div class="help-card owner-only">\n      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg> Ask Daybook']
     .forEach(s=>assert.ok(html.includes(s),s));
-  assert.ok(html.includes("if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !window.daybookMember) { event.preventDefault(); runAskDaybook(); return; }"));
+});
+test('Ask Daybook: Enter asks a question, still opens a search result, and never asks for a member',()=>{
+  const calls=[];
+  const {context}=environment(['intelligenceSearchKey','looksLikeQuestion'],{QUESTION_START:vm.runInNewContext(html.match(/var QUESTION_START = (\/[^\n]*\/i);/)[1]),
+    intelligenceSearchState:{results:[{id:'r1'}],active:0},runAskDaybook:()=>calls.push('ask'),openIntelligenceSearchResult:i=>calls.push('open:'+i),closeIntelligenceSearch:()=>calls.push('close')});
+  ['What have I got on QBE','Why did I make the ETH call','QBE since August?','Did Suncorp lift its allowance','compare QBE and IAG'].forEach(q=>assert.equal(context.looksLikeQuestion(q),true,q));
+  ['QBE','heavy vehicle','Whatever','Isuzu trucks','labour rate',''].forEach(q=>assert.equal(context.looksLikeQuestion(q),false,q));
+  const key=(key,value,mods={})=>{const e={key,target:{value},preventDefault(){this.prevented=true;},...mods};context.intelligenceSearchKey(e);return e;};
+  key('Enter','What have I got on QBE'); key('Enter','QBE'); key('Enter','QBE',{ctrlKey:true});
+  assert.deepEqual(calls,['ask','open:0','ask'],'a question asks; a keyword opens the top result; Ctrl+Enter always asks');
+  calls.length=0; context.daybookMember=true;
+  key('Enter','What have I got on QBE'); key('Enter','QBE',{ctrlKey:true});
+  assert.deepEqual(calls,['open:0','open:0'],'a member only ever opens results');
+});
+test('Search with no matches says what to do: ask a question, see the answer, or use fewer words',()=>{
+  const {context,element}=environment(['paintIntelligenceSearchResults','looksLikeQuestion'],{QUESTION_START:vm.runInNewContext(html.match(/var QUESTION_START = (\/[^\n]*\/i);/)[1]),intelligenceSearchState:{results:[]}});
+  const show=(typed,answered,member)=>{element('intel-search-input').value=typed;element('ask-out').hidden=!answered;context.daybookMember=member;context.paintIntelligenceSearchResults();return element('intel-search-results').innerHTML;};
+  assert.match(show('What have I got on QBE',false,false),/That reads as a question: press Enter/);
+  assert.match(show('qbe storm excess',false,false),/For a question, press Enter or tap Ask Daybook; for a search, try fewer words/);
+  assert.match(show('What have I got on QBE',true,false),/the answer is above/);
+  assert.match(show('What have I got on QBE',false,true),/No matching intelligence found/,'a member sees the plain message');
+});
+test('Search: a key typed on the tick box or a button goes into the box, and ticking the web hands focus back',()=>{
+  const {context,element}=environment(['intelligenceSearchTypeAhead','focusSearchInput'],{runIntelligenceSearch:q=>{context.searched=q;}});
+  const input=element('intel-search-input'); let focused=0; input.focus=()=>{focused++;}; input.value='QB';
+  const press=(key,target,mods={})=>{const e={key,target,preventDefault(){this.prevented=true;},...mods};context.intelligenceSearchTypeAhead(e);return e;};
+  const box={tagName:'INPUT',type:'checkbox'}, button={tagName:'BUTTON'}, select={tagName:'SELECT'};
+  assert.equal(press('E',box).prevented,true); assert.equal(input.value,'QBE'); assert.equal(context.searched,'QBE'); assert.equal(focused,1);
+  press('?',button); assert.equal(input.value,'QBE?');
+  [press(' ',box),press('Enter',button),press('a',select),press('k',button,{ctrlKey:true}),press('x',input)].forEach(e=>assert.equal(e.prevented,undefined,'Space, Enter, the Earlier list, shortcuts and the box itself are left alone'));
+  assert.equal(input.value,'QBE?');
+  assert.ok(html.includes('<input type="checkbox" id="ask-web" onchange="paintAskCost(); focusSearchInput()">'));
+  assert.ok(html.includes('aria-labelledby="intel-search-label" onkeydown="intelligenceSearchTypeAhead(event)"'));
 });
 test('feed health: a member sees no Briefing pill, since their account has no briefings',()=>{
   const specStart=html.indexOf('var FEED_SPEC = [');

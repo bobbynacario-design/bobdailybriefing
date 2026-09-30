@@ -2179,21 +2179,21 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .command-review-outcomes{font-size:10.5px;line-height:1.55;color:var(--txt2);padding:.55rem .65rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg3);margin-bottom:.55rem}
 
 /* ── UNIFIED INTELLIGENCE SEARCH ── */
-.intel-search-overlay{position:fixed;inset:0;z-index:8000;background:rgba(3,5,8,.76);backdrop-filter:blur(8px);display:flex;align-items:flex-start;justify-content:center;padding:9vh 1rem 1rem}
+.intel-search-overlay{position:fixed;inset:0;z-index:8000;background:rgba(3,5,8,.76);backdrop-filter:blur(8px);display:flex;align-items:flex-start;justify-content:center;padding:6vh 1rem 1rem}
 .intel-search-overlay[hidden]{display:none}
-.intel-search-dialog{width:min(760px,100%);max-height:78vh;display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--rim2);border-radius:15px;box-shadow:0 30px 90px rgba(0,0,0,.55);overflow:hidden}
+.intel-search-dialog{width:min(1000px,100%);max-height:88vh;display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--rim2);border-radius:15px;box-shadow:0 30px 90px rgba(0,0,0,.55);overflow:hidden}
 .intel-search-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.65rem;padding:.85rem 1rem;border-bottom:1px solid var(--rim)}
-.intel-search-icon{font-family:var(--mono);font-size:18px;color:var(--gold)}
-.intel-search-input{width:100%;border:0;background:transparent;color:var(--txt);font-family:var(--sans);font-size:18px;outline:none}.intel-search-input::placeholder{color:var(--txt3)}
+.intel-search-icon{font-family:var(--mono);font-size:21px;color:var(--gold)}
+.intel-search-input{width:100%;border:0;background:transparent;color:var(--txt);font-family:var(--sans);font-size:21px;outline:none}.intel-search-input::placeholder{color:var(--txt3)}
 .intel-search-close{border:1px solid var(--rim);border-radius:5px;background:transparent;color:var(--txt3);font-family:var(--mono);font-size:9px;padding:.25rem .4rem;cursor:pointer}
-.intel-search-status{padding:.5rem 1rem;font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.04em;border-bottom:1px solid var(--rim)}
-.intel-search-results{overflow-y:auto;padding:.45rem;min-height:170px}
+.intel-search-status{padding:.5rem 1rem;font-family:var(--mono);font-size:11px;color:var(--txt3);letter-spacing:.04em;border-bottom:1px solid var(--rim)}
+.intel-search-results{overflow-y:auto;padding:.45rem;min-height:200px}
 .intel-search-result{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem;text-align:left;border:1px solid transparent;border-radius:9px;background:transparent;padding:.65rem .7rem;cursor:pointer;color:inherit}
 .intel-search-result:hover,.intel-search-result.active{border-color:rgba(201,168,76,.35);background:var(--gold-dim)}
 .intel-search-title{font-size:13px;font-weight:600;color:var(--txt);line-height:1.35}.intel-search-detail{font-size:11px;color:var(--txt2);line-height:1.45;margin-top:.2rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .intel-search-meta{display:flex;align-items:center;gap:.4rem;justify-content:flex-end;white-space:nowrap}.intel-search-source{font-family:var(--mono);font-size:8px;color:var(--gold);text-transform:uppercase;letter-spacing:.07em}.intel-search-date{font-family:var(--mono);font-size:8px;color:var(--txt3)}
-.intel-search-empty{padding:2.4rem 1rem;text-align:center;color:var(--txt3);font-family:var(--mono);font-size:10px;line-height:1.7}
-.intel-search-foot{display:flex;justify-content:space-between;gap:.7rem;padding:.55rem 1rem;border-top:1px solid var(--rim);font-family:var(--mono);font-size:8px;color:var(--txt3)}
+.intel-search-empty{padding:2.4rem 1rem;text-align:center;color:var(--txt2);font-family:var(--sans);font-size:14px;line-height:1.7}
+.intel-search-foot{display:flex;justify-content:space-between;gap:.7rem;padding:.55rem 1rem;border-top:1px solid var(--rim);font-family:var(--mono);font-size:11px;color:var(--txt3)}
 .intel-search-shortcut{font-family:var(--mono);font-size:9px;padding:.1rem .35rem;border:1px solid var(--rim);border-radius:4px;color:var(--txt3)}
 
 /* ── EVIDENCE SETS ── */
@@ -2262,21 +2262,22 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .metric-detail{font-size:12px;line-height:1.5;margin-top:.5rem;color:var(--txt2)}.metric-detail summary{cursor:pointer}.metric-detail div{padding-top:.5rem}.tick-val{font-size:21px;overflow-wrap:anywhere}.tick-move{font-size:12px}.tick{min-width:0}
 .card-body{font-size:15px;line-height:1.7}.card-hl{font-size:18px}.src{font-size:12px}.command-open-item{font:inherit;color:inherit;text-align:left;border:0;background:none;padding:0;cursor:pointer}.command-open-item:hover{text-decoration:underline}
 .ask-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem .8rem;padding:.55rem 1rem;border-bottom:1px solid var(--rim)}
-.ask-web{display:flex;align-items:center;gap:.35rem;font-size:12px;color:var(--txt2);cursor:pointer}
-.ask-cost{font-family:var(--mono);font-size:10px;color:var(--txt3)}
-#ask-history{margin-left:auto;max-width:15rem;background:var(--bg3);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:.25rem .4rem;font-size:12px}
+.ask-run{font-size:13px;padding:.45rem 1rem;border-color:var(--gold);color:var(--gold)}
+.ask-web{display:flex;align-items:center;gap:.4rem;font-size:14px;color:var(--txt2);cursor:pointer}
+.ask-cost{font-family:var(--mono);font-size:12px;color:var(--txt3)}
+#ask-history{margin-left:auto;max-width:20rem;font-size:13px!important;background:var(--bg3);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:.25rem .4rem;font-size:12px}
 #ask-history[hidden],#ask-out[hidden]{display:none}
-.ask-out{padding:.85rem 1rem;border-bottom:1px solid var(--rim);max-height:48vh;overflow:auto}
-.ask-q{font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--txt3);margin:0 0 .4rem}
-.ask-text{font-size:14px;line-height:1.7;color:var(--txt);margin:0 0 .6rem}
-.ask-ref{display:inline-block;font-family:var(--mono);font-size:10px;line-height:1.4;padding:0 .3rem;margin-left:.15rem;border:1px solid var(--gold-dim);border-radius:5px;color:var(--gold);background:transparent;cursor:pointer;text-decoration:none;vertical-align:1px}
+.ask-out{padding:.95rem 1.1rem;border-bottom:1px solid var(--rim);max-height:60vh;overflow:auto}
+.ask-q{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--txt3);margin:0 0 .4rem}
+.ask-text{font-size:16px;line-height:1.7;color:var(--txt);margin:0 0 .6rem}
+.ask-ref{display:inline-block;font-family:var(--mono);font-size:11px;line-height:1.4;padding:0 .3rem;margin-left:.15rem;border:1px solid var(--gold-dim);border-radius:5px;color:var(--gold);background:transparent;cursor:pointer;text-decoration:none;vertical-align:1px}
 .ask-ref:hover{border-color:var(--gold)}
-.ask-gap{font-size:12px;color:var(--txt2);margin:0 0 .6rem}
-.ask-sources{list-style:none;margin:0 0 .7rem;padding:0;display:grid;gap:.3rem;font-size:12px;line-height:1.5;color:var(--txt2)}
+.ask-gap{font-size:14px;color:var(--txt2);margin:0 0 .6rem}
+.ask-sources{list-style:none;margin:0 0 .7rem;padding:0;display:grid;gap:.35rem;font-size:14px;line-height:1.5;color:var(--txt2)}
 .ask-sources li{display:flex;gap:.45rem;align-items:baseline}
 .ask-actions{display:flex;flex-wrap:wrap;gap:.4rem}
-.ask-status{font-size:13px;color:var(--txt2);margin:0}.ask-status.is-warn{color:var(--amber)}
-.ask-meta{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:.55rem}
+.ask-status{font-size:15px;color:var(--txt2);margin:0}.ask-status.is-warn{color:var(--amber)}
+.ask-meta{font-family:var(--mono);font-size:11px;color:var(--txt3);margin-top:.55rem}
 .search-coverage{padding:.6rem 1rem;display:flex;gap:.7rem;align-items:center;justify-content:space-between;font-size:12px;color:var(--txt2)}
 #grounding-numbers a{color:var(--amber)}
 .gn-grid{display:grid;grid-template-columns:minmax(0,1fr);column-gap:3rem;align-items:start}
@@ -2529,14 +2530,14 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 </nav>
 
 <div class="intel-search-overlay" id="intel-search-overlay" hidden onclick="if(event.target===this)closeIntelligenceSearch()">
-  <section class="intel-search-dialog" role="dialog" aria-modal="true" aria-labelledby="intel-search-label">
+  <section class="intel-search-dialog" role="dialog" aria-modal="true" aria-labelledby="intel-search-label" onkeydown="intelligenceSearchTypeAhead(event)">
     <div class="intel-search-head"><span class="intel-search-icon">⌕</span><input class="intel-search-input" id="intel-search-input" aria-label="Search all intelligence" placeholder="Search briefings, evidence, notes, decisions, your numbers, Radar…" autocomplete="off" oninput="runIntelligenceSearch(this.value)" onkeydown="intelligenceSearchKey(event)"><button class="intel-search-close" onclick="closeIntelligenceSearch()">ESC</button></div>
-    <div class="ask-bar owner-only" id="ask-bar"><button type="button" class="tool-chip ask-run" id="ask-run" onclick="runAskDaybook()" title="Answer the question in the box from your Daybook (Ctrl+Enter)">Ask Daybook</button><label class="ask-web"><input type="checkbox" id="ask-web" onchange="paintAskCost()"> Also check the web</label><span class="ask-cost" id="ask-cost">About $0.05–0.10 a question</span><select id="ask-history" aria-label="Earlier questions" hidden onchange="showAskAnswer(this.value)"></select></div>
+    <div class="ask-bar owner-only" id="ask-bar"><button type="button" class="tool-chip ask-run" id="ask-run" onclick="runAskDaybook()" title="Answer the question in the box from your Daybook (Enter on a question, or Ctrl+Enter)">Ask Daybook</button><label class="ask-web"><input type="checkbox" id="ask-web" onchange="paintAskCost(); focusSearchInput()"> Also check the web</label><span class="ask-cost" id="ask-cost">About $0.05–0.10 a question</span><select id="ask-history" aria-label="Earlier questions" hidden onchange="showAskAnswer(this.value)"></select></div>
     <div class="ask-out owner-only" id="ask-out" hidden aria-live="polite"></div>
     <div class="intel-search-status" id="intel-search-status"><span id="intel-search-label">Unified intelligence search</span></div>
     <div class="search-coverage"><span id="intel-search-coverage" role="status">Coverage not loaded</span><button class="tool-chip" onclick="loadIntelligenceSearchData()">Refresh sources</button></div>
     <div class="intel-search-results" id="intel-search-results" role="status"><div class="intel-search-empty">Type at least two characters to search the loaded intelligence archive.</div></div>
-    <div class="intel-search-foot"><span>↑↓ select · Enter open<span class="owner-only"> · Ctrl+Enter ask</span> · Esc close</span><span>Local ranking · no model cost</span></div>
+    <div class="intel-search-foot"><span>↑↓ select · Enter open<span class="owner-only"> · a question + Enter asks</span> · Esc close</span><span>Local ranking · no model cost</span></div>
   </section>
 </div>
 
@@ -4184,6 +4185,7 @@ function openIntelligenceSearch() {
   if (!overlay || !input) return;
   rememberModalFocus(overlay);
   overlay.hidden = false;
+  input.placeholder = window.daybookMember ? 'Search briefings, evidence, notes, decisions, your numbers, Radar…' : 'Search your Daybook, or ask a question and press Enter…';
   input.focus();
   input.select();
   if (!intelligenceSearchState.loaded || Date.now() - (intelligenceSearchState.loadedAt || 0) > 300000) loadIntelligenceSearchData();
@@ -4209,7 +4211,8 @@ function runIntelligenceSearch(query) {
   if (query.length < 2) {
     intelligenceSearchState.results = [];
     status.textContent = intelligenceSearchState.loaded ? intelligenceSearchState.index.length + ' items indexed' : 'Unified intelligence search';
-    out.innerHTML = '<div class="intel-search-empty">Type at least two characters to search briefing history, research, decisions, Radar, Markets, Sports, and your reflections.</div>';
+    out.innerHTML = window.daybookMember ? '<div class="intel-search-empty">Type at least two characters to search briefing history, research, decisions, Radar, Markets, Sports, and your reflections.</div>'
+      : '<div class="intel-search-empty">Type a few words to search everything in your Daybook.<br>Or type a question and press Enter: Ask Daybook answers it from your own material.</div>';
     return;
   }
   // Reflections are indexed fresh on every search, so a note written a minute ago is findable.
@@ -4226,9 +4229,14 @@ function paintIntelligenceSearchResults() {
   if (!out) return;
   var results = intelligenceSearchState.results;
   if (!results.length) {
-    // A question rarely matches every word; for the owner, point at Ask Daybook.
+    // A question rarely matches every word; for the owner, point at Ask Daybook,
+    // or at the answer already showing above.
+    var answered = !window.daybookMember && document.getElementById('ask-out') && !document.getElementById('ask-out').hidden;
+    var typed = (document.getElementById('intel-search-input') || {}).value || '';
     out.innerHTML = window.daybookMember ? '<div class="intel-search-empty">No matching intelligence found.<br>Try fewer or broader terms.</div>'
-      : '<div class="intel-search-empty">No record has every one of these words.<br>For a question, tap Ask Daybook (Ctrl+Enter); for a search, try fewer words.</div>';
+      : answered ? '<div class="intel-search-empty">No record has every one of these words; the answer is above.</div>'
+      : looksLikeQuestion(typed) ? '<div class="intel-search-empty">That reads as a question: press Enter and Ask Daybook answers it from your own material.</div>'
+      : '<div class="intel-search-empty">No record has every one of these words.<br>For a question, press Enter or tap Ask Daybook; for a search, try fewer words.</div>';
     return;
   }
   out.innerHTML = results.map(function (item, index) {
@@ -4249,10 +4257,38 @@ function intelligenceSearchKey(event) {
   if (event.key === 'Escape') { event.preventDefault(); closeIntelligenceSearch(); return; }
   if (event.key === 'ArrowDown') { event.preventDefault(); intelligenceSearchMove(1); return; }
   if (event.key === 'ArrowUp') { event.preventDefault(); intelligenceSearchMove(-1); return; }
-  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !window.daybookMember) { event.preventDefault(); runAskDaybook(); return; }
+  if (event.key === 'Enter' && !window.daybookMember && (event.ctrlKey || event.metaKey || looksLikeQuestion(event.target && event.target.value))) { event.preventDefault(); runAskDaybook(); return; }
   if (event.key === 'Enter' && intelligenceSearchState.results.length) {
     event.preventDefault(); openIntelligenceSearchResult(intelligenceSearchState.active);
   }
+}
+
+// A question ends in "?" or opens with a question word; Enter asks it rather
+// than opening the top search result.
+var QUESTION_START = /^(what|why|how|when|where|who|whom|whose|which|is|are|was|were|did|do|does|can|could|should|would|will|has|have|had|tell me|show me|summari[sz]e|compare|explain)\b/i;
+function looksLikeQuestion(value) {
+  var text = String(value || '').trim();
+  return text.length >= 3 && (/\?$/.test(text) || QUESTION_START.test(text));
+}
+function focusSearchInput() {
+  var input = document.getElementById('intel-search-input');
+  if (!input) return;
+  input.focus();
+  var end = input.value.length;
+  if (input.setSelectionRange) input.setSelectionRange(end, end);
+}
+// A key typed while the tick box or a button has focus goes into the box, so
+// ticking "Also check the web" first never swallows the question. Space and
+// Enter keep working the control; the Earlier questions list keeps its keys.
+function intelligenceSearchTypeAhead(event) {
+  var target = event.target, input = document.getElementById('intel-search-input');
+  if (!input || !target || target === input || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) && target.type !== 'checkbox') return;
+  if (typeof event.key !== 'string' || event.key.length !== 1 || event.key === ' ') return;
+  event.preventDefault();
+  focusSearchInput();
+  input.value += event.key;
+  runIntelligenceSearch(input.value);
 }
 
 function openIntelligenceSearchResult(index) {
@@ -4431,6 +4467,7 @@ async function runAskDaybook(question) {
     _askThread = _askThread.concat([{q: q, a: res.answer.answer}]).slice(-3);
     paintAskHistory();
     out.innerHTML = askAnswerHtml(res.answer, following);
+    runIntelligenceSearch((input && input.value) || '');  // the note under it now points at the answer
   } catch (error) {
     console.error('Ask Daybook failed:', error);
     out.innerHTML = '<p class="ask-status is-warn">' + esc(askError(error)) + '</p>';
