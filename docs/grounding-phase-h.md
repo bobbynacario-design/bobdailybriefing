@@ -660,3 +660,238 @@ RiskM8 — after CPI proves the ABS path". CPI has proved it.
   record, so it checked everything. The scheduled run at 20:15 UTC (06:15 AEST
   on 30 September) is due to publish it: 4.35 → 4.6 from 2026-09-30,
   expecting 2026-11-03 next.
+
+## H-7: AER distribution determinations, for BI-Assessor's STPIS cross-check
+
+Status: **diagnostic, 2026-09-29; waiting on Bob's decisions (D-H7-1 to
+D-H7-3).** The roadmap row says: "manual + watch — BI-Assessor STPIS
+cross-check — needs its own design".
+
+### What BI-Assessor does with STPIS today (read-only, main d7dead1)
+
+- **In a third-party utility claim** a network may claim its **STPIS loss**:
+  the incentive revenue it forfeits because the outage the vehicle caused
+  worsened its reliability (SAIDI, SAIFI).
+- **BI-Assessor extracts the utility's own STPIS workbook**
+  (`extract_stpis_workbook_inputs`; sheets "Incident Input", "Incident Impact"
+  and "AER Inputs"). It takes:
+  - the nominal WACC;
+  - the incident's SAIDI and SAIFI impacts;
+  - the financial year the loss is recognised;
+  - customer minutes off supply;
+  - customers affected;
+  - the model status.
+- **The report has three STPIS sections** (methodology, verification,
+  recoverability). The TP guidance says "Verify against AER … STPIS
+  guidelines".
+- **Verification today is only against the utility's own figures.** Nothing
+  independent from the AER is held.
+- **Networks in its prompt:** SAPN, Endeavour, Ausgrid, Energex and Western
+  Power. Western Power is regulated by the ERA in WA, not the AER, so it is out
+  of this series' reach.
+
+### What the AER publishes (read in the built-in browser, 2026-09-29)
+
+- **Per network, per five-year determination:** a final decision attachment
+  on STPIS. For example, SA Power Networks 2025–30 is "Final Decision
+  Attachment 10 — Service target performance incentive scheme", April 2025,
+  PDF 318 KB.
+  - Under STPIS version 2 it sets the network's performance targets, incentive
+    rates and revenue-at-risk cap. These are **to confirm from the PDF**: it has
+    not been read yet (see D-H7-2).
+  - The rate of return (WACC) is set in the same determination and updated each
+    year.
+- **Each May:** "STPIS annual distribution outcomes", with every network's
+  s-factor. For 2024–25, released 22 May 2026: SA Power Networks +1.37% of
+  allowable revenue (+$12.0m in 2026–27); Energex −1.16%; Ergon −2.00%.
+  - These are aggregates, not per-incident parameters.
+  - They confirm the **two-year delay** (2024–25 performance → 2026–27 revenue)
+    that the utility workbooks discount with a WACC.
+- **Exclusions:** only interruptions the network cannot control, and major
+  event days, are excluded. They come from its annual information orders.
+- **The S-factor calculation model** (September 2025, XLSX) is a generic
+  template with example data, not per-network figures.
+- **Licence:** CC BY 4.0. The attribution is "Source: AER © Commonwealth of
+  Australia". Third-party content is excluded.
+- **Access:** aer.gov.au is behind Akamai (`edgekey.net`) and never answers
+  automated readers: 45-second timeouts with Daybook's identity or a plain
+  request, while abs.gov.au answers in 0.4 s. So there is no automated watch;
+  the figures are captured by hand from files Bob downloads, as the FWO guides
+  were.
+  - Its PDFs are served as downloads, so they cannot be read in the browser
+    pane either.
+
+### The design questions
+
+- **Which parameters.** An incident-level cross-check needs the incentive
+  rates (by feeder class, for the incident's network and year) and the WACC.
+  The s-factor outcomes are context only.
+- **The contract may need a change.** If an incentive rate is stated as a
+  percentage of revenue per unit of SAIDI or SAIFI, `pct` does not describe it
+  honestly. Targets in minutes have no unit at all.
+  - A new `unitCode` changes `validate.js`, and both consumers re-copy it
+    (the Phase B precedent).
+  - This waits until the attachment has been read.
+- **Which networks.** Bob's files: SA Power Networks, Essential Energy,
+  Endeavour, Ausgrid, Energex, Ergon, Powercor and AusNet. The Victorian
+  networks have new determinations from 1 July 2026.
+- **No consumer mapping yet.** ClaimBench has no STPIS metric, so how
+  BI-Assessor uses the figures (a per-claim reference beside the utility's
+  "AER Inputs", or a proposal) is its own decision, taken in its session.
+- **Watch:** a reviewed-period reminder per network (like H-3 and H-4), stale
+  when its determination period ends, since the AER cannot be read
+  automatically.
+
+### Decisions for Bob
+
+- **D-H7-1 Scope.**
+  - (a) Pilot with SA Power Networks 2025–30 (recommended): read Attachment
+    10, report its exact tables, then settle the parameters and any contract
+    change before writing code.
+  - (b) All of Bob's networks at once.
+  - (c) Park H-7, and let BI-Assessor capture AER parameters per claim.
+- **D-H7-2 The PDF.** Bob downloads the attachment in his browser and gives
+  the path (as for the FWO guides), or allows one download in the built-in
+  browser.
+- **D-H7-3 Order.** H-7 is design-heavy. Diesel terminal gate prices (the last
+  roadmap row, automated) could go first.
+
+### Pilot read: SA Power Networks 2025–30 (2026-09-29)
+
+Bob chose the pilot (D-H7-1 a) and downloaded the attachment in his own
+browser.
+- **The file:** "AER - Final Decision Attachment 10 - Service target
+  performance incentive scheme - SA Power Networks - 2025-30 …April 2025.pdf",
+  325,680 bytes, 11 pages, SHA-256 `bae5a861…d68a9bef`.
+- **How it was read:** from the rendered pages 5 and 6.
+  `pdftotext -layout` drops the CBD ir−SAIDI value and shifts the row, as it
+  did in the FWO guide.
+- **STPIS version:** 2.0, including the telephone-answering parameter. The
+  values apply to the whole period, not year by year.
+
+| Table | CBD | Urban | Short rural | Long rural |
+|---|---|---|---|---|
+| 10.1 Target SAIDI (minutes) | 20.2689 | 95.1206 | 168.4875 | 285.7143 |
+| 10.1 Target SAIFI (interruptions) | 0.1795 | 0.8711 | 1.1589 | 1.4335 |
+| 10.2 ir − SAIDI | 0.0028 | 0.0316 | 0.0063 | 0.0059 |
+| 10.2 ir − SAIFI | 0.2091 | 2.3008 | 0.6081 | 0.7886 |
+| 10.3 VCR ($/MWh) | 34,464 | 33,392 | 33,392 | 33,392 |
+
+- **Telephone answering:** target 88.26%, incentive rate −0.0400.
+- **The note under Table 10.2:** "ir is the incentive rate (expressed in a
+  percentage per unit of the parameter)".
+- **VCR:** the AER's December 2024 review, escalated to the December 2024
+  quarter.
+- **Target calculations:** the accompanying "STPIS Model" (XLSX, April 2025).
+- **Not in this attachment:** the revenue-at-risk cap, and the WACC.
+
+### What the pilot means for the design
+
+- **The figures are a table, not a number.** For each network there are four
+  feeder classes × (two targets + two incentive rates + VCR), per five-year
+  period. As Daybook facts that is about 20 series per network, and about 160
+  across Bob's eight networks.
+- **The contract has no honest unit for most of them.**
+  - An incentive rate is a percentage *per minute* or *per interruption*.
+    Publishing it as `pct` would let a machine consumer read 0.0316 as 0.0316%
+    of something.
+  - Targets are minutes and interruptions, and VCR is $/MWh. None of these
+    exists.
+  - Adding units and bases changes `validate.js`, the schemas and the
+    fixtures, and both consumers must re-copy and pass their gates. The Phase B
+    precedent cost a session in each repo.
+- **One consumer, no automation.** Only BI-Assessor would use these, and the
+  AER cannot be read automatically, so Daybook adds no watch beyond a reminder.
+- **Worth checking next, in the same determinations:** the "alternative
+  control services" decision is expected to set networks' quoted-service
+  **labour rates in $ per hour**. They would fit the contract as it stands
+  (`aud_per_hour`) and bear on the labour-rate question in ~46% of Bob's TP
+  files. Not yet confirmed.
+
+### Decisions (Bob, 2026-09-29)
+
+- **STPIS parameters stay in BI-Assessor.** BI-Assessor holds its own AER
+  STPIS reference (per network and period, with citations) for its STPIS
+  verification, built in a BI-Assessor session. No contract change.
+  - Daybook adds only a reminder per captured network, so a new determination
+    is not missed.
+  - The reminder waits for BI-Assessor's table, which decides which networks
+    and periods are held.
+- **Next: the labour-rate pilot.** Read SA Power Networks' 2025–30
+  alternative control services decision for its quoted-service labour rates
+  ($ per hour). Bob downloads the attachment. Then decide whether they serve as
+  a TP labour-rate benchmark, as an `aud_per_hour` series.
+
+### Labour-rate pilot: SA Power Networks quoted services, 2025–26 (2026-09-29)
+
+- **Where the rates are.** Final Decision Attachment 16 (Alternative control
+  services, April 2025; 317,891 bytes, SHA-256 `2005ea38…35631`) says "our
+  final decision sets the maximum labour rates to be applied to quoted
+  services". It points to the price lists in "Final Decision – SAPN – 15.1.1 –
+  Standardised ANS Model – April 2025 – Public", tab "Final Decision – Labour".
+- **The model.** The AER's own final-decision model:
+  - `.xlsm`, 867,701 bytes, SHA-256 `1c433b16…390b3411`;
+  - URL `/system/files/2025-04/AER - Final Decision - SA Power Networks - 2025-30 … - 15.1.1 - Standardised ANS Model - April 2025 - Public.xlsm`.
+  - Bob downloaded it. It was read with openpyxl in data-only mode: stored
+    values, no macros run.
+  - It is listed only through the determination page's lazily loaded
+    "Models" list, not through site search.
+- **"Table 2: Quoted service hourly labour rates for 2025–26, revised proposal
+  ($2025–26)".** The cells show 2 decimals. Final decision:
+
+| Category | Business hours | After hours |
+|---|---|---|
+| Administrative Officer | 103.03 | 177.03 |
+| Project Manager | 208.33 | 354.15 |
+| Field Worker | 189.70 | 309.32 |
+| Technical Specialist | 208.33 | 354.15 |
+| Engineer | 194.44 | 330.54 |
+| Senior Engineer | 222.21 | 377.75 |
+
+- **What a rate is.** It is a **total** rate ("Calc|Labour Rates", 9.2): base
+  labour + on-costs + overheads + vehicle and other costs. For the Field Worker
+  in business hours: 75.66 + 35.39 = 111.05 standard, + 53.05 overheads, + 25.60
+  vehicle and other = 189.70.
+  - So a utility invoice that charges crew labour and a vehicle separately is
+    compared against a rate that already includes the vehicle.
+- **Later years.** 2026–27 onward are the 2025–26 rates indexed each year by
+  CPI and the X factors in Table 1: −0.0079, −0.0088, −0.0096 and −0.0113 for
+  2026–27 to 2029–30. The model says these labour escalators act as X factors,
+  with positive escalation shown as negative.
+  - The rate actually in force in 2026–27 would come from SA Power Networks'
+    AER-approved 2026–27 pricing proposal. That is another document, and it is
+    the network's own content.
+- **GST is not stated in the model.** No figure may be labelled with or
+  without GST until a source says so.
+- **Fit.** These fit the contract as it stands: `kind: 'regulated_fee'`,
+  `basisCode: 'regulated_fee_max'` (the maximum a network may charge),
+  `unitCode: 'aud_per_hour'`, `jurisdiction: 'SA'`, a period of 2025-07-01 to
+  2026-06-30. ClaimBench already maps `regulated_fee_max` and `aud_per_hour`
+  records. A labour-rate benchmark for TP infrastructure claims is BI-Assessor's
+  mapping decision.
+- **ClaimBench has a place waiting for it** (read-only, main d7dead1).
+  `rates.js` holds `bm_rate_contractor_labour_au_v1`, "Contractor labour —
+  hourly CHARGE rate … (numbers not yet captured)", `proposed`, basis
+  `market_rate`. Its research queue names "utility labour/plant charge rates"
+  as having no citable public figure. An AER maximum is `regulated_fee_max`,
+  not `market_rate`, so it would be a new record line beside that placeholder,
+  not its numbers.
+
+### The rates in force now: SA Power Networks' own manual (2026-09-30)
+
+- **The 2025–26 table is for a year that has ended.** A claim for an incident
+  after 1 July 2026 is compared against the 2026–27 rates, which come from the
+  network's AER-approved 2026–27 pricing proposal (approved 22 April 2026).
+- **SA Power Networks publishes them itself**, in "Manual 18: Connections &
+  Ancillary Network Services":
+  - 2026–27: `sapowernetworks.com.au/public/download.jsp?id=337829`, served as
+    "SA Power Networks Connections and Ancillary Network Services 2026-27
+    20260724 v1.2.pdf", 2,163,126 bytes;
+  - 2025–26: `…?id=333196`, "… 2025-2026 20260701 v1.3.pdf".
+- **Its site answers automated requests** (HTTP 200 to a HEAD request).
+  `robots.txt` disallows only admin, script, log, search and resource-library
+  query paths. So, unlike the AER, a digest watch on the manual is possible,
+  as for the FWO pay guide.
+- **Not read yet.** Whether it holds the quoted-service labour rates, their GST
+  treatment and its licence are all to confirm from the file. It is the
+  network's own content, not CC BY.
