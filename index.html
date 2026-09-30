@@ -1163,6 +1163,7 @@ body.light .paste-zone textarea::placeholder{color:rgba(0,0,0,.55)}
 .secgroup-chip{font-family:var(--mono);font-size:11px;padding:.45rem .8rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;letter-spacing:.04em}
 .secgroup-chip:hover{color:var(--txt2);border-color:var(--txt3)}
 .secgroup-chip.active{color:var(--gold);background:var(--gold-dim);border-color:rgba(201,168,76,.25)}
+.secgroup-chip:disabled{opacity:.45;cursor:default;color:var(--txt3);border-color:var(--rim)}
 .reader-meta{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;text-transform:uppercase}
 
 /* ── STORY CARDS ── */
@@ -2566,6 +2567,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 
   <div class="section-nav" id="section-nav">
     <button class="secgroup-chip active" data-group="all" onclick="setSectionGroup('all',this)"><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> All</button>
+    <button class="secgroup-chip" data-group="insurance" onclick="setSectionGroup('insurance',this)"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg> Insurance &amp; BI</button>
     <button class="secgroup-chip" data-group="global" onclick="setSectionGroup('global',this)"><svg class="ico" aria-hidden="true"><use href="#i-globe"/></svg> Global</button>
     <button class="secgroup-chip" data-group="ph" onclick="setSectionGroup('ph',this)"><svg class="ico" aria-hidden="true"><use href="#i-ph"/></svg> Philippines</button>
     <button class="secgroup-chip" data-group="ai" onclick="setSectionGroup('ai',this)"><svg class="ico" aria-hidden="true"><use href="#i-chip"/></svg> AI &amp; Markets</button>
@@ -3166,16 +3168,32 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 
 <script>
 // ── CONSTANTS ──
+// `group` is the Today-tab section selector each section belongs to (the
+// .secgroup-chip buttons). Insurance and Interruptions have their own, so
+// Bob's core sections can be read on their own, not only under All.
 var SEC_META = {
-  global:  {pip:'#3498DB', label:'GLOBAL NEWS',      page:'global'},
-  ph:      {pip:'#2DB87A', label:'PHILIPPINES',       page:'ph'},
-  insurance:{pip:'#78D0A4', label:'INSURANCE SIGNALS', page:'today'},
-  interruptions:{pip:'#E85C5C', label:'INTERRUPTIONS WATCH', page:'today'},
-  ai:      {pip:'#9B6FE8', label:'AI & TECHNOLOGY',   page:'ai'},
-  markets: {pip:'var(--amber)', label:'MARKETS & ECONOMY', page:'ai'},
-  ev:      {pip:'#1EC8C8', label:'EV INDUSTRY',       page:'ai'},
-  watch:   {pip:'#E85C5C', label:'ONE THING TO WATCH',page:'today'}
+  global:  {pip:'#3498DB', label:'GLOBAL NEWS',      page:'global', group:'global'},
+  ph:      {pip:'#2DB87A', label:'PHILIPPINES',       page:'ph', group:'ph'},
+  insurance:{pip:'#78D0A4', label:'INSURANCE SIGNALS', page:'today', group:'insurance'},
+  interruptions:{pip:'#E85C5C', label:'INTERRUPTIONS WATCH', page:'today', group:'insurance'},
+  ai:      {pip:'#9B6FE8', label:'AI & TECHNOLOGY',   page:'ai', group:'ai'},
+  markets: {pip:'var(--amber)', label:'MARKETS & ECONOMY', page:'ai', group:'ai'},
+  ev:      {pip:'#1EC8C8', label:'EV INDUSTRY',       page:'ai', group:'ai'},
+  watch:   {pip:'#E85C5C', label:'ONE THING TO WATCH',page:'today', group:'today'}
 };
+var SEC_GROUP_LABELS = {insurance:'Insurance & BI', global:'Global', ph:'Philippines', ai:'AI & Markets'};
+// Stories per section selector for a briefing: { all, insurance, global, ph, ai }.
+function sectionGroupCounts(data) {
+  var counts = {all:0, insurance:0, global:0, ph:0, ai:0};
+  var sections = (data && data.sections) || {};
+  Object.keys(SEC_META).forEach(function(id) {
+    if (id === 'watch') return;
+    var n = (sections[id] || []).length;
+    counts[SEC_META[id].group] = (counts[SEC_META[id].group] || 0) + n;
+    counts.all += n;
+  });
+  return counts;
+}
 var HIGH_KEYS = ['insurance','claim','claims','forensic','business interruption','interruption','bsp','consulting','audit','cpa','underwriting','indemnity','assessment','reinsurance','catastrophe','loss adjust','loss adjusting','supply chain','outage','port closure','power interruption','typhoon','flood','aud','asx'];
 var MED_KEYS  = ['market','economy','inflation','trade','technology','gdp','rate','central bank','supply chain','disruption','peso','currency','weather','rain','storm'];
 var _currentData = null;
@@ -9375,7 +9393,8 @@ function setRelevanceFilter(filter, el) {
 }
 
 // Section-group selector (Today tab): show only one section group at a time —
-// All / Global / PH / AI — composing with the relevance filter below.
+// All / Insurance & BI / Global / PH / AI — composing with the relevance filter
+// below. Each section's selector is SEC_META[id].group.
 function setSectionGroup(group, el) {
   _secGroup = group || 'all';
   document.querySelectorAll('.secgroup-chip').forEach(function(btn){
@@ -9405,10 +9424,13 @@ function applyRelevanceFilter() {
   var todayCards = Array.prototype.slice.call(document.querySelectorAll('#today-out .card[data-rel]')).filter(groupMatches);
   var visibleToday = todayCards.filter(function(card){ return card.style.display !== 'none'; }).length;
   var totalToday = todayCards.length;
-  var grpLabel = _secGroup === 'all' ? '' : ' · ' + _secGroup.toUpperCase();
+  var grpName = SEC_GROUP_LABELS[_secGroup] || _secGroup;
+  var grpLabel = _secGroup === 'all' ? '' : ' · ' + grpName.toUpperCase();
   var label = (_relFilter === 'all' && _secGroup === 'all')
     ? 'All stories visible'
-    : (visibleToday + ' of ' + totalToday + ' stories visible / ' + _relFilter.toUpperCase() + grpLabel);
+    : (_secGroup !== 'all' && totalToday === 0)
+      ? 'No ' + grpName + ' stories in this briefing. Choose All to see the rest.'
+      : (visibleToday + ' of ' + totalToday + ' stories visible / ' + _relFilter.toUpperCase() + grpLabel);
   setText('reader-meta', label);
 }
 
@@ -9902,7 +9924,7 @@ function renderBriefing(options) {
       secHTML += '</div></div>';
     });
 
-    todayHTML += '<div data-group="'+esc(meta.page)+'" style="margin-bottom:1.75rem;animation:fadeIn .4s ease">'+secHTML+'</div>';
+    todayHTML += '<div data-group="'+esc(meta.group)+'" style="margin-bottom:1.75rem;animation:fadeIn .4s ease">'+secHTML+'</div>';
   });
 
   // Watch section. The follow-up on yesterday's item comes FIRST: it is the
@@ -11319,18 +11341,24 @@ function updateTabBadges(data) {
       tab.appendChild(badge);
     }
   });
-  // Update the Today-tab section selector pills (All / Global / PH / AI)
+  // Update the Today-tab section selector pills (All / Insurance & BI / Global /
+  // PH / AI), counting each selector's own sections. A selector with no stories
+  // in this briefing is disabled, not a blank page.
+  var groupCounts = sectionGroupCounts(data);
   document.querySelectorAll('.secgroup-chip[data-group]').forEach(function(chip) {
     var g = chip.getAttribute('data-group');
-    var n = g === 'all' ? pageCounts.today : pageCounts[g];
+    var n = groupCounts[g] || 0;
     var existing = chip.querySelector('.tab-badge');
     if (existing) existing.remove();
-    if (n !== undefined && n > 0) {
+    if (n > 0) {
       var badge = document.createElement('span');
       badge.className = 'tab-badge';
       badge.textContent = n;
       chip.appendChild(badge);
     }
+    var empty = g !== 'all' && n === 0;
+    chip.disabled = empty;
+    chip.title = empty ? 'No ' + (SEC_GROUP_LABELS[g] || g) + ' stories in this briefing' : '';
   });
   // Page tabs sit inside collapsed section menus, so surface the count up there too.
   if (window.syncNavGroupBadges) syncNavGroupBadges();

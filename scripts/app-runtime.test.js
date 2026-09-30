@@ -39,6 +39,26 @@ function environment(names, extra={}) {
   return {context,element};
 }
 
+// The Today-tab section selectors: every section belongs to one that has a chip,
+// so no section (Insurance, Interruptions) is reachable only under All.
+const secMetaSource=()=>{const s=html.indexOf('var SEC_META = {');return html.slice(s,html.indexOf('\n};',s)+3)+'\n'+html.slice(html.indexOf('var SEC_GROUP_LABELS'),html.indexOf('\n',html.indexOf('var SEC_GROUP_LABELS')));};
+test('every briefing section has a section selector, and each selector counts its own stories',()=>{
+  const {context}=environment(['sectionGroupCounts']);
+  vm.runInContext(secMetaSource(),context);
+  const chips=[...html.matchAll(/<button class="secgroup-chip[^"]*" data-group="([a-z]+)"/g)].map(m=>m[1]);
+  assert.deepEqual(chips,['all','insurance','global','ph','ai']);
+  const groups=vm.runInContext('Object.keys(SEC_META).filter(function(id){return id!=="watch";}).map(function(id){return SEC_META[id].group;})',context);
+  groups.forEach(g=>assert.ok(chips.includes(g),'a section in group "'+g+'" has no selector chip'));
+  chips.filter(g=>g!=='all').forEach(g=>assert.ok(groups.includes(g),'the "'+g+'" chip selects no section'));
+  // The 30 September briefing: 9 stories, 7 of them Insurance and Interruptions.
+  const counts=context.sectionGroupCounts({sections:{global:[1],ph:[],insurance:[1,2,3,4],interruptions:[1,2,3],ai:[],markets:[1],ev:[]}});
+  assert.deepEqual({...counts},{all:9,insurance:7,global:1,ph:0,ai:1});
+  assert.deepEqual({...context.sectionGroupCounts(null)},{all:0,insurance:0,global:0,ph:0,ai:0});
+  // Section blocks are tagged by selector, and an empty selector is disabled, not a blank page.
+  assert.ok(html.includes(`todayHTML += '<div data-group="'+esc(meta.group)+'"`));
+  assert.match(html,/chip\.disabled = empty;/);
+});
+
 const NUMBERS=['groundingShortName','groundingDay','groundingPeriod','groundingStatus','groundingNumbersHtml'];
 const escHtml=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 test('numbers escape source content and separate fact trust from watch states',()=>{
