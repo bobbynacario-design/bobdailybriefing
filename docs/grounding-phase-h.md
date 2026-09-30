@@ -1269,3 +1269,54 @@ Daybook's own user agent.
 - **Nothing is published by this lane.** No record uses the new unit, so the
   next run's snapshot is unchanged. The diesel series is registered only after
   both consumers have re-copied.
+
+### Built (H-8, lane 2: the source, not yet registered)
+
+- **`grounding/sources/aip-tgp.js`**. `registryEntries()` gives seven series,
+  `aip_tgp_diesel_<city>`:
+  - capture `page`, stream `hv_loi`, freshness 10 days, cadence 12 hours;
+  - bounds 100 to 450 c/L, max change 80.
+  - They are **not in `grounding/series.js` yet**. A test pins that, until
+    lane 4.
+- **One page read per run** serves all seven. It checks:
+  - the page title;
+  - the exact heading "Diesel (cents per litre, inclusive of GST)";
+  - a "Location" column followed by 3 to 10 weekday dates in order, each
+    weekday matching its date;
+  - the description's three sentences, which become the qualifications.
+- **Fails closed:**
+  - Anything above that does not hold blocks all seven.
+  - A missing city row, or a cell that is not a price (`^\d{2,3}\.\d$`),
+    blocks that city only.
+  - A page that cannot be fetched throws, so the publisher holds the day.
+- **The day** is the latest the table lists before the current Sydney week's
+  Monday. On the 06:15 run of Thursday 1 October that is Friday 25 September.
+  At 00:30 on a Sydney Monday (still Sunday in UTC) it is already the previous
+  Friday.
+- **The record:**
+  - `kind: 'rate'`, `basisCode: 'market_rate'`,
+    `unitCode: 'aud_cents_per_litre'`;
+  - observation key, date and `publishedAt` all the day;
+  - `effectiveFrom`/`To` null; `scope.period` the one day;
+  - quote "Diesel (cents per litre, inclusive of GST) […] Friday, 25th
+    September 2026 […] Sydney […] 271.5";
+  - the locator gives the table, column and row in words.
+- **`formatValue`** shows the unit as "271.5 c/L".
+- **Fixture:** the diesel table and description of the live page (2026-09-30),
+  trimmed, with a source and copyright header.
+- **Tests:** 7 new, plus the display case; 146 grounding tests in total. Ten
+  deliberate breakages were each caught:
+  - the UTC date instead of Sydney's;
+  - the earliest day of the week;
+  - the current week counted as completed;
+  - no weekday check;
+  - one read per series;
+  - days out of order accepted;
+  - the description not checked;
+  - a non-price cell accepted;
+  - the title not checked;
+  - a missing city blocking every city.
+- **Live read** of the real page, as the 06:15 run on 1 October would: seven
+  Friday 25 September figures, source-linked, fact-verified and plausible.
+  Sydney 271.5, Melbourne 269.5, Brisbane 271.9, Adelaide 267.4, Darwin
+  277.6, Perth 261.9, Hobart 270.4.

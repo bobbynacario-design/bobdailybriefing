@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test validate.test.js producer.test.js publisher/publish.test.js fetch-release.test.js sources/abs-cpi.test.js sources/fwo-pay-guide.test.js sources/nsw-tow-fees.test.js sources/vic-gazette-towing.test.js sources/sg-legislation.test.js sources/ato-sbb.test.js sources/ato-taxstats.test.js sources/rba-cash-rate.test.js sources/abs-wpi.test.js sources/sapn-manual18.test.js",
+    "test": "node --test validate.test.js producer.test.js publisher/publish.test.js fetch-release.test.js sources/abs-cpi.test.js sources/fwo-pay-guide.test.js sources/nsw-tow-fees.test.js sources/vic-gazette-towing.test.js sources/sg-legislation.test.js sources/ato-sbb.test.js sources/ato-taxstats.test.js sources/rba-cash-rate.test.js sources/abs-wpi.test.js sources/sapn-manual18.test.js sources/aip-tgp.test.js",
     "fixtures": "node build-contract-files.js",
     "fixtures:check": "node build-contract-files.js --check"
   }

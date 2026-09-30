@@ -66,8 +66,8 @@ function plain(n) { return V.canonicalNumber(n) || String(n); }
 function formatValue(rec) {
   if (!rec) return '';
   const unit = rec.unitCode;
-  const one = (n) => unit === 'pct' ? plain(n) + '%' : unit === 'pct_pa' ? plain(n) + '% p.a.' : unit === 'index_points' ? plain(n) : money(n);
-  const suffix = unit === 'aud_per_hour' ? '/hour' : unit === 'aud_per_day' ? '/day' : unit === 'aud_per_item' ? ' each' : unit === 'index_points' ? ' index points' : '';
+  const one = (n) => unit === 'pct' ? plain(n) + '%' : unit === 'pct_pa' ? plain(n) + '% p.a.' : unit === 'index_points' || unit === 'aud_cents_per_litre' ? plain(n) : money(n);
+  const suffix = unit === 'aud_per_hour' ? '/hour' : unit === 'aud_per_day' ? '/day' : unit === 'aud_per_item' ? ' each' : unit === 'index_points' ? ' index points' : unit === 'aud_cents_per_litre' ? ' c/L' : '';
   if (rec.range) return one(rec.range.min) + '–' + one(rec.range.max) + suffix;
   return rec.value == null ? '' : one(rec.value) + suffix;
 }

@@ -239,4 +239,6 @@ test('values display in their units', () => {
   assert.equal(formatValue({ unitCode: 'aud_per_day', range: { min: 18.5, max: 34 } }), '$18.50–$34.00/day');
   assert.equal(formatValue({ unitCode: 'index_points', value: 139.2 }), '139.2 index points');
   assert.equal(formatValue({ unitCode: 'aud_per_item', value: 272.8 }), '$272.80 each');
+  assert.equal(formatValue({ unitCode: 'aud_cents_per_litre', value: 271.5 }), '271.5 c/L');
+  assert.equal(formatValue({ unitCode: 'aud_cents_per_litre', value: 270 }), '270 c/L');
 });
