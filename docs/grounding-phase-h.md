@@ -1096,3 +1096,127 @@ Bob allowed the download (D-H7-4) and chose the Field Worker rates only
   decisions.
 - **Next, here:** 2025–26 (D-H7-7), once Bob downloads a source that states
   GST.
+
+## H-8: diesel terminal gate prices (automated, Daybook only)
+
+Status: **diagnostic, 2026-09-30; waiting on Bob's decisions (D-H8-1 to
+D-H8-4).** The roadmap row says: "automated — Daybook only for now —
+heavy-vehicle LOI context". Everything below was read on that date with
+Daybook's own user agent.
+
+### Why it matters now
+
+- **Diesel is the largest variable cost** a heavy-vehicle operator saves while
+  a truck is off the road. In Bob's LOI files, saved or variable costs are an
+  issue in about 57% of claims.
+- **2026 has been unusually volatile.** In AIP's Sydney series (the city page's
+  chart data), the price was 168 c/L on 30 September 2025 and 157 in January
+  2026. It reached 327 in March, fell to 176 by 1 July, and is 266.5 today.
+  The largest week-to-week move was 62.7 c/L (week to 13 March 2026). So a
+  downtime period's month changes the saved-fuel figure a great deal.
+
+### Sources
+
+| Source | What it gives | Access |
+|---|---|---|
+| AIP, `aip.com.au/pricing/terminal-gate-prices/` | Table "Diesel (cents per litre, inclusive of GST)": the last five weekdays for Sydney, Melbourne, Brisbane, Adelaide, Darwin, Perth and Hobart. 30 September: 266.5, 264.2, 267.1, 263.1, 273.0, 257.2, 265.3 | HTTP 200, about 4 s, LiteSpeed with no bot wall; robots disallows only `/wp-admin/` |
+| AIP city pages (`…/sydneydiesel/` etc.) | A year of daily figures in the chart's data, to 4 decimals (266.5375) | Same |
+| AIP historical data | `AIP_TGP_Data_25-Sep-2026.xlsx` (updated weekly) and `AIP_Annual_TGP_Data.xlsx` | Not read (a download) |
+| AIP weekly diesel report | A PDF each week; its wholesale prices are "based on market data published by AIP member companies" | Not machine-readable without a PDF library |
+| Viva Energy, Ampol, BP, Mobil | Each wholesaler's own TGP, which the Oil Code requires it to post daily | Readable, but each is one company's price by terminal: not the same figure, so not a cross-check |
+| `api.aip.com.au/public/tgp` | An AIP site frozen in 2016–17 | Ignore |
+
+- **What the figure is:** "Prices shown are the average Terminal Gate Price
+  for unleaded petrol and diesel across each of these companies for the day"
+  (BP Australia, Ampol, Viva Energy Australia and ExxonMobil), prepared by
+  ORIMA Research for AIP. "Prices are generally collated each weekday
+  morning."
+- **GST and excise:** the prices include GST and fuel excise. An operator
+  claims GST credits, and for heavy vehicles fuel tax credits too, so the cost
+  it saves is lower than the TGP. Daybook cannot derive an ex-GST or net figure
+  (consumers refuse derived figures). That stays a qualification and the
+  assessor's step.
+- **Licence:** "Copyright 2026. All Rights Reserved by Australian Institute of
+  Petroleum", with a general-use disclaimer and no open licence. As for SA
+  Power Networks: short quotes for citation, attributed.
+- **No cross-check.** The chart data (266.5375) is a finer form of the same
+  number. The contract's cross-check needs the same value in the quote, and
+  rounding it would be a derivation. So the series is fact-verified, not
+  cross-checked.
+
+### The contract has no unit for it
+
+- **Terminal gate prices are cents per litre**, and `unitCode` has no such
+  unit. `aud_per_item` would be dishonest. Converting to dollars (2.665) breaks
+  the value binding: the token must appear in the quote.
+- **A new unit changes `validate.js`** and the generated
+  `schema/facts.schema.json`. Today any record error, an unknown unit included,
+  fails the whole facts file (`ok: errors.length === 0 && recordErrors ===
+  0`). So until both consumers re-copy, a single diesel record would make every
+  later release unreadable to them. That would stop RiskM8's CPI and
+  ClaimBench's award and fee imports.
+- **Order, whatever the choice:** Daybook commits the contract change first.
+  RiskM8 re-copies and runs its gate (no deploy). BI-Assessor re-copies, runs
+  its gate, and Bob runs `deploy:safe`, because its Admin import runs in
+  Functions. Only then does Daybook publish a diesel record.
+
+### Proposed design
+
+- **Series:** `aip_tgp_diesel_<city>`, e.g. "Diesel terminal gate price, Sydney
+  (AIP average of four wholesalers, incl GST)". Capture `page`; `kind: 'rate'`,
+  `basisCode: 'market_rate'`, the new `unitCode: 'aud_cents_per_litre'`;
+  jurisdiction by state (Sydney NSW, Melbourne VIC, and so on).
+- **One observation per week (D-H8-2):** the last weekday of the latest
+  completed Sydney week that the table lists, usually Friday.
+  - The observation key and date are that day: `2026-09-25`. `publishedAt` is
+    the same day, since AIP collates each weekday morning.
+  - The table always shows the five most recent weekdays. So from Monday to
+    Thursday it still lists the previous Friday, and any day of a completed
+    week it shows is followed by the rest of that week. That makes the chosen
+    day that week's last trading day.
+  - A week missed on all four days is skipped. Freshness (10 days) then turns
+    the series stale.
+- **Evidence:** the quote is the table's heading, the day's column heading and
+  the city's cell ("Diesel (cents per litre, inclusive of GST) […] Friday,
+  25th September 2026 […] Sydney […] 271.5"). The locator gives the table,
+  row and column in words.
+- **Fails closed:** a changed heading or unit, headings that are not five
+  weekdays, a missing city, or a cell that is not a number. An unreachable page
+  holds the series for the day.
+- **Bounds:** min 100, max 450, maxChange 80 c/L between weeks. The past year
+  ran 156 to 327, with a 62.7 weekly move.
+- **Fixtures:** trimmed, verbatim table fragments, with a source and
+  copyright header.
+- **UI (its own lane):** Your numbers shows a dated key as "25 Sep 2026". Help
+  gets one sentence.
+
+### Decisions for Bob
+
+- **D-H8-1 Contract.**
+  - (a) Add `aud_cents_per_litre`, and make a record in vocabulary a
+    consumer's validator does not know (unit, kind, basis or jurisdiction) an
+    ineligible record rather than a failed release (recommended). This follows
+    the Phase E principle, "plausibility decides one record, never the
+    release". It costs one re-copy now and none for future units, such as
+    $/MWh or minutes if STPIS ever comes to Daybook. The producer still refuses
+    unknown vocabulary, so a typo cannot publish.
+  - (b) Add the unit only. Every future unit repeats the
+    re-copy-before-publishing order.
+  - (c) No contract change: keep diesel out of the release and show it only in
+    Daybook, through a separate feed. Consumers are untouched, but Your
+    numbers and the Morning 5 would need a second data path.
+- **D-H8-2 Observation.** One per completed week (recommended), or one per
+  weekday (about 250 a year per city; facts.json keeps history, and the
+  consumer's 10 MiB file cap would be reached in a few years).
+- **D-H8-3 Cities and the Morning 5.** The Morning 5 adds one item per changed
+  record (score 87), so seven cities means seven items every Monday.
+  - (a) All seven capitals, folded into one Morning 5 item per run: "Diesel
+    TGP, week to 25 Sep: Sydney 271.5 …" (recommended). The fold is in
+    `lib/command-center-core.js`, which the Morning 5 push Functions share, so
+    Bob redeploys `deliverMorningFive` and `testBriefingDelivery`.
+  - (b) Sydney, Melbourne and Brisbane only, unfolded: three items a week, no
+    Functions deploy.
+  - (c) Sydney only.
+- **D-H8-4 Bounds, licence and fixtures** as above (recommended): 100–450,
+  maxChange 80, freshness 10 days; short quotes with "© Australian Institute
+  of Petroleum" attribution; trimmed page fragments as test data.
