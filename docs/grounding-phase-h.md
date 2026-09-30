@@ -511,6 +511,26 @@ as the series' first update: a live end-to-end cycle.
   `expectedBy` moving to 2026-11-03. If the RBA's page has not moved by then,
   the series reads **overdue** instead.
 
+### First update, 2026-09-30
+
+- **Published:** the scheduled grounding run 36646763391 on 79933b4 published
+  **release 000011**, manifest
+  `a301d30f2ea19a5f03b8325c4bf94fea083efc50288b069dbbfdb1a55a0129c4`. GitHub
+  started the 20:15 UTC schedule at 23:44 UTC, about 3½ hours late (09:44 AEST).
+- **What changed:** compared with 000010, exactly one record was added and one
+  was altered:
+  - added `rba_cash_rate_target@2026-09-30#r1` = 4.6, `supersedes` the August
+    record. The statement is mr-26-27 (29 September 2026): "the Board decided
+    to increase the cash rate target by 25 basis points to 4.60 per cent." The
+    table row is 30 Sep 2026, 4.60.
+  - `rba_cash_rate_target@2026-08-12#r1`: lifecycle current → superseded,
+    nothing else.
+  - The only watch record that changed is the series' own: published,
+    `expectedBy` 2026-11-03.
+- **The mirror** is at sequence 11, with the same manifest.
+- This is the series' first real update cycle, and the first one for any
+  automated series after Phase G's rehearsal.
+
 ## H-6: wages (WPI) and construction prices (PPI), for labour and materials
 
 Status: **live, 2026-09-29**, in release 000010 (see "Live" at the end). Bob
