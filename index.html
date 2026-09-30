@@ -4005,6 +4005,7 @@ function groundingPeriod(fact) {
   if (from && to) return groundingDay(from) + ' to ' + groundingDay(to);
   if (from) return 'from ' + groundingDay(from);
   var key = String(fact.observationKey || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(key)) return groundingDay(key);
   var q = /^(\d{4})-Q([1-4])$/.exec(key);
   if (q) return groundingDay(q[1] + '-' + String(Number(q[2]) * 3).padStart(2, '0') + '-01').replace(/^1 (\w+) /, '$1 qtr ');
   var m = /^(\d{4})-(\d{2})$/.exec(key);
@@ -4025,7 +4026,9 @@ function groundingNumbersHtml(data) {
   };
   var watchOf = function(seriesId) { return watches.find(function(w) { return w.seriesId === seriesId; }) || null; };
   var groupOf = { index: 'Economy', rate: 'Economy', award_wage: 'Wages', regulated_fee: 'Fees', regulatory: 'Rules' };
-  var order = ['Economy', 'Wages', 'Fees', 'Rules', 'Other', 'Reminders'];
+  // Fuel prices are rates by kind, but seven capitals belong together.
+  var groupFor = function(fact) { return fact.unitCode === 'aud_cents_per_litre' ? 'Fuel' : groupOf[fact.kind] || 'Other'; };
+  var order = ['Economy', 'Fuel', 'Wages', 'Fees', 'Rules', 'Other', 'Reminders'];
   var groups = {};
   var add = function(name, html) { (groups[name] = groups[name] || []).push(html); };
   var attention = 0;
@@ -4062,7 +4065,7 @@ function groundingNumbersHtml(data) {
       earlier.map(function(e) {
         return '<div>Earlier: <b>' + esc(e.display) + '</b> · ' + esc(groundingPeriod(e)) + ' · published ' + esc(groundingDay(e.publishedAt)) + ' · ' + source(e.url, 'source') + '</div>';
       }).join('');
-    add(groupOf[fact.kind] || 'Other', row(status, summary, body));
+    add(groupFor(fact), row(status, summary, body));
   });
   // Series that only watch (reminders to review something by hand): never evidence.
   watches.filter(function(w) { return seriesIds.indexOf(w.seriesId) < 0; }).forEach(function(w) {

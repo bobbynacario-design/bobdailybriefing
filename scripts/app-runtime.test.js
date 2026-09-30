@@ -82,6 +82,19 @@ test('numbers read as one row per series, grouped, with earlier periods inside t
   assert.equal(context.groundingPeriod({observationKey:'2026-07'}),'Jul 2026');
   assert.equal(context.groundingPeriod({effectiveFrom:'2025-07-01',effectiveTo:'2026-06-30'}),'FY2025-26');
   assert.equal(context.groundingPeriod({effectiveFrom:'2026-09-30',effectiveTo:null}),'from 30 Sep 2026');
+  // A one-day price (diesel, H-8) reads as its date.
+  assert.equal(context.groundingPeriod({observationKey:'2026-09-25',effectiveFrom:null,effectiveTo:null}),'25 Sep 2026');
+});
+test('diesel terminal gate prices sit together under Fuel, one row per capital',()=>{
+  const {context}=environment(NUMBERS,{esc:escHtml});
+  const city=(key,name,display)=>({seriesId:'aip_tgp_diesel_'+key,kind:'rate',unitCode:'aud_cents_per_litre',title:'Diesel terminal gate price, '+name+' (AIP average of four wholesalers, incl GST)',
+    display,observationKey:'2026-09-25',publishedAt:'2026-09-25',effectiveFrom:null,effectiveTo:null,publisher:'Australian Institute of Petroleum',url:'https://aip.com.au/pricing/terminal-gate-prices/',
+    checks:{sourceLinked:true,factVerified:true,crossChecked:false}});
+  const out=context.groundingNumbersHtml({schema:'daybook-grounding-mirror/1',sequence:14,updatedAt:'2026-10-01T00:00:00Z',facts:[
+    {seriesId:'rba',kind:'rate',unitCode:'pct_pa',title:'RBA cash rate target',display:'4.6% p.a.',observationKey:'2026-09-30',publishedAt:'2026-09-29',effectiveFrom:'2026-09-30',effectiveTo:null,publisher:'Reserve Bank of Australia',url:'https://example.org',checks:{sourceLinked:true,factVerified:true,crossChecked:true}},
+    city('sydney','Sydney','271.5 c/L'),city('melbourne','Melbourne','269.5 c/L')],watch:[]});
+  assert.deepEqual([...out.matchAll(/class="gn-group">([^<]*)</g)].map(m=>m[1]),['Economy','Fuel']);
+  assert.match(out,/<span class="gn-name">Diesel terminal gate price, Sydney<\/span><span class="gn-sub">25 Sep 2026 · Australian Institute of Petroleum<\/span><\/span><span class="gn-value">271\.5 c\/L</);
 });
 test('aha actions preserve sources and invalidation when saved or scheduled',()=>{
   const data={date:'2026-09-26',aha:{title:'A useful connection',insight:'A provisional reading',chain:['First observation'],wrong_if:'The delay is temporary',links:['Source headline']}};
