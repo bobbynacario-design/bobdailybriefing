@@ -1347,3 +1347,35 @@ Daybook's own user agent.
      (and flip the "not registered yet" test), the Help sentence and a cache
      bump. Then a live dry run and a dispatch. The first release will carry the
      latest completed week's Friday.
+
+### Lane 4 prepared, held until the consumers' mains carry the re-copy (2026-09-30)
+
+- **What Bob reported and what was on disk at 05:15 UTC** did not match, so
+  nothing was pushed:
+  - RiskM8's re-copy was committed (e3676d0, validate.js `fe1e7e68…`) on
+    branch `claude/compassionate-wiles-88e4fb`, not merged or pushed. Main was
+    still `6cca646b…`.
+  - BI-Assessor's re-copy was correct but uncommitted, in the worktree of
+    branch `claude/daybook-vocab-83eb7b1`. main was still `b4054baa…`, so
+    nothing new could have been deployed.
+  - `deliverMorningFive` and `testBriefingDelivery` still carried source hash
+    `f15333f1…`, the 27 September deploy. The deploy was run from the main
+    checkout, which was 22 commits behind origin/main (e3f6d45, no FOLDS).
+    That checkout has since been fast-forwarded to 11c510a, keeping Bob's
+    local `sports-public.json` change, and the Functions core now carries
+    the fold.
+- **Registered locally:** `aipTgp.registryEntries()` is in
+  `grounding/series.js`, and the test now pins all seven, once each. 146
+  grounding tests pass.
+- **Help** (cache v135) names the diesel prices, the Fuel group, the weekly
+  Friday figure, GST and excise, and the one Morning 5 item.
+- **Live dry run** over release 000012: it would cut 000013 with August CPI
+  and the seven prices for 2026-09-25 (22 facts, 22 watch records).
+- **That release, through each consumer's copy of the validator:**
+  - RiskM8 main (`6cca646b…`): release **rejected**, "unitCode: must be one
+    of …", so not even August CPI would import.
+  - BI-Assessor main (`b4054baa…`): release **rejected**, likewise.
+  - Both re-copies (`fe1e7e68…`): valid; the plan imports CPI; the diesel
+    records are skipped as "series not allowlisted".
+  - So pushing before the consumers merge would have broken tonight's CPI for
+    both.

@@ -30,6 +30,7 @@ const taxStats = require('./sources/ato-taxstats');
 const rbaCash = require('./sources/rba-cash-rate');
 const absWpi = require('./sources/abs-wpi');
 const sapn = require('./sources/sapn-manual18');
+const aipTgp = require('./sources/aip-tgp');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -259,4 +260,10 @@ module.exports = [
   bounds: { min: -2, max: 10, maxChange: 2.5 },
   cadenceHours: 12,
   fetch: absWpi.fetchFor(s),
-})));
+})))
+  // Phase H, H-8: diesel terminal gate prices for the seven capitals, AIP's
+  // average of four wholesalers, c/L incl GST, one figure per completed week
+  // (D-H8-1 to D-H8-4), for Daybook only: heavy-vehicle LOI context. The unit
+  // is aud_cents_per_litre, which both consumers' copies of the contract know
+  // (checked on both consumers' mains before this was published).
+  .concat(aipTgp.registryEntries());

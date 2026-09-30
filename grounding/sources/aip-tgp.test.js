@@ -133,9 +133,10 @@ test('it fails closed on anything it does not recognise', async () => {
   await assert.rejects(ENTRIES[0].fetch({ fetch: async () => { throw new Error('ECONNRESET'); }, now: THU }), /ECONNRESET/);
 });
 
-test('the series are not registered yet: the consumers re-copy the contract first (H-8 lane 4)', () => {
+test('the seven series are registered, once each, with the contract that knows their unit (H-8 lane 4)', () => {
   const REGISTRY = require('../series');
-  assert.ok(!REGISTRY.some((s) => /^aip_tgp_/.test(s.seriesId)));
+  assert.deepEqual(REGISTRY.filter((s) => /^aip_tgp_/.test(s.seriesId)).map((s) => s.seriesId), aip.SERIES.map((s) => s.seriesId));
+  assert.equal(new Set(REGISTRY.map((s) => s.seriesId)).size, REGISTRY.length);
   assert.ok(V.ENUMS.unitCode.includes('aud_cents_per_litre'));
   assert.ok(ENTRIES.every((e) => e.streams.every((s) => V.ENUMS.stream.includes(s))));
 });
