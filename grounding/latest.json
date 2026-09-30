@@ -1,9 +1,9 @@
 {
   "schema": "daybook-grounding-latest/1",
-  "sequence": 11,
-  "generatedAt": "2026-09-29T23:44:25.714Z",
+  "sequence": 12,
+  "generatedAt": "2026-09-30T04:18:52.087Z",
   "manifest": {
-    "path": "releases/000011/manifest.json",
-    "sha256": "a301d30f2ea19a5f03b8325c4bf94fea083efc50288b069dbbfdb1a55a0129c4"
+    "path": "releases/000012/manifest.json",
+    "sha256": "c3f0ef546114c11ad294c3e0d562520ebd74f58f3f50dfb7dc469ddaed200782"
   }
 }

@@ -1,0 +1,1061 @@
+{
+  "schema": "daybook-grounding-facts/1",
+  "generatedAt": "2026-09-30T04:18:52.087Z",
+  "records": [
+    {
+      "recordId": "abs_cpi_all_groups_annual_change@2026-07#r1",
+      "seriesId": "abs_cpi_all_groups_annual_change",
+      "observationKey": "2026-07",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 3.5,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "3.5",
+          "evidenceId": "release"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "index",
+      "title": "CPI, all groups, annual change (Australia)",
+      "unitCode": "pct",
+      "basisCode": "annual_change",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "All groups CPI",
+        "period": {
+          "from": "2025-08-01",
+          "to": "2026-07-31"
+        }
+      },
+      "observationDate": "2026-07-31",
+      "publishedAt": "2026-08-26",
+      "evidence": [
+        {
+          "evidenceId": "release",
+          "role": "release",
+          "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/jul-2026",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "Consumer Price Index, Australia, July 2026",
+          "quote": "In the 12 months to July 2026: The Consumer Price Index (CPI) rose 3.5%, down from 3.8% in the 12 months to June 2026.",
+          "locator": {
+            "selector": "#key-statistics"
+          },
+          "asOf": "2026-08-26",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T08:03:57.047Z",
+          "contentSha256": "8da989b352cd9de2772a548fe1d8b67726eed5ae68fc042c48be86e727001f59",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Consumer Price Index, Australia, July 2026"
+        },
+        {
+          "evidenceId": "api",
+          "role": "cross_check",
+          "url": "https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0/3.10001.10.50.M?startPeriod=2026-07&endPeriod=2026-07",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "ABS Data API, ABS,CPI,2.0.0, 3.10001.10.50.M (All groups CPI, Australia, % change from previous year)",
+          "quote": "3.5",
+          "locator": {
+            "table": "ABS,CPI,2.0.0/3.10001.10.50.M",
+            "row": "2026-07"
+          },
+          "asOf": "2026-08-26",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T08:03:57.047Z",
+          "contentSha256": "15b942a4c2d4e13538e88b4b7d2064da26c2cdebd4d54d22da238c13f548522e",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Consumer Price Index, Australia, July 2026"
+        }
+      ],
+      "captureMethod": "page"
+    },
+    {
+      "recordId": "fwo_ma000020_cw2_ordinary@2026-07-01#r1",
+      "seriesId": "fwo_ma000020_cw2_ordinary",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 30.39,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "The rates of pay in the tables for weekly hire employees include industry allowance and tool allowance (where applicable).",
+          "evidenceId": "guide"
+        },
+        {
+          "text": "When do the rates in the pay guide apply from? The first full pay period starting on or after 01 July 2026.",
+          "evidenceId": "guide"
+        },
+        {
+          "text": "If our information is inconsistent with the award, then the award applies.",
+          "evidenceId": "guide"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "30.39",
+          "evidenceId": "guide"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "award_wage",
+      "title": "Building and Construction award, CW/ECW 2 (civil, weekly hire), ordinary hourly rate",
+      "unitCode": "aud_per_hour",
+      "basisCode": "award_min_wage",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "Level 2 (CW/ECW 2); Weekly hire - full-time and part-time - Civil construction",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-07-02",
+      "evidence": [
+        {
+          "evidenceId": "guide",
+          "role": "release",
+          "url": "https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf",
+          "publisher": "Fair Work Ombudsman",
+          "title": "Pay Guide - Building and Construction General On-site Award [MA000020], Effective: 01/07/2026, Published: 02/07/2026",
+          "quote": "Weekly hire - full-time and part-time - Civil construction. Table 1 of 3. Classification: Level 2 (CW/ECW 2). Weekly pay rate: $1,154.65. Hourly pay rate: $30.39.",
+          "locator": {
+            "page": "71",
+            "table": "Weekly hire - full-time and part-time - Civil construction, Table 1 of 3, column \"Hourly pay rate\"",
+            "row": "Level 2 (CW/ECW 2)"
+          },
+          "asOf": "2026-07-02",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T09:21:55Z",
+          "contentSha256": "da4e9013a6ed7efe71d77dd3aa63764b50bc99e60fce5250abca80819fccda2e",
+          "licence": "© Fair Work Ombudsman www.fairwork.gov.au. Licensed under CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/legalcode). Pay Guide - Building and Construction General On-site Award [MA000020], https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf"
+        }
+      ],
+      "captureMethod": "manual"
+    },
+    {
+      "recordId": "nsw_tow_accident_towing_light@2026-07-01#r1",
+      "seriesId": "nsw_tow_accident_towing_light",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 320,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "These fees are valid for the 2026 to 2027 period. The listed charges exclude any applicable GST.",
+          "evidenceId": "page"
+        },
+        {
+          "text": "For each tow undertaken in excess of 10km via the most direct route (defined Sydney metropolitan area): $7 per km",
+          "evidenceId": "page"
+        },
+        {
+          "text": "For each tow undertaken via the most direct route in excess of 20km (other areas): $6 per km",
+          "evidenceId": "page"
+        },
+        {
+          "text": "Surcharge outside business hours: 20%",
+          "evidenceId": "page"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "320",
+          "evidenceId": "page"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "regulated_fee",
+      "title": "NSW accident towing, light vehicles: maximum charge per tow (ex GST)",
+      "basisCode": "regulated_fee_max",
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-07-01",
+      "captureMethod": "page",
+      "unitCode": "aud_per_item",
+      "scope": {
+        "jurisdiction": "NSW",
+        "classification": "Light vehicles (gross vehicle mass up to 4.5 tonnes): for any accident towing work",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "page",
+          "role": "release",
+          "url": "https://www.nsw.gov.au/legal-and-justice/consumer-rights-and-protection/services/your-rights-when-your-vehicle-towed/tow-truck-fees-for-light-vehicles",
+          "publisher": "NSW Fair Trading",
+          "title": "Tow truck fees for light vehicles",
+          "quote": "These fees are valid for the 2026 to 2027 period. The listed charges exclude any applicable GST. […] For any accident towing work: $320",
+          "locator": {
+            "paragraph": "Towing fees",
+            "table": "Summary of towing fees for light vehicles listed by item type and maximum charge.",
+            "row": "For any accident towing work"
+          },
+          "asOf": "2026-07-01",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T13:59:26.704Z",
+          "contentSha256": "3e1ca8ec53990122b042eaa6584ed36a9ecaf6d18eb7f4d393ee3c8bbb9302e7",
+          "licence": "CC BY 4.0. © State of New South Wales. For current information go to www.nsw.gov.au"
+        }
+      ]
+    },
+    {
+      "recordId": "nsw_tow_storage_light_daily@2026-07-01#r1",
+      "seriesId": "nsw_tow_storage_light_daily",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": null,
+      "range": {
+        "min": 18,
+        "max": 34
+      },
+      "qualifications": [
+        {
+          "text": "These fees are valid for the 2026 to 2027 period. The listed charges exclude any applicable GST.",
+          "evidenceId": "page"
+        },
+        {
+          "text": "Light motor vehicle (not a motorcycle) outside Sydney metropolitan area: $18 (the range minimum)",
+          "evidenceId": "page"
+        },
+        {
+          "text": "Light motor vehicle (not a motorcycle) in Sydney metropolitan area: $34 (the range maximum)",
+          "evidenceId": "page"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "range.min",
+          "token": "18",
+          "evidenceId": "page"
+        },
+        {
+          "field": "range.max",
+          "token": "34",
+          "evidenceId": "page"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "regulated_fee",
+      "title": "NSW storage of towed light vehicles: maximum charge per 24 hours (ex GST)",
+      "basisCode": "regulated_fee_max",
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-07-01",
+      "captureMethod": "page",
+      "unitCode": "aud_per_day",
+      "scope": {
+        "jurisdiction": "NSW",
+        "classification": "Light motor vehicle (not a motorcycle), storage within an authorised holding yard, for each 24 hours or part of 24 hours",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "page",
+          "role": "release",
+          "url": "https://www.nsw.gov.au/legal-and-justice/consumer-rights-and-protection/services/your-rights-when-your-vehicle-towed/tow-truck-fees-for-light-vehicles",
+          "publisher": "NSW Fair Trading",
+          "title": "Tow truck fees for light vehicles",
+          "quote": "These fees are valid for the 2026 to 2027 period. The listed charges exclude any applicable GST. […] Maximum charge for each 24 hours or part of 24 hours: Light motor vehicle (not a motorcycle) in Sydney metropolitan area $34; Light motor vehicle (not a motorcycle) outside Sydney metropolitan area $18.",
+          "locator": {
+            "paragraph": "Fees for storage within an authorised holding yard",
+            "table": "Summary of storage fees listed by item type and maximum charge.",
+            "row": "Light motor vehicle (not a motorcycle)"
+          },
+          "asOf": "2026-07-01",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T13:59:26.704Z",
+          "contentSha256": "3e1ca8ec53990122b042eaa6584ed36a9ecaf6d18eb7f4d393ee3c8bbb9302e7",
+          "licence": "CC BY 4.0. © State of New South Wales. For current information go to www.nsw.gov.au"
+        }
+      ]
+    },
+    {
+      "recordId": "vic_atsa_accident_tow_base_fee@2026-07-01#r1",
+      "seriesId": "vic_atsa_accident_tow_base_fee",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 289.6,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "This notice comes into operation on 1 July 2026.",
+          "evidenceId": "notice"
+        },
+        {
+          "text": "All varied charge amounts in this notice are inclusive of GST.",
+          "evidenceId": "notice"
+        },
+        {
+          "text": "7. Fee per km travelled by tow truck beyond the first 8 kms […] resulting in a varied charge amount of $4.60.",
+          "evidenceId": "notice"
+        },
+        {
+          "text": "8. After hours surcharge […] resulting in a varied charge amount of $98.80.",
+          "evidenceId": "notice"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "289.60",
+          "evidenceId": "notice"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "title": "VIC accident towing base fee (first 8 km, under 4 t GVM, controlled areas), incl GST",
+      "kind": "regulated_fee",
+      "basisCode": "regulated_fee_max",
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-05-22",
+      "captureMethod": "manual",
+      "unitCode": "aud_per_item",
+      "scope": {
+        "jurisdiction": "VIC",
+        "classification": "Base fee for towing, inclusive of the first 8 kms travelled; motor vehicles under 4.0 tonnes GVM; controlled areas",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "notice",
+          "role": "release",
+          "url": "https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf",
+          "publisher": "Victoria Government Gazette (Secretary, Department of Transport and Planning)",
+          "title": "Accident Towing Services Act 2007: Variation of charges for 2026–27 for accident towing and storage services under section 212H (Special Gazette No. S 257, 22 May 2026)",
+          "quote": "6. Base fee for towing inclusive of the first 8 kms travelled […] for the base fee for towing accident damaged motor vehicles with a gross vehicle mass of less than 4.0 tonnes from a road accident scene, within an area declared to be a controlled area […] resulting in a varied charge amount of $289.60.",
+          "locator": {
+            "page": "2",
+            "paragraph": "6. Base fee for towing inclusive of the first 8 kms travelled"
+          },
+          "asOf": "2026-05-22",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T13:51:03Z",
+          "contentSha256": "a9468e364310e749269764d376286da48455ea99bbb665ad61ff75dce667bdc2",
+          "licence": "© State of Victoria. The Victoria Government Gazette is subject to copyright (Copyright Act 1968); quoted in part for citation only. Full notice: https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf"
+        }
+      ]
+    },
+    {
+      "recordId": "vic_atsa_storage_motor_car_daily@2026-07-01#r1",
+      "seriesId": "vic_atsa_storage_motor_car_daily",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": null,
+      "range": {
+        "min": 22.2,
+        "max": 32.8
+      },
+      "qualifications": [
+        {
+          "text": "This notice comes into operation on 1 July 2026.",
+          "evidenceId": "notice"
+        },
+        {
+          "text": "All varied charge amounts in this notice are inclusive of GST.",
+          "evidenceId": "notice"
+        },
+        {
+          "text": "(c) 'motor car' means a motor vehicle less than 4 tonnes GVM (gross vehicle mass) other than a motor cycle.",
+          "evidenceId": "notice"
+        },
+        {
+          "text": "9.2 Locked storage charge for a motor cycle – under cover […] resulting in a varied charge amount of $10.80 per day.",
+          "evidenceId": "notice"
+        },
+        {
+          "text": "9.4 Locked storage charge for a motor cycle – in a locked yard […] resulting in a varied charge amount of $6.80 per day.",
+          "evidenceId": "notice"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "range.min",
+          "token": "22.20",
+          "evidenceId": "notice"
+        },
+        {
+          "field": "range.max",
+          "token": "32.80",
+          "evidenceId": "notice"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "title": "VIC storage of accident-damaged motor cars per day (locked yard to under cover), incl GST",
+      "kind": "regulated_fee",
+      "basisCode": "regulated_fee_max",
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-05-22",
+      "captureMethod": "manual",
+      "unitCode": "aud_per_day",
+      "scope": {
+        "jurisdiction": "VIC",
+        "classification": "Locked storage of an accident damaged motor car following towing from a road accident scene within a controlled area, per day",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "notice",
+          "role": "release",
+          "url": "https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf",
+          "publisher": "Victoria Government Gazette (Secretary, Department of Transport and Planning)",
+          "title": "Accident Towing Services Act 2007: Variation of charges for 2026–27 for accident towing and storage services under section 212H (Special Gazette No. S 257, 22 May 2026)",
+          "quote": "9.1 Locked storage charge for a motor car – under cover […] resulting in a varied charge amount of $32.80 per day. […] 9.3 Locked storage charge for a motor car – in a locked yard […] resulting in a varied charge amount of $22.20 per day.",
+          "locator": {
+            "page": "3",
+            "paragraph": "9. Locked storage charge"
+          },
+          "asOf": "2026-05-22",
+          "tier": "primary",
+          "retrievedAt": "2026-09-27T13:51:03Z",
+          "contentSha256": "a9468e364310e749269764d376286da48455ea99bbb665ad61ff75dce667bdc2",
+          "licence": "© State of Victoria. The Victoria Government Gazette is subject to copyright (Copyright Act 1968); quoted in part for citation only. Full notice: https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf"
+        }
+      ]
+    },
+    {
+      "recordId": "fwo_ma000020_cw2_ordinary@2025-07-01#r1",
+      "seriesId": "fwo_ma000020_cw2_ordinary",
+      "observationKey": "2025-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 29.01,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "The rates of pay in the tables for weekly hire employees include industry allowance and tool allowance (where applicable).",
+          "evidenceId": "guide"
+        },
+        {
+          "text": "When do the rates in the pay guide apply from? The first full pay period starting on or after 01 July 2025.",
+          "evidenceId": "guide"
+        },
+        {
+          "text": "If our information is inconsistent with the award, then the award applies.",
+          "evidenceId": "guide"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "29.01",
+          "evidenceId": "guide"
+        }
+      ],
+      "effectiveFrom": "2025-07-01",
+      "effectiveTo": "2026-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "award_wage",
+      "title": "Building and Construction award, CW/ECW 2 (civil, weekly hire), ordinary hourly rate",
+      "unitCode": "aud_per_hour",
+      "basisCode": "award_min_wage",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "Level 2 (CW/ECW 2); Weekly hire - full-time and part-time - Civil construction",
+        "period": {
+          "from": "2025-07-01",
+          "to": "2026-06-30"
+        }
+      },
+      "observationDate": "2025-07-01",
+      "publishedAt": "2025-07-17",
+      "evidence": [
+        {
+          "evidenceId": "guide",
+          "role": "release",
+          "url": "https://web.archive.org/web/20251123050747id_/https://calculate.fairwork.gov.au/Download/AwardSummary?awardCode=ma000020&effectiveDate=&fileType=pdf&krn=",
+          "publisher": "Fair Work Ombudsman",
+          "title": "Pay Guide - Building and Construction General On-site Award [MA000020], Effective: 01/07/2025, Published: 17/07/2025 (Internet Archive copy of the FWO download, captured 23/11/2025)",
+          "quote": "Weekly hire - full-time and part-time - Civil construction. Table 1 of 3. Classification: Level 2 (CW/ECW 2). Weekly pay rate: $1,102.30. Hourly pay rate: $29.01.",
+          "locator": {
+            "page": "83",
+            "table": "Weekly hire - full-time and part-time - Civil construction, Table 1 of 3, column \"Hourly pay rate\"",
+            "row": "Level 2 (CW/ECW 2)"
+          },
+          "asOf": "2025-07-17",
+          "tier": "primary",
+          "retrievedAt": "2026-09-28T22:47:15Z",
+          "contentSha256": "f76e74d682cd8bc70e262e3d7643ae361f6dc660d074c2bcb8f1de5fbfb4a04b",
+          "licence": "© Fair Work Ombudsman www.fairwork.gov.au. Licensed under CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/legalcode). Pay Guide - Building and Construction General On-site Award [MA000020], https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf"
+        }
+      ],
+      "captureMethod": "manual"
+    },
+    {
+      "recordId": "rba_cash_rate_target@2026-08-12#r1",
+      "seriesId": "rba_cash_rate_target",
+      "observationKey": "2026-08-12",
+      "revision": 1,
+      "lifecycle": "superseded",
+      "supersedes": null,
+      "value": 4.35,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "4.35",
+          "evidenceId": "statement"
+        }
+      ],
+      "effectiveFrom": "2026-08-12",
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "rate",
+      "title": "RBA cash rate target",
+      "unitCode": "pct_pa",
+      "basisCode": "policy_rate_target",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "Cash rate target",
+        "period": {
+          "from": "2026-08-12",
+          "to": null
+        }
+      },
+      "observationDate": "2026-08-12",
+      "publishedAt": "2026-08-11",
+      "evidence": [
+        {
+          "evidenceId": "statement",
+          "role": "release",
+          "url": "https://www.rba.gov.au/media-releases/2026/mr-26-19.html",
+          "publisher": "Reserve Bank of Australia",
+          "title": "Statement by the Monetary Policy Board: Monetary Policy Decision, 11 August 2026 (Media Release 2026-19)",
+          "quote": "At its meeting today, the Board decided to leave the cash rate target unchanged at 4.35 per cent.",
+          "locator": {
+            "paragraph": "First paragraph"
+          },
+          "asOf": "2026-08-11",
+          "tier": "primary",
+          "retrievedAt": "2026-09-28T23:54:22.936Z",
+          "contentSha256": "b1fdb00efbc67b029dd2c459e0273872e40a0ed212b1c5012d33613fcc3208c5",
+          "licence": "Source: Reserve Bank of Australia 2026. Statements CC BY 4.0; the cash rate target is RBA Financial Data, used under section 5 of https://www.rba.gov.au/copyright/ with attribution. No RBA endorsement is implied."
+        },
+        {
+          "evidenceId": "table",
+          "role": "cross_check",
+          "url": "https://www.rba.gov.au/statistics/cash-rate/",
+          "publisher": "Reserve Bank of Australia",
+          "title": "Cash Rate Target: Interest Rate Decisions",
+          "quote": "4.35",
+          "locator": {
+            "table": "Interest Rate Decisions, column \"Cash rate target %\"",
+            "row": "12 Aug 2026"
+          },
+          "asOf": "2026-08-11",
+          "tier": "primary",
+          "retrievedAt": "2026-09-28T23:54:22.936Z",
+          "contentSha256": "9643afac57d7e73d226624ce8d023bc9013618e6d4b50a0e5ab489ef071745a2",
+          "licence": "Source: Reserve Bank of Australia 2026. Statements CC BY 4.0; the cash rate target is RBA Financial Data, used under section 5 of https://www.rba.gov.au/copyright/ with attribution. No RBA endorsement is implied."
+        }
+      ],
+      "captureMethod": "page"
+    },
+    {
+      "recordId": "abs_wpi_all_industries_annual_change@2026-Q2#r1",
+      "seriesId": "abs_wpi_all_industries_annual_change",
+      "observationKey": "2026-Q2",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 3.2,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "3.2",
+          "evidenceId": "release"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "index",
+      "title": "Wage Price Index, all industries, annual change (Australia)",
+      "unitCode": "pct",
+      "basisCode": "annual_change",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "Total hourly rates of pay excluding bonuses; private and public sectors; all industries; seasonally adjusted",
+        "period": {
+          "from": "2025-07-01",
+          "to": "2026-06-30"
+        }
+      },
+      "observationDate": "2026-06-30",
+      "publishedAt": "2026-08-19",
+      "evidence": [
+        {
+          "evidenceId": "release",
+          "role": "release",
+          "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/jun-2026",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "Wage Price Index, Australia, June 2026",
+          "quote": "All sector WPI, quarterly and annual movement (%), seasonally adjusted (a). Jun-26: Quarterly (%) 0.8; Annual (%) 3.2.",
+          "locator": {
+            "table": "All sector WPI, quarterly and annual movement (%), seasonally adjusted (a)",
+            "row": "Jun-26"
+          },
+          "asOf": "2026-08-19",
+          "tier": "primary",
+          "retrievedAt": "2026-09-29T08:18:00.468Z",
+          "contentSha256": "3ce6dc1aa78f8ceb2121838b88e15376edf3af0c945c8907a8b42cda32ca7236",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Wage Price Index, Australia, June 2026"
+        },
+        {
+          "evidenceId": "api",
+          "role": "cross_check",
+          "url": "https://data.api.abs.gov.au/rest/data/ABS,WPI,1.2.0/3.THRPEB.7.TOT.20.AUS.Q?startPeriod=2026-Q2&endPeriod=2026-Q2",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "ABS Data API, ABS,WPI,1.2.0, 3.THRPEB.7.TOT.20.AUS.Q (% change from the same quarter a year earlier)",
+          "quote": "3.2",
+          "locator": {
+            "table": "ABS,WPI,1.2.0/3.THRPEB.7.TOT.20.AUS.Q",
+            "row": "2026-Q2"
+          },
+          "asOf": "2026-08-19",
+          "tier": "primary",
+          "retrievedAt": "2026-09-29T08:18:00.468Z",
+          "contentSha256": "8e4edab921886df5bebfca769b88735306cbcb3f8712472df5e630565693bde7",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Wage Price Index, Australia, June 2026"
+        }
+      ],
+      "captureMethod": "page"
+    },
+    {
+      "recordId": "abs_wpi_construction_annual_change@2026-Q2#r1",
+      "seriesId": "abs_wpi_construction_annual_change",
+      "observationKey": "2026-Q2",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 3.3,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "Index series is original, total hourly rates of pay excluding bonuses.",
+          "evidenceId": "release"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "3.3",
+          "evidenceId": "release"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "index",
+      "title": "Wage Price Index, Construction, annual change (Australia)",
+      "unitCode": "pct",
+      "basisCode": "annual_change",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "Total hourly rates of pay excluding bonuses; private and public sectors; Construction; original",
+        "period": {
+          "from": "2025-07-01",
+          "to": "2026-06-30"
+        }
+      },
+      "observationDate": "2026-06-30",
+      "publishedAt": "2026-08-19",
+      "evidence": [
+        {
+          "evidenceId": "release",
+          "role": "release",
+          "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/jun-2026",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "Wage Price Index, Australia, June 2026",
+          "quote": "Annual and quarterly movement - industries (a). Construction: Annual change (%) 3.3; Quarterly change (%) 0.8.",
+          "locator": {
+            "table": "Annual and quarterly movement - industries (a)",
+            "row": "Construction"
+          },
+          "asOf": "2026-08-19",
+          "tier": "primary",
+          "retrievedAt": "2026-09-29T08:18:00.468Z",
+          "contentSha256": "3ce6dc1aa78f8ceb2121838b88e15376edf3af0c945c8907a8b42cda32ca7236",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Wage Price Index, Australia, June 2026"
+        },
+        {
+          "evidenceId": "api",
+          "role": "cross_check",
+          "url": "https://data.api.abs.gov.au/rest/data/ABS,WPI,1.2.0/3.THRPEB.7.E.10.AUS.Q?startPeriod=2026-Q2&endPeriod=2026-Q2",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "ABS Data API, ABS,WPI,1.2.0, 3.THRPEB.7.E.10.AUS.Q (% change from the same quarter a year earlier)",
+          "quote": "3.3",
+          "locator": {
+            "table": "ABS,WPI,1.2.0/3.THRPEB.7.E.10.AUS.Q",
+            "row": "2026-Q2"
+          },
+          "asOf": "2026-08-19",
+          "tier": "primary",
+          "retrievedAt": "2026-09-29T08:18:00.468Z",
+          "contentSha256": "8e4edab921886df5bebfca769b88735306cbcb3f8712472df5e630565693bde7",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Wage Price Index, Australia, June 2026"
+        }
+      ],
+      "captureMethod": "page"
+    },
+    {
+      "recordId": "abs_wpi_electricity_gas_water_waste_annual_change@2026-Q2#r1",
+      "seriesId": "abs_wpi_electricity_gas_water_waste_annual_change",
+      "observationKey": "2026-Q2",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 3.6,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "Index series is original, total hourly rates of pay excluding bonuses.",
+          "evidenceId": "release"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "3.6",
+          "evidenceId": "release"
+        }
+      ],
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "index",
+      "title": "Wage Price Index, Electricity, gas, water and waste services, annual change (Australia)",
+      "unitCode": "pct",
+      "basisCode": "annual_change",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "Total hourly rates of pay excluding bonuses; private and public sectors; Electricity, gas, water and waste services; original",
+        "period": {
+          "from": "2025-07-01",
+          "to": "2026-06-30"
+        }
+      },
+      "observationDate": "2026-06-30",
+      "publishedAt": "2026-08-19",
+      "evidence": [
+        {
+          "evidenceId": "release",
+          "role": "release",
+          "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/jun-2026",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "Wage Price Index, Australia, June 2026",
+          "quote": "Annual and quarterly movement - industries (a). Electricity, gas, water and waste services: Annual change (%) 3.6; Quarterly change (%) 0.6.",
+          "locator": {
+            "table": "Annual and quarterly movement - industries (a)",
+            "row": "Electricity, gas, water and waste services"
+          },
+          "asOf": "2026-08-19",
+          "tier": "primary",
+          "retrievedAt": "2026-09-29T08:18:00.468Z",
+          "contentSha256": "3ce6dc1aa78f8ceb2121838b88e15376edf3af0c945c8907a8b42cda32ca7236",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Wage Price Index, Australia, June 2026"
+        },
+        {
+          "evidenceId": "api",
+          "role": "cross_check",
+          "url": "https://data.api.abs.gov.au/rest/data/ABS,WPI,1.2.0/3.THRPEB.7.D.10.AUS.Q?startPeriod=2026-Q2&endPeriod=2026-Q2",
+          "publisher": "Australian Bureau of Statistics",
+          "title": "ABS Data API, ABS,WPI,1.2.0, 3.THRPEB.7.D.10.AUS.Q (% change from the same quarter a year earlier)",
+          "quote": "3.6",
+          "locator": {
+            "table": "ABS,WPI,1.2.0/3.THRPEB.7.D.10.AUS.Q",
+            "row": "2026-Q2"
+          },
+          "asOf": "2026-08-19",
+          "tier": "primary",
+          "retrievedAt": "2026-09-29T08:18:00.468Z",
+          "contentSha256": "8e4edab921886df5bebfca769b88735306cbcb3f8712472df5e630565693bde7",
+          "licence": "CC BY 4.0. Source: Australian Bureau of Statistics, Wage Price Index, Australia, June 2026"
+        }
+      ],
+      "captureMethod": "page"
+    },
+    {
+      "recordId": "rba_cash_rate_target@2026-09-30#r1",
+      "seriesId": "rba_cash_rate_target",
+      "observationKey": "2026-09-30",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": "rba_cash_rate_target@2026-08-12#r1",
+      "value": 4.6,
+      "range": null,
+      "qualifications": [],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "4.60",
+          "evidenceId": "statement"
+        }
+      ],
+      "effectiveFrom": "2026-09-30",
+      "effectiveTo": null,
+      "derivation": null,
+      "plausibilityOverride": null,
+      "kind": "rate",
+      "title": "RBA cash rate target",
+      "unitCode": "pct_pa",
+      "basisCode": "policy_rate_target",
+      "scope": {
+        "jurisdiction": "AU",
+        "classification": "Cash rate target",
+        "period": {
+          "from": "2026-09-30",
+          "to": null
+        }
+      },
+      "observationDate": "2026-09-30",
+      "publishedAt": "2026-09-29",
+      "evidence": [
+        {
+          "evidenceId": "statement",
+          "role": "release",
+          "url": "https://www.rba.gov.au/media-releases/2026/mr-26-27.html",
+          "publisher": "Reserve Bank of Australia",
+          "title": "Statement by the Monetary Policy Board: Monetary Policy Decision, 29 September 2026 (Media Release 2026-27)",
+          "quote": "At its meeting today, the Board decided to increase the cash rate target by 25 basis points to 4.60 per cent.",
+          "locator": {
+            "paragraph": "First paragraph"
+          },
+          "asOf": "2026-09-29",
+          "tier": "primary",
+          "retrievedAt": "2026-09-29T23:44:25.714Z",
+          "contentSha256": "d8a127214816397b86ae6756095b4fa0580f4f793bb93ad78b38f30f750cc875",
+          "licence": "Source: Reserve Bank of Australia 2026. Statements CC BY 4.0; the cash rate target is RBA Financial Data, used under section 5 of https://www.rba.gov.au/copyright/ with attribution. No RBA endorsement is implied."
+        },
+        {
+          "evidenceId": "table",
+          "role": "cross_check",
+          "url": "https://www.rba.gov.au/statistics/cash-rate/",
+          "publisher": "Reserve Bank of Australia",
+          "title": "Cash Rate Target: Interest Rate Decisions",
+          "quote": "4.60",
+          "locator": {
+            "table": "Interest Rate Decisions, column \"Cash rate target %\"",
+            "row": "30 Sep 2026"
+          },
+          "asOf": "2026-09-29",
+          "tier": "primary",
+          "retrievedAt": "2026-09-29T23:44:25.714Z",
+          "contentSha256": "940d647dbb9f47a5c799079c1d6be7c497fa7ad08807e9580b97313cb9d9db6b",
+          "licence": "Source: Reserve Bank of Australia 2026. Statements CC BY 4.0; the cash rate target is RBA Financial Data, used under section 5 of https://www.rba.gov.au/copyright/ with attribution. No RBA endorsement is implied."
+        }
+      ],
+      "captureMethod": "page"
+    },
+    {
+      "recordId": "sapn_quoted_labour_field_worker_ordinary@2026-07-01#r1",
+      "seriesId": "sapn_quoted_labour_field_worker_ordinary",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 198.12,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "Table 3, FW Field Worker, Ordinary Time, 2026/27 (GST Inclusive): $217.93.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "Field Worker ordinary business hours are typically between 7:30am and 3:30pm Monday to Friday.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "These labour rates are our charge-out rates.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "Labour consists of all labour costs directly incurred in the provision of the service which may include labour on-costs, fleet on-costs, and overheads.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "The AER approved labour rates will apply for both ancillary network services, quoted services and any connections quoted services.",
+          "evidenceId": "manual"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "198.12",
+          "evidenceId": "manual"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "title": "SA Power Networks Field Worker labour rate, ordinary time (quoted services, excl GST)",
+      "kind": "regulated_fee",
+      "basisCode": "regulated_fee_max",
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-07-24",
+      "captureMethod": "manual",
+      "unitCode": "aud_per_hour",
+      "scope": {
+        "jurisdiction": "SA",
+        "classification": "Field Worker (labour code FW), ordinary time, quoted services, excl GST",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "manual",
+          "role": "release",
+          "url": "https://www.sapowernetworks.com.au/public/download.jsp?id=337829",
+          "publisher": "SA Power Networks",
+          "title": "Manual 18: Connections & Ancillary Network Services, issued June 2026 (SA Power Networks Connections and Ancillary Network Services 2026-27 20260724 v1.2.pdf)",
+          "quote": "D.2 Quoted service labour rates […] Table 3 – Hourly labour rates applicable for quoted services […] Ordinary Time […] Overtime […] 2026/27 (GST Exclusive) 2026/27 (GST Inclusive) 2026/27 (GST Exclusive) 2026/27 (GST Inclusive) […] FW Field Worker $198.12 $217.93 $323.05 $355.36",
+          "locator": {
+            "page": "30 of 38 (PDF page 31)",
+            "table": "Table 3 – Hourly labour rates applicable for quoted services, column \"Ordinary Time, 2026/27 (GST Exclusive)\"",
+            "row": "FW Field Worker"
+          },
+          "asOf": "2026-07-24",
+          "tier": "primary",
+          "retrievedAt": "2026-09-30T04:01:17Z",
+          "contentSha256": "bd069d6111263091a02cd599d585265cacc14adba40d1d47974b08c9cce4c08a",
+          "licence": "© SA Power Networks 2026. All rights reserved (Copyright Act 1968); quoted in part for citation only. Full manual: https://www.sapowernetworks.com.au/public/download.jsp?id=337829"
+        }
+      ]
+    },
+    {
+      "recordId": "sapn_quoted_labour_field_worker_overtime@2026-07-01#r1",
+      "seriesId": "sapn_quoted_labour_field_worker_overtime",
+      "observationKey": "2026-07-01",
+      "revision": 1,
+      "lifecycle": "current",
+      "supersedes": null,
+      "value": 323.05,
+      "range": null,
+      "qualifications": [
+        {
+          "text": "Table 3, FW Field Worker, Overtime, 2026/27 (GST Inclusive): $355.36.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "Overtime rates will be applicable to all customer initiated after hours work.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "Field Worker ordinary business hours are typically between 7:30am and 3:30pm Monday to Friday.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "These labour rates are our charge-out rates.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "Labour consists of all labour costs directly incurred in the provision of the service which may include labour on-costs, fleet on-costs, and overheads.",
+          "evidenceId": "manual"
+        },
+        {
+          "text": "The AER approved labour rates will apply for both ancillary network services, quoted services and any connections quoted services.",
+          "evidenceId": "manual"
+        }
+      ],
+      "valueBindings": [
+        {
+          "field": "value",
+          "token": "323.05",
+          "evidenceId": "manual"
+        }
+      ],
+      "effectiveFrom": "2026-07-01",
+      "effectiveTo": "2027-06-30",
+      "derivation": null,
+      "plausibilityOverride": null,
+      "title": "SA Power Networks Field Worker labour rate, overtime (quoted services, excl GST)",
+      "kind": "regulated_fee",
+      "basisCode": "regulated_fee_max",
+      "observationDate": "2026-07-01",
+      "publishedAt": "2026-07-24",
+      "captureMethod": "manual",
+      "unitCode": "aud_per_hour",
+      "scope": {
+        "jurisdiction": "SA",
+        "classification": "Field Worker (labour code FW), overtime, quoted services, excl GST",
+        "period": {
+          "from": "2026-07-01",
+          "to": "2027-06-30"
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "manual",
+          "role": "release",
+          "url": "https://www.sapowernetworks.com.au/public/download.jsp?id=337829",
+          "publisher": "SA Power Networks",
+          "title": "Manual 18: Connections & Ancillary Network Services, issued June 2026 (SA Power Networks Connections and Ancillary Network Services 2026-27 20260724 v1.2.pdf)",
+          "quote": "D.2 Quoted service labour rates […] Table 3 – Hourly labour rates applicable for quoted services […] Ordinary Time […] Overtime […] 2026/27 (GST Exclusive) 2026/27 (GST Inclusive) 2026/27 (GST Exclusive) 2026/27 (GST Inclusive) […] FW Field Worker $198.12 $217.93 $323.05 $355.36",
+          "locator": {
+            "page": "30 of 38 (PDF page 31)",
+            "table": "Table 3 – Hourly labour rates applicable for quoted services, column \"Overtime, 2026/27 (GST Exclusive)\"",
+            "row": "FW Field Worker"
+          },
+          "asOf": "2026-07-24",
+          "tier": "primary",
+          "retrievedAt": "2026-09-30T04:01:17Z",
+          "contentSha256": "bd069d6111263091a02cd599d585265cacc14adba40d1d47974b08c9cce4c08a",
+          "licence": "© SA Power Networks 2026. All rights reserved (Copyright Act 1968); quoted in part for citation only. Full manual: https://www.sapowernetworks.com.au/public/download.jsp?id=337829"
+        }
+      ]
+    }
+  ]
+}
