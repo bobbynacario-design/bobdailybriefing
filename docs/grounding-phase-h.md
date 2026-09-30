@@ -1522,3 +1522,59 @@ network. That was not so for SA Power Networks.
     expressly). Endeavour's Outdoor rate equals Ausgrid's to the cent, so NSW
     coverage is not lost meanwhile.
   - (c) Leave Ausgrid out.
+
+### Decisions (Bob, 2026-09-30)
+
+- **D-H7b-1:** the R4 field worker per network (Endeavour's "(Outdoor)").
+- **D-H7b-2:** after-hours and overtime rates as their own series; Ausgrid's
+  175% rule is a qualification.
+- **D-H7b-3:** FY2025-26 and FY2026-27.
+- **D-H7b-4 (a):** Ausgrid is published now with short quotes and
+  attribution, as for SA Power Networks and AIP.
+
+### Built (H-7b)
+
+- **The producer (bb54b9e):** a manual capture's periods apply newest first.
+  - Oldest first, FY27 would have superseded FY26 on arrival, and consumers
+    skip superseded records.
+  - Now both stay current, as the FY26 award did when it was added a run
+    later. Automated series still apply oldest first.
+  - A dry run over live release 000013 changed nothing already published.
+- **`grounding/sources/nsw-ans-labour.js`**, five series:
+  - `ausgrid_quoted_labour_field_worker_ordinary`;
+  - `endeavour_quoted_labour_field_worker_outdoor_ordinary` and
+    `…_after_hours`;
+  - `essential_quoted_labour_field_worker_ordinary` and `…_overtime`.
+  - All are capture `manual`, freshness 400, cadence 12, stream
+    `tp_utility`. Bounds are 120–300 (max change 25) for ordinary time, and
+    200–550 (max change 40) for after hours and overtime.
+- **Three watches:**
+  - **Ausgrid:** the Network prices JSON; stale on a new year, link or date.
+  - **Endeavour:** the Connection costs link; stale on a new year or version.
+    The Summary is ignored. Two candidate links block.
+  - **Essential:** HEAD only, never the Cloudflare page. It checks the
+    captured file's Last-Modified, and whether next year's name answers as a
+    PDF; a 404 there is not news.
+  - Each network's source is read once per run.
+- **The captures:** ten records, each year's figure bound to the table row,
+  with the source's own sentences as qualifications:
+  - the GST-inclusive figure;
+  - Ausgrid's 175% rule;
+  - Endeavour's "AER approved maximum hourly rates (including on-costs and
+    overhead)";
+  - Essential's GST, overtime, final-decision and customer-requested
+    sentences.
+  - Endeavour's FY26 record cites the Archive `id_` copy.
+  - Each licence says "no licence to reproduce is given", and no PDF is kept.
+- **Fixtures:** the Ausgrid page's price-list JSON entries, and Endeavour's
+  three price-list links, verbatim and trimmed.
+- **Tests:** 7 new; 154 grounding tests in total. Twelve deliberate breakages
+  were each caught:
+  - Ausgrid: a new file ignored, a later date ignored, the oldest edition
+    taken, any document counted;
+  - Endeavour: a new version ignored, the Summary accepted, the first of two
+    links taken;
+  - Essential: any answer counted as next year, the revision date ignored, a
+    404 stopping the run, GET instead of HEAD;
+  - one read per series.
+- **Live read:** all five watches against the real sites report published.

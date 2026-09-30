@@ -1,0 +1,126 @@
+[
+  {
+    "seriesId": "ausgrid_quoted_labour_field_worker_ordinary",
+    "title": "Ausgrid Field worker R4 labour rate, business hours (quoted services, excl GST)",
+    "observationKey": "2025-07-01",
+    "kind": "regulated_fee",
+    "basisCode": "regulated_fee_max",
+    "observationDate": "2025-07-01",
+    "publishedAt": "2025-07-01",
+    "effectiveFrom": "2025-07-01",
+    "effectiveTo": "2026-06-30",
+    "derivation": null,
+    "plausibilityOverride": null,
+    "captureMethod": "manual",
+    "value": 204.17,
+    "range": null,
+    "unitCode": "aud_per_hour",
+    "scope": {
+      "jurisdiction": "NSW",
+      "classification": "Ausgrid, Field worker R4, business hours, quoted services, excl GST",
+      "period": {
+        "from": "2025-07-01",
+        "to": "2026-06-30"
+      }
+    },
+    "qualifications": [
+      {
+        "text": "1.1 Approved labour rates for 2025-26, Field worker R4, Max Labour rate (incl. GST): 224.59.",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "If an ancillary network service is provided outside the hours of 7.30 am to 4.00 pm on a working day at the request of a customer or for reasons outside of Ausgrid's control such as road occupancy licence requirements, Ausgrid will charge 175% of the fee for that service.",
+        "evidenceId": "schedule"
+      }
+    ],
+    "valueBindings": [
+      {
+        "field": "value",
+        "token": "204.17",
+        "evidenceId": "schedule"
+      }
+    ],
+    "evidence": [
+      {
+        "evidenceId": "schedule",
+        "role": "release",
+        "url": "https://aopt-p-001.sitecorecontenthub.cloud/api/public/content/05fe9ad310ad42fca617a067f1026aa0?v=dac7cf33",
+        "publisher": "Ausgrid",
+        "title": "Ausgrid Price List - Alternative control services fee schedule 2025-26: for the financial year ending 30 June 2026",
+        "quote": "1.1 Approved labour rates for 2025-26 […] Category Max Labour rate (excl. GST) Max Labour rate (incl. GST) […] Field worker R4 204.17 224.59",
+        "locator": {
+          "page": "3",
+          "table": "1.1 Approved labour rates for 2025-26, column \"Max Labour rate (excl. GST)\"",
+          "row": "Field worker R4"
+        },
+        "asOf": "2025-07-01",
+        "tier": "primary",
+        "retrievedAt": "2026-09-30T06:42:18Z",
+        "contentSha256": "843cbfd3bb8176de2090e7a53571d5d54e861e383472db209cfce0f801d36868",
+        "licence": "© Ausgrid. Quoted in part for citation only (Copyright Act 1968); no licence to reproduce is given. Full document: https://aopt-p-001.sitecorecontenthub.cloud/api/public/content/05fe9ad310ad42fca617a067f1026aa0?v=dac7cf33"
+      }
+    ]
+  },
+  {
+    "seriesId": "ausgrid_quoted_labour_field_worker_ordinary",
+    "title": "Ausgrid Field worker R4 labour rate, business hours (quoted services, excl GST)",
+    "observationKey": "2026-07-01",
+    "kind": "regulated_fee",
+    "basisCode": "regulated_fee_max",
+    "observationDate": "2026-07-01",
+    "publishedAt": "2026-04-27",
+    "effectiveFrom": "2026-07-01",
+    "effectiveTo": "2027-06-30",
+    "derivation": null,
+    "plausibilityOverride": null,
+    "captureMethod": "manual",
+    "value": 213.5,
+    "range": null,
+    "unitCode": "aud_per_hour",
+    "scope": {
+      "jurisdiction": "NSW",
+      "classification": "Ausgrid, Field worker R4, business hours, quoted services, excl GST",
+      "period": {
+        "from": "2026-07-01",
+        "to": "2027-06-30"
+      }
+    },
+    "qualifications": [
+      {
+        "text": "1.1 Approved labour rates for 2026-27, Field worker R4, Max Labour rate (incl. GST): 234.85.",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "If an ancillary network service is provided outside the hours of 7.30 am to 4.00 pm on a working day at the request of a customer or for reasons outside of Ausgrid's control such as road occupancy licence requirements, Ausgrid will charge 175% of the fee for that service.",
+        "evidenceId": "schedule"
+      }
+    ],
+    "valueBindings": [
+      {
+        "field": "value",
+        "token": "213.50",
+        "evidenceId": "schedule"
+      }
+    ],
+    "evidence": [
+      {
+        "evidenceId": "schedule",
+        "role": "release",
+        "url": "https://aopt-p-001.sitecorecontenthub.cloud/api/public/content/3b5b67d7d3c84908aa85764259902cb8?v=5e213d9f",
+        "publisher": "Ausgrid",
+        "title": "Ausgrid 2026-27 Alternative Control Services Price List: Alternative control services fee schedule for the financial year ending 30 June 2027",
+        "quote": "1.1 Approved labour rates for 2026-27 […] Category Max Labour rate (excl. GST) Max Labour rate (incl. GST) […] Field worker R4 213.50 234.85",
+        "locator": {
+          "page": "3",
+          "table": "1.1 Approved labour rates for 2026-27, column \"Max Labour rate (excl. GST)\"",
+          "row": "Field worker R4"
+        },
+        "asOf": "2026-04-27",
+        "tier": "primary",
+        "retrievedAt": "2026-09-30T06:42:16Z",
+        "contentSha256": "280b4382daa978cfb080f095167592970c5099cd502e6a1b426333ffa2d37106",
+        "licence": "© Ausgrid. Quoted in part for citation only (Copyright Act 1968); no licence to reproduce is given. Full document: https://aopt-p-001.sitecorecontenthub.cloud/api/public/content/3b5b67d7d3c84908aa85764259902cb8?v=5e213d9f"
+      }
+    ]
+  }
+]

@@ -31,6 +31,7 @@ const rbaCash = require('./sources/rba-cash-rate');
 const absWpi = require('./sources/abs-wpi');
 const sapn = require('./sources/sapn-manual18');
 const aipTgp = require('./sources/aip-tgp');
+const nswLabour = require('./sources/nsw-ans-labour');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -266,4 +267,10 @@ module.exports = [
   // (D-H8-1 to D-H8-4), for Daybook only: heavy-vehicle LOI context. The unit
   // is aud_cents_per_litre, which both consumers' copies of the contract know
   // (checked on both consumers' mains before this was published).
-  .concat(aipTgp.registryEntries());
+  .concat(aipTgp.registryEntries())
+  // Phase H, H-7b: the NSW distributors' field worker (R4) labour rates for
+  // quoted services, excl GST, FY2025-26 and FY2026-27 (D-H7b-1 to D-H7b-4):
+  // Ausgrid (business hours), Endeavour Energy (outdoor, business and after
+  // hours) and Essential Energy (normal time and overtime). Captured by hand
+  // from each network's price list; each network's listing is watched.
+  .concat(nswLabour.registryEntries());

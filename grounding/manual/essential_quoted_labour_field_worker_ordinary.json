@@ -1,0 +1,142 @@
+[
+  {
+    "seriesId": "essential_quoted_labour_field_worker_ordinary",
+    "title": "Essential Energy Field Worker R4 labour rate, normal time (quoted services, excl GST)",
+    "observationKey": "2025-07-01",
+    "kind": "regulated_fee",
+    "basisCode": "regulated_fee_max",
+    "observationDate": "2025-07-01",
+    "publishedAt": "2025-05-16",
+    "effectiveFrom": "2025-07-01",
+    "effectiveTo": "2026-06-30",
+    "derivation": null,
+    "plausibilityOverride": null,
+    "captureMethod": "manual",
+    "value": 203.67,
+    "range": null,
+    "unitCode": "aud_per_hour",
+    "scope": {
+      "jurisdiction": "NSW",
+      "classification": "Essential Energy, Field Worker (R4), normal time, quoted services, excl GST",
+      "period": {
+        "from": "2025-07-01",
+        "to": "2026-06-30"
+      }
+    },
+    "qualifications": [
+      {
+        "text": "*All rates in the below tables are exclusive of GST",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "* Essential Energy may impose an overtime hourly rate for services provided outside the hours of 7.30am and 4pm on a working day.",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "This attachment sets out the final decision of prices Essential Energy is allowed to charge customers for the provision of alternative control services.",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "Alternative control services are customer specific or customer requested services and so the full cost of the service is attributed to a particular customer, or group of customers, benefiting from the service.",
+        "evidenceId": "schedule"
+      }
+    ],
+    "valueBindings": [
+      {
+        "field": "value",
+        "token": "203.67",
+        "evidenceId": "schedule"
+      }
+    ],
+    "evidence": [
+      {
+        "evidenceId": "schedule",
+        "role": "release",
+        "url": "https://www.essentialenergy.com.au/-/media/Project/EssentialEnergy/Website/Files/Our-Network/AncillaryNetworkServicesPriceList2025-26.pdf",
+        "publisher": "Essential Energy",
+        "title": "Price Schedule for Ancillary Network Services, 1 July 2025 (July 2025, V1)",
+        "quote": "Table 1.1: Rates Labour class Normal time rate $ Overtime rate $* […] Field Worker (R4) $203.67 $278.69",
+        "locator": {
+          "page": "1 of 32",
+          "table": "Table 1.1: Rates, column \"Normal time rate $\"",
+          "row": "Field Worker (R4)"
+        },
+        "asOf": "2025-05-16",
+        "tier": "primary",
+        "retrievedAt": "2026-09-30T06:42:24Z",
+        "contentSha256": "4a279dbafd2f9aab51b98d00cb35e3ea925572e59cc8f4d5e478ef1f48be80ec",
+        "licence": "© Essential Energy. Quoted in part for citation only (Copyright Act 1968); no licence to reproduce is given. Full document: https://www.essentialenergy.com.au/-/media/Project/EssentialEnergy/Website/Files/Our-Network/AncillaryNetworkServicesPriceList2025-26.pdf"
+      }
+    ]
+  },
+  {
+    "seriesId": "essential_quoted_labour_field_worker_ordinary",
+    "title": "Essential Energy Field Worker R4 labour rate, normal time (quoted services, excl GST)",
+    "observationKey": "2026-07-01",
+    "kind": "regulated_fee",
+    "basisCode": "regulated_fee_max",
+    "observationDate": "2026-07-01",
+    "publishedAt": "2026-04-28",
+    "effectiveFrom": "2026-07-01",
+    "effectiveTo": "2027-06-30",
+    "derivation": null,
+    "plausibilityOverride": null,
+    "captureMethod": "manual",
+    "value": 212.98,
+    "range": null,
+    "unitCode": "aud_per_hour",
+    "scope": {
+      "jurisdiction": "NSW",
+      "classification": "Essential Energy, Field Worker (R4), normal time, quoted services, excl GST",
+      "period": {
+        "from": "2026-07-01",
+        "to": "2027-06-30"
+      }
+    },
+    "qualifications": [
+      {
+        "text": "*All rates in the below tables are exclusive of GST",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "* Essential Energy may impose an overtime hourly rate for services provided outside the hours of 7.30am and 4pm on a working day.",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "This attachment sets out the final decision of prices Essential Energy is allowed to charge customers for the provision of alternative control services.",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "Alternative control services are customer specific or customer requested services and so the full cost of the service is attributed to a particular customer, or group of customers, benefiting from the service.",
+        "evidenceId": "schedule"
+      }
+    ],
+    "valueBindings": [
+      {
+        "field": "value",
+        "token": "212.98",
+        "evidenceId": "schedule"
+      }
+    ],
+    "evidence": [
+      {
+        "evidenceId": "schedule",
+        "role": "release",
+        "url": "https://www.essentialenergy.com.au/-/media/Project/EssentialEnergy/Website/Files/Our-Network/AncillaryNetworkServicesPriceList2026-27.pdf",
+        "publisher": "Essential Energy",
+        "title": "Price Schedule for Ancillary Network Services, 1 July 2026 (July 2026, V2)",
+        "quote": "Table 1.1: Rates Labour class Normal time rate $ Overtime rate $* […] Field Worker (R4) $212.98 $291.43",
+        "locator": {
+          "page": "1 of 32",
+          "table": "Table 1.1: Rates, column \"Normal time rate $\"",
+          "row": "Field Worker (R4)"
+        },
+        "asOf": "2026-04-28",
+        "tier": "primary",
+        "retrievedAt": "2026-09-30T06:42:23Z",
+        "contentSha256": "dcd2c8b375426afe522f98cc36b509415231736b9c6348a6964aeefca5a1167f",
+        "licence": "© Essential Energy. Quoted in part for citation only (Copyright Act 1968); no licence to reproduce is given. Full document: https://www.essentialenergy.com.au/-/media/Project/EssentialEnergy/Website/Files/Our-Network/AncillaryNetworkServicesPriceList2026-27.pdf"
+      }
+    ]
+  }
+]

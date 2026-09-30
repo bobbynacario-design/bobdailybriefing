@@ -1,0 +1,126 @@
+[
+  {
+    "seriesId": "endeavour_quoted_labour_field_worker_outdoor_after_hours",
+    "title": "Endeavour Energy outdoor Field Worker R4 labour rate, after hours (quoted services, excl GST)",
+    "observationKey": "2025-07-01",
+    "kind": "regulated_fee",
+    "basisCode": "regulated_fee_max",
+    "observationDate": "2025-07-01",
+    "publishedAt": "2025-09-24",
+    "effectiveFrom": "2025-07-01",
+    "effectiveTo": "2026-06-30",
+    "derivation": null,
+    "plausibilityOverride": null,
+    "captureMethod": "manual",
+    "value": 357.31,
+    "range": null,
+    "unitCode": "aud_per_hour",
+    "scope": {
+      "jurisdiction": "NSW",
+      "classification": "Endeavour Energy, Field Worker R4 (Outdoor), after hours, quoted services, excl GST",
+      "period": {
+        "from": "2025-07-01",
+        "to": "2026-06-30"
+      }
+    },
+    "qualifications": [
+      {
+        "text": "Table 2: Labour rates, After Hours, Field Worker R4 (Outdoor), ANS hourly labour rates 2025-26 (Inc. GST): $393.04.",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "The AER approved maximum hourly rates (including on-costs and overhead) for quoted service charges for 2025-26 are as follows:",
+        "evidenceId": "schedule"
+      }
+    ],
+    "valueBindings": [
+      {
+        "field": "value",
+        "token": "357.31",
+        "evidenceId": "schedule"
+      }
+    ],
+    "evidence": [
+      {
+        "evidenceId": "schedule",
+        "role": "release",
+        "url": "https://web.archive.org/web/20251106112318id_/https://www.endeavourenergy.com.au/__data/assets/pdf_file/0011/35021/ANS-Price-List-202526-v1.2.pdf",
+        "publisher": "Endeavour Energy",
+        "title": "Network Price List: Ancillary Network Services 2025-2026, Version 1.2 (24 September 2025) (Internet Archive copy of the Endeavour Energy download, captured 6 November 2025)",
+        "quote": "Table 2: Labour rates […] ANS hourly labour rates 2025-26 (Ex. GST) […] ANS hourly labour rates 2025-26 (Inc. GST) […] After Hours […] Field Worker R4 (Outdoor) $357.31 $393.04",
+        "locator": {
+          "page": "16 (PDF page 19)",
+          "table": "Table 2: Labour rates, After Hours, column \"ANS hourly labour rates 2025-26 (Ex. GST)\"",
+          "row": "Field Worker R4 (Outdoor)"
+        },
+        "asOf": "2025-09-24",
+        "tier": "primary",
+        "retrievedAt": "2026-09-30T06:42:21Z",
+        "contentSha256": "8ae2fa8e6773c05011d2b50bf862fd7adc95c8c1bcc4a32e8b019dcf9f47e8ff",
+        "licence": "© Endeavour Energy. Quoted in part for citation only (Copyright Act 1968); no licence to reproduce is given. Full document: https://web.archive.org/web/20251106112318id_/https://www.endeavourenergy.com.au/__data/assets/pdf_file/0011/35021/ANS-Price-List-202526-v1.2.pdf"
+      }
+    ]
+  },
+  {
+    "seriesId": "endeavour_quoted_labour_field_worker_outdoor_after_hours",
+    "title": "Endeavour Energy outdoor Field Worker R4 labour rate, after hours (quoted services, excl GST)",
+    "observationKey": "2026-07-01",
+    "kind": "regulated_fee",
+    "basisCode": "regulated_fee_max",
+    "observationDate": "2026-07-01",
+    "publishedAt": "2026-06-25",
+    "effectiveFrom": "2026-07-01",
+    "effectiveTo": "2027-06-30",
+    "derivation": null,
+    "plausibilityOverride": null,
+    "captureMethod": "manual",
+    "value": 373.64,
+    "range": null,
+    "unitCode": "aud_per_hour",
+    "scope": {
+      "jurisdiction": "NSW",
+      "classification": "Endeavour Energy, Field Worker R4 (Outdoor), after hours, quoted services, excl GST",
+      "period": {
+        "from": "2026-07-01",
+        "to": "2027-06-30"
+      }
+    },
+    "qualifications": [
+      {
+        "text": "Table 2: Labour rates, After Hours, Field Worker R4 (Outdoor), ANS hourly labour rates 2026-27 (Inc. GST): $411.00.",
+        "evidenceId": "schedule"
+      },
+      {
+        "text": "The AER approved maximum hourly rates (including on-costs and overhead) for quoted service charges for 2026-27 are as follows:",
+        "evidenceId": "schedule"
+      }
+    ],
+    "valueBindings": [
+      {
+        "field": "value",
+        "token": "373.64",
+        "evidenceId": "schedule"
+      }
+    ],
+    "evidence": [
+      {
+        "evidenceId": "schedule",
+        "role": "release",
+        "url": "https://edge.sitecorecloud.io/endeavouren152b-endeavouren7772-production9ea5-b88d/media/Endeavour-Energy/Publications/Documents/ANS-Price-List-202627-v12---Final.pdf",
+        "publisher": "Endeavour Energy",
+        "title": "Network Price List: Ancillary Network Services 2026-2027, Version 1.2 (25 June 2026)",
+        "quote": "Table 2: Labour rates […] ANS hourly labour rates 2026-27 (Ex. GST) […] ANS hourly labour rates 2026-27 (Inc. GST) […] After Hours […] Field Worker R4 (Outdoor) 7000000239 $373.64 $411.00",
+        "locator": {
+          "page": "19 (PDF page 22)",
+          "table": "Table 2: Labour rates, After Hours, column \"ANS hourly labour rates 2026-27 (Ex. GST)\"",
+          "row": "Field Worker R4 (Outdoor)"
+        },
+        "asOf": "2026-06-25",
+        "tier": "primary",
+        "retrievedAt": "2026-09-30T06:42:20Z",
+        "contentSha256": "3a0eefec0e4653dbb25361401453f75bb43465a3a348dfccb1d2f5dd38076cdf",
+        "licence": "© Endeavour Energy. Quoted in part for citation only (Copyright Act 1968); no licence to reproduce is given. Full document: https://edge.sitecorecloud.io/endeavouren152b-endeavouren7772-production9ea5-b88d/media/Endeavour-Energy/Publications/Documents/ANS-Price-List-202627-v12---Final.pdf"
+      }
+    ]
+  }
+]
