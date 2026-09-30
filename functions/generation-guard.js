@@ -8,6 +8,16 @@ function authorize(auth, allowedEmails) {
     throw guardError("permission-denied", "Generation is restricted to the configured owner accounts.");
   }
 }
+// Daybook is invite-only (isDaybookMember in the shared Firestore rules): a
+// verified owner, or a verified email with a daybook-invites document. The
+// Admin SDK bypasses the rules, so a Function acting for an account checks it
+// itself. "owner", "member", or null for anyone else.
+async function daybookRole(token, owners, inviteExists) {
+  const email = String(token && token.email || "").toLowerCase();
+  if (!email || token.email_verified !== true) return null;
+  if (owners.includes(email)) return "owner";
+  return (await inviteExists(email)) ? "member" : null;
+}
 async function guardedGeneration({db, uid, feature, period, cap, requestId, input}, work) {
   if (!Number.isInteger(cap) || cap < 1) throw guardError("failed-precondition", "Generation limit is not configured correctly.");
   const id = requestId || randomUUID();
@@ -43,4 +53,4 @@ async function guardedGeneration({db, uid, feature, period, cap, requestId, inpu
     throw error;
   }
 }
-module.exports = {authorize, guardedGeneration};
+module.exports = {authorize, daybookRole, guardedGeneration};

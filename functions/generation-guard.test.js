@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {authorize,guardedGeneration} = require('./generation-guard');
+const {authorize,daybookRole,guardedGeneration} = require('./generation-guard');
 function database() {
   const records = new Map(); let chain = Promise.resolve();
   const ref = key => ({key,set:async (value,opts) => records.set(key,opts && opts.merge ? {...records.get(key),...value} : value)});
@@ -13,6 +13,19 @@ test('only verified configured owners can generate', () => {
   assert.throws(() => authorize({token:{email:'other@example.com',email_verified:true}},['owner@example.com']));
   assert.throws(() => authorize({token:{email:'owner@example.com',email_verified:false}},['owner@example.com']));
   authorize({token:{email:'OWNER@example.com',email_verified:true}},['owner@example.com']);
+});
+test('Daybook roles: a verified owner, a verified invitee, and nobody else', async () => {
+  const asked = []; const invites = async email => { asked.push(email); return email === 'alice@example.com'; };
+  const owners = ['owner@example.com'];
+  assert.equal(await daybookRole({email:'OWNER@example.com',email_verified:true},owners,invites),'owner');
+  assert.deepEqual(asked,[],'the owner never depends on an invite document');
+  assert.equal(await daybookRole({email:'Alice@Example.com',email_verified:true},owners,invites),'member');
+  assert.deepEqual(asked,['alice@example.com'],'invites are looked up by lowercase email');
+  assert.equal(await daybookRole({email:'eve@example.com',email_verified:true},owners,invites),null,'not invited');
+  assert.equal(await daybookRole({email:'alice@example.com',email_verified:false},owners,invites),null,'unverified');
+  assert.equal(await daybookRole({email:'owner@example.com',email_verified:false},owners,invites),null,'an unverified owner email');
+  assert.equal(await daybookRole({email_verified:true},owners,invites),null,'no email');
+  assert.equal(await daybookRole(null,owners,invites),null);
 });
 test('concurrent requests reserve quota before starting provider work', async () => {
   const db = database(); let calls = 0;

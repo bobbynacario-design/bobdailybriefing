@@ -8,6 +8,7 @@ const logger = require("firebase-functions/logger");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
+const {getAuth} = require("firebase-admin/auth");
 const OpenAI = require("openai");
 const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
@@ -20,7 +21,7 @@ const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, SY
 const {
   parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
 } = require("./market-facts");
-const {authorize, guardedGeneration} = require("./generation-guard");
+const {authorize, daybookRole, guardedGeneration} = require("./generation-guard");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
   isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, hasNewReminders, weeklyReadDue,
@@ -1191,10 +1192,11 @@ function withAudit(state, entry) {
 // Today's spark and due watch-metric reminders, from one read of the account's
 // synced Daily Boost doc, and on Sundays whether the weekly read is still to do
 // (one more read, that day only). Best effort: a failed read leaves it off the push.
-async function dailyBoostFor(db, uid, now, lastWeeklyNudge) {
+// The weekly read is owner-only AI, so only an owner's push announces it.
+async function dailyBoostFor(db, uid, now, lastWeeklyNudge, weeklyAllowed) {
   const dayKey = phtDateKey(now);
   let weekly = false;
-  if (weeklyReadDue(dayKey, {}, lastWeeklyNudge)) {
+  if (weeklyAllowed && weeklyReadDue(dayKey, {}, lastWeeklyNudge)) {
     try {
       const reads = await db.collection(BRIEFINGS_COLL).doc("weekly-mirror-" + uid).get();
       weekly = weeklyReadDue(dayKey, reads.exists ? reads.data().mirrors : {}, lastWeeklyNudge);
@@ -1232,13 +1234,16 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   if (!options.test && isQuietTime(local.time, config.quietStart, config.quietEnd)) {
     return {status: "quiet-hours"};
   }
+  // An account whose invite was removed stops getting the Morning 5 at once.
+  const role = options.role !== undefined ? options.role : await daybookRoleForUid(prefs.uid);
+  if (!role) return {status: "not-member"};
 
   const shared = options.shared || await sharedCommandInputs(db);
   const inputs = await userCommandInputs(db, prefs.uid, prefs, shared, now);
   const command = buildCommandCenter(inputs, now);
   const items = selectDeliverable(command.morningFive, config);
   const signature = digestSignature(items);
-  const boost = await dailyBoostFor(db, prefs.uid, now, state.lastWeeklyNudge);
+  const boost = await dailyBoostFor(db, prefs.uid, now, state.lastWeeklyNudge, role === "owner");
   const changed = isMaterialChange(state.lastSignature, items);
   // A reminder coming due is worth a push even on a morning the Morning 5 has
   // not changed; one already announced is not.
@@ -1287,10 +1292,30 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   return {status: type, successCount: response.successCount, failureCount: response.failureCount};
 }
 
+// Delivery is for Daybook's members only (daybookRole in generation-guard.js).
+// Email sign-up is open on the shared project, so "signed in" is not enough.
+const inviteExists = (email) => getFirestore().collection("daybook-invites").doc(email).get().then((snap) => snap.exists);
+async function requireDaybookMember(auth, action) {
+  if (!auth) throw new HttpsError("unauthenticated", "Sign in before " + action + ".");
+  const role = await daybookRole(auth.token, GENERATION_OWNERS, inviteExists);
+  if (!role) throw new HttpsError("permission-denied", "This account is not on Daybook's invite list.");
+  return role;
+}
+// The scheduled run has only the uid, so it reads the account's email from Auth.
+async function daybookRoleForUid(uid) {
+  try {
+    const user = await getAuth().getUser(uid);
+    return await daybookRole({email: user.email, email_verified: user.emailVerified}, GENERATION_OWNERS, inviteExists);
+  } catch (error) {
+    logger.warn("Daybook membership lookup failed", {uid, code: error.code, message: error.message});
+    return null;
+  }
+}
+
 exports.registerBriefingDevice = onCall(
   {region: "asia-southeast1", timeoutSeconds: 30, memory: "256MiB"},
   async (request) => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before enabling delivery.");
+    await requireDaybookMember(request.auth, "enabling delivery");
     const token = String(request.data && request.data.token || "").trim();
     if (token.length < 20 || token.length > 4096) {
       throw new HttpsError("invalid-argument", "The browser returned an invalid delivery token.");
@@ -1314,7 +1339,7 @@ exports.registerBriefingDevice = onCall(
 exports.muteBriefingDelivery = onCall(
   {region: "asia-southeast1", timeoutSeconds: 30, memory: "256MiB"},
   async (request) => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before muting delivery.");
+    await requireDaybookMember(request.auth, "muting delivery");
     const uid = request.auth.uid;
     const db = getFirestore();
     const ref = db.collection(BRIEFINGS_COLL).doc(COMMAND_PREF_PREFIX + uid);
@@ -1337,13 +1362,13 @@ exports.muteBriefingDelivery = onCall(
 exports.testBriefingDelivery = onCall(
   {region: "asia-southeast1", timeoutSeconds: 60, memory: "256MiB"},
   async (request) => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in before testing delivery.");
+    const role = await requireDaybookMember(request.auth, "testing delivery");
     const uid = request.auth.uid;
     const db = getFirestore();
     const doc = await db.collection(BRIEFINGS_COLL).doc(COMMAND_PREF_PREFIX + uid).get();
     if (!doc.exists) throw new HttpsError("failed-precondition", "Save delivery preferences first.");
     try {
-      const result = await deliverMorningFiveForUser(db, doc, {test: true});
+      const result = await deliverMorningFiveForUser(db, doc, {test: true, role});
       if (result.status === "no-device") throw new HttpsError("failed-precondition", "Enable notifications on this device first.");
       return result;
     } catch (error) {
