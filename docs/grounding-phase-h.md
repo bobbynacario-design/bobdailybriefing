@@ -1414,3 +1414,111 @@ Daybook's own user agent.
   grounding run all passed.
 - **Next week:** the run of Monday 5 October (Sydney) should publish Friday 2
   October's prices, superseding these.
+
+## H-7b: NSW networks' quoted-service labour rates (Ausgrid, Endeavour, Essential)
+
+Status: **diagnostic, 2026-09-30; waiting on Bob's decisions (D-H7b-1 to
+D-H7b-4).** This follows the SA Power Networks pattern (H-7a) for the three
+NSW distributors in Bob's files. NSW is his biggest state. Everything below
+was read on that date with Daybook's own user agent. Bob allowed the six
+downloads, which are kept in the scratchpad, not the repo.
+
+### Where each network publishes its rates
+
+| Network | Listing page | 2026–27 document | 2025–26 document |
+|---|---|---|---|
+| Ausgrid | `ausgrid.com.au/about-us/regulation-and-compliance/network-prices`. HTTP 200; robots `Allow: /`. The page's JSON lists each document with a title and modify date | "Ausgrid 2026-27 Alternative Control Services Price List" (Sitecore content hub `…/content/3b5b67d7…`), 451,497 bytes, modified 12 May 2026, SHA-256 `280b4382…7106` | "Ausgrid Price List – Appendix B Alternative control services fee schedule 2025-26" (`…/content/05fe9ad3…`), 302,388 bytes, SHA-256 `843cbfd3…6868`, still listed |
+| Endeavour Energy | `…/for-your-business/request-a-connection-or-upgrade/connection-costs`. HTTP 200; robots allows it | `ANS-Price-List-202627-v12---Final.pdf` on `edge.sitecorecloud.io`, 870,291 bytes, Version 1.2 (25 June 2026; four versions since 28 April), SHA-256 `3a0eefec…6cdf`. The CDN refuses HEAD; a ranged GET answers | The 2025–26 v1.2 is gone from Endeavour's site (404). The Internet Archive's `id_` capture of 2025-11-06 of Endeavour's own URL: 178,982 bytes, SHA-256 `8ae2fa8e…47e8ff` |
+| Essential Energy | `…/our-network/network-pricing-and-regulatory-reporting/network-pricing` returns **403, a Cloudflare challenge** (`cf-mitigated: challenge`), to Daybook and to plain clients. Not bypassed | `…/Files/Our-Network/AncillaryNetworkServicesPriceList2026-27.pdf` answers directly: 504,021 bytes, 28 April 2026, "July 2026 \| V2", SHA-256 `dcd2c8b3…167f`. The name follows 2025-26's; a wrong name returns a 200 HTML page, not a 404 | `AncillaryNetworkServicesPriceList2025-26.pdf`, 440,838 bytes, SHA-256 `4a279dba…80ec` |
+
+All three state the GST basis in both years, so FY26 is honest for every
+network. That was not so for SA Power Networks.
+
+### The field worker rates (read with `pdftotext -raw`)
+
+| Network (category) | 2025–26 | 2026–27 | After hours / overtime, 2025–26 → 2026–27 |
+|---|---|---|---|
+| Ausgrid, "Field worker R4", "Max Labour rate (excl. GST)" | 204.17 (224.59 incl) | 213.50 (234.85 incl) | No rate: "If an ancillary network service is provided outside the hours of 7.30 am to 4.00 pm on a working day … Ausgrid will charge 175% of the fee for that service." |
+| Endeavour, "Field Worker R4 (Outdoor)", Business Hours, "(Ex. GST)" | 204.17 (224.59 incl) | 213.50 (234.85 incl) | After Hours: 357.31 → 373.64 (411.00 incl) |
+| Endeavour, "Field Worker R4" (not outdoor) | 179.38 | 187.58 | 313.92 → 328.27 |
+| Essential, "Field Worker (R4)", "All rates … exclusive of GST" | 203.67 | 212.98 | Overtime rate: 278.69 → 291.43, which Essential "may impose … outside the hours of 7.30am and 4pm on a working day" |
+
+- **What the rates are.** Endeavour: "The AER approved maximum hourly rates
+  (including on-costs and overhead) for quoted service charges for 2026-27".
+  Essential: "the final decision of prices Essential Energy is allowed to
+  charge customers for the provision of alternative control services".
+  Ausgrid: "Approved labour rates", "Max Labour rate". So `regulated_fee_max`
+  in all three, as for SA Power Networks.
+- **They move together.** 2026–27 over 2025–26 is ×1.0457 for all three
+  (213.50/204.17, 212.98/203.67). Ausgrid's R4 and Endeavour's R4 (Outdoor)
+  are identical to the cent in both years. Ausgrid's R1 (130.24) and R2
+  (207.90) equal Essential's R1 and R2a. That fits a common AER NSW schedule
+  in the 2024–29 determinations, but the determinations have not been read,
+  so this is a consistency check, not a cross-check.
+- **For comparison:** SA Power Networks' Field Worker is $198.12 (2026–27), a
+  different determination.
+- **Endeavour has two R4 rates.** The plain one ($187.58) is well below the
+  others. The "(Outdoor)" one matches Ausgrid's. A line crew repairing a
+  struck pole is outdoor work.
+
+### Terms of use
+
+- None of the six documents states a copyright notice or a licence. Endeavour's
+  says only "Endeavour Energy may change the information in this document
+  without notice."
+- **Ausgrid's website disclaimer:** "None of the contents of this website or
+  any part in it may be reproduced on any other Internet website except with
+  the express written permission of Ausgrid." Daybook's releases are public
+  on GitHub. The SA Power Networks and AIP terms were similar ("All rights
+  reserved"), and Bob accepted short quotes of the figure for citation there.
+- Endeavour's site has no copyright page that answers (`/disclaimer`,
+  `/copyright` return 404). Essential's site cannot be read (Cloudflare).
+
+### Proposed design
+
+- **Series** (`kind: 'regulated_fee'`, `basisCode: 'regulated_fee_max'`,
+  `unitCode: 'aud_per_hour'`, jurisdiction NSW, excl GST, capture `manual`),
+  with FY2025-26 and FY2026-27 observations each:
+  - `ausgrid_quoted_labour_field_worker_ordinary` (the 175% rule and the
+    inclusive figure as qualifications);
+  - `endeavour_quoted_labour_field_worker_outdoor_ordinary` and
+    `…_outdoor_after_hours`;
+  - `essential_quoted_labour_field_worker_ordinary` and `…_overtime`.
+  - Five series and ten records. No derived Ausgrid overtime is published.
+- **Watches**, all automated, which the AER never allowed:
+  - **Ausgrid:** the network-prices page's JSON. It turns stale on a new
+    "Alternative Control Services Price List" title or a new modify date.
+  - **Endeavour:** the connection-costs page's "Ancillary Network Services
+    Price List" link. It turns stale on a new year or a new version in the
+    filename (v1.2 → v1.3).
+  - **Essential:** its page cannot be read, so the watch HEADs the current
+    file, and turns stale on a new `Last-Modified`. It also HEADs next year's
+    predictable name (`…PriceList2027-28.pdf`), and turns stale once that
+    answers as a PDF.
+- **Evidence:** the table heading and the category's row, as for SA Power
+  Networks. The Endeavour FY26 record cites the Archive copy (the FWO FY26
+  route).
+- **Contract:** nothing changes (`aud_per_hour` and `regulated_fee_max`
+  exist, and so does NSW).
+- **Consumer:** ClaimBench maps SA Power Networks' rates since PR #10. Adding
+  these is a mapping change in a BI-Assessor session.
+
+### Decisions for Bob
+
+- **D-H7b-1 Categories.** (a) The R4 field worker per network, Endeavour's
+  "(Outdoor)" variant (recommended). (b) Add Endeavour's plain R4 as well.
+  (c) Add each network's outdoor technical specialist (Endeavour R2
+  (Outdoor) $220.31, Essential R2b $233.83).
+- **D-H7b-2 After hours.** Publish Endeavour's after-hours and Essential's
+  overtime rates as their own series, and carry Ausgrid's 175% rule as a
+  qualification with no derived figure (recommended). Or ordinary time only.
+- **D-H7b-3 Years.** FY2025-26 and FY2026-27 together (recommended). Every
+  document states GST.
+- **D-H7b-4 Ausgrid's terms.**
+  - (a) Short quotes of the figure with attribution, as for SA Power Networks
+    and AIP.
+  - (b) Publish Endeavour and Essential now, and ask Ausgrid for written
+    permission first (recommended, given its disclaimer names other websites
+    expressly). Endeavour's Outdoor rate equals Ausgrid's to the cent, so NSW
+    coverage is not lost meanwhile.
+  - (c) Leave Ausgrid out.
