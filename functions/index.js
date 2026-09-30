@@ -28,6 +28,8 @@ const {
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
+const Ask = require("./ask-daybook");
+const IntelligenceSearchCore = require("./intelligence-search-core");
 
 initializeApp();
 
@@ -49,14 +51,16 @@ function protectGeneration(feature, handler) {
       if (feature === "briefing" && String(data.date || "").length > 100) throw new HttpsError("invalid-argument", "Invalid date label.");
       if (feature === "dossier" && !cleanStory(data.story)) throw new HttpsError("invalid-argument", "Choose a briefing story to go deeper on.");
       if (feature === "meeting" && !cleanTopic(data.topic)) throw new HttpsError("invalid-argument", "Name the client, insurer or topic (at least three characters).");
-      const daily = feature === "briefing" || feature === "mirror" || feature === "dossier" || feature === "meeting";
+      if (feature === "ask" && !Ask.cleanQuestion(data.question)) throw new HttpsError("invalid-argument", "Type a question first (at least three characters).");
+      const daily = feature === "briefing" || feature === "mirror" || feature === "dossier" || feature === "meeting" || feature === "ask";
       return await guardedGeneration({db:getFirestore(), uid:request.auth.uid, feature,
         period:daily ? phtDateKey() : phtDateKey().slice(0,7),
         cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : feature === "dossier" ? DOSSIER_DAILY_CAP :
-          feature === "meeting" ? MEETING_DAILY_CAP : DEEP_RESEARCH_CAP,
+          feature === "meeting" ? MEETING_DAILY_CAP : feature === "ask" ? ASK_DAILY_CAP : DEEP_RESEARCH_CAP,
         requestId:data.requestId,
         input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : feature === "dossier" ? {story:storyDossierKey(cleanStory(data.story)),refresh:data.refresh === true} :
-          feature === "meeting" ? {topic:cleanTopic(data.topic),items:cleanMaterial(data.material).length} : {topic:data.topic.trim(),premium:!!data.premium}
+          feature === "meeting" ? {topic:cleanTopic(data.topic),items:cleanMaterial(data.material).length} :
+          feature === "ask" ? {question:Ask.cleanQuestion(data.question),web:data.web === true,thread:Ask.cleanThread(data.thread).length} : {topic:data.topic.trim(),premium:!!data.premium}
       }, () => handler(request));
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -76,6 +80,8 @@ const MIRROR_DAILY_CAP = parseInt(process.env.MIRROR_DAILY_CAP || "3", 10);
 const DOSSIER_DAILY_CAP = parseInt(process.env.DOSSIER_DAILY_CAP || "10", 10);
 // Meeting briefs: one page before a call; five a day is plenty.
 const MEETING_DAILY_CAP = parseInt(process.env.MEETING_DAILY_CAP || "5", 10);
+// Ask Daybook questions a day (Bob chose 20 on 2026-10-01).
+const ASK_DAILY_CAP = parseInt(process.env.ASK_DAILY_CAP || "20", 10);
 const REPORTS_COLL = "reports-bob";
 const REPORTS_META = "reports-bob-meta";
 const WEBHOOK_EVENTS_COLL = "openai-webhook-events";
@@ -782,6 +788,135 @@ exports.generateMeetingBrief = onCall(
     const stored = await ref.get().then((snap) => (snap.exists ? snap.data().items || {} : {})).catch(() => ({}));
     await ref.set({uid, kind: "meeting-briefs", items: keepBriefs(stored, id, brief), updatedAt: brief.generatedAt});
     return {id, brief};
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Ask Daybook (functions/ask-daybook.js): a question answered from his own
+// material. The model looks things up with search_daybook, at most three
+// times, and each lookup runs on the same index as the app's Search box.
+// ─────────────────────────────────────────────────────────────
+// A follow-up within a few minutes reuses the index instead of re-reading
+// about 150 documents.
+const ASK_INDEX_TTL_MS = 3 * 60 * 1000;
+let askIndexCache = null;
+async function loadAskIndex(db, uid) {
+  if (askIndexCache && askIndexCache.uid === uid && Date.now() - askIndexCache.at < ASK_INDEX_TTL_MS) return askIndexCache.index;
+  const coll = db.collection(BRIEFINGS_COLL);
+  const get = (id) => coll.doc(id).get().then((snap) => (snap.exists ? snap.data() : null)).catch(() => null);
+  const latest = async (prefix) => {
+    const pointer = await get(prefix + "-latest");
+    return pointer && pointer.value ? get(prefix + "-" + pointer.value) : null;
+  };
+  // His own documents, newest first, as the app's Search reads them.
+  const own = (name, n) => db.collection(name).where("uid", "==", uid).orderBy("saved", "desc").limit(n).get()
+    .then((snap) => snap.docs.map((doc) => Object.assign({id: doc.id}, doc.data()))).catch(() => []);
+  const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports] = await Promise.all([
+    own(BRIEFINGS_COLL, 100), own(REPORTS_COLL, 50), own(JOURNAL_COLL, 100),
+    get(COMMAND_PREF_PREFIX + uid), get("dossiers-" + uid), get("meeting-briefs-" + uid), get("weekly-mirror-" + uid), get("daily-boost-" + uid),
+    get("grounding-latest"), latest("news"), latest("radar"), latest("miro"), latest("sports"),
+  ]);
+  const index = IntelligenceSearchCore.buildIndex(Ask.askIndexInput(
+    {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports}, DailyBoostCore));
+  askIndexCache = {uid, at: Date.now(), index};
+  return index;
+}
+
+async function openaiResponse(body, label, timeoutMs) {
+  let response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    logger.error("OpenAI network error (" + label + ")", err);
+    throw new HttpsError("unavailable", "OpenAI request failed before receiving a response.");
+  }
+  const responseText = await response.text();
+  let json;
+  try {
+    json = JSON.parse(responseText);
+  } catch (err) {
+    json = {error: {message: responseText || "Non-JSON OpenAI response"}};
+  }
+  if (!response.ok) {
+    const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
+    logger.error("OpenAI API error (" + label + ")", {status: response.status, message: msg});
+    throw new HttpsError("internal", msg);
+  }
+  return json;
+}
+
+exports.askDaybook = onCall(
+  {
+    region: "asia-southeast1",
+    timeoutSeconds: 240,
+    memory: "512MiB",
+    secrets: [OPENAI_API_KEY],
+  },
+  protectGeneration("ask", async (request) => {
+    const db = getFirestore();
+    const uid = request.auth.uid;
+    const question = Ask.cleanQuestion(request.data.question);
+    const web = request.data.web === true;
+    const thread = Ask.cleanThread(request.data.thread);
+    const model = DEFAULT_MODEL;
+    const now = Date.now();
+    const [index, accountsSnap] = await Promise.all([
+      loadAskIndex(db, uid),
+      db.collection(BRIEFINGS_COLL).doc("accounts-" + uid).get().catch(() => null),
+    ]);
+    // His accounts give the model the other names to look up (AAMI for Suncorp…).
+    const kept = accountsSnap && accountsSnap.exists ? cleanAccounts((accountsSnap.data() || {}).accounts) : [];
+    const accounts = kept.length ? kept : DEFAULT_ACCOUNTS;
+    const today = new Intl.DateTimeFormat("en-AU", {timeZone: "Asia/Manila", weekday: "long", day: "numeric", month: "long", year: "numeric"})
+      .format(new Date(now)) + " (" + phtDateKey(now) + ")";
+    const tools = [Ask.SEARCH_TOOL].concat(web ? [{type: "web_search", search_context_size: "medium"}] : []);
+    const include = web ? ["web_search_call.action.sources"] : undefined;
+    const registry = Ask.newRegistry();
+    const usage = {inputTokens: 0, outputTokens: 0, cachedTokens: 0};
+    const searched = [];
+    const track = (json) => {
+      const u = extractUsage(json);
+      usage.inputTokens += u.inputTokens; usage.outputTokens += u.outputTokens; usage.cachedTokens += u.cachedTokens;
+      searchUrls(json).forEach((url) => searched.push(url));
+      return json;
+    };
+    const deadline = now + 210000;
+    let json;
+    let lookups = 0;
+    try {
+      const result = await Ask.runLookups({
+        firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web}), tool_choice: "auto"},
+        call: async (body) => track(await openaiResponse(Object.assign({model, tools, include}, body), "ask", Math.max(20000, Math.min(120000, deadline - Date.now())))),
+        lookup: (plan) => Ask.lookupOutput(IntelligenceSearchCore.searchPlan(index, plan, {now}), registry),
+      });
+      json = result.json;
+      lookups = result.lookups;
+    } finally {
+      // Every call is paid for, answer or not, so the ledger counts them all.
+      await recordUsage(db, "ask-daybook", model, usage, phtDateKey());
+    }
+
+    let answer;
+    try {
+      answer = Ask.cleanAnswer(parseBriefing(extractText(json)), registry, searched, web);
+    } catch (err) {
+      answer = null;
+    }
+    if (!answer) {
+      logger.error("Ask Daybook answer unusable", {lookups});
+      throw new HttpsError("internal", "The answer came back unusable. Try again in a minute.");
+    }
+    Object.assign(answer, {question, web, lookups, model, generatedAt: new Date().toISOString()});
+    const id = "a" + Date.now().toString(36);
+    const ref = db.collection(BRIEFINGS_COLL).doc("ask-" + uid);
+    const stored = await ref.get().then((snap) => (snap.exists ? snap.data().items || {} : {})).catch(() => ({}));
+    await ref.set({uid, kind: "ask", items: Ask.keepAnswers(stored, id, answer), updatedAt: answer.generatedAt});
+    return {id, answer};
   })
 );
 
