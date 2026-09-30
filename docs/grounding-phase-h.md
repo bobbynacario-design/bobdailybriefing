@@ -1578,3 +1578,27 @@ network. That was not so for SA Power Networks.
     404 stopping the run, GET instead of HEAD;
   - one read per series.
 - **Live read:** all five watches against the real sites report published.
+
+### Live, 2026-09-30: H-7b done on Daybook's side
+
+- **Published:** dispatch run 36681958864 on a9e0b4d (07:08 UTC) published
+  **release 000014**, manifest
+  `06492dd9c0a7ac5034728ac12d5b409bebefb226274a6e5a12819a20ed8cd9d6`.
+- **What changed:** compared with 000013, it adds exactly the ten NSW records,
+  all `current` with `supersedes` null (FY26 as "an earlier period"). No
+  record is altered, and the only watch records that changed are the five
+  new ones, all published.
+  - August CPI was held by its cadence again; the scheduled 20:15 UTC run is
+    due to publish it as 000015.
+- **GitHub's runner reached all three networks:** `grounding-ops` shows the
+  five series checked at 07:08:06 UTC with no error. Ausgrid's page and
+  Endeavour's page were read, and Essential's PDFs answered HEAD. Cloudflare
+  challenges only Essential's HTML.
+- **Each consumer's own copy:** RiskM8's validator reads the release.
+  BI-Assessor's `importDaybookRelease` skips the ten as "series not mapped
+  to ClaimBench" until its mapping adds them.
+- **The mirror** is at sequence 14, with the same manifest. **Help**
+  (a9e0b4d, cache v136) is live. CI, Publish static app and the grounding run
+  passed.
+- **Next, in BI-Assessor's session:** map the five series beside the SA Power
+  Networks line (PR #10).
