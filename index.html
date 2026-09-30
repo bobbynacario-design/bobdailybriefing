@@ -35,7 +35,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, updateProfile, reload } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, deleteField, collection, getDocs, query, orderBy, limit, startAfter, where, runTransaction, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 import { getMessaging, getToken, onMessage, isSupported as isMessagingSupported } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
@@ -79,21 +79,142 @@ function getUid() {
   return window._firebaseUid || '';
 }
 
-// Google Sign-In — opens popup and returns the stable Google account uid
+// ── Access: Daybook is invite-only. The rules (sonicvault/firestore.rules)
+// enforce it; this check decides what the sign-in page shows. The owner never
+// depends on the invite document, so a missing or unreadable invite list can
+// never lock him out.
+const DAYBOOK_OWNER = 'bobbynacario@gmail.com';
+const INVITES = 'daybook-invites';
+// 'ok' | 'verify' (an email account not yet verified) | 'no-email' | 'no-invite' | 'rules-error'
+async function daybookAccess(user) {
+  if (!user || !user.email) return 'no-email';
+  if (!user.emailVerified) return 'verify';
+  var email = user.email.toLowerCase();
+  if (email === DAYBOOK_OWNER) return 'ok';
+  try {
+    var snap = await getDoc(doc(db, INVITES, email));
+    return snap.exists() ? 'ok' : 'no-invite';
+  } catch (e) {
+    console.warn('Invite check failed:', (e && e.code) || e);
+    return 'rules-error';
+  }
+}
+var _accessRun = 0;
+// Nothing loads until the check passes: the uid is only published on 'ok'.
+async function applyAuthUser(user) {
+  var run = ++_accessRun;
+  if (window._sessionUid && window._sessionUid !== (user && user.uid) && window.clearPrivateSession) window.clearPrivateSession();
+  window._sessionUid = user && user.uid || null;
+  if (!user) {
+    window._firebaseUid = null;
+    window._firebaseUser = null;
+    if (window.resetIntelligenceSearch) window.resetIntelligenceSearch();
+    if (window.resetEvidenceSets) window.resetEvidenceSets();
+    return 'signed-out';
+  }
+  var access = await daybookAccess(user);
+  if (run !== _accessRun || auth.currentUser !== user) return 'superseded';
+  if (access === 'ok') {
+    window._firebaseUid = user.uid;
+    window._firebaseUser = user;
+    if (window._onAuthReady) window._onAuthReady(user);
+    return access;
+  }
+  window._firebaseUid = null;
+  window._firebaseUser = null;
+  if (window._onAuthDenied) window._onAuthDenied(access, user);
+  // An unverified email account stays signed in, so it can resend and check
+  // its link. Anyone else is signed out; the session was never used.
+  if (access !== 'verify') { window._sessionUid = null; try { await signOut(auth); } catch (e) {} }
+  return access;
+}
+onAuthStateChanged(auth, function(user) { applyAuthUser(user); });
+
+// Google: a popup, or a full-page redirect where popups are blocked (an
+// installed app). The access check runs from onAuthStateChanged either way.
+const POPUP_FALLBACK = ['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'];
 window.fbSignIn = async function() {
   try {
     setSyncStatus('syncing','Signing in...');
-    var provider = new GoogleAuthProvider();
-    var cred = await signInWithPopup(auth, provider);
-    window._firebaseUid = cred.user.uid;
-    window._firebaseUser = cred.user;
+    var cred = await signInWithPopup(auth, new GoogleAuthProvider());
     setSyncStatus('ok','Signed in');
-    return cred.user.uid;
+    return {ok: true, uid: cred.user.uid};
   } catch(e) {
+    if (e && POPUP_FALLBACK.indexOf(e.code) >= 0) {
+      await signInWithRedirect(auth, new GoogleAuthProvider());
+      return {ok: false, code: 'redirect'};
+    }
     console.error('Google sign-in failed:', e);
     setSyncStatus('error','Sign-in failed');
-    return null;
+    return {ok: false, code: (e && e.code) || ''};
   }
+};
+getRedirectResult(auth).catch(function(e) {
+  if (e && e.code && window._onAuthError) window._onAuthError(e.code);
+});
+
+// Email and password. The emailed links bring the reader back here, or to
+// Firebase's own page if this origin is not an authorised domain.
+const CONTINUE_ERRORS = ['auth/unauthorized-continue-uri', 'auth/invalid-continue-uri', 'auth/missing-continue-uri'];
+async function withContinue(send) {
+  try { return await send({url: window.location.origin + window.location.pathname}); }
+  catch (e) { if (e && CONTINUE_ERRORS.indexOf(e.code) >= 0) return send(undefined); throw e; }
+}
+window.fbEmailSignIn = async function(email, password) {
+  try { await signInWithEmailAndPassword(auth, email, password); return {ok: true}; }
+  catch (e) { return {ok: false, code: (e && e.code) || ''}; }
+};
+window.fbEmailRegister = async function(name, email, password) {
+  try {
+    var cred = await createUserWithEmailAndPassword(auth, email, password);
+    try { if (name) await updateProfile(cred.user, {displayName: name}); } catch (e) { console.warn('Display name not saved:', e); }
+    var sent = true;
+    try { await withContinue(function(s) { return sendEmailVerification(cred.user, s); }); } catch (e) { sent = false; console.warn('Verification email failed:', e); }
+    return {ok: true, verificationSent: sent};
+  } catch (e) { return {ok: false, code: (e && e.code) || ''}; }
+};
+window.fbResendVerification = async function() {
+  if (!auth.currentUser) return {ok: false, code: 'no-user'};
+  try { await withContinue(function(s) { return sendEmailVerification(auth.currentUser, s); }); return {ok: true}; }
+  catch (e) { return {ok: false, code: (e && e.code) || ''}; }
+};
+// The same answer whether or not an account exists, so it cannot be used to find members.
+window.fbPasswordReset = async function(email) {
+  try { await withContinue(function(s) { return sendPasswordResetEmail(auth, email, s); }); return {ok: true}; }
+  catch (e) { if (e && e.code === 'auth/user-not-found') return {ok: true}; return {ok: false, code: (e && e.code) || ''}; }
+};
+// After the emailed link: re-read the account, and refresh the token so the
+// rules see email_verified at once (the cached one keeps it false for an hour).
+window.fbRefreshVerification = async function() {
+  var user = auth.currentUser;
+  if (!user) return 'signed-out';
+  await reload(user);
+  var current = auth.currentUser;
+  if (!current || !current.emailVerified) return 'verify';
+  await current.getIdToken(true);
+  return applyAuthUser(current);
+};
+
+// The owner's Invites panel (Help). The rules let only the owner list or change invites.
+window.fbIsDaybookOwner = function() {
+  var user = auth.currentUser;
+  return !!(user && user.emailVerified && String(user.email || '').toLowerCase() === DAYBOOK_OWNER);
+};
+window.fbListInvites = async function() {
+  var snap = await getDocs(collection(db, INVITES));
+  return snap.docs.map(function(d) { return d.data(); });
+};
+window.fbSaveInvite = async function(email, name) {
+  var owner = auth.currentUser;
+  if (!window.fbIsDaybookOwner()) throw new Error('Only the owner manages invites');
+  await setDoc(doc(db, INVITES, email), {
+    email: email, role: email === DAYBOOK_OWNER ? 'owner' : 'member', name: String(name || '').slice(0, 80),
+    invitedAt: new Date().toISOString(), invitedBy: owner.email.toLowerCase()
+  });
+};
+window.fbRemoveInvite = async function(email) {
+  if (!window.fbIsDaybookOwner()) throw new Error('Only the owner manages invites');
+  await deleteDoc(doc(db, INVITES, email));
 };
 
 // Sign out — clears Firebase session
@@ -103,22 +224,6 @@ window.fbSignOut = async function() {
   window._firebaseUid = null;
   window._firebaseUser = null;
 };
-
-// Listen for auth state changes (auto sign-in if Firebase has a persisted session)
-onAuthStateChanged(auth, function(user) {
-  if (window._sessionUid && window._sessionUid !== (user && user.uid) && window.clearPrivateSession) window.clearPrivateSession();
-  window._sessionUid = user && user.uid || null;
-  if (user) {
-    window._firebaseUid = user.uid;
-    window._firebaseUser = user;
-    if (window._onAuthReady) window._onAuthReady(user);
-  } else {
-    window._firebaseUid = null;
-    window._firebaseUser = null;
-    if (window.resetIntelligenceSearch) window.resetIntelligenceSearch();
-    if (window.resetEvidenceSets) window.resetEvidenceSets();
-  }
-});
 
 // Save a briefing (includes UID for server-side rule enforcement)
 window.fbSaveBriefing = async function(dateKey, data) {
@@ -1051,21 +1156,81 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .update-banner button{font-family:var(--mono);font-size:10px;padding:.35rem .65rem;border-radius:6px;border:1px solid var(--gold);background:var(--gold);color:var(--bg);cursor:pointer;text-transform:uppercase;letter-spacing:.06em}
 
 /* ── AUTH GATE ── */
-.auth-overlay{position:fixed;inset:0;z-index:10000;background:var(--bg);display:flex;align-items:center;justify-content:center;animation:fadeIn .3s ease}
+/* Sign-in page: the two-panel layout Enclave and PokerHQ share (story left,
+   access card right), in Daybook's own tokens so both themes hold. */
+.auth-overlay{position:fixed;inset:0;z-index:10000;background:var(--bg);overflow-y:auto;animation:fadeIn .3s ease}
 .auth-overlay.hidden{display:none}
-.auth-box{background:var(--bg2);border:1px solid var(--rim2);border-radius:16px;padding:2.5rem 2rem;width:90%;max-width:380px;text-align:center}
-.auth-box .auth-icon{font-size:48px;margin-bottom:1rem;opacity:.7}
-.auth-box .auth-title{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--gold);margin-bottom:.4rem}
-.auth-box .auth-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em;margin-bottom:1.5rem}
-.auth-box input{width:100%;background:var(--bg3);border:1px solid var(--rim2);border-radius:8px;padding:.7rem 1rem;font-family:var(--mono);font-size:14px;color:var(--txt);outline:none;text-align:center;letter-spacing:.15em;transition:border-color .15s;margin-bottom:.75rem}
-.auth-box input:focus{border-color:var(--gold)}
-.auth-box input::placeholder{color:var(--txt3);letter-spacing:.06em}
-.auth-box .auth-btn{width:100%;font-family:var(--sans,system-ui,sans-serif);font-size:14px;padding:.75rem 1rem;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:8px;cursor:pointer;font-weight:500;letter-spacing:.02em;transition:box-shadow .15s,background .15s;display:flex;align-items:center;justify-content:center;gap:8px}
-.auth-box .auth-btn:hover{background:#f8f9fa;box-shadow:0 1px 3px rgba(60,64,67,.3)}
-.auth-box .install-btn{width:100%;margin-top:.75rem;padding:.7rem 1rem}
-.auth-error{font-family:var(--mono);font-size:11px;color:var(--red);margin-top:.5rem;min-height:1.2em}
-.auth-mode-link{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:1rem;cursor:pointer;transition:color .15s}
-.auth-mode-link:hover{color:var(--gold)}
+.login-wrap{min-height:100%;display:grid;place-items:center;padding:56px 40px;position:relative;background:radial-gradient(circle at 14% 18%,rgba(201,168,76,.13),transparent 32%),radial-gradient(circle at 85% 80%,rgba(52,152,219,.10),transparent 30%),var(--bg)}
+.login-wrap::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:48px 48px}
+.login-shell{width:min(100%,1120px);display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:clamp(48px,7vw,96px);align-items:center;position:relative;z-index:1}
+.login-story{min-width:0}
+.login-brand{display:flex;align-items:center;gap:14px;margin-bottom:52px}
+.login-mark{width:56px;height:56px;flex:none}
+.login-logo-text{font-family:var(--serif);font-size:22px;font-weight:700;letter-spacing:.14em;color:var(--gold);line-height:1}
+.login-tagline{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--txt3);margin-top:7px;text-transform:uppercase}
+.login-eyebrow,.login-card-kicker{font-family:var(--mono);color:var(--gold2);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase}
+.login-eyebrow{margin-bottom:16px}
+.login-headline{max-width:700px;font-family:var(--serif);font-size:clamp(42px,5.4vw,70px);font-weight:400;line-height:1.02;letter-spacing:.01em;text-wrap:balance;color:var(--txt)}
+.login-desc{font-family:var(--sans);color:var(--txt2);font-size:17px;max-width:640px;margin-top:22px;line-height:1.65}
+.login-benefits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:38px}
+.login-benefit{min-height:178px;display:flex;flex-direction:column;justify-content:space-between;gap:24px;padding:18px;border:1px solid var(--rim2);border-radius:12px;background:rgba(255,255,255,.025)}
+.login-benefit-index{font-family:var(--mono);font-size:10px;color:var(--gold2);letter-spacing:.12em}
+.login-benefit h2{font-family:var(--sans);font-size:15px;font-weight:600;margin-bottom:7px;color:var(--txt)}
+.login-benefit p{font-family:var(--sans);color:var(--txt3);font-size:12px;line-height:1.55}
+.login-trust{display:flex;flex-wrap:wrap;gap:10px 24px;margin-top:24px;color:var(--txt3);font-family:var(--mono);font-size:10px;letter-spacing:.04em}
+.login-trust span::before{content:'✓';color:var(--green);margin-right:7px}
+.login-card{background:rgba(15,18,24,.94);border:1px solid var(--rim2);border-radius:18px;padding:32px;text-align:left;width:100%;box-shadow:0 28px 80px rgba(0,0,0,.34);backdrop-filter:blur(16px)}
+.login-card-kicker{margin-bottom:12px}
+.login-card h2{font-family:var(--sans);font-size:25px;font-weight:600;line-height:1.2;margin-bottom:10px;color:var(--txt)}
+.login-card-desc{font-family:var(--sans);color:var(--txt3);font-size:13px;line-height:1.55;margin-bottom:20px}
+.login-mode{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border:1px solid var(--rim2);border-radius:10px;margin-bottom:16px}
+.login-mode-btn{font-family:var(--sans);font-size:13px;padding:.55rem .5rem;border:0;border-radius:7px;background:transparent;color:var(--txt3);cursor:pointer}
+.login-mode-btn.active{background:var(--gold-dim);color:var(--gold2);font-weight:600}
+.login-field{margin-bottom:12px}
+.login-field label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin-bottom:6px}
+.login-field input{width:100%;background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:.7rem .85rem;font-family:var(--sans);font-size:14px;color:var(--txt);outline:none}
+.login-field input:focus{border-color:var(--gold)}
+.login-hint{font-family:var(--sans);font-size:11px;color:var(--txt3);margin-top:6px}
+.login-message{font-family:var(--sans);font-size:12px;line-height:1.55;color:var(--red);background:var(--red-dim);border:1px solid rgba(232,92,92,.3);border-radius:9px;padding:.6rem .75rem;margin:4px 0 12px}
+.login-message.is-success{color:var(--green);background:var(--green-dim);border-color:rgba(45,184,122,.3)}
+.login-submit{width:100%;font-family:var(--sans);font-size:14px;font-weight:600;padding:.8rem 1rem;border:0;border-radius:10px;background:var(--gold);color:#101318;cursor:pointer}
+.login-submit:hover{background:var(--gold2)}
+.login-submit:disabled{opacity:.6;cursor:default}
+.login-link{display:block;margin:10px auto 0;background:none;border:0;padding:4px;font-family:var(--sans);font-size:12px;color:var(--txt3);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.login-link:hover{color:var(--gold2)}
+.login-divider{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--txt3);font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em}
+.login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--rim2)}
+.btn-google{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:#fff;color:#1f1f1f;border:none;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:500;font-family:var(--sans);cursor:pointer}
+.btn-google:hover{opacity:.92}
+.auth-error{font-family:var(--sans);font-size:12px;color:var(--red);margin-top:.5rem;min-height:1.2em}
+.login-install{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:10px;background:transparent;color:var(--txt3);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:12px;font-family:var(--sans);cursor:pointer}
+.login-install:hover{color:var(--gold2);border-color:var(--line-hover)}
+.login-access-request{margin-top:16px;font-family:var(--sans);font-size:12px;color:var(--txt3)}
+.login-access-request a,.login-denied a{color:var(--gold2)}
+.login-denied{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px;background:var(--bg3)}
+.login-denied-title{font-family:var(--sans);font-size:14px;font-weight:600;color:var(--txt);margin-bottom:4px}
+.login-denied-body{font-family:var(--sans);font-size:12px;line-height:1.55;color:var(--txt2)}
+.login-verify-actions{display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+.login-card-footer{margin-top:24px;padding-top:16px;border-top:1px solid var(--rim);color:var(--txt3);font-family:var(--sans);font-size:11px;line-height:1.45}
+body.light .login-wrap::before{background-image:linear-gradient(rgba(0,0,0,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.025) 1px,transparent 1px)}
+body.light .login-benefit{background:rgba(255,255,255,.5)}
+body.light .login-card{background:rgba(255,255,255,.95)}
+body.light .login-submit{color:#fff}
+body.light .btn-google{box-shadow:inset 0 0 0 1px #747775}
+body.light .login-eyebrow,body.light .login-card-kicker,body.light .login-benefit-index,body.light .login-mode-btn.active{color:var(--gold)}
+/* `hidden` must win over the display these controls set (Forgot password in Create account mode). */
+.login-card [hidden],#invites-card[hidden]{display:none!important}
+.invite-form{display:flex;flex-wrap:wrap;gap:8px;margin:.75rem 0 .25rem}
+.invite-form input{flex:1 1 180px;min-width:0;background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:.55rem .75rem;font-family:var(--sans);font-size:13px;color:var(--txt)}
+.invite-form input:focus{border-color:var(--gold);outline:none}
+.invite-message{font-family:var(--sans);font-size:12px;color:var(--txt2);min-height:1.2em;margin:.35rem 0}
+.invite-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:.6rem 0;border-top:1px solid var(--rim)}
+.invite-name{font-family:var(--sans);font-size:13px;font-weight:500;color:var(--txt)}
+.invite-meta{font-family:var(--mono);font-size:11px;color:var(--txt3);margin-top:2px;overflow-wrap:anywhere}
+.invite-role{font-family:var(--mono);font-size:10px;color:var(--gold);border:1px solid var(--gold-dim);border-radius:6px;padding:0 .35rem;margin-left:.3rem}
+.invite-empty{font-family:var(--sans);font-size:12px;color:var(--txt3)}
+@media(max-width:900px){.login-wrap{padding:40px 24px}.login-shell{display:flex;flex-direction:column;align-items:stretch;gap:0;max-width:720px}.login-story{display:contents}.login-story>*{order:3}.login-brand{order:1;margin-bottom:28px}.login-card{order:2;max-width:520px}.login-eyebrow{margin-top:52px}}
+@media(max-width:600px){.login-wrap{display:block;padding:26px 16px 34px}.login-brand{margin-bottom:22px}.login-eyebrow{margin-top:40px}.login-card{max-width:none;padding:24px 20px}.login-mark{width:46px;height:46px}.login-logo-text{font-size:19px}.login-headline{font-size:clamp(36px,11vw,50px)}.login-desc{font-size:15px}.login-benefits{grid-template-columns:1fr}.login-benefit{min-height:0;flex-direction:row;justify-content:flex-start;gap:16px}.login-benefit-index{padding-top:3px}.login-trust{flex-direction:column;gap:9px}}
 .lock-btn{background:transparent;border:1px solid var(--rim2);border-radius:6px;padding:.35rem .6rem;cursor:pointer;font-size:14px;transition:all .15s}
 .lock-btn:hover{border-color:var(--red);background:var(--red-dim)}
 .lock-btn.unlocked{border-color:var(--green);color:var(--green)}
@@ -2223,17 +2388,69 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 
 <!-- AUTH GATE -->
 <div class="auth-overlay" id="auth-overlay">
-  <div class="auth-box">
-    <div class="auth-icon"><svg class="ico" aria-hidden="true"><use href="#i-lock"/></svg></div>
-    <div class="auth-title">Daybook</div>
-    <div class="auth-sub">Sign in to sync your briefings across devices</div>
-    <button class="auth-btn google-btn" id="auth-btn" onclick="handleAuth()">
-      <svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle;margin-right:8px"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
-      Sign in with Google
-    </button>
-    <button class="install-btn" id="login-install-btn" onclick="installBriefingApp()">INSTALL DESKTOP APP</button>
-    <div class="auth-error" id="auth-error"></div>
-  </div>
+  <main class="login-wrap" aria-labelledby="login-title">
+   <div class="login-shell">
+    <section class="login-story">
+      <div class="login-brand">
+        <img class="login-mark" src="./assets/icons/daybook-mark.svg" alt="" width="56" height="56">
+        <div>
+          <div class="login-logo-text">DAYBOOK</div>
+          <div class="login-tagline">private &middot; invite-only</div>
+        </div>
+      </div>
+      <p class="login-eyebrow">Your morning intelligence desk</p>
+      <h1 class="login-headline" id="login-title">Start each working day with the whole picture.</h1>
+      <p class="login-desc" id="login-desc">Daybook turns the day&rsquo;s insurance, claims and market news into one ranked briefing, keeps the published numbers your work relies on, and remembers the calls you made and why.</p>
+      <div class="login-benefits" aria-label="What Daybook does">
+        <article class="login-benefit"><span class="login-benefit-index">01</span><div><h2>Read the day once</h2><p>A ranked briefing across insurance, interruptions, markets and the Philippines, each story linked to its source.</p></div></article>
+        <article class="login-benefit"><span class="login-benefit-index">02</span><div><h2>Keep the numbers straight</h2><p>CPI, the cash rate, wage and labour rates, tow fees and diesel prices, each with its source and the day it was checked.</p></div></article>
+        <article class="login-benefit"><span class="login-benefit-index">03</span><div><h2>Decide, then check</h2><p>A journal of the calls you make and why, each one checked later against what happened.</p></div></article>
+      </div>
+      <div class="login-trust" aria-label="Privacy and access"><span>Invite-only</span><span>Private to your account</span><span>Verified sign-in</span></div>
+    </section>
+    <aside class="login-card" aria-labelledby="login-card-title">
+     <div id="auth-signin-view">
+      <p class="login-card-kicker">Member access</p>
+      <h2 id="login-card-title">Open your Daybook</h2>
+      <p class="login-card-desc">Use the email address your invitation was sent to, or continue with Google.</p>
+      <div id="auth-denied"></div>
+      <form id="auth-form" novalidate onsubmit="submitEmailAuth(event)">
+        <div class="login-mode" role="group" aria-label="Sign in or create an account">
+          <button type="button" class="login-mode-btn active" data-auth-mode="signin" aria-pressed="true" onclick="setAuthMode('signin')">Sign in</button>
+          <button type="button" class="login-mode-btn" data-auth-mode="register" aria-pressed="false" onclick="setAuthMode('register')">Create account</button>
+        </div>
+        <div class="login-field" id="auth-name-group" hidden><label for="auth-name">Your name</label><input id="auth-name" type="text" autocomplete="name" maxlength="80"></div>
+        <div class="login-field"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="email" inputmode="email" required></div>
+        <div class="login-field"><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="current-password" required><p class="login-hint" id="auth-password-hint" hidden>At least 8 characters.</p></div>
+        <p class="login-message" id="auth-message" role="alert" hidden></p>
+        <button type="submit" class="login-submit" id="auth-submit">Sign in</button>
+        <button type="button" class="login-link" id="auth-forgot" onclick="forgotAuthPassword()">Forgot password?</button>
+      </form>
+      <div class="login-divider" aria-hidden="true"><span>or</span></div>
+      <button type="button" class="btn-google" id="auth-btn" onclick="handleAuth()">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      <span>Continue with Google</span>
+      </button>
+      <div class="auth-error" id="auth-error" role="alert"></div>
+      <button type="button" class="login-install" id="login-install-btn" onclick="installBriefingApp()">&#10515; Install as desktop app</button>
+      <div class="login-access-request"><span>Not yet a member?</span> <a href="mailto:bobbynacario@gmail.com?subject=Daybook%20access%20request">Request access</a></div>
+      <div class="login-card-footer">Access is checked against the private invite list. Each account sees only its own saved work and the shared feeds.</div>
+     </div>
+     <div id="auth-verify-view" hidden>
+      <p class="login-card-kicker">One more step</p>
+      <h2>Check your inbox</h2>
+      <p class="login-card-desc">A verification link was sent to <strong id="auth-verify-email"></strong>. Open it, then come back here. You only need to do this once.</p>
+      <p class="login-message" id="auth-verify-message" role="status" hidden></p>
+      <button type="button" class="login-submit" id="auth-verify-continue" onclick="continueAfterVerify()">I&rsquo;ve verified, continue</button>
+      <div class="login-verify-actions">
+        <button type="button" class="login-link" onclick="resendAuthVerification(this)">Resend the email</button>
+        <button type="button" class="login-link" onclick="useDifferentAccount()">Use a different account</button>
+      </div>
+      <div class="login-card-footer">Can&rsquo;t find it? Check your spam or promotions folder.</div>
+     </div>
+    </aside>
+   </div>
+  </main>
 </div>
 
 <!-- TOAST CONTAINER -->
@@ -2944,6 +3161,17 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   </div>
 
   <div class="help-body">
+    <div class="help-card help-wide" id="invites-card" hidden>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg> Invites — who can use Daybook</div>
+      <p>Daybook is invite-only. Add someone here, then send them the link to Daybook: they choose <b>Create account</b> with this email (or <b>Continue with Google</b> if it is a Google address) and verify it. Each account sees only its own saved work and the shared feeds (Radar, Markets, Sports and Your numbers). The AI features (the briefing, Go deeper, the weekly read, the meeting brief and deep research) stay yours. Removing someone stops their access to Daybook&rsquo;s data at once.</p>
+      <form class="invite-form" onsubmit="addInvite(event)">
+        <input id="invite-name" type="text" maxlength="80" placeholder="Name" aria-label="Name">
+        <input id="invite-email" type="email" placeholder="name@example.com" aria-label="Email to invite" autocomplete="off">
+        <button type="submit" class="tool-chip" id="invite-submit">Invite</button>
+      </form>
+      <p class="invite-message" id="invite-message" role="status"></p>
+      <div id="invite-list">Loading invites…</div>
+    </div>
     <div class="help-card help-wide help-takeaway">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> Today — how the page works</div>
       <p><b>Start here</b> at the top names the one thing to do next: a check that is due, a goal move whose target date has arrived, an experiment ready to review, the weekly read on Sundays, today’s spark, then a line in your note. <b>Not now</b> shows the next one for this visit; nothing else is hidden.</p>
@@ -3209,6 +3437,211 @@ function initAuthGate() {
   var overlay = document.getElementById('auth-overlay');
   overlay.classList.remove('hidden');
   document.getElementById('auth-error').textContent = '';
+  showAuthView('signin');
+}
+
+// ── SIGN-IN PAGE: email and password, Google, and the invite gate ──
+// The Firebase module decides access (window._onAuthDenied); this draws it.
+var AUTH_MIN_PASSWORD = 8;
+var AUTH_CONTACT = 'bobbynacario@gmail.com';
+var _authMode = 'signin';
+function authMessageFor(code) {
+  switch (code) {
+    case 'auth/invalid-email': return 'That email address doesn’t look right.';
+    case 'auth/missing-password': return 'Enter your password.';
+    case 'auth/weak-password': return 'Use at least ' + AUTH_MIN_PASSWORD + ' characters for your password.';
+    case 'auth/email-already-in-use': return 'There’s already an account for this email. Sign in instead. If you joined with Google, use Continue with Google, or Forgot password to set a password.';
+    case 'auth/invalid-credential': case 'auth/invalid-login-credentials': case 'auth/wrong-password': case 'auth/user-not-found':
+      return 'Email or password is incorrect. If you usually continue with Google, you don’t have a password yet: choose Forgot password to set one. New here? Choose Create account.';
+    case 'auth/too-many-requests': return 'Too many attempts. Wait a few minutes and try again.';
+    case 'auth/operation-not-allowed': return 'Email sign-in isn’t switched on yet. Use Continue with Google for now.';
+    case 'auth/user-disabled': return 'This account has been disabled.';
+    case 'auth/network-request-failed': return 'Network error. Check your connection and try again.';
+    case 'auth/popup-closed-by-user': case 'auth/cancelled-popup-request': return 'Sign-in was cancelled.';
+    case 'auth/unauthorized-domain': return 'Sign-in isn’t allowed from this address.';
+    default: return 'Couldn’t sign in. Please try again.';
+  }
+}
+// The card above the form when an account was turned away.
+function authDeniedHtml(reason, email) {
+  var request = '<a href="mailto:' + AUTH_CONTACT + '?subject=' + encodeURIComponent('Daybook access request') + '">Request access</a>';
+  if (reason === 'no-invite') return '<div class="login-denied"><div class="login-denied-title">No invite found</div><div class="login-denied-body">' +
+    esc(email || 'This account') + ' is not on the invite list. Daybook is invite-only. ' + request + ', or try a different account.</div></div>';
+  if (reason === 'no-email') return '<div class="login-denied"><div class="login-denied-title">Email required</div><div class="login-denied-body">This account doesn’t share an email address, so its invite can’t be checked. Try a different account.</div></div>';
+  if (reason === 'rules-error') return '<div class="login-denied"><div class="login-denied-title">Couldn’t check access</div><div class="login-denied-body">There was a problem checking the invite list. Try again in a moment.</div></div>';
+  return '';
+}
+function showAuthView(view) {
+  var signin = document.getElementById('auth-signin-view'), verify = document.getElementById('auth-verify-view');
+  if (!signin || !verify) return;
+  signin.hidden = view === 'verify';
+  verify.hidden = view !== 'verify';
+}
+function setAuthMessage(id, text, tone) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text || '';
+  el.hidden = !text;
+  el.classList.toggle('is-success', tone === 'success');
+}
+function setAuthMode(mode) {
+  _authMode = mode === 'register' ? 'register' : 'signin';
+  var registering = _authMode === 'register';
+  document.querySelectorAll('[data-auth-mode]').forEach(function(btn) {
+    var on = btn.getAttribute('data-auth-mode') === _authMode;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  document.getElementById('auth-name-group').hidden = !registering;
+  document.getElementById('auth-password-hint').hidden = !registering;
+  document.getElementById('auth-password').setAttribute('autocomplete', registering ? 'new-password' : 'current-password');
+  document.getElementById('auth-submit').textContent = registering ? 'Create account' : 'Sign in';
+  document.getElementById('auth-forgot').hidden = registering;
+  setAuthMessage('auth-message', '');
+}
+// '' when the form can be sent, or what to fix.
+function authFormProblem(mode, name, email, password) {
+  if (mode === 'register' && !String(name || '').trim()) return 'Enter your name.';
+  if (!email || email.indexOf('@') < 1 || /\s/.test(email)) return 'Enter the email address your invitation was sent to.';
+  if (!password) return 'Enter your password.';
+  if (mode === 'register' && password.length < AUTH_MIN_PASSWORD) return 'Use at least ' + AUTH_MIN_PASSWORD + ' characters for your password.';
+  return '';
+}
+async function submitEmailAuth(event) {
+  if (event) event.preventDefault();
+  var name = document.getElementById('auth-name').value.trim();
+  var email = document.getElementById('auth-email').value.trim().toLowerCase();
+  var password = document.getElementById('auth-password').value;
+  var problem = authFormProblem(_authMode, name, email, password);
+  if (problem) { setAuthMessage('auth-message', problem); return; }
+  setAuthMessage('auth-message', '');
+  document.getElementById('auth-denied').innerHTML = '';
+  var registering = _authMode === 'register';
+  var submit = document.getElementById('auth-submit');
+  if (!window.fbEmailSignIn) { setAuthMessage('auth-message', 'Sign-in is still loading. Try again in a moment.'); return; }
+  submit.disabled = true;
+  submit.textContent = registering ? 'Creating account…' : 'Signing in…';
+  var result = registering ? await window.fbEmailRegister(name, email, password) : await window.fbEmailSignIn(email, password);
+  submit.disabled = false;
+  submit.textContent = registering ? 'Create account' : 'Sign in';
+  if (!result.ok) { setAuthMessage('auth-message', authMessageFor(result.code)); return; }
+  if (registering && result.verificationSent === false) setAuthMessage('auth-verify-message', 'We couldn’t send the verification email. Use Resend the email.');
+  document.getElementById('auth-password').value = '';
+  // The access check (onAuthStateChanged) takes it from here.
+}
+async function forgotAuthPassword() {
+  var email = document.getElementById('auth-email').value.trim().toLowerCase();
+  if (!email || email.indexOf('@') < 1) { setAuthMessage('auth-message', 'Enter your email address above, then choose Forgot password.'); document.getElementById('auth-email').focus(); return; }
+  var btn = document.getElementById('auth-forgot');
+  btn.disabled = true;
+  var result = window.fbPasswordReset ? await window.fbPasswordReset(email) : {ok: false, code: ''};
+  btn.disabled = false;
+  if (result.ok) setAuthMessage('auth-message', 'If there’s an account for ' + email + ', a password reset link is on its way. Check spam or promotions if it isn’t in your inbox within a minute. This also sets a password if you joined with Google.', 'success');
+  else setAuthMessage('auth-message', authMessageFor(result.code));
+}
+window._onAuthDenied = function(reason, user) {
+  var email = user && user.email || '';
+  if (reason === 'verify') {
+    setText('auth-verify-email', email);
+    showAuthView('verify');
+    return;
+  }
+  showAuthView('signin');
+  document.getElementById('auth-denied').innerHTML = authDeniedHtml(reason, email);
+};
+window._onAuthError = function(code) { setText('auth-error', authMessageFor(code)); };
+async function continueAfterVerify() {
+  var btn = document.getElementById('auth-verify-continue');
+  btn.disabled = true;
+  setAuthMessage('auth-verify-message', '');
+  try {
+    var access = window.fbRefreshVerification ? await window.fbRefreshVerification() : 'verify';
+    if (access === 'verify') setAuthMessage('auth-verify-message', 'Not verified yet. Open the link in the email first, then try again.');
+  } catch (e) {
+    console.error('Verification check failed:', e);
+    setAuthMessage('auth-verify-message', 'Couldn’t check just now. Try again in a moment.');
+  }
+  btn.disabled = false;
+}
+async function resendAuthVerification(btn) {
+  if (btn) btn.disabled = true;
+  var result = window.fbResendVerification ? await window.fbResendVerification() : {ok: false, code: ''};
+  if (btn) btn.disabled = false;
+  var email = document.getElementById('auth-verify-email').textContent;
+  setAuthMessage('auth-verify-message', result.ok ? 'Sent. Check ' + email + ' for the new link.' : authMessageFor(result.code), result.ok ? 'success' : '');
+}
+function useDifferentAccount() {
+  if (window.fbSignOut) window.fbSignOut();
+  setAuthMessage('auth-verify-message', '');
+  showAuthView('signin');
+}
+
+// ── INVITES (owner only, Help) ──
+var DAYBOOK_URL = 'https://bobbynacario-design.github.io/bobdailybriefing/';
+// A lowercase address, or '' if it is not one. Invite ids are the lowercase email.
+function normalizeInviteEmail(value) {
+  var email = String(value || '').trim().toLowerCase();
+  return /^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(email) && email.length <= 254 ? email : '';
+}
+function inviteRowsHtml(invites) {
+  var list = (invites || []).slice().sort(function(a, b) {
+    if ((a.role === 'owner') !== (b.role === 'owner')) return a.role === 'owner' ? -1 : 1;
+    return String(b.invitedAt || '') < String(a.invitedAt || '') ? -1 : 1;
+  });
+  if (!list.length) return '<p class="invite-empty">No invites yet.</p>';
+  return list.map(function(inv) {
+    var day = /^\d{4}-\d{2}-\d{2}/.test(String(inv.invitedAt || '')) ? groundingDay(String(inv.invitedAt).slice(0, 10)) : '';
+    return '<div class="invite-row"><div><div class="invite-name">' + esc(inv.name || inv.email) + (inv.role === 'owner' ? ' <span class="invite-role">owner</span>' : '') + '</div>' +
+      '<div class="invite-meta">' + esc(inv.email) + (day ? ' · invited ' + esc(day) : '') + '</div></div>' +
+      (inv.role === 'owner' ? '' : '<button type="button" class="tool-chip" data-invite-remove="' + esc(inv.email) + '" onclick="removeInvite(this)">Remove</button>') + '</div>';
+  }).join('');
+}
+async function renderInvitesPanel() {
+  var card = document.getElementById('invites-card');
+  if (!card) return;
+  var owner = !!(window.fbIsDaybookOwner && window.fbIsDaybookOwner());
+  card.hidden = !owner;
+  if (!owner) return;
+  var listEl = document.getElementById('invite-list');
+  try {
+    listEl.innerHTML = inviteRowsHtml(await window.fbListInvites());
+  } catch (e) {
+    console.error('Invites did not load:', e);
+    listEl.textContent = 'Invites could not load. The Firestore rules for the invite list may not be deployed yet.';
+  }
+}
+async function addInvite(event) {
+  if (event) event.preventDefault();
+  var email = normalizeInviteEmail(document.getElementById('invite-email').value);
+  var name = document.getElementById('invite-name').value.trim();
+  if (!email) { setText('invite-message', 'Enter a full email address.'); return; }
+  var btn = document.getElementById('invite-submit');
+  btn.disabled = true;
+  try {
+    await window.fbSaveInvite(email, name);
+    document.getElementById('invite-email').value = '';
+    document.getElementById('invite-name').value = '';
+    setText('invite-message', 'Invited ' + email + '. Send them ' + DAYBOOK_URL + ' and ask them to choose Create account with that email, or Continue with Google.');
+    await renderInvitesPanel();
+  } catch (e) {
+    console.error('Invite failed:', e);
+    setText('invite-message', 'Could not save the invite. Check the connection and try again.');
+  }
+  btn.disabled = false;
+}
+async function removeInvite(btn) {
+  var email = btn && btn.getAttribute('data-invite-remove');
+  if (!email || !confirm('Remove ' + email + '? They lose access to Daybook at once.')) return;
+  btn.disabled = true;
+  try {
+    await window.fbRemoveInvite(email);
+    setText('invite-message', 'Removed ' + email + '.');
+    await renderInvitesPanel();
+  } catch (e) {
+    console.error('Remove failed:', e);
+    setText('invite-message', 'Could not remove the invite. Try again.');
+    btn.disabled = false;
+  }
 }
 
 function onSignedIn() {
@@ -3238,6 +3671,7 @@ function onSignedIn() {
     window._feedHealthTimer = setInterval(window.loadFeedHealth, 15 * 60 * 1000);
   }
   consumeBriefingDeliveryMute();
+  renderInvitesPanel();  // the owner's Invites card on Help; hidden for anyone else
   navFromHash();  // open the deep-linked tab (e.g. a shared #sports link)
   // The app opens on Today without switchPage, so that visit is counted here.
   if (!location.hash || location.hash === '#today') trackUse('page_today');
@@ -3266,12 +3700,10 @@ async function handleAuth() {
     errorEl.textContent = 'Auth not ready, try again';
     return;
   }
-  var uid = await window.fbSignIn();
-  if (uid) {
-    onSignedIn();
-  } else {
-    errorEl.textContent = 'Sign-in failed or cancelled';
-  }
+  document.getElementById('auth-denied').innerHTML = '';
+  var result = await window.fbSignIn();
+  // On success the access check (onAuthStateChanged) opens Daybook or says why not.
+  if (!result.ok && result.code !== 'redirect') errorEl.textContent = authMessageFor(result.code);
 }
 
 function clearPrivateSession() {
@@ -3294,6 +3726,8 @@ function clearPrivateSession() {
   _accounts = null; _accountsFor = null; _callsCache = null; _callsLoading = false;
   clearTimeout(_usage.timer); _usage = {day: '', counts: {}, timer: null, pruned: false};
   if (window.fbAcceptEvidenceBase) window.fbAcceptEvidenceBase(null);
+  var invitesCard = document.getElementById('invites-card');
+  if (invitesCard) { invitesCard.hidden = true; setText('invite-list', ''); setText('invite-message', ''); }
   resetTicker();
   setText('hero-date','Sign in to read your briefing');
   setText('hero-timestamp','');

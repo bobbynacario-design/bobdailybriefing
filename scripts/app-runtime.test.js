@@ -59,6 +59,45 @@ test('every briefing section has a section selector, and each selector counts it
   assert.match(html,/chip\.disabled = empty;/);
 });
 
+// The invite-only sign-in page (Enclave-style) and the owner's Invites panel.
+test('sign-in messages are plain, the denied card is escaped, and the form says what to fix',()=>{
+  const {context}=environment(['authMessageFor','authDeniedHtml','authFormProblem'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),AUTH_MIN_PASSWORD:8,AUTH_CONTACT:'bobbynacario@gmail.com'});
+  assert.match(context.authMessageFor('auth/invalid-credential'),/Email or password is incorrect\. If you usually continue with Google, you don’t have a password yet/);
+  assert.match(context.authMessageFor('auth/email-already-in-use'),/already an account for this email\. Sign in instead/);
+  assert.match(context.authMessageFor('auth/operation-not-allowed'),/Email sign-in isn’t switched on yet/);
+  assert.equal(context.authMessageFor('auth/weak-password'),'Use at least 8 characters for your password.');
+  assert.equal(context.authMessageFor('something/else'),'Couldn’t sign in. Please try again.');
+  const denied=context.authDeniedHtml('no-invite','<eve>@example.com');
+  assert.match(denied,/No invite found/); assert.ok(!denied.includes('<eve>')); assert.match(denied,/&lt;eve>@example\.com is not on the invite list/);
+  assert.match(denied,/href="mailto:bobbynacario@gmail\.com\?subject=Daybook%20access%20request">Request access<\/a>/);
+  assert.match(context.authDeniedHtml('rules-error'),/Couldn’t check access/);
+  assert.equal(context.authDeniedHtml('ok'),'');
+  assert.equal(context.authFormProblem('register','','a@b.co','longenough'),'Enter your name.');
+  assert.equal(context.authFormProblem('signin','','not-an-email','x'),'Enter the email address your invitation was sent to.');
+  assert.equal(context.authFormProblem('register','Ann','a@b.co','short'),'Use at least 8 characters for your password.');
+  assert.equal(context.authFormProblem('signin','','a@b.co','short'),'',"a short password is only refused when creating one");
+  // The page and the access gate are wired: nothing loads until the check passes.
+  assert.match(html,/if \(access === 'ok'\) \{\n    window\._firebaseUid = user\.uid;/);
+  assert.match(html,/const DAYBOOK_OWNER = 'bobbynacario@gmail\.com';/);
+  ['auth-signin-view','auth-verify-view','auth-form','auth-denied','auth-btn','login-install-btn'].forEach(id=>assert.ok(html.includes('id="'+id+'"'),id));
+  // Controls that set their own display (.login-link) must still obey `hidden`.
+  assert.match(html,/\.login-card \[hidden\],#invites-card\[hidden\]\{display:none!important\}/);
+});
+test('invites: addresses are normalised, and the list puts the owner first with no Remove',()=>{
+  const {context}=environment(['normalizeInviteEmail','inviteRowsHtml','groundingDay'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')});
+  assert.equal(context.normalizeInviteEmail('  Alice@Example.COM '),'alice@example.com');
+  ['','alice','alice@','@example.com','a b@example.com','alice@example','a/b@example.com'].forEach(v=>assert.equal(context.normalizeInviteEmail(v),'',v));
+  const rows=context.inviteRowsHtml([
+    {email:'alice@example.com',role:'member',name:'Alice <A>',invitedAt:'2026-09-30T09:00:00Z'},
+    {email:'bobbynacario@gmail.com',role:'owner',name:'Bob',invitedAt:'2026-09-30T08:28:49Z'},
+  ]);
+  assert.ok(rows.indexOf('Bob')<rows.indexOf('Alice'),'owner first');
+  assert.equal((rows.match(/data-invite-remove=/g)||[]).length,1,'only the member can be removed');
+  assert.match(rows,/data-invite-remove="alice@example\.com"/);
+  assert.match(rows,/Alice &lt;A>/); assert.match(rows,/alice@example\.com · invited 30 Sep 2026/);
+  assert.equal(context.inviteRowsHtml([]),'<p class="invite-empty">No invites yet.</p>');
+});
+
 const NUMBERS=['groundingShortName','groundingDay','groundingPeriod','groundingStatus','groundingNumbersHtml'];
 const escHtml=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 test('numbers escape source content and separate fact trust from watch states',()=>{
