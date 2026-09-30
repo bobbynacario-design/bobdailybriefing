@@ -1066,3 +1066,33 @@ Bob allowed the download (D-H7-4) and chose the Field Worker rates only
   before 11:44 UTC publishes the labour rates alone. The scheduled 20:15 UTC
   run then publishes August CPI as its own release, the routine Phase G
   expected.
+
+### Live, 2026-09-30
+
+- **Published:** dispatch run 36668257495 on 3c10cdd (04:18 UTC) published
+  **release 000012**, manifest
+  `c3f0ef546114c11ad294c3e0d562520ebd74f58f3f50dfb7dc469ddaed200782`.
+- **What changed:** compared with 000011, it adds exactly the two records,
+  `sapn_quoted_labour_field_worker_ordinary@2026-07-01#r1` = 198.12 and
+  `…_overtime@2026-07-01#r1` = 323.05. No record is altered.
+  - The only watch records that changed are the two new series' own, both
+    published.
+  - August CPI was not in it, as planned: every series was last checked at
+    23:44 UTC, inside CPI's 12-hour cadence. The scheduled 20:15 UTC run is due
+    to publish it (3.5 → 4.0) as release 000013.
+- **`fetchRelease` against the live URL:** ok, sequence 12. Both records are
+  source-linked, fact-verified, plausible and eligible, and not cross-checked.
+- **The mirror** is at sequence 12, with the same manifest. Before
+  publishing, Your numbers was previewed with the dry run's mirror. The two
+  rows sit under Fees as "SA Power Networks Field Worker labour rate, ordinary
+  time" / "… overtime", FY2026-27, $198.12/hour and $323.05/hour.
+- **Help** (3c10cdd, cache v133) is live. Its first deploy was stopped by CI's
+  audit gate: new high-severity advisories on brace-expansion (and undici in
+  sports) failed every push that day. 8e7c015 patched both, lockfile only.
+  Then the static-app workflow was dispatched (run 36668989112).
+- **Next, in BI-Assessor's session:** map the two series in ClaimBench as a
+  `regulated_fee_max` line beside `bm_rate_contractor_labour_au_v1`. The
+  mapping and how a report may compare against it are BI-Assessor's
+  decisions.
+- **Next, here:** 2025–26 (D-H7-7), once Bob downloads a source that states
+  GST.
