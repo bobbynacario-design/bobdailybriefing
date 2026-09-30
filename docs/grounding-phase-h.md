@@ -1379,3 +1379,38 @@ Daybook's own user agent.
     records are skipped as "series not allowlisted".
   - So pushing before the consumers merge would have broken tonight's CPI for
     both.
+
+### Live, 2026-09-30: H-8 done
+
+- **Prerequisites checked before pushing (05:32 UTC):**
+  - RiskM8 main 8781b59, and BI-Assessor main f69603a (PR #12), both carry
+    validate.js `fe1e7e68…`. BI-Assessor's pin names 83eb7b1.
+  - BI-Assessor's four Functions were uploaded at 05:25–05:26 UTC (storage
+    generation), after the 05:22 merge, from a checkout at f69603a.
+  - `deliverMorningFive` and `testBriefingDelivery` now carry source hash
+    `ad127782…` (was `f15333f1…`).
+- **Published:** dispatch run 36673945340 on de7c9aa (about 05:33 UTC)
+  published **release 000013**, manifest
+  `6eb29900f842b1dab5204c249ffb47e4dc5170dfe25bca6f446cac4c95a00be5`.
+- **What changed:** compared with 000012, it adds exactly the seven records
+  `aip_tgp_diesel_<city>@2026-09-25#r1`: Adelaide 267.4, Brisbane 271.9,
+  Darwin 277.6, Hobart 270.4, Melbourne 269.5, Perth 261.9 and Sydney 271.5
+  c/L. No record is altered, and the only watch records that changed are the
+  seven new ones, all published.
+  - GitHub's runner can read aip.com.au.
+  - August CPI was held, correctly: every other series was last checked at
+    23:44 UTC, inside the 12-hour cadence. The scheduled 20:15 UTC run is due
+    to publish it as 000014.
+- **Each consumer's own copy of the validator, read-only:**
+  - RiskM8, with its production mapping `riskm8-daybook-map/2`: release
+    valid; the seven are skipped as "series not allowlisted".
+  - BI-Assessor's pure `importDaybookRelease`: action import; the seven are
+    skipped as "series not mapped to ClaimBench"; nothing else is new.
+- **The mirror** is at sequence 13, with the same manifest. Built from it, the
+  Morning 5 holds one diesel item: "Diesel terminal gate prices, 25 Sep 2026
+  (c/L): Adelaide 267.4, Brisbane 271.9, Darwin 277.6, Hobart 270.4,
+  Melbourne 269.5, Perth 261.9, Sydney 271.5".
+- **Help** (de7c9aa, cache v135) is live. CI, Publish static app and the
+  grounding run all passed.
+- **Next week:** the run of Monday 5 October (Sydney) should publish Friday 2
+  October's prices, superseding these.
