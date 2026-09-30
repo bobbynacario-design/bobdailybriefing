@@ -1,0 +1,270 @@
+{
+  "schema": "daybook-grounding-watch/1",
+  "generatedAt": "2026-09-30T05:33:36.129Z",
+  "records": [
+    {
+      "watchId": "abs_cpi_all_groups_annual_change@series",
+      "seriesId": "abs_cpi_all_groups_annual_change",
+      "state": "published",
+      "expectedBy": "2026-09-30",
+      "stateChangedAt": "2026-09-27T08:03:57.047Z",
+      "detail": "Latest: 3.5% (2026-07), published 2026-08-26. Next: Consumer Price Index, Australia, August 2026, listed by the ABS for 2026-09-30.",
+      "evidence": {
+        "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release",
+        "retrievedAt": "2026-09-27T08:03:57.047Z"
+      }
+    },
+    {
+      "watchId": "fwo_ma000020_cw2_ordinary@series",
+      "seriesId": "fwo_ma000020_cw2_ordinary",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T09:35:01.492Z",
+      "detail": "Latest: $30.39/hour (2026-07-01), published 2026-07-02.",
+      "evidence": {
+        "url": "https://calculate.fairwork.gov.au/payguides/fairwork/ma000020/pdf",
+        "retrievedAt": "2026-09-27T09:35:01.492Z"
+      }
+    },
+    {
+      "watchId": "nsw_tow_accident_towing_light@series",
+      "seriesId": "nsw_tow_accident_towing_light",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T13:59:26.704Z",
+      "detail": "Latest: $320.00 each (2026-07-01), published 2026-07-01.",
+      "evidence": {
+        "url": "https://www.nsw.gov.au/legal-and-justice/consumer-rights-and-protection/services/your-rights-when-your-vehicle-towed/tow-truck-fees-for-light-vehicles",
+        "retrievedAt": "2026-09-27T13:59:26.704Z"
+      }
+    },
+    {
+      "watchId": "nsw_tow_storage_light_daily@series",
+      "seriesId": "nsw_tow_storage_light_daily",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T13:59:26.704Z",
+      "detail": "Latest: $18.00–$34.00/day (2026-07-01), published 2026-07-01.",
+      "evidence": {
+        "url": "https://www.nsw.gov.au/legal-and-justice/consumer-rights-and-protection/services/your-rights-when-your-vehicle-towed/tow-truck-fees-for-light-vehicles",
+        "retrievedAt": "2026-09-27T13:59:26.704Z"
+      }
+    },
+    {
+      "watchId": "vic_atsa_accident_tow_base_fee@series",
+      "seriesId": "vic_atsa_accident_tow_base_fee",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T13:59:26.704Z",
+      "detail": "Latest: $289.60 each (2026-07-01), published 2026-05-22.",
+      "evidence": {
+        "url": "https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf",
+        "retrievedAt": "2026-09-27T13:59:26.704Z"
+      }
+    },
+    {
+      "watchId": "vic_atsa_storage_motor_car_daily@series",
+      "seriesId": "vic_atsa_storage_motor_car_daily",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T13:59:26.704Z",
+      "detail": "Latest: $22.20–$32.80/day (2026-07-01), published 2026-05-22.",
+      "evidence": {
+        "url": "https://www.gazette.vic.gov.au/gazette/Gazettes2026/GG2026S257.pdf",
+        "retrievedAt": "2026-09-27T13:59:26.704Z"
+      }
+    },
+    {
+      "watchId": "cth_sg_charge_percentage@series",
+      "seriesId": "cth_sg_charge_percentage",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T22:37:36.357Z",
+      "detail": "Reviewed 2026-09-28: compilation 78 (C2026C00272), in force from 2026-07-01. Section 17A(2): \"charge percentage means 12.\" SG now arises on each payment of qualifying earnings (the QE day), as amended by the Treasury Laws Amendment (Payday Superannuation) Act 2025 from 1 July 2026.",
+      "evidence": {
+        "url": "https://www.legislation.gov.au/C2004A04402/latest/text",
+        "retrievedAt": "2026-09-27T22:37:36.357Z"
+      }
+    },
+    {
+      "watchId": "ato_small_business_benchmarks_year@series",
+      "seriesId": "ato_small_business_benchmarks_year",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T22:48:00.302Z",
+      "detail": "Reviewed 2026-09-28: the 2023-24 benchmarks, released by the ATO on 2026-03-15. A reminder, not a watch: the ATO and data.gov.au refuse automated readers, so Daybook turns this stale a year after the release.",
+      "evidence": {
+        "url": "https://www.ato.gov.au/businesses-and-organisations/income-deductions-and-concessions/small-business-benchmarks",
+        "retrievedAt": "2026-09-27T22:48:00.302Z"
+      }
+    },
+    {
+      "watchId": "ato_taxation_statistics_edition@series",
+      "seriesId": "ato_taxation_statistics_edition",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-27T23:04:46.954Z",
+      "detail": "Reviewed 2026-09-28: Taxation Statistics 2023-24, released 2026-06-17. Company industry benchmarks by fine industry and business industry code, by business status and business income range, with average and median ratios; gross profit ratio = (total business income - cost of sales) / total business income. A reminder, not a watch: the ATO and data.gov.au refuse automated readers.",
+      "evidence": {
+        "url": "https://www.ato.gov.au/about-ato/research-and-statistics/in-detail/taxation-statistics",
+        "retrievedAt": "2026-09-27T23:04:46.954Z"
+      }
+    },
+    {
+      "watchId": "rba_cash_rate_target@series",
+      "seriesId": "rba_cash_rate_target",
+      "state": "published",
+      "expectedBy": "2026-11-03",
+      "stateChangedAt": "2026-09-29T23:44:25.714Z",
+      "detail": "Latest: 4.6% p.a. (2026-09-30), published 2026-09-29. Next: a Monetary Policy Board decision, scheduled by the RBA for 2026-11-03.",
+      "evidence": {
+        "url": "https://www.rba.gov.au/schedules-events/board-meeting-schedules.html",
+        "retrievedAt": "2026-09-29T23:44:25.714Z"
+      }
+    },
+    {
+      "watchId": "sapn_quoted_labour_field_worker_ordinary@series",
+      "seriesId": "sapn_quoted_labour_field_worker_ordinary",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T04:18:52.087Z",
+      "detail": "Latest: $198.12/hour (2026-07-01), published 2026-07-24.",
+      "evidence": {
+        "url": "https://www.sapowernetworks.com.au/public/download.jsp?id=337829",
+        "retrievedAt": "2026-09-30T04:18:52.087Z"
+      }
+    },
+    {
+      "watchId": "sapn_quoted_labour_field_worker_overtime@series",
+      "seriesId": "sapn_quoted_labour_field_worker_overtime",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T04:18:52.087Z",
+      "detail": "Latest: $323.05/hour (2026-07-01), published 2026-07-24.",
+      "evidence": {
+        "url": "https://www.sapowernetworks.com.au/public/download.jsp?id=337829",
+        "retrievedAt": "2026-09-30T04:18:52.087Z"
+      }
+    },
+    {
+      "watchId": "abs_wpi_all_industries_annual_change@series",
+      "seriesId": "abs_wpi_all_industries_annual_change",
+      "state": "published",
+      "expectedBy": "2026-11-18",
+      "stateChangedAt": "2026-09-29T08:18:00.468Z",
+      "detail": "Latest: 3.2% (2026-Q2), published 2026-08-19. Next: Wage Price Index, Australia, September 2026, listed by the ABS for 2026-11-18.",
+      "evidence": {
+        "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/latest-release",
+        "retrievedAt": "2026-09-29T08:18:00.468Z"
+      }
+    },
+    {
+      "watchId": "abs_wpi_construction_annual_change@series",
+      "seriesId": "abs_wpi_construction_annual_change",
+      "state": "published",
+      "expectedBy": "2026-11-18",
+      "stateChangedAt": "2026-09-29T08:18:00.468Z",
+      "detail": "Latest: 3.3% (2026-Q2), published 2026-08-19. Next: Wage Price Index, Australia, September 2026, listed by the ABS for 2026-11-18.",
+      "evidence": {
+        "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/latest-release",
+        "retrievedAt": "2026-09-29T08:18:00.468Z"
+      }
+    },
+    {
+      "watchId": "abs_wpi_electricity_gas_water_waste_annual_change@series",
+      "seriesId": "abs_wpi_electricity_gas_water_waste_annual_change",
+      "state": "published",
+      "expectedBy": "2026-11-18",
+      "stateChangedAt": "2026-09-29T08:18:00.468Z",
+      "detail": "Latest: 3.6% (2026-Q2), published 2026-08-19. Next: Wage Price Index, Australia, September 2026, listed by the ABS for 2026-11-18.",
+      "evidence": {
+        "url": "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/latest-release",
+        "retrievedAt": "2026-09-29T08:18:00.468Z"
+      }
+    },
+    {
+      "watchId": "aip_tgp_diesel_sydney@series",
+      "seriesId": "aip_tgp_diesel_sydney",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T05:33:36.129Z",
+      "detail": "Latest: 271.5 c/L (2026-09-25), published 2026-09-25.",
+      "evidence": {
+        "url": "https://aip.com.au/pricing/terminal-gate-prices/",
+        "retrievedAt": "2026-09-30T05:33:36.129Z"
+      }
+    },
+    {
+      "watchId": "aip_tgp_diesel_melbourne@series",
+      "seriesId": "aip_tgp_diesel_melbourne",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T05:33:36.129Z",
+      "detail": "Latest: 269.5 c/L (2026-09-25), published 2026-09-25.",
+      "evidence": {
+        "url": "https://aip.com.au/pricing/terminal-gate-prices/",
+        "retrievedAt": "2026-09-30T05:33:36.129Z"
+      }
+    },
+    {
+      "watchId": "aip_tgp_diesel_brisbane@series",
+      "seriesId": "aip_tgp_diesel_brisbane",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T05:33:36.129Z",
+      "detail": "Latest: 271.9 c/L (2026-09-25), published 2026-09-25.",
+      "evidence": {
+        "url": "https://aip.com.au/pricing/terminal-gate-prices/",
+        "retrievedAt": "2026-09-30T05:33:36.129Z"
+      }
+    },
+    {
+      "watchId": "aip_tgp_diesel_adelaide@series",
+      "seriesId": "aip_tgp_diesel_adelaide",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T05:33:36.129Z",
+      "detail": "Latest: 267.4 c/L (2026-09-25), published 2026-09-25.",
+      "evidence": {
+        "url": "https://aip.com.au/pricing/terminal-gate-prices/",
+        "retrievedAt": "2026-09-30T05:33:36.129Z"
+      }
+    },
+    {
+      "watchId": "aip_tgp_diesel_darwin@series",
+      "seriesId": "aip_tgp_diesel_darwin",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T05:33:36.129Z",
+      "detail": "Latest: 277.6 c/L (2026-09-25), published 2026-09-25.",
+      "evidence": {
+        "url": "https://aip.com.au/pricing/terminal-gate-prices/",
+        "retrievedAt": "2026-09-30T05:33:36.129Z"
+      }
+    },
+    {
+      "watchId": "aip_tgp_diesel_perth@series",
+      "seriesId": "aip_tgp_diesel_perth",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T05:33:36.129Z",
+      "detail": "Latest: 261.9 c/L (2026-09-25), published 2026-09-25.",
+      "evidence": {
+        "url": "https://aip.com.au/pricing/terminal-gate-prices/",
+        "retrievedAt": "2026-09-30T05:33:36.129Z"
+      }
+    },
+    {
+      "watchId": "aip_tgp_diesel_hobart@series",
+      "seriesId": "aip_tgp_diesel_hobart",
+      "state": "published",
+      "expectedBy": null,
+      "stateChangedAt": "2026-09-30T05:33:36.129Z",
+      "detail": "Latest: 270.4 c/L (2026-09-25), published 2026-09-25.",
+      "evidence": {
+        "url": "https://aip.com.au/pricing/terminal-gate-prices/",
+        "retrievedAt": "2026-09-30T05:33:36.129Z"
+      }
+    }
+  ]
+}
