@@ -1099,8 +1099,10 @@ Bob allowed the download (D-H7-4) and chose the Field Worker rates only
 
 ## H-8: diesel terminal gate prices (automated, Daybook only)
 
-Status: **diagnostic, 2026-09-30; waiting on Bob's decisions (D-H8-1 to
-D-H8-4).** The roadmap row says: "automated — Daybook only for now —
+Status: **lanes 1–3 built and pushed, 2026-09-30 (83eb7b1, ae64da4, 308c1a1).
+Lane 4, registering and publishing, waits for both consumers' re-copies and
+Bob's Morning 5 Functions deploy** (see "What is left" at the end). Bob agreed
+D-H8-1 to D-H8-4 as recommended. The roadmap row says: "automated — Daybook only for now —
 heavy-vehicle LOI context". Everything below was read on that date with
 Daybook's own user agent.
 
@@ -1320,3 +1322,28 @@ Daybook's own user agent.
   Friday 25 September figures, source-linked, fact-verified and plausible.
   Sydney 271.5, Melbourne 269.5, Brisbane 271.9, Adelaide 267.4, Darwin
   277.6, Perth 261.9, Hobart 270.4.
+
+### Built (H-8, lane 3: the app) and what is left
+
+- **308c1a1 (cache v134, live):**
+  - The Morning 5 folds a run's cents-per-litre changes into one item:
+    "Diesel terminal gate prices, 25 Sep 2026 (c/L): Adelaide 267.4, Brisbane
+    271.9, …", with the cities in the producer's order.
+  - Your numbers shows a one-day key as "25 Sep 2026", in a Fuel group after
+    Economy.
+  - Previewed with a dry-run mirror of 000012 plus the seven series. That dry
+    run would cut 000013 with August CPI and the seven Friday figures.
+  - CI and Publish static app passed.
+- **What is left, in order:**
+  1. RiskM8 re-copies `validate.js` and `schema/facts.schema.json` from 83eb7b1
+     (chip task_5229fc25). RiskM8 was still on 2a162d7, so the 2136a5a
+     mapping-version change arrives with it.
+  2. BI-Assessor re-copies `validate.js` from 83eb7b1, and Bob runs
+     `deploy:safe` (chip task_9923052b).
+  3. Bob redeploys `deliverMorningFive` and `testBriefingDelivery`, so the
+     Morning 5 push folds too. The functions copy of
+     `command-center-core.js` is synced at predeploy.
+  4. Lane 4 here: add `aipTgp.registryEntries()` to `grounding/series.js`
+     (and flip the "not registered yet" test), the Help sentence and a cache
+     bump. Then a live dry run and a dispatch. The first release will carry the
+     latest completed week's Friday.
