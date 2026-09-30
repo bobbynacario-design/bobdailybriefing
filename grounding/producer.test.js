@@ -118,6 +118,20 @@ test('a reviewed manual capture adds an earlier period as its own current record
   const after = Object.fromEntries(fy28.snapshot.facts.map((f) => [f.recordId, f.lifecycle]));
   assert.deepEqual(after, { 'test_award_cw1@2026-07-01#r1': 'superseded', 'test_award_cw1@2025-07-01#r1': 'current', 'test_award_cw1@2027-07-01#r1': 'current' });
 });
+test('two periods captured together both stay current, the same as adding the earlier one later', () => {
+  const period = (value, from, to) => Object.assign(award(value), { observationKey: from, observationDate: from, publishedAt: from.slice(0, 4) + '-06-20',
+    effectiveFrom: from, effectiveTo: to, scope: { jurisdiction: 'AU', classification: 'CW1', period: { from, to } } });
+  const fy26 = period(30.10, '2025-07-01', '2026-06-30');
+  const together = run(null, [fy26, award(31.15)], T1);
+  const later = run(asPrevious(run(null, [award(31.15)], T1)), [fy26, award(31.15)], T2);
+  const lives = (r) => Object.fromEntries(r.snapshot.facts.map((f) => [f.recordId, [f.lifecycle, f.supersedes]]));
+  assert.deepEqual(lives(together), { 'test_award_cw1@2026-07-01#r1': ['current', null], 'test_award_cw1@2025-07-01#r1': ['current', null] });
+  assert.deepEqual(lives(together), lives(later));
+  assert.deepEqual(together.changes.map((c) => c.kind), ['new', 'earlier']);
+  // Automated periods still apply oldest first: the newer supersedes the older.
+  const auto = run(null, [cpi('2026-08', 3.1), cpi('2026-09', 3.2)], T1);
+  assert.deepEqual(auto.snapshot.facts.map((f) => [f.observationKey, f.lifecycle]), [['2026-08', 'superseded'], ['2026-09', 'current']]);
+});
 test('a plausibility breach is not published: the last good figure stays and the watch says why', () => {
   const first = run(null, [cpi('2026-08', 3.1)], T1);
   const jump = run(asPrevious(first), [cpi('2026-09', 8.5)], T2);

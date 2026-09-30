@@ -175,9 +175,18 @@ function produce(input) {
 
   let working = previous ? clone(previous.facts) : [];
   const changes = [], skipped = [], issues = {};
+  // Within a series, periods apply oldest first, so a new one supersedes the
+  // last. A reviewed manual capture's periods apply newest first instead: each
+  // earlier period then enters as its own current record, as it would had it
+  // been added in a later run (the FY26 award). So two years captured together
+  // (H-7b) both stay current, whatever order they arrive in.
   const observations = (input.observations || []).map(asObservation)
-    .sort((a, b) => (a.seriesId !== b.seriesId ? (a.seriesId < b.seriesId ? -1 : 1)
-      : a.observationKey === b.observationKey ? 0 : (a.observationKey < b.observationKey ? -1 : 1)));
+    .sort((a, b) => {
+      if (a.seriesId !== b.seriesId) return a.seriesId < b.seriesId ? -1 : 1;
+      if (a.observationKey === b.observationKey) return 0;
+      const newestFirst = a.captureMethod === 'manual' && b.captureMethod === 'manual';
+      return (a.observationKey < b.observationKey) === newestFirst ? 1 : -1;
+    });
 
   observations.forEach((obs) => {
     if (!byId[obs.seriesId]) { skipped.push({ seriesId: obs.seriesId, observationKey: obs.observationKey, reason: 'series not registered in grounding/series.js' }); return; }
