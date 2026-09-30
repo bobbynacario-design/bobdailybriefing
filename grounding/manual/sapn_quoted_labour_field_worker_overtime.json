@@ -1,0 +1,78 @@
+{
+  "seriesId": "sapn_quoted_labour_field_worker_overtime",
+  "title": "SA Power Networks Field Worker labour rate, overtime (quoted services, excl GST)",
+  "observationKey": "2026-07-01",
+  "kind": "regulated_fee",
+  "basisCode": "regulated_fee_max",
+  "observationDate": "2026-07-01",
+  "publishedAt": "2026-07-24",
+  "effectiveFrom": "2026-07-01",
+  "effectiveTo": "2027-06-30",
+  "derivation": null,
+  "plausibilityOverride": null,
+  "captureMethod": "manual",
+  "value": 323.05,
+  "range": null,
+  "unitCode": "aud_per_hour",
+  "scope": {
+    "jurisdiction": "SA",
+    "classification": "Field Worker (labour code FW), overtime, quoted services, excl GST",
+    "period": {
+      "from": "2026-07-01",
+      "to": "2027-06-30"
+    }
+  },
+  "qualifications": [
+    {
+      "text": "Table 3, FW Field Worker, Overtime, 2026/27 (GST Inclusive): $355.36.",
+      "evidenceId": "manual"
+    },
+    {
+      "text": "Overtime rates will be applicable to all customer initiated after hours work.",
+      "evidenceId": "manual"
+    },
+    {
+      "text": "Field Worker ordinary business hours are typically between 7:30am and 3:30pm Monday to Friday.",
+      "evidenceId": "manual"
+    },
+    {
+      "text": "These labour rates are our charge-out rates.",
+      "evidenceId": "manual"
+    },
+    {
+      "text": "Labour consists of all labour costs directly incurred in the provision of the service which may include labour on-costs, fleet on-costs, and overheads.",
+      "evidenceId": "manual"
+    },
+    {
+      "text": "The AER approved labour rates will apply for both ancillary network services, quoted services and any connections quoted services.",
+      "evidenceId": "manual"
+    }
+  ],
+  "valueBindings": [
+    {
+      "field": "value",
+      "token": "323.05",
+      "evidenceId": "manual"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "manual",
+      "role": "release",
+      "url": "https://www.sapowernetworks.com.au/public/download.jsp?id=337829",
+      "publisher": "SA Power Networks",
+      "title": "Manual 18: Connections & Ancillary Network Services, issued June 2026 (SA Power Networks Connections and Ancillary Network Services 2026-27 20260724 v1.2.pdf)",
+      "quote": "D.2 Quoted service labour rates […] Table 3 – Hourly labour rates applicable for quoted services […] Ordinary Time […] Overtime […] 2026/27 (GST Exclusive) 2026/27 (GST Inclusive) 2026/27 (GST Exclusive) 2026/27 (GST Inclusive) […] FW Field Worker $198.12 $217.93 $323.05 $355.36",
+      "locator": {
+        "page": "30 of 38 (PDF page 31)",
+        "table": "Table 3 – Hourly labour rates applicable for quoted services, column \"Overtime, 2026/27 (GST Exclusive)\"",
+        "row": "FW Field Worker"
+      },
+      "asOf": "2026-07-24",
+      "tier": "primary",
+      "retrievedAt": "2026-09-30T04:01:17Z",
+      "contentSha256": "bd069d6111263091a02cd599d585265cacc14adba40d1d47974b08c9cce4c08a",
+      "licence": "© SA Power Networks 2026. All rights reserved (Copyright Act 1968); quoted in part for citation only. Full manual: https://www.sapowernetworks.com.au/public/download.jsp?id=337829"
+    }
+  ]
+}

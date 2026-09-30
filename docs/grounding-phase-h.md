@@ -895,3 +895,174 @@ browser.
 - **Not read yet.** Whether it holds the quoted-service labour rates, their GST
   treatment and its licence are all to confirm from the file. It is the
   network's own content, not CC BY.
+
+### Read: Manual 18, 2026–27 (2026-09-30)
+
+Bob allowed the download (D-H7-4) and chose the Field Worker rates only
+(D-H7-5).
+- **The file:** "SA Power Networks Connections and Ancillary Network Services
+  2026-27 20260724 v1.2.pdf", 2,163,126 bytes, 39 pages, SHA-256
+  `bd069d6111263091a02cd599d585265cacc14adba40d1d47974b08c9cce4c08a`, from
+  `https://www.sapowernetworks.com.au/public/download.jsp?id=337829`.
+  - The first attempt stopped at the 60-second timeout with 1.2 MB, and the
+    second took 1.7 s. A watch that downloads must allow for a slow server.
+- **Where:** Appendix D, "D.2 Quoted service labour rates", "Table 3 – Hourly
+  labour rates applicable for quoted services", PDF page 31 (printed "Page 30
+  of 38"). Read with `pdftotext -raw` and checked against the rendered page.
+  `-layout` shuffles the rows, as it did in the FWO guide.
+
+| Labour code | Description | Ordinary time excl GST | incl GST | Overtime excl GST | incl GST |
+|---|---|---|---|---|---|
+| FW | Field Worker | $198.12 | $217.93 | $323.05 | $355.36 |
+
+- **What the manual says about them:**
+  - "These labour rates are our charge-out rates."
+  - "Overtime rates will be applicable to all customer initiated after hours
+    work."
+  - The footnote: "Field Worker ordinary business hours are typically between
+    7:30am and 3:30pm Monday to Friday."
+  - The formula (D.1): "Labour consists of all labour costs directly incurred
+    in the provision of the service which may include labour on-costs, fleet
+    on-costs, and overheads." A 6% margin is added on top of labour,
+    contractor services and materials.
+  - Section 3.1: "The AER approved labour rates will apply for both ancillary
+    network services, quoted services and any connections quoted services."
+- **What they are not.** The manual applies them to customer-initiated
+  services. It does not say that a network's claim for damage to its assets is
+  priced at them. For a TP infrastructure claim they are a reasonableness
+  reference for the labour line: the regulator's maximum for the network's own
+  quoted work. They are not a rate the network is bound to charge.
+- **They agree with the AER determination.** Every 2026–27 figure in Table 3
+  (all six categories, both columns) is the AER model's 2025–26 figure ×
+  1.0444, to rounding: CPI plus the 0.79% real labour escalator (X = −0.0079).
+  Every GST-inclusive figure is exactly the exclusive one × 1.1. This is a
+  consistency check, not a cross-check the contract records.
+- **The page that lists it:** the resource page
+  `https://www.sapowernetworks.com.au/data/307870/sa-power-networks-connections-ancillary-network-services/`
+  (HTTP 200, 0.6 s). It reads "SA Power Networks Connections and Ancillary
+  Network Services 2026-27 … Last Modified : 24th July 2026 First Published :
+  28th May 2026", and links `/public/download.jsp?id=337829`. It always points
+  at the current edition.
+- **Old editions are overwritten, not kept.** The Internet Archive's copies of
+  the resource page (December 2025 to May 2026) show that the 2025–26 edition
+  was id 333196: "… 2025-2026 … Published : 3rd June 2025 Download (2169 KB)".
+  On 2026-09-30 that id still answers with a file named "… 2025-2026 20260701
+  v1.3.pdf", but its bytes are the 2026–27 manual: the same SHA-256 as
+  id 337829. (A small, unrelated id returns its own file, so this is not the
+  CDN, Imperva, ignoring the query.) The Archive holds no copy of the 2025–26
+  PDF. So:
+  - the capture's `url` is the download id, and its `contentSha256` is the only
+    proof of which bytes were read;
+  - 2025–26 needs another source (D-H7-7).
+- **Licence:** "SA Power Networks Copyright ©2026 … All rights reserved. You
+  shall not reproduce any content of this document by any process without
+  first obtaining the SA Power Networks permission, except as permitted under
+  the Copyright Act 1968." It is stricter than the VIC gazette's notice. A
+  figure is a fact; the table's text is not ours to copy.
+
+### Proposed design (H-7a)
+
+- **Two series, both capture `manual`, jurisdiction SA:**
+  - `sapn_quoted_labour_field_worker_ordinary`: "SA Power Networks Field
+    Worker labour rate, ordinary time (quoted services, excl GST)";
+  - `sapn_quoted_labour_field_worker_overtime`: "SA Power Networks Field
+    Worker labour rate, overtime (quoted services, excl GST)".
+  - `kind: 'regulated_fee'`, `basisCode: 'regulated_fee_max'` (the AER sets
+    the maximum labour rates for quoted services, Attachment 16),
+    `unitCode: 'aud_per_hour'`, one observation per financial year.
+  - The short names differ ("… ordinary time" / "… overtime"), so Your numbers
+    tells them apart.
+- **Observations:**
+  - 2026–27 from Manual 18 v1.2, Table 3, with the manual's own sentences above
+    as qualifications. The GST-inclusive figure is a qualification.
+  - 2025–26 (for incidents before 1 July 2026): see D-H7-7 below.
+- **Watch:** `grounding/sources/sapn-manual18.js` reads the resource page each
+  day, as the VIC watch reads the gazette search. Its `REVIEWED` const holds
+  the edition ("2026-27"), "Last Modified" and the download id.
+  - Unchanged: published.
+  - A new edition, a new revision or a new id: **stale**, and a person
+    re-captures.
+  - A page it cannot read: blocked, and the capture stands.
+  - It never downloads the PDF, so a slow server cannot hold anything.
+- **Bounds:** ordinary 120–300, overtime 200–500; maxChange 25 and 40 (about
+  12% a year; the real 2026–27 move was 4.4%).
+- **Licence (as the VIC gazette, D-H2):** short quotes of the one row and the
+  qualifying sentences, attributed "© SA Power Networks 2026"; the PDF is not
+  kept in the repo; its SHA-256 and permanent URL are in the capture.
+- **Contract:** nothing changes. `validate.js` keeps its SHA-256.
+- **Consumer:** ClaimBench would hold these beside
+  `bm_rate_contractor_labour_au_v1` as a new `regulated_fee_max` line; the
+  mapping is BI-Assessor's decision, in its session. Until it maps them they
+  are skipped as not allowlisted, and Daybook shows them in Your numbers.
+
+### Decisions (Bob, 2026-09-30)
+
+- **D-H7-4:** the 2026–27 Manual 18 may be downloaded (done, above).
+- **D-H7-5:** the Field Worker only, ordinary time and overtime.
+- **D-H7-6:** values **excl GST**. The inclusive figure is a qualification.
+  Utility invoices carry labour ex GST with GST as its own line, and the NSW
+  tow fees are ex GST.
+- **The design as proposed**: two manual series, the resource-page watch,
+  the bounds, short quotes with © attribution, no copy of the PDF kept, and no
+  contract change.
+- **D-H7-7, 2025–26:** Bob allowed the 2025–26 manual's download. That turned
+  up the overwrite above, so the edition cannot be had from SA Power Networks
+  or the Archive. The AER model alone would give 189.70 and 309.32, but it
+  never states GST, so it cannot carry an "excl GST" title. **2026–27 is built
+  first.** 2025–26 waits for a source that states GST, such as SA Power
+  Networks' 2025–26 pricing proposal on aer.gov.au, which Bob downloads. An
+  older period is added later as its own record (the FY26 award precedent).
+
+### Built (H-7a)
+
+- **`grounding/sources/sapn-manual18.js`**, registered as
+  `sapn_quoted_labour_field_worker_ordinary` and `…_overtime` (capture
+  `manual`, freshness 400 days, cadence 12 hours; bounds 120 to 300 with max
+  change 25, and 200 to 500 with max change 40; stream `tp_utility`).
+  - The watch reads the resource page once per run for both series. It reads
+    the edition from the resource title, and the date from "Last Modified"
+    (the older layout's "Published" if that is all there is). It needs exactly
+    one download link.
+  - Anything else fails closed as blocked: years that do not follow each
+    other, a date it cannot read, no download, or two downloads.
+  - It compares the page with the capture for the same edition. A new edition,
+    a later date or a new id means stale. Captures of an earlier year cited to
+    another source (the FY26 route) are ignored by the comparison.
+- **The captures** (`grounding/manual/sapn_quoted_labour_field_worker_*.json`):
+  - $198.12 and $323.05 an hour, excl GST, 2026-07-01 to 2027-06-30;
+    `publishedAt` 2026-07-24, the date of the v1.2 read;
+  - one piece of release evidence: the D.2 heading, Table 3's title and column
+    headings, and the Field Worker row, in 279 characters;
+  - the locator gives the printed page and the column in words;
+  - the qualifications are the GST-inclusive figure, the four sentences quoted
+    above and, for overtime, "Overtime rates will be applicable to all customer
+    initiated after hours work."
+- **Fixtures:** the resource block of the live page (2026-09-30), and the
+  same block from the Archive's copy of 2025-12-08 (the older layout). Both
+  are trimmed, with a source and copyright header.
+- **Tests:** 6 new; 135 grounding tests in total.
+  - Nine deliberate breakages were each caught:
+    - a revision date ignored;
+    - stale on the capture's own date;
+    - the first of several downloads taken;
+    - one page read per series;
+    - any two years accepted;
+    - a day not zero-padded;
+    - a moved download ignored;
+    - any capture matched regardless of edition;
+    - "Published" preferred over "Last Modified".
+  - The last one got through the first version of the tests (neither real
+    page carries both), and a case was added.
+- **Live dry run** over release 000011 with every real source: it would cut
+  release 000012 with three changes.
+  - The two labour rates: source-linked, fact-verified, plausible and
+    eligible; not cross-checked (one source). Both watches read the live page
+    as published.
+  - **August CPI**, which the ABS released today: 3.5 → 4.0 for 2026-08,
+    cross-checked, superseding July. The next is expected 2026-10-28.
+  - Every other series is unchanged.
+- **Timing:** every series was last checked at 23:44 UTC on the 29th
+  (`grounding-ops`), and CPI is re-checked only after 12 hours. So a dispatch
+  before 11:44 UTC publishes the labour rates alone. The scheduled 20:15 UTC
+  run then publishes August CPI as its own release, the routine Phase G
+  expected.

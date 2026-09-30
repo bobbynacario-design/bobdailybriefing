@@ -29,6 +29,7 @@ const sbb = require('./sources/ato-sbb');
 const taxStats = require('./sources/ato-taxstats');
 const rbaCash = require('./sources/rba-cash-rate');
 const absWpi = require('./sources/abs-wpi');
+const sapn = require('./sources/sapn-manual18');
 
 module.exports = [
   // Phase E pilot, for RiskM8 (docs/grounding-phase-e.md, D-E1 to D-E4).
@@ -200,6 +201,42 @@ module.exports = [
     bounds: { min: 0, max: 10, maxChange: 1 },
     cadenceHours: 12,
     fetch: rbaCash.fetchCashRate,
+  },
+  // Phase H, H-7a: SA Power Networks' quoted-service labour rates, Field
+  // Worker, ordinary time and overtime, excl GST (Bob's D-H7-5 and D-H7-6).
+  // The AER sets them as maximums in the distribution determination; the
+  // network publishes each year's in Manual 18, Appendix D, Table 3. Captured
+  // by hand; the manual's resource page is watched each day. The manual is
+  // "All rights reserved": short quotes only, no copy of the PDF kept.
+  {
+    seriesId: sapn.ORDINARY.seriesId,
+    title: sapn.ORDINARY.title,
+    capture: 'manual',
+    publisher: sapn.PUBLISHER,
+    urls: { resource: sapn.RESOURCE_URL, manual2026: sapn.DOWNLOAD_BASE + '337829' },
+    licence: sapn.licenceFor(2026, sapn.DOWNLOAD_BASE + '337829'),
+    streams: ['tp_utility'],
+    // An annual figure (1 July); the watch turns it stale when a new edition
+    // or revision is listed.
+    freshnessDays: 400,
+    // 2025-26 was $189.70 (the AER's model), 2026-27 $198.12: about 4.4% a year.
+    bounds: { min: 120, max: 300, maxChange: 25 },
+    cadenceHours: 12,
+    fetch: sapn.watchOrdinary,
+  },
+  {
+    seriesId: sapn.OVERTIME.seriesId,
+    title: sapn.OVERTIME.title,
+    capture: 'manual',
+    publisher: sapn.PUBLISHER,
+    urls: { resource: sapn.RESOURCE_URL, manual2026: sapn.DOWNLOAD_BASE + '337829' },
+    licence: sapn.licenceFor(2026, sapn.DOWNLOAD_BASE + '337829'),
+    streams: ['tp_utility'],
+    freshnessDays: 400,
+    // 2025-26 was $309.32 (the AER's model), 2026-27 $323.05.
+    bounds: { min: 200, max: 500, maxChange: 40 },
+    cadenceHours: 12,
+    fetch: sapn.watchOvertime,
   },
   // Phase H, H-6: the ABS Wage Price Index, annual change (D-H6-1 to D-H6-4),
   // for Daybook only until a consumer maps it. Three series from one quarterly
