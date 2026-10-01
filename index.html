@@ -387,6 +387,24 @@ window.fbGenerateDossier = async function(story, refresh) {
   var res = await generate({ story: story, refresh: refresh === true, requestId: crypto.randomUUID() });
   return res.data;
 };
+// About you (PROFILE_FIELDS in lib/briefing-prompt-core.js): the one profile
+// every AI feature reads. Null until he saves one; the defaults apply.
+window.fbLoadProfile = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'profile-' + uid));
+    return snap.exists() ? (snap.data().profile || null) : null;
+  } catch (e) {
+    // Not saved yet: the shared rule reads a missing doc as denied.
+    if (e && e.code === 'permission-denied') return null;
+    throw e;
+  }
+};
+window.fbSaveProfile = async function(profile) {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  await setDoc(doc(db, COLL, 'profile-' + uid), {uid: uid, kind: 'profile', profile: profile, updatedAt: new Date().toISOString()});
+};
 window.fbLoadDossiers = async function(uid) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
   try {
@@ -2373,6 +2391,19 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 .acct-badges{display:flex;flex-wrap:wrap;gap:.3rem;margin:.1rem 0 .5rem}.acct-badge{font-family:var(--mono);font-size:10px;letter-spacing:.03em;padding:.14rem .5rem;border-radius:6px;border:1px solid var(--line);background:var(--gold-dim);color:var(--txt);cursor:pointer}.acct-badge:hover{border-color:var(--line-hover)}.acct-badge.is-call{background:var(--blue-dim)}
 .accounts-panel{margin-bottom:1rem}.accounts-panel .command-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}.acct-group{margin:.5rem 0 .2rem}.acct-group-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.2rem}.acct-row{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;padding:.3rem 0;border-bottom:1px solid var(--rim)}.acct-name{flex:1 1 9rem;font-size:13px;color:var(--txt)}.acct-count{font-family:var(--mono);font-size:10.5px;color:var(--txt3)}.acct-chips{display:flex;flex-wrap:wrap;gap:.3rem}.acct-more{margin-top:.6rem}.acct-more summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--txt2)}.acct-quiet{font-size:12.5px;color:var(--txt3);margin:.3rem 0}.acct-edit-label{display:block;font-size:12px;color:var(--txt2);margin:.4rem 0 .3rem}#accounts-text{width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:.5rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt)}
 /* Meeting brief */
+.about-panel{margin-bottom:1rem}.about-fields{display:grid;gap:1rem;margin:.4rem 0 .8rem}
+.about-field{display:grid;gap:.3rem}.about-label{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--txt)}
+.about-hint{font-size:13px;color:var(--txt3)}.about-count{font-family:var(--mono);font-size:11px;color:var(--txt3);justify-self:end}
+.about-field textarea{width:100%;min-width:0;background:var(--bg3);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.6rem .75rem;font-family:var(--sans);font-size:14px;line-height:1.6;resize:vertical}
+.about-field textarea:focus{border-color:var(--gold);outline:none}
+.about-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-bottom:.4rem}.about-save{border-color:var(--gold);color:var(--gold)}
+.about-status{font-size:13px;color:var(--txt2)}.about-state{font-family:var(--mono);font-size:11px;color:var(--txt3)}
+.about-item{padding:.8rem 0;border-top:1px solid var(--rim)}.about-item:first-child{border-top:0}
+.about-item-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.3rem .8rem}
+.about-item-head strong{font-size:14px;color:var(--txt)}.about-steers{font-family:var(--mono);font-size:11px;color:var(--txt3)}
+.about-item p,.about-item li{font-size:13.5px;line-height:1.6;color:var(--txt2)}.about-item p{margin:.35rem 0 0}
+.about-item ul{margin:.35rem 0 0;padding-left:1.1rem}.about-item li{margin:.15rem 0}
+.about-item .tool-chip{margin-top:.45rem}.about-vote{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem}
 .meeting-panel{margin-bottom:1rem}.meeting-panel .command-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:flex-start}.meeting-intro{font-size:12.5px;line-height:1.6;color:var(--txt2);margin:.2rem 0 .6rem}.meeting-form{display:flex;flex-wrap:wrap;gap:.5rem}.meeting-form input{flex:1 1 220px;min-width:0;padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font-size:14px}.meeting-status{font-family:var(--mono);font-size:11px;color:var(--txt3);margin:.5rem 0 0;min-height:1em}.meeting-status.is-warn{color:var(--amber);font-size:12px}.meeting-brief{margin:.7rem 0 0}.meeting-brief a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}#meeting-history{max-width:100%;font-size:12px}
 /* Called it? */
 .called-it .called-row{display:grid;grid-template-columns:minmax(0,1fr) auto 3.2em;gap:.6rem;align-items:baseline;padding:.35rem 0;border-bottom:1px solid var(--rim);font-size:12.5px;color:var(--txt2)}.called-it .called-row b{font-family:var(--mono);color:var(--txt);text-align:right}.called-split{font-family:var(--mono);font-size:10.5px;color:var(--txt3);margin:.5rem 0 .2rem}.called-read{font-size:13px;line-height:1.55;color:var(--txt);margin:.5rem 0 0}.called-waiting{font-size:12px;color:var(--amber);margin:.35rem 0 0}
@@ -2514,6 +2545,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <button class="ntab" data-page="pse" onclick="switchPage('pse',this)">PSE</button>
     <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">Markets</button>
     <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">Sports</button>
+    <button class="ntab owner-only" data-page="about" onclick="switchPage('about',this)">About you</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">Help</button>
     <button class="ntab" data-page="decisions" onclick="switchPage('decisions',this)">Decisions</button>
   </div>
@@ -3196,6 +3228,25 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 </div>
 
 <!-- ═══════════════ HELP PAGE ═══════════════ -->
+<div class="page" id="page-about">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">What Daybook knows</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-eye"/></svg> About you</div>
+    <div class="hero-sub">The profile the AI features read, and what Daybook has picked up from what you record and tap.</div>
+    <div class="hero-divider"></div>
+  </div>
+  <section class="command-panel about-panel owner-only" id="about-profile" aria-labelledby="about-profile-title">
+    <div class="command-panel-head"><div><div class="command-panel-title" id="about-profile-title">Your profile</div><div class="command-panel-meta">Read by the briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research, from their next run</div></div><span class="about-state" id="about-state"></span></div>
+    <div class="about-fields" id="about-fields"><p class="rel-none-txt">Loading your profile…</p></div>
+    <div class="about-actions"><button type="button" class="tool-chip about-save" id="about-save" onclick="saveAboutProfile()">Save profile</button><button type="button" class="tool-chip" id="about-reset" onclick="resetAboutProfile()">Put back the starting profile</button><span class="about-status" id="about-status" role="status"></span></div>
+    <p class="meeting-intro">Your words replace only the facts about you. The rules for using them stay fixed: nothing here can make an AI feature invent a link, drop its sources or give trading advice.</p>
+  </section>
+  <section class="command-panel about-panel owner-only" id="about-learned-panel" aria-labelledby="about-learned-title">
+    <div class="command-panel-head"><div><div class="command-panel-title" id="about-learned-title">What it has picked up from you</div><div class="command-panel-meta">Each one says what it steers. Nothing here is guessed: it is what you recorded or tapped.</div></div></div>
+    <div id="about-learned"><p class="rel-none-txt">Loading…</p></div>
+  </section>
+</div>
+
 <div class="page" id="page-help">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">How to read it</div>
@@ -3213,6 +3264,11 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li><b>Not included</b> — the AI features (the daily briefing, Go deeper, the weekly read, meeting briefs and deep research) run on the owner&rsquo;s account, so their buttons are not shown here and Today has no briefing of its own.</li>
         <li><b>Morning delivery</b> — you can turn on the Morning 5 notification on Command, on each device you use.</li>
       </ul>
+    </div>
+    <div class="help-card help-wide owner-only">
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-eye"/></svg> About you — what Daybook knows</div>
+      <p><b>More → About you</b> holds one profile in five boxes: your work, your clients and files, what moves your numbers, what to look out for, and anything else. The briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research all read it from their next run, so a change in your work mix reaches all of them at once. It starts as the profile those features already used; <b>Put back the starting profile</b> returns to it. Your words change only the facts about you: the rules (sources, no invented links, no trading advice) stay fixed.</p>
+      <p>Below it, <b>What it has picked up from you</b> lists what already steers Daybook, each with what it steers: your story votes (with <b>Take back</b>), open calls, Radar setups, accounts, goals and Morning 5 priorities, plus what you open most. Nothing there is guessed. Later, Daybook will suggest profile lines from what you use, for you to approve.</p>
     </div>
     <div class="help-card help-wide" id="invites-card" hidden>
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg> Invites — who can use Daybook</div>
@@ -3456,6 +3512,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
   <button class="mob-tab" id="mob-pse" onclick="switchPageMobile('pse',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-pse"/></svg></span>PSE</button>
   <button class="mob-tab" id="mob-miro" onclick="switchPageMobile('miro',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-miro"/></svg></span>MKTS</button>
   <button class="mob-tab" id="mob-sports" onclick="switchPageMobile('sports',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-sports"/></svg></span>SPORT</button>
+  <button class="mob-tab owner-only" id="mob-about" onclick="switchPageMobile('about',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-eye"/></svg></span>YOU</button>
   <button class="mob-tab" id="mob-help" onclick="switchPageMobile('help',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-help"/></svg></span>HELP</button>
 </div>
 
@@ -3747,6 +3804,7 @@ function onSignedIn() {
   }
   consumeBriefingDeliveryMute();
   renderInvitesPanel();  // the owner's Invites card on Help; hidden for anyone else
+  loadAboutProfile();    // his profile, for the copied AI prompt; About you renders it
   navFromHash();  // open the deep-linked tab (e.g. a shared #sports link)
   // The app opens on Today without switchPage, so that visit is counted here.
   if (!location.hash || location.hash === '#today') trackUse('page_today');
@@ -3802,6 +3860,7 @@ function clearPrivateSession() {
   resetIntelligenceSearch(); resetEvidenceSets();
   _meetingBriefs = {}; _meetingFor = null; _meetingShown = '';
   _askThread = []; _askAnswers = {}; _askFor = null; _askShown = '';
+  _aboutProfile = null; _aboutFor = null; _aboutDirty = false; _aboutVotes = [];
   var askOut = document.getElementById('ask-out'); if (askOut) { askOut.hidden = true; askOut.innerHTML = ''; }
   var askHistory = document.getElementById('ask-history'); if (askHistory) { askHistory.hidden = true; askHistory.innerHTML = ''; }
   _accounts = null; _accountsFor = null; _callsCache = null; _callsLoading = false;
@@ -4072,6 +4131,7 @@ function switchPage(id, el) {
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
   if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
+  if (id==='about') pending = renderAbout();
   setPageHash(id);
   window.scrollTo(0,0);
   updatePrimaryNavigation(id);
@@ -4100,6 +4160,7 @@ function switchPageMobile(id, el) {
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
   if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
+  if (id==='about') pending = renderAbout();
   setPageHash(id);
   window.scrollTo(0,0);
   updatePrimaryNavigation(id);
@@ -5284,6 +5345,148 @@ function paintMeetingHistory() {
   }).join('');
   if (_meetingShown) select.value = _meetingShown;
 }
+// ── About you (PROFILE_FIELDS in lib/briefing-prompt-core.js) ──
+// The one profile every AI feature reads, and what Daybook has picked up from
+// what he recorded or tapped, each with what it steers. Nothing here is
+// inferred, so nothing here can be wrong about him in a way he cannot see.
+var _aboutProfile = null, _aboutFor = null, _aboutDirty = false, _aboutVotes = [];
+function aboutFieldsHtml(profile) {
+  return window.BriefingPromptCore.PROFILE_FIELDS.map(function(f) {
+    var value = profile[f.key] || '', rows = f.key === 'files' ? 7 : f.key === 'work' ? 2 : 4;
+    return '<label class="about-field" for="about-' + f.key + '"><span class="about-label">' + esc(f.label) + '</span><span class="about-hint">' + esc(f.hint) + '</span>' +
+      '<textarea id="about-' + f.key + '" data-about-field="' + f.key + '" maxlength="' + f.max + '" rows="' + rows + '" oninput="aboutEdited(this)">' + esc(value) + '</textarea>' +
+      '<span class="about-count" id="about-count-' + f.key + '">' + value.length + ' / ' + f.max + '</span></label>';
+  }).join('');
+}
+function aboutValues() {
+  var out = {};
+  window.BriefingPromptCore.PROFILE_FIELDS.forEach(function(f) { var box = document.getElementById('about-' + f.key); out[f.key] = box ? box.value : ''; });
+  return out;
+}
+function paintAboutProfile(profile) {
+  var fields = document.getElementById('about-fields');
+  if (fields) fields.innerHTML = aboutFieldsHtml(profile);
+  setText('about-state', window.BriefingPromptCore.isDefaultProfile(profile) ? 'The starting profile' : 'In your own words');
+}
+function aboutEdited(box) {
+  _aboutDirty = true;
+  var field = box && box.getAttribute('data-about-field');
+  if (field) setText('about-count-' + field, box.value.length + ' / ' + box.getAttribute('maxlength'));
+  setText('about-status', 'Not saved yet.');
+}
+async function saveAboutProfile() {
+  var core = window.BriefingPromptCore, button = document.getElementById('about-save');
+  if (!window._firebaseUid || typeof window.fbSaveProfile !== 'function') { setText('about-status', 'Sign in to keep your profile.'); return; }
+  var profile = core.cleanProfile(aboutValues());
+  if (button) button.disabled = true;
+  try {
+    await window.fbSaveProfile(profile);
+    _aboutProfile = profile; _aboutDirty = false;
+    paintAboutProfile(profile);
+    setText('about-status', 'Saved. The next briefing, answer, dossier or brief uses it.');
+  } catch (e) {
+    console.error('Profile save failed:', e);
+    setText('about-status', 'Could not save. Check the connection and try again.');
+  }
+  if (button) button.disabled = false;
+}
+function resetAboutProfile() {
+  if (!confirm('Put back the starting profile? What is in these boxes now is replaced.')) return;
+  paintAboutProfile(window.BriefingPromptCore.DEFAULT_PROFILE);
+  _aboutDirty = true;
+  setText('about-status', 'Starting profile put back. Tap Save profile to use it.');
+}
+async function loadAboutProfile() {
+  var uid = window._firebaseUid || null;
+  if (!uid || window.daybookMember || typeof window.fbLoadProfile !== 'function' || _aboutFor === uid) return;
+  _aboutFor = uid;
+  try { _aboutProfile = await window.fbLoadProfile(uid); } catch (e) { _aboutProfile = null; _aboutFor = null; }
+}
+async function renderAbout() {
+  var core = window.BriefingPromptCore;
+  if (!core || !core.PROFILE_FIELDS || window.daybookMember) return;
+  await loadAboutProfile();
+  if (!_aboutDirty) paintAboutProfile(core.cleanProfile(_aboutProfile));
+  await renderAboutLearned();
+}
+function aboutItem(title, steers, body) {
+  return '<div class="about-item"><div class="about-item-head"><strong>' + esc(title) + '</strong><span class="about-steers">Steers: ' + esc(steers) + '</span></div>' + body + '</div>';
+}
+// What it has picked up, from what is already loaded or one small read each.
+// html is built from esc()'d parts only.
+function aboutLearnedHtml(d) {
+  var html = '';
+  var votes = d.votes || {up: [], down: []}, all = votes.up.concat(votes.down);
+  _aboutVotes = all;
+  html += aboutItem('Your story votes (last 30 days)', 'the briefing', all.length
+    ? '<p>' + votes.up.length + ' “more like this” and ' + votes.down.length + ' “less like this”. The briefing reads them as examples and a count by section.</p><ul>' +
+      all.slice(0, 12).map(function(v, i) { return '<li class="about-vote"><span>' + (v.vote === 1 ? '▲' : '▼') + ' ' + esc(v.headline) + (v.section ? ' · ' + esc(v.section) : '') + '</span><button type="button" class="tool-chip" data-about-vote="' + i + '">Take back</button></li>'; }).join('') +
+      '</ul>' + (all.length > 12 ? '<p>And ' + (all.length - 12) + ' more.</p>' : '')
+    : '<p>No votes yet. Tap “More like this” or “Less like this” on a briefing story and it shows here.</p>');
+  var calls = d.calls || [];
+  html += aboutItem('Your open calls', 'the briefing (as private context, never as news)', calls.length
+    ? '<ul>' + calls.map(function(c) { return '<li>' + esc([c.asset, c.action, c.createdDate, c.conviction ? 'conviction ' + c.conviction + '/5' : ''].filter(Boolean).join(' · ')) + (c.reason ? ' — ' + esc(c.reason) : ' — no reason recorded') + '</li>'; }).join('') + '</ul>'
+    : '<p>No open calls in your decision journal.</p>');
+  var setups = d.setups || [];
+  html += aboutItem('Radar setups it sees', 'the briefing', setups.length
+    ? '<p>' + setups.map(function(s) { return esc(s.symbol + ' (' + s.status + ')'); }).join(', ') + '.</p>' : '<p>No confirmed or forming setups today.</p>');
+  html += aboutItem('Your accounts', 'the briefing’s account badges, the meeting brief and Ask Daybook',
+    '<p>' + d.accounts + (d.accounts === 1 ? ' account' : ' accounts') + (d.ownAccounts ? ', your own list.' : ', the starter list.') + '</p><button type="button" class="tool-chip" data-about-go="accounts">Edit on Evidence</button>');
+  var goals = d.goals || [];
+  html += aboutItem('Your goals', 'your daily spark and the weekly read', goals.length
+    ? '<ul>' + goals.map(function(g) { return '<li>' + esc(g.text) + (g.nextMove ? ' — next: ' + esc(g.nextMove) : '') + '</li>'; }).join('') + '</ul>'
+    : '<p>None set.</p><button type="button" class="tool-chip" data-about-go="goals">Set your goals on Today</button>');
+  var weights = d.weights || [];
+  html += aboutItem('Your Morning 5 priorities', 'Command and the morning push', weights.length
+    ? '<p>' + weights.map(esc).join(', ') + '. Everything else is Normal.</p><button type="button" class="tool-chip" data-about-go="command">Change on Command</button>'
+    : '<p>Every source at Normal.</p><button type="button" class="tool-chip" data-about-go="command">Change on Command</button>');
+  var used = d.used || [];
+  html += aboutItem('What you open most (last 14 days)', 'nothing yet', used.length
+    ? '<p>' + used.map(function(u) { return esc(u.label) + ' ' + u.count; }).join(' · ') + '.</p><p>From mid-October, Daybook will use this to suggest profile lines for you to approve. Nothing is added without you.</p>'
+    : '<p>Not enough use recorded yet.</p>');
+  return html;
+}
+function aboutWeightText(prefs) {
+  var weights = (prefs && prefs.sourceWeights) || {}, quiet = (prefs && prefs.quietSources) || [];
+  return Object.keys(weights).filter(function(k) { return weights[k] !== 1; }).sort()
+    .map(function(k) { return k + ': ' + (weights[k] < 1 ? 'Low' : 'High'); })
+    .concat(quiet.map(function(k) { return k + ': quiet'; }));
+}
+async function renderAboutLearned() {
+  var out = document.getElementById('about-learned'), core = window.BriefingPromptCore, uid = window._firebaseUid;
+  if (!out || !uid) return;
+  var read = function(loader) { return typeof loader === 'function' ? Promise.resolve().then(loader).catch(function() { return null; }) : Promise.resolve(null); };
+  var results = await Promise.all([read(window.fbLoadDecisions), read(window.fbLoadRadar), read(function() { return window.fbLoadUsage(uid); }),
+    commandPrefsAvailable ? Promise.resolve(commandPreferences) : read(window.fbLoadCommandPrefs)]);
+  var day = window.DailyBoostCore ? window.DailyBoostCore.dateKey() : '';
+  var usage = results[2] && results[2].days ? usageSummary(results[2].days, day, 14) : null;
+  out.innerHTML = aboutLearnedHtml({
+    votes: core.readerVotes(window.dailyBoostFeedbackEntries ? window.dailyBoostFeedbackEntries() : {}, day),
+    calls: (results[0] || []).filter(function(e) { return e && (e.status || 'open') !== 'closed' && (e.action || 'watched') !== 'skipped'; }),
+    setups: ((results[1] && results[1].signals) || []).filter(function(s) { return s && (s.status === 'confirmed' || s.status === 'forming'); })
+      .sort(function(a, b) { return (Number(b.score) || 0) - (Number(a.score) || 0); }).slice(0, 8),
+    accounts: activeAccounts().length, ownAccounts: !!(_accounts && _accounts.length),
+    goals: window.dailyBoostGoals ? window.dailyBoostGoals() : [],
+    weights: aboutWeightText(results[3]),
+    used: usage ? usage.used.filter(function(u) { return /^page_/.test(u.key) || /^open_/.test(u.key); }).slice(0, 6) : []
+  });
+}
+document.addEventListener('click', function(event) {
+  var target = event.target && event.target.closest ? event.target.closest('#about-learned [data-about-vote], #about-learned [data-about-go]') : null;
+  if (!target) return;
+  if (target.hasAttribute('data-about-vote')) {
+    var v = _aboutVotes[Number(target.getAttribute('data-about-vote'))];
+    // The same vote again takes it back (daily-boost.js voteBriefingStory).
+    if (v && window.voteBriefingStory) window.voteBriefingStory({headline: v.headline, source: v.source, section: v.section, url: v.url}, v.vote);
+    renderAboutLearned();
+    return;
+  }
+  var go = target.getAttribute('data-about-go');
+  if (go === 'accounts') { switchPage('evidence', document.querySelector('.ntab[data-page="evidence"]')); editAccounts(); }
+  else if (go === 'goals') { switchPage('today', document.querySelector('.ntab[data-page="today"]')); var goalsPanel = document.getElementById('boost-goals-panel'); if (goalsPanel) { goalsPanel.open = true; goalsPanel.scrollIntoView({block:'center', behavior:'smooth'}); } }
+  else if (go === 'command') { switchPage('command', document.querySelector('.ntab[data-page="command"]')); var settings = document.getElementById('command-settings'); if (settings) settings.open = true; }
+});
+
 async function loadMeetingBriefs() {
   var uid = window._firebaseUid || null;
   if (!uid || typeof window.fbLoadMeetingBriefs !== 'function' || _meetingFor === uid) return;
@@ -12576,6 +12779,7 @@ function getRecentBriefings() {
 function getGeminiPrompt() {
   return window.BriefingPromptCore.buildBriefingPrompt({
     dateLabel: getTodayBriefingDateLabel(),
+    profile: _aboutProfile,
     feedback: getBriefingFeedback(),
     context: {recent: getRecentBriefings(), accounts: activeAccounts()}
   });

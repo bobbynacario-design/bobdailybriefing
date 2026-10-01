@@ -27,7 +27,7 @@ assert.deepEqual(duplicateIds(sports), [], 'sports.html must not contain duplica
 
 [
   'page-today', 'page-history', 'page-trends', 'page-research', 'page-radar',
-  'page-command', 'page-evidence', 'page-timeline', 'page-journal', 'page-pse', 'page-miro', 'page-sports', 'page-help', 'page-decisions'
+  'page-command', 'page-evidence', 'page-timeline', 'page-journal', 'page-pse', 'page-miro', 'page-sports', 'page-help', 'page-decisions', 'page-about'
 ].forEach(function (id) {
   assert.ok(html.includes('id="' + id + '"'), 'missing application page #' + id);
 });

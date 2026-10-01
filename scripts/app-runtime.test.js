@@ -278,6 +278,53 @@ test('Search: a key typed on the tick box or a button goes into the box, and tic
   assert.ok(html.includes('<input type="checkbox" id="ask-web" onchange="paintAskCost(); focusSearchInput()">'));
   assert.ok(html.includes('aria-labelledby="intel-search-label" onkeydown="intelligenceSearchTypeAhead(event)"'));
 });
+// About you: the one profile every AI feature reads, and what it has picked up.
+const ABOUT_FNS=['aboutFieldsHtml','aboutValues','paintAboutProfile','aboutEdited','saveAboutProfile','resetAboutProfile','aboutItem','aboutLearnedHtml','aboutWeightText'];
+function aboutEnvironment(extra={}){
+  const env=environment(ABOUT_FNS,{esc:escHtml,_firebaseUid:'bob',confirm:()=>true,...extra});
+  vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),env.context);
+  vm.runInContext(html.match(/var _aboutProfile = [^\n]*;/)[0],env.context);
+  return env;
+}
+test('About you: the five boxes start from the profile the AI used, and a save keeps his words, tidied',async()=>{
+  let saved=null;
+  const {context,element}=aboutEnvironment({fbSaveProfile:async p=>{saved=p;}});
+  const core=context.BriefingPromptCore;
+  context.paintAboutProfile(core.cleanProfile(null));
+  const fields=element('about-fields').innerHTML;
+  assert.equal((fields.match(/<textarea /g)||[]).length,5);
+  assert.match(fields,/<span class="about-label">Your clients and files<\/span>/); assert.match(fields,/Most of his files are third-party property damage claims for QBE/);
+  assert.match(fields,/maxlength="1200"/); assert.equal(element('about-state').textContent,'The starting profile');
+  // The boxes he edits (stand-ins for the textareas).
+  const values={work:'I assess <BI> claims for Allianz.',files:'  Small-business BI  \n\n Some QBE pole strikes ',matters:'',lookFor:'storms',other:''};
+  Object.keys(values).forEach(k=>{element('about-'+k).value=values[k];});
+  const box=element('about-work'); box.getAttribute=n=>n==='data-about-field'?'work':n==='maxlength'?'300':null;
+  context.aboutEdited(box);
+  assert.equal(element('about-count-work').textContent,'33 / 300'); assert.equal(element('about-status').textContent,'Not saved yet.');
+  await context.saveAboutProfile();
+  assert.deepEqual({...saved},{work:'I assess <BI> claims for Allianz.',files:'Small-business BI\nSome QBE pole strikes',matters:'',lookFor:'storms',other:''});
+  assert.match(element('about-status').textContent,/^Saved\. The next briefing, answer, dossier or brief uses it\./);
+  assert.equal(element('about-state').textContent,'In your own words');
+  assert.match(element('about-fields').innerHTML,/I assess &lt;BI> claims/,'escaped in the box');
+  context.resetAboutProfile();
+  assert.match(element('about-fields').innerHTML,/Most of his files are third-party/); assert.match(element('about-status').textContent,/Tap Save profile to use it/);
+});
+test('About you: what it has picked up says what each thing steers, and never guesses',()=>{
+  const {context}=aboutEnvironment();
+  const out=context.aboutLearnedHtml({votes:{up:[{headline:'Trucking <operator> back',section:'interruptions',vote:1}],down:[]},
+    calls:[{asset:'ETH',action:'took',createdDate:'2026-07-21',conviction:4,reason:''}],setups:[{symbol:'ETH',status:'forming'}],
+    accounts:24,ownAccounts:true,goals:[],weights:context.aboutWeightText({sourceWeights:{Sports:0.5,Markets:0.5,Radar:1},quietSources:[]}),used:[{label:'Evidence',count:44}]});
+  assert.match(out,/<strong>Your story votes \(last 30 days\)<\/strong><span class="about-steers">Steers: the briefing<\/span>/);
+  assert.match(out,/▲ Trucking &lt;operator> back · interruptions<\/span><button type="button" class="tool-chip" data-about-vote="0">Take back<\/button>/);
+  assert.match(out,/ETH · took · 2026-07-21 · conviction 4\/5 — no reason recorded/);
+  assert.match(out,/ETH \(forming\)\./); assert.match(out,/24 accounts, your own list\./);
+  assert.match(out,/None set\./); assert.match(out,/Markets: Low, Sports: Low\. Everything else is Normal\./);
+  assert.match(out,/Steers: nothing yet/); assert.match(out,/Evidence 44/); assert.match(out,/Nothing is added without you\./);
+  // The page and its tab are the owner's, like the AI features it describes.
+  ['<button class="ntab owner-only" data-page="about"','<button class="mob-tab owner-only" id="mob-about"','<section class="command-panel about-panel owner-only" id="about-profile"']
+    .forEach(s=>assert.ok(html.includes(s),s));
+  assert.match(html,/if \(v && window\.voteBriefingStory\) window\.voteBriefingStory\(\{headline: v\.headline, source: v\.source, section: v\.section, url: v\.url\}, v\.vote\);/,'Take back votes the same way again, which takes it back');
+});
 test('feed health: a member sees no Briefing pill, since their account has no briefings',()=>{
   const specStart=html.indexOf('var FEED_SPEC = [');
   const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[]});
@@ -582,10 +629,14 @@ test('a card citation carries headline, source, the briefing date and a web link
 // story votes the same way the server generator does, and nothing when there are none.
 test('the copied AI prompt carries the reader feedback from synced votes', () => {
   let entries={};
-  const {context}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt','activeAccounts'],{_accounts:null,getTodayBriefingDateLabel:()=> 'Friday, September 25, 2026',
+  const {context}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt','activeAccounts'],{_accounts:null,_aboutProfile:null,getTodayBriefingDateLabel:()=> 'Friday, September 25, 2026',
     DailyBoostCore:{dateKey:()=> '2026-09-25'},dailyBoostFeedbackEntries:()=>entries});
   vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),context);
   assert.doesNotMatch(context.getGeminiPrompt(),/READER FEEDBACK/);
+  // About you: the copied prompt carries his saved profile, as the server's does.
+  context._aboutProfile={work:'I assess BI claims for Allianz.',files:'Small-business BI.'};
+  assert.match(context.getGeminiPrompt(),/\nAbout Bob: I assess BI claims for Allianz\.\n/);
+  context._aboutProfile=null;
   entries={'2026-09-24':{feedback:[{headline:'Insurer lifts BI reserves again',source:'Insurance News',section:'insurance',vote:1},{headline:'Rates hold again',section:'markets',vote:-1}]},
     '2026-09-25':{feedback:[{headline:'Rates hold again',section:'markets',vote:0}]}};
   const prompt=context.getGeminiPrompt();
@@ -702,7 +753,7 @@ test('every section colour resolves to numbers for the PDF', () => {
 // The copied prompt gets the last briefings from the loaded history, so an
 // outside AI is held to the same no-rerun rule as the generator.
 test('the copied AI prompt carries the last briefings, and the verification line reports reruns', () => {
-  const {context,element}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt','renderGroundingLine','activeAccounts'],{_accounts:null,getTodayBriefingDateLabel:()=> 'Saturday, September 26, 2026',
+  const {context,element}=environment(['getBriefingFeedback','getRecentBriefings','getGeminiPrompt','renderGroundingLine','activeAccounts'],{_accounts:null,_aboutProfile:null,getTodayBriefingDateLabel:()=> 'Saturday, September 26, 2026',
     DailyBoostCore:{dateKey:d=>d?new Date(d).toISOString().slice(0,10):'2026-09-26'},dailyBoostFeedbackEntries:()=>({}),
     _briefingHistory:[{key:'t',saved:Date.parse('2026-09-26T02:00:00Z'),data:{date:'Today',sections:{global:[{headline:'Today story'}]}}},
       {key:'f',saved:Date.parse('2026-09-25T02:00:00Z'),data:{date:'Friday, September 25, 2026',watch:'NGCP alerts',sections:{interruptions:[{headline:'Visayas grid on yellow alert anew'}]}}}]});
