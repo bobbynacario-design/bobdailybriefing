@@ -4281,6 +4281,7 @@ function runIntelligenceSearch(query) {
   var index = intelligenceSearchState.index.concat(reflections);
   intelligenceSearchState.results = window.IntelligenceSearchCore.search(index, query, {limit:40});
   intelligenceSearchState.active = 0;
+  intelligenceSearchState.showMatches = false;
   status.textContent = intelligenceSearchState.results.length + ' result' + (intelligenceSearchState.results.length === 1 ? '' : 's') + ' for “' + query + '” · ' + index.length + ' items indexed';
   paintIntelligenceSearchResults();
 }
@@ -4289,11 +4290,17 @@ function paintIntelligenceSearchResults() {
   var out = document.getElementById('intel-search-results');
   if (!out) return;
   var results = intelligenceSearchState.results;
+  var answered = !window.daybookMember && document.getElementById('ask-out') && !document.getElementById('ask-out').hidden;
+  var typed = (document.getElementById('intel-search-input') || {}).value || '';
+  // Under an answer, a question's keyword matches only share its common words
+  // ("Charlie Munger…" for "describe me in one word"), so they fold away.
+  if (results.length && answered && looksLikeQuestion(typed) && !intelligenceSearchState.showMatches) {
+    out.innerHTML = '<div class="intel-search-empty"><button type="button" class="tool-chip" id="intel-show-matches" onclick="showKeywordMatches()">Show ' + results.length + ' keyword match' + (results.length === 1 ? '' : 'es') + '</button><br>They only share words with your question; the answer is above.</div>';
+    return;
+  }
   if (!results.length) {
     // A question rarely matches every word; for the owner, point at Ask Daybook,
     // or at the answer already showing above.
-    var answered = !window.daybookMember && document.getElementById('ask-out') && !document.getElementById('ask-out').hidden;
-    var typed = (document.getElementById('intel-search-input') || {}).value || '';
     out.innerHTML = window.daybookMember ? '<div class="intel-search-empty">No matching intelligence found.<br>Try fewer or broader terms.</div>'
       : answered ? '<div class="intel-search-empty">No record has every one of these words; the answer is above.</div>'
       : looksLikeQuestion(typed) ? '<div class="intel-search-empty">That reads as a question: press Enter and Ask Daybook answers it from your own material.</div>'
@@ -4350,6 +4357,11 @@ function intelligenceSearchTypeAhead(event) {
   focusSearchInput();
   input.value += event.key;
   runIntelligenceSearch(input.value);
+}
+
+function showKeywordMatches() {
+  intelligenceSearchState.showMatches = true;
+  paintIntelligenceSearchResults();
 }
 
 function openIntelligenceSearchResult(index) {
@@ -11554,18 +11566,27 @@ function clampDek(dek, max) {
   return slice.replace(/\s+\S*$/, '').trim() + '…';
 }
 
-// Strip OpenAI deep-research citation tokens (citeturn31search0…) plus their
-// private-use delimiter glyphs — but never touch fenced code / mermaid blocks.
+// Strip ChatGPT deep-research citation markers (IntelligenceSearchCore.
+// stripCiteMarkers: cite, filecite, image and entity spans, with or without
+// their private-use glyphs) but never touch fenced code / mermaid blocks. The
+// old rule removed any word starting "cite" (so "cited" went too) and missed
+// image and file markers, which is how one summary read "iturn35image0".
 function stripCites(md) {
+  var strip = window.IntelligenceSearchCore && window.IntelligenceSearchCore.stripCiteMarkers;
   return (md||'').split(/(```[\s\S]*?```)/g).map(function(seg) {
-    if (seg.indexOf('```') === 0) return seg;
-    return seg
-      .replace(/[-]/g, '')
-      .replace(/cite[\w]+/gi, '')
-      .replace(/ +([.,;:)])/g, '$1')
-      .replace(/\(\s*\)/g, '')
-      .replace(/[ \t]{2,}/g, ' ');
+    return seg.indexOf('```') === 0 || !strip ? seg : strip(seg);
   }).join('');
+}
+// A report's summary line without citation markers. A summary that was only
+// a marker falls back to the report's first paragraph.
+function reportDek(r) {
+  var dek = stripCites(r && r.dek || '').trim();
+  if (dek || !r || !r.md) return dek;
+  var para = stripCites(r.md).replace(/^---[\s\S]*?---\s*/, '').split(/\n\s*\n/).map(function(p) { return p.trim(); })
+    // Skip headings, quotes, tables, code, images and bullets; bold text is fine.
+    .filter(function(p) { return p && !/^(#|>|\||`|!\[|[-*+]\s|\d+\.\s)/.test(p); })[0] || '';
+  para = para.replace(/\*\*/g, '').replace(/[*_`]/g, '');
+  return para.length > 220 ? para.slice(0, 217).replace(/\s+\S*$/, '') + '…' : para;
 }
 
 // Minimal YAML-ish front-matter: leading ---\n key: value (and "- item" lists) \n---
@@ -11658,7 +11679,7 @@ function mdToReportHtml(rawMd) {
     flush();
 
     // Dek (front-matter or first paragraph), trimmed
-    var dek = fm.meta.dek || '';
+    var dek = stripCites(fm.meta.dek || '').trim();
     if (!dek) { var fp = root.querySelector('p'); dek = fp ? fp.textContent.trim() : ''; }
     dek = clampDek(dek, 320);
 
@@ -11708,7 +11729,7 @@ function paintResearchList() {
   var el = document.getElementById('research-out');
   if (!el) return;
   var all = BUILTIN_REPORTS.concat((window._reportFeed||[]).map(function(r) {
-    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:r.dek||'', tags:r.tags||[], format:r.format||'html', html:r.html, md:r.md, status:r.status||'ready', error:r.error||'', builtin:false, saved:r.saved };
+    return { id:r.id, title:r.title, dateLabel:r.dateLabel, dek:reportDek(r), tags:r.tags||[], format:r.format||'html', html:r.html, md:r.md, status:r.status||'ready', error:r.error||'', builtin:false, saved:r.saved };
   }));
 
   var subEl = document.getElementById('research-sub');
@@ -11895,7 +11916,7 @@ function fillMetaFromMarkdown(md, file) {
   }
   var dekEl = document.getElementById('research-dek');
   if (dekEl && !dekEl.value.trim()) {
-    var d = fm.meta.dek || '';
+    var d = stripCites(fm.meta.dek || '').trim();
     if (!d) {
       var para = clean.replace(/^\s*#.+$/m, '').split(/\n\s*\n/).map(function(s){ return s.trim(); })
         .filter(function(s){ return s && !/^[#>|`\-*]/.test(s); })[0] || '';

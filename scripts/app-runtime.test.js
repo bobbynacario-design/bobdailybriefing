@@ -266,6 +266,27 @@ test('Search with no matches says what to do: ask a question, see the answer, or
   assert.match(show('What have I got on QBE',true,false),/the answer is above/);
   assert.match(show('What have I got on QBE',false,true),/No matching intelligence found/,'a member sees the plain message');
 });
+test('reports: citation markers leave the text and the summary, never code blocks, and a marker-only summary falls back',()=>{
+  const {context}=environment(['stripCites','reportDek']);
+  vm.runInContext(readFileSync(new URL('../lib/intelligence-search-core.js',import.meta.url),'utf8'),context);
+  assert.equal(context.stripCites('He cited it. citeturn1view0\n```\nkeep citex here\n```'),'He cited it. \n```\nkeep citex here\n```','code blocks are left as written');
+  assert.equal(context.reportDek({dek:'iturn35image0',md:'---\ntitle: Munger\n---\n# Munger\n\n**The viral summary** is mostly faithful. citeturn2view0\n\nMore.'}),'The viral summary is mostly faithful.');
+  assert.equal(context.reportDek({dek:'A real summary.',md:'x'}),'A real summary.');
+  assert.equal(context.reportDek({dek:'',md:''}),'');
+});
+test('Search: under an answer, a question’s keyword matches fold away until asked for',()=>{
+  const {context,element}=environment(['paintIntelligenceSearchResults','showKeywordMatches','looksLikeQuestion'],{QUESTION_START:vm.runInNewContext(html.match(/var QUESTION_START = (\/[^\n]*\/i);/)[1]),
+    esc:escHtml,intelligenceSearchState:{results:[{id:'r1',title:'Charlie Munger and Inversion Thinking',source:'Research',excerpt:'',meta:''}],active:0,showMatches:false}});
+  element('ask-out').hidden=false; element('intel-search-input').value='describe me in one word?';
+  context.paintIntelligenceSearchResults();
+  assert.match(element('intel-search-results').innerHTML,/Show 1 keyword match<\/button><br>They only share words with your question; the answer is above\./);
+  context.showKeywordMatches();
+  assert.match(element('intel-search-results').innerHTML,/Charlie Munger and Inversion Thinking/);
+  context.intelligenceSearchState.showMatches=false; element('intel-search-input').value='munger inversion';
+  context.paintIntelligenceSearchResults();
+  assert.match(element('intel-search-results').innerHTML,/Charlie Munger/,'keywords, not a question: shown as usual');
+  assert.match(html,/intelligenceSearchState\.active = 0;\n  intelligenceSearchState\.showMatches = false;/,'a new search folds them again');
+});
 test('Search: a key typed on the tick box or a button goes into the box, and ticking the web hands focus back',()=>{
   const {context,element}=environment(['intelligenceSearchTypeAhead','focusSearchInput'],{runIntelligenceSearch:q=>{context.searched=q;}});
   const input=element('intel-search-input'); let focused=0; input.focus=()=>{focused++;}; input.value='QB';
