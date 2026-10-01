@@ -1,7 +1,7 @@
 /* Daybook service worker.
    App-shell requests are network-first so deploys update cleanly; cache is the
    offline fallback. Firebase and Google auth traffic always bypasses the cache. */
-var CACHE_NAME = 'bob-briefing-shell-v153';
+var CACHE_NAME = 'bob-briefing-shell-v154';
 
 var briefingMessaging = null;
 try {
@@ -83,22 +83,29 @@ self.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// A tap on a push opens Daybook at the page it names. The address is shared
+// with the other apps on github.io (PokerHQ, SonicVault), so only windows under
+// Daybook's own scope count: steering one of theirs fails and nothing opens.
+// The window is raised first, while the tap still allows it (a raise after a
+// slow load is refused), then moved; a window this worker cannot move is told
+// to go there itself (index.html openFromServiceWorker).
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  var target = event.notification.data && event.notification.data.url || './#command';
-  if (event.action === 'mute') {
-    var muted = new URL(target, self.location.origin);
-    muted.searchParams.set('mute', 'delivery');
-    target = muted.href;
-  }
+  var scope = self.registration.scope;
+  var target = new URL(event.notification.data && event.notification.data.url || './#command', scope);
+  if (target.href.indexOf(scope) !== 0) target = new URL('./#command', scope);
+  if (event.action === 'mute') target.searchParams.set('mute', 'delivery');
+  var url = target.href;
   event.waitUntil(clients.matchAll({type: 'window', includeUncontrolled: true}).then(function(windows) {
-    for (var i = 0; i < windows.length; i++) {
-      if ('focus' in windows[i]) {
-        if ('navigate' in windows[i]) return windows[i].navigate(target).then(function(client) { return client.focus(); });
-        return windows[i].focus();
-      }
-    }
-    return clients.openWindow ? clients.openWindow(target) : null;
+    // Most recently focused first, so this is the Daybook window he used last.
+    var mine = windows.filter(function(w) { return w.url && w.url.indexOf(scope) === 0; })[0];
+    if (!mine) return clients.openWindow ? clients.openWindow(url) : null;
+    return Promise.resolve(mine.focus ? mine.focus() : mine).catch(function() { return mine; }).then(function(client) {
+      client = client || mine;
+      if (client.url === url) return client;
+      var tell = function() { client.postMessage({type: 'daybook-open', url: url}); return client; };
+      return client.navigate ? client.navigate(url).then(function(moved) { return moved || tell(); }, tell) : tell();
+    });
   }));
 });
 

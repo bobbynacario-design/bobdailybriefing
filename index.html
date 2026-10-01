@@ -13302,10 +13302,26 @@ function applyWaitingServiceWorker(worker) {
   worker.postMessage({ type: 'SKIP_WAITING' });
 }
 
+// A notification tap (sw.js notificationclick) on a window the worker cannot
+// move itself: go to the page it names, within Daybook only. A change of page
+// alone is a hash change (navFromHash); anything else, such as Mute, loads it.
+function openFromServiceWorker(message) {
+  if (!message || message.type !== 'daybook-open' || !message.url) return false;
+  var url, here = window.location;
+  // The worker sends a full address; anything else is not from it.
+  try { url = new URL(message.url); } catch (e) { return false; }
+  var base = here.href.split('#')[0].split('?')[0];
+  if (url.origin !== here.origin || url.href.indexOf(base.replace(/[^\/]*$/, '')) !== 0) return false;
+  if (url.pathname === here.pathname && url.search === here.search) here.hash = url.hash;
+  else here.href = url.href;
+  return true;
+}
+
 function registerBriefingServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   var canRegister = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   if (!canRegister) return;
+  navigator.serviceWorker.addEventListener('message', function(event) { openFromServiceWorker(event.data); });
   navigator.serviceWorker.addEventListener('controllerchange', function() {
     if (window.__briefingUpdateReloading) window.location.reload();
   });

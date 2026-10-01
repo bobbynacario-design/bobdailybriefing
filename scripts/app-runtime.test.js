@@ -1210,3 +1210,59 @@ test('the usage summary ranks the last 30 days and names what has gone unused',(
   assert.deepEqual([...s.used.map(u=>u.label+':'+u.count+':'+u.days)],['Today:5:2','Go deeper:1:1']);
   assert.deepEqual([...s.unused],['Account: meeting brief'],'older than 30 days does not count');
 });
+
+// A tap on a push (sw.js notificationclick). The github.io address is shared
+// with PokerHQ and SonicVault, so their windows show up in matchAll too.
+const SCOPE='https://bobbynacario-design.github.io/bobdailybriefing/';
+function serviceWorker(windows,opened=[]){
+  const handlers={};
+  const self={addEventListener:(type,fn)=>{handlers[type]=fn;},registration:{scope:SCOPE},location:{origin:'https://bobbynacario-design.github.io'}};
+  const context={self,URL,Promise,console:{warn(){}},importScripts:()=>{throw new Error('offline');},caches:{},
+    clients:{matchAll:async()=>windows,openWindow:async url=>{opened.push(url);return {url};}}};
+  vm.createContext(context);
+  vm.runInContext(readFileSync(new URL('../sw.js',import.meta.url),'utf8'),context);
+  return async(data,action='')=>{
+    let done; const event={action,notification:{data,close(){}},waitUntil:p=>{done=p;}};
+    handlers.notificationclick(event); await done;
+  };
+}
+function windowClient(url,calls,{canNavigate=true}={}){
+  return {url,focus:async function(){calls.push('focus '+url);return this;},
+    navigate:async function(to){calls.push('navigate '+to);if(!canNavigate)throw new TypeError('not controlled');this.url=to;return this;},
+    postMessage:m=>calls.push('message '+m.type+' '+m.url)};
+}
+test('a tap on a push raises Daybook first, then moves it to the page, and never touches another app’s window',async()=>{
+  const calls=[];
+  const tap=serviceWorker([windowClient('https://bobbynacario-design.github.io/pokerhq/#table',calls),windowClient(SCOPE+'#today',calls)]);
+  await tap({url:SCOPE+'#command'});
+  assert.deepEqual(calls,['focus '+SCOPE+'#today','navigate '+SCOPE+'#command'],'raised while the tap allows it, then moved; PokerHQ left alone');
+  // Already there: raised, not reloaded.
+  const here=[]; await serviceWorker([windowClient(SCOPE+'#command',here)])({url:SCOPE+'#command'});
+  assert.deepEqual(here,['focus '+SCOPE+'#command']);
+  // A Daybook window the worker does not control is told to go there itself.
+  const loose=[]; await serviceWorker([windowClient(SCOPE+'#today',loose,{canNavigate:false})])({url:SCOPE+'#today'.replace('today','command')});
+  assert.deepEqual(loose,['focus '+SCOPE+'#today','navigate '+SCOPE+'#command','message daybook-open '+SCOPE+'#command']);
+});
+test('with no Daybook window open, a tap opens one; Mute and stray links stay inside Daybook',async()=>{
+  const opened=[], calls=[];
+  const tap=serviceWorker([windowClient('https://bobbynacario-design.github.io/sonicvault/',calls)],opened);
+  await tap({url:SCOPE+'#today'});
+  await tap({url:SCOPE+'#command'},'mute');
+  await tap({url:'https://bobbynacario-design.github.io/pokerhq/'});
+  await tap(undefined);
+  assert.deepEqual(opened,[SCOPE+'#today',SCOPE+'?mute=delivery#command',SCOPE+'#command',SCOPE+'#command']);
+  assert.deepEqual(calls,[],'the other app’s window is never raised or moved');
+});
+test('a Daybook window told to open a page goes there, and only within Daybook',()=>{
+  const {context}=environment(['openFromServiceWorker'],{URL});
+  const loc={origin:'https://bobbynacario-design.github.io',pathname:'/bobdailybriefing/',search:'',hash:'#today',assigned:null,
+    get href(){return this.origin+this.pathname+this.search+this.hash;},set href(v){this.assigned=v;}};
+  context.location=loc;
+  assert.equal(context.openFromServiceWorker({type:'daybook-open',url:SCOPE+'#command'}),true); assert.equal(loc.hash,'#command'); assert.equal(loc.assigned,null,'a page change is a hash change, no reload');
+  assert.equal(context.openFromServiceWorker({type:'daybook-open',url:SCOPE+'?mute=delivery#command'}),true); assert.equal(loc.assigned,SCOPE+'?mute=delivery#command','Mute loads the page so it can act');
+  loc.assigned=null;
+  ['https://bobbynacario-design.github.io/pokerhq/#x','https://evil.example.com/bobdailybriefing/','not a url'].forEach(url=>assert.equal(context.openFromServiceWorker({type:'daybook-open',url}),false,url));
+  assert.equal(context.openFromServiceWorker({type:'other',url:SCOPE}),false); assert.equal(context.openFromServiceWorker(null),false);
+  assert.equal(loc.assigned,null); assert.equal(loc.hash,'#command');
+  assert.ok(html.includes("navigator.serviceWorker.addEventListener('message', function(event) { openFromServiceWorker(event.data); });"));
+});
