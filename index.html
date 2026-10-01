@@ -3295,7 +3295,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
         <li>Every claim carries a ref: <b>S1</b> opens that record where it lives; <b>W1</b> opens a web page. A claim with no ref it found is dropped, and when your Daybook has nothing on it, it says so rather than guessing.</li>
         <li>It keeps straight whose words are whose, as the meeting brief does: <b>you noted</b> only for your notes, decisions and the note on a saved page. A dossier, meeting brief or weekly read is AI-written; a briefing story is something you were shown.</li>
         <li><b>Also check the web</b> is off unless you tick it. About $0.05–0.10 a question from your Daybook, about $0.30–0.35 with the web; up to twenty a day. Nothing is sent until you tap, and it never gives trading advice.</li>
-        <li>A follow-up (or one of its suggested questions) carries the last three exchanges, so “and Suncorp?” works. <b>New question</b> starts afresh. The latest twenty answers are kept under <b>Earlier questions</b>; <b>＋ Evidence</b> saves one with its sources.</li>
+        <li>A follow-up carries the last three exchanges, so “and Suncorp?” works: one of its suggested questions, a short question, or one that opens like a follow-up (“and…”, “what about…”, “is that…”). Any other question starts afresh, as does <b>New question</b>. When your Daybook has nothing on it, the answer says so. The latest twenty answers are kept under <b>Earlier questions</b>; <b>＋ Evidence</b> saves one with its sources.</li>
       </ul>
     </div>
 
@@ -4450,14 +4450,24 @@ function newAskQuestion() {
   paintAskHistory();
   if (input) { input.value = ''; input.focus(); runIntelligenceSearch(''); }
 }
-async function runAskDaybook(question) {
+// A follow-up carries the thread; any other question starts afresh, so an
+// unrelated question neither pays for nor leans on the last one. A follow-up
+// is a suggested one, a short question, or one that opens like a follow-up.
+var FOLLOW_UP_START = /^(and|also|plus|what about|how about|so|then|but|same|compare|more|tell me more|go on|anything else|what else|is that|was that|why is that|why was that|it|its|it's|that|this|those|these|they|them|their|he|she)\b/i;
+function looksLikeFollowUp(question) {
+  var text = String(question || '').trim();
+  return FOLLOW_UP_START.test(text) || (text.length > 0 && text.split(/\s+/).length <= 4);
+}
+async function runAskDaybook(question, suggested) {
   var input = document.getElementById('intel-search-input'), out = document.getElementById('ask-out'), button = document.getElementById('ask-run');
   var q = String(question || (input && input.value) || '').trim();
   if (!out || _askRunning) return;
   out.hidden = false;
   if (!window._firebaseUid || typeof window.fbAskDaybook !== 'function') { out.innerHTML = '<p class="ask-status is-warn">Sign in to ask your Daybook.</p>'; return; }
   if (q.length < 3) { out.innerHTML = '<p class="ask-status is-warn">Type a question in the box first.</p>'; if (input) input.focus(); return; }
-  var web = !!(document.getElementById('ask-web') || {}).checked, following = _askThread.length > 0;
+  var web = !!(document.getElementById('ask-web') || {}).checked;
+  var following = _askThread.length > 0 && (suggested === true || looksLikeFollowUp(q));
+  if (!following) _askThread = [];
   _askRunning = true;
   if (button) button.disabled = true;
   out.innerHTML = '<p class="ask-status">' + aiWorkingHtml('Looking through your Daybook' + (web ? ' and the web' : ''), {slow: web ? 120 : 60}) + '</p>';
@@ -4499,7 +4509,7 @@ document.addEventListener('click', function(event) {
   if (target.hasAttribute('data-ask-ref')) { openAskSource(target.getAttribute('data-ask-ref')); return; }
   var q = target.getAttribute('data-ask-follow'), input = document.getElementById('intel-search-input');
   if (input) input.value = q;
-  runAskDaybook(q);
+  runAskDaybook(q, true);  // a suggested follow-up always continues the thread
 });
 
 function saveIntelligenceSearchResult(index) {

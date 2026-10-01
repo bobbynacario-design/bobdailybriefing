@@ -226,7 +226,8 @@ function cleanAnswer(raw, registry, searched, web) {
   });
   return {
     answer,
-    not_found: clip(raw.not_found, 240),
+    // When no lookup found anything, say so even if the model did not.
+    not_found: clip(raw.not_found, 240) || (registry.list.length ? "" : web ? "Nothing in your Daybook matched; this answer is from the web." : "Nothing in your Daybook matched this."),
     follow_ups: arr(raw.follow_ups).map((q) => clip(q, 160)).filter(Boolean).slice(0, 2),
     sources,
     web_sources: webSources.map((item, i) => (item ? Object.assign({ref: "W" + (i + 1)}, item) : null)).filter(Boolean),

@@ -172,10 +172,11 @@ test('search results for the personal sources open where they live',async()=>{
   assert.ok(html.includes("  if (item.source === 'Dossier') return openDossierResult(item.ref);"),'wired into the opener search uses');
 });
 // Ask Daybook (functions/ask-daybook.js), in the Search overlay.
-const ASK_FNS=['askAnswerHtml','paintAskHistory','runAskDaybook','askError','showAskAnswer','newAskQuestion','openAskSource','saveAskAnswer','askCostText','paintAskCost'];
+const ASK_FNS=['looksLikeFollowUp','askAnswerHtml','paintAskHistory','runAskDaybook','askError','showAskAnswer','newAskQuestion','openAskSource','saveAskAnswer','askCostText','paintAskCost'];
 function askEnvironment(extra={}){
   const env=environment(ASK_FNS,{esc:escHtml,_firebaseUid:'bob',aiWorkingHtml:text=>'<working>'+text,runIntelligenceSearch:()=>{},...extra});
   vm.runInContext(html.match(/var _askThread = [^\n]*;/)[0],env.context);
+  vm.runInContext(html.match(/var FOLLOW_UP_START = [^\n]*;/)[0],env.context);
   env.element('intel-search-input').focus=()=>{};
   return env;
 }
@@ -220,6 +221,13 @@ test('Ask Daybook: a question goes to the server, a follow-up carries the thread
   context.showAskAnswer('a1');
   await context.runAskDaybook('more on that?');
   assert.deepEqual(sent[3].thread,[{q:'What have I got on QBE?',a:'Answer 1 [S1]'}],'an earlier answer can be followed up');
+  // 1 Oct: an unrelated question carried the last one along, and was labelled a follow-up.
+  await context.runAskDaybook('Why did I make the ETH call, and was I right?');
+  assert.deepEqual(sent[4].thread,[],'an unrelated question starts afresh'); assert.doesNotMatch(element('ask-out').innerHTML,/Following up/);
+  await context.runAskDaybook('Which of my accounts were in the news this week, ranked?',true);
+  assert.equal(sent[5].thread.length,1,'a suggested follow-up always continues'); assert.match(element('ask-out').innerHTML,/Following up · Which of my accounts/);
+  ['and Suncorp?','what about IAG?','is that still open?','IAG instead?'].forEach(q=>assert.equal(context.looksLikeFollowUp(q),true,q));
+  ['Why did I make the ETH call?',"What's new with Suncorp this week?",'What have I got on QBE since August?'].forEach(q=>assert.equal(context.looksLikeFollowUp(q),false,q));
 });
 test('Ask Daybook: errors are plain, and a saved answer keeps its sources but not its ref marks',async()=>{
   let saved=null;

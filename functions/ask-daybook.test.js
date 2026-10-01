@@ -78,6 +78,12 @@ test("an answer keeps only refs a lookup returned and links the search returned"
   const offline = Ask.cleanAnswer(raw, registry, ["https://coindesk.com/eth"], false);
   assert.deepEqual(offline.web_sources, [], "no web links when the web was off"); assert.doesNotMatch(offline.answer, /\[W/);
   assert.equal(Ask.cleanAnswer({answer: ""}, registry, [], false), null);
+  // 1 Oct: a Suncorp question found nothing in his Daybook and the answer did not say so.
+  const empty = Ask.newRegistry();
+  assert.equal(Ask.cleanAnswer({answer: "From the web [W1].", web_sources: []}, empty, [], true).not_found, "Nothing in your Daybook matched; this answer is from the web.");
+  assert.equal(Ask.cleanAnswer({answer: "Nothing found."}, empty, [], false).not_found, "Nothing in your Daybook matched this.");
+  assert.equal(Ask.cleanAnswer({answer: "x", not_found: "No Suncorp items since Monday."}, empty, [], true).not_found, "No Suncorp items since Monday.", "the model's own line wins");
+  assert.equal(Ask.cleanAnswer({answer: "x [S1]"}, registry, [], false).not_found, "", "when a lookup found records, nothing is added");
   assert.equal(Ask.cleanAnswer(null, registry, [], false), null);
 });
 
