@@ -29,6 +29,7 @@ const {
 const DailyBoostCore = require("./daily-boost");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 const Ask = require("./ask-daybook");
+const Calendar = require("./calendar");
 const IntelligenceSearchCore = require("./intelligence-search-core");
 
 initializeApp();
@@ -1527,6 +1528,87 @@ exports.testBriefingDelivery = onCall(
       if (error instanceof HttpsError) throw error;
       logger.error("Test Morning 5 delivery failed", error);
       throw new HttpsError("internal", "The test notification could not be sent.");
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────
+// Calendars (functions/calendar.js): his secret iCal links, read twice a day,
+// keeping the next 36 hours of meetings that name one of his accounts. The
+// owner's only: the briefs they lead to are owner-only AI.
+// ─────────────────────────────────────────────────────────────
+async function fetchCalendar(url) {
+  let response;
+  try {
+    response = await fetch(url, {headers: {"Accept": "text/calendar"}, redirect: "follow", signal: AbortSignal.timeout(20000)});
+  } catch (error) {
+    throw new Error("could not reach the calendar");
+  }
+  if (!response.ok) throw new Error("the calendar answered HTTP " + response.status + (response.status === 404 ? " (was the link reset?)" : ""));
+  const length = Number(response.headers.get("content-length") || 0);
+  if (length > Calendar.MAX_ICS_BYTES) throw new Error("the calendar file is too large");
+  const body = await response.text();
+  if (body.length > Calendar.MAX_ICS_BYTES) throw new Error("the calendar file is too large");
+  if (!/BEGIN:VCALENDAR/.test(body.slice(0, 2000))) throw new Error("the link did not return a calendar");
+  return body;
+}
+
+// Read every saved link and keep the matched meetings in meetings-<uid>.
+// Unmatched events are counted, never stored. The link itself never appears
+// in a result or a log.
+async function readCalendars(db, uid, now) {
+  const coll = db.collection(BRIEFINGS_COLL);
+  const [calendarSnap, accountsSnap] = await Promise.all([
+    coll.doc("calendar-" + uid).get(), coll.doc("accounts-" + uid).get().catch(() => null),
+  ]);
+  const links = Calendar.cleanLinks(calendarSnap.exists ? calendarSnap.data().links : []);
+  const kept = accountsSnap && accountsSnap.exists ? cleanAccounts((accountsSnap.data() || {}).accounts) : [];
+  const accounts = kept.length ? kept : DEFAULT_ACCOUNTS;
+  const from = now, to = now + Calendar.WINDOW_HOURS * 3600000;
+  const results = await Promise.all(links.map(async (link) => {
+    try {
+      const events = Calendar.eventsBetween(await fetchCalendar(link.url), from, to);
+      const meetings = Calendar.matchMeetings(events, accounts, link.service);
+      return {meetings, source: Calendar.readResult(link.service, events, meetings, "")};
+    } catch (error) {
+      logger.warn("Calendar read failed", {uid, service: link.service, message: error.message});
+      return {meetings: [], source: Calendar.readResult(link.service, [], [], error.message)};
+    }
+  }));
+  const record = {
+    uid, kind: "meetings", checkedAt: new Date(now).toISOString(),
+    items: Calendar.mergeMeetings(results.map((r) => r.meetings)),
+    sources: results.map((r) => r.source),
+  };
+  await coll.doc("meetings-" + uid).set(record);
+  return record;
+}
+
+// Saving a link on About you reads it at once, so he sees what it found.
+exports.checkCalendarNow = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 60, memory: "256MiB"},
+  async (request) => {
+    const role = await requireDaybookMember(request.auth, "reading your calendar");
+    if (role !== "owner") throw new HttpsError("permission-denied", "Calendars are on the owner's account only.");
+    return readCalendars(getFirestore(), request.auth.uid, Date.now());
+  }
+);
+
+// 06:00 and 18:00 Manila: the morning catches today's meetings, the evening
+// tomorrow's (so a brief can be ready the night before).
+exports.checkCalendars = onSchedule(
+  {schedule: "0 6,18 * * *", timeZone: "Asia/Manila", region: "asia-southeast1", timeoutSeconds: 120, memory: "256MiB"},
+  async () => {
+    const db = getFirestore();
+    const docs = await db.collection(BRIEFINGS_COLL).where("kind", "==", "calendar").limit(20).get();
+    for (const doc of docs.docs) {
+      const uid = doc.data().uid;
+      if (!uid || (await daybookRoleForUid(uid)) !== "owner") continue;
+      try {
+        await readCalendars(db, uid, Date.now());
+      } catch (error) {
+        logger.error("Calendar check failed", {uid, message: error.message});
+      }
     }
   }
 );

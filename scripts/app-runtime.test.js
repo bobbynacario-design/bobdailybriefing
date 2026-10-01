@@ -346,6 +346,57 @@ test('About you: what it has picked up says what each thing steers, and never gu
     .forEach(s=>assert.ok(html.includes(s),s));
   assert.match(html,/if \(v && window\.voteBriefingStory\) window\.voteBriefingStory\(\{headline: v\.headline, source: v\.source, section: v\.section, url: v\.url\}, v\.vote\);/,'Take back votes the same way again, which takes it back');
 });
+// Your calendars (functions/calendar.js), on About you.
+const CAL_FNS=['calendarLinkFor','calendarLinkLabel','calendarLinksHtml','meetingTime','calendarComingHtml','paintCalendar','calendarLinksToSave','saveCalendarLinks'];
+function calendarEnvironment(extra={}){
+  const env=environment(CAL_FNS,{esc:escHtml,_firebaseUid:'bob',URL,...extra});
+  vm.runInContext(html.match(/var CALENDAR_SERVICES = \[[\s\S]*?\n\];/)[0],env.context);
+  vm.runInContext(html.match(/var _calendarLinks = [^\n]*;/)[0],env.context);
+  return env;
+}
+const GOOGLE_LINK='https://calendar.google.com/calendar/ical/bob%40gmail.com/private-0123456789abcdef/basic.ics';
+test('calendars: each box takes only its own service’s https link, and a saved link is never shown in full',()=>{
+  const {context,element}=calendarEnvironment();
+  const [google,outlook]=vm.runInContext('CALENDAR_SERVICES',context);
+  assert.equal(context.calendarLinkFor(google,'  '+GOOGLE_LINK+' '),GOOGLE_LINK);
+  assert.equal(context.calendarLinkFor(google,'https://outlook.office365.com/owa/calendar/a/b/calendar.ics'),'','an Outlook link in the Google box');
+  assert.equal(context.calendarLinkFor(outlook,'https://outlook.office365.com/owa/calendar/a/b/calendar.ics').length>0,true);
+  ['http://calendar.google.com/x.ics','https://calendar.google.com.evil.io/x.ics','not a link'].forEach(v=>assert.equal(context.calendarLinkFor(google,v),'',v));
+  vm.runInContext('_calendarLinks=[{service:"Google",url:'+JSON.stringify(GOOGLE_LINK)+'}];',context);
+  context.paintCalendar();
+  const shown=element('calendar-links').innerHTML;
+  assert.match(shown,/Saved: bob@gmail\.com/,'which calendar it is'); assert.ok(!shown.includes('private-0123456789abcdef'),'the secret part is never shown');
+  assert.equal(context.calendarLinkLabel({url:'https://outlook.office365.com/owa/calendar/abc@x.com/0f1e2d3c4b5a/calendar.ics'}),'calendar …4b5a');
+  assert.match(shown,/data-calendar-remove="Google"/); assert.match(shown,/aria-label="Outlook \/ Microsoft 365 link"/);
+});
+test('calendars: a paste replaces, a saved link stays, a removed one goes, and a bad paste is named',()=>{
+  const {context,element}=calendarEnvironment();
+  vm.runInContext('_calendarLinks=[{service:"Google",url:'+JSON.stringify(GOOGLE_LINK)+'}];',context);
+  element('calendar-Google').value=''; element('calendar-Outlook').value='https://outlook.office365.com/owa/calendar/a/b/calendar.ics';
+  assert.deepEqual(JSON.parse(JSON.stringify(context.calendarLinksToSave())),{links:[{service:'Google',url:GOOGLE_LINK},{service:'Outlook',url:'https://outlook.office365.com/owa/calendar/a/b/calendar.ics'}],bad:[]});
+  vm.runInContext('_calendarRemoved={Google:true};',context);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.calendarLinksToSave().links.map(l=>l.service))),['Outlook']);
+  element('calendar-Outlook').value='https://evil.example.com/cal.ics';
+  assert.deepEqual(JSON.parse(JSON.stringify(context.calendarLinksToSave().bad)),['Outlook / Microsoft 365']);
+});
+test('calendars: saving reads them at once and shows what it found, without the links',async()=>{
+  let saved=null;
+  const record={checkedAt:'2026-10-01T10:00:00Z',items:[{id:'m1',title:'Suncorp weekly catch-up',start:'2026-10-02T00:00:00Z',accounts:['Suncorp'],calendar:'Outlook'}],
+    sources:[{service:'Google',ok:true,events:23,matched:0},{service:'Outlook',ok:false,error:'the calendar answered HTTP 404 (was the link reset?)'}]};
+  const {context,element}=calendarEnvironment({fbSaveCalendar:async l=>{saved=l;},fbCheckCalendarNow:async()=>record});
+  element('calendar-Google').value=GOOGLE_LINK; element('calendar-Outlook').value='';
+  await context.saveCalendarLinks();
+  assert.deepEqual(JSON.parse(JSON.stringify(saved)),[{service:'Google',url:GOOGLE_LINK}]);
+  assert.equal(element('calendar-status').textContent,'Saved and read.');
+  const coming=element('calendar-coming').innerHTML;
+  assert.match(coming,/Suncorp weekly catch-up · <b>Suncorp<\/b> · Outlook/);
+  assert.match(coming,/Google: 23 events, 0 naming your accounts · Outlook: could not read \(the calendar answered HTTP 404 \(was the link reset\?\)\)/);
+  element('calendar-Google').value='https://example.com/x.ics';
+  await context.saveCalendarLinks();
+  assert.match(element('calendar-status').textContent,/That is not a Google Calendar calendar link/);
+  // The page and its section are the owner's.
+  assert.ok(html.includes('<section class="command-panel about-panel owner-only" id="about-calendar"'));
+});
 test('feed health: a member sees no Briefing pill, since their account has no briefings',()=>{
   const specStart=html.indexOf('var FEED_SPEC = [');
   const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[]});

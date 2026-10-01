@@ -405,6 +405,38 @@ window.fbSaveProfile = async function(profile) {
   if (!uid) throw new Error('Sign in first');
   await setDoc(doc(db, COLL, 'profile-' + uid), {uid: uid, kind: 'profile', profile: profile, updatedAt: new Date().toISOString()});
 };
+// Calendars (functions/calendar.js): his secret iCal links, and the meetings
+// the server kept from them. The links work like a password: they live only in
+// his own calendar-<uid> doc and are never shown back in full.
+window.fbLoadCalendar = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'calendar-' + uid));
+    return snap.exists() ? (snap.data().links || []) : [];
+  } catch (e) {
+    if (e && e.code === 'permission-denied') return [];
+    throw e;
+  }
+};
+window.fbSaveCalendar = async function(links) {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  await setDoc(doc(db, COLL, 'calendar-' + uid), {uid: uid, kind: 'calendar', links: links, updatedAt: new Date().toISOString()});
+};
+window.fbLoadMeetings = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'meetings-' + uid));
+    return snap.exists() ? snap.data() : null;
+  } catch (e) {
+    if (e && e.code === 'permission-denied') return null;
+    throw e;
+  }
+};
+window.fbCheckCalendarNow = async function() {
+  var check = httpsCallable(functions, 'checkCalendarNow', {timeout: 70000});
+  return (await check({})).data;
+};
 window.fbLoadDossiers = async function(uid) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
   try {
@@ -2398,6 +2430,11 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 .about-field textarea:focus{border-color:var(--gold);outline:none}
 .about-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-bottom:.4rem}.about-save{border-color:var(--gold);color:var(--gold)}
 .about-status{font-size:13px;color:var(--txt2)}.about-state{font-family:var(--mono);font-size:11px;color:var(--txt3)}
+.calendar-links{display:grid;gap:.8rem;margin:.4rem 0 .8rem}.calendar-link{display:grid;gap:.3rem}
+.calendar-link input{width:100%;min-width:0;background:var(--bg3);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.55rem .75rem;font-family:var(--mono);font-size:12px}
+.calendar-link input:focus{border-color:var(--gold);outline:none}.calendar-saved{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;font-size:13px;color:var(--txt2)}
+.calendar-coming{margin:.6rem 0}.calendar-coming li{font-size:13.5px;line-height:1.6;color:var(--txt2)}.calendar-coming ul{margin:.3rem 0 0;padding-left:1.1rem}
+.calendar-how{margin-top:.6rem;font-size:13px;color:var(--txt2)}.calendar-how summary{cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--txt)}.calendar-how p{margin:.5rem 0;line-height:1.6}
 .about-item{padding:.8rem 0;border-top:1px solid var(--rim)}.about-item:first-child{border-top:0}
 .about-item-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.3rem .8rem}
 .about-item-head strong{font-size:14px;color:var(--txt)}.about-steers{font-family:var(--mono);font-size:11px;color:var(--txt3)}
@@ -3241,6 +3278,17 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="about-actions"><button type="button" class="tool-chip about-save" id="about-save" onclick="saveAboutProfile()">Save profile</button><button type="button" class="tool-chip" id="about-reset" onclick="resetAboutProfile()">Put back the starting profile</button><span class="about-status" id="about-status" role="status"></span></div>
     <p class="meeting-intro">Your words replace only the facts about you. The rules for using them stay fixed: nothing here can make an AI feature invent a link, drop its sources or give trading advice.</p>
   </section>
+  <section class="command-panel about-panel owner-only" id="about-calendar" aria-labelledby="about-calendar-title">
+    <div class="command-panel-head"><div><div class="command-panel-title" id="about-calendar-title">Your calendars</div><div class="command-panel-meta">Read-only, twice a day (6:00 and 18:00). Only meetings whose title names one of your accounts are kept.</div></div></div>
+    <div class="calendar-links" id="calendar-links"></div>
+    <div class="about-actions"><button type="button" class="tool-chip about-save" id="calendar-save" onclick="saveCalendarLinks()">Save and check now</button><span class="about-status" id="calendar-status" role="status"></span></div>
+    <div id="calendar-coming"></div>
+    <details class="calendar-how"><summary>Where to find each link</summary>
+      <p><b>Google Calendar</b> (on a computer): Settings ⚙ → under <b>Settings for my calendars</b>, pick your calendar → <b>Integrate calendar</b> → copy <b>Secret address in iCal format</b>.</p>
+      <p><b>Outlook / Microsoft 365</b> (Outlook on the web): Settings ⚙ → <b>Calendar</b> → <b>Shared calendars</b> → under <b>Publish a calendar</b>, pick the calendar and <b>Can view all details</b> → <b>Publish</b> → copy the <b>ICS</b> link. If there is no Publish option, your employer has switched it off.</p>
+      <p>Each link lets anyone who has it read that calendar, so treat it like a password: it is kept only in your account here and never shown back in full. If one is ever exposed, reset it in Google or Outlook and paste the new one.</p>
+    </details>
+  </section>
   <section class="command-panel about-panel owner-only" id="about-learned-panel" aria-labelledby="about-learned-title">
     <div class="command-panel-head"><div><div class="command-panel-title" id="about-learned-title">What it has picked up from you</div><div class="command-panel-meta">Each one says what it steers. Nothing here is guessed: it is what you recorded or tapped.</div></div></div>
     <div id="about-learned"><p class="rel-none-txt">Loading…</p></div>
@@ -3269,6 +3317,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-eye"/></svg> About you — what Daybook knows</div>
       <p><b>More → About you</b> holds one profile in five boxes: your work, your clients and files, what moves your numbers, what to look out for, and anything else. The briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research all read it from their next run, so a change in your work mix reaches all of them at once. It starts as the profile those features already used; <b>Put back the starting profile</b> returns to it. Your words change only the facts about you: the rules (sources, no invented links, no trading advice) stay fixed.</p>
       <p>Below it, <b>What it has picked up from you</b> lists what already steers Daybook, each with what it steers: your story votes (with <b>Take back</b>), open calls, Radar setups, accounts, goals and Morning 5 priorities, plus what you open most. Nothing there is guessed. Later, Daybook will suggest profile lines from what you use, for you to approve.</p>
+      <p><b>Your calendars</b> — paste your Google Calendar secret iCal address and your Outlook published ICS link (<b>Where to find each link</b> shows how). Daybook reads them read-only at 6:00 and 18:00 and keeps only the next 36 hours of meetings whose title names one of your accounts (other names count: AAMI for Suncorp). Nothing else from your calendars is kept or sent anywhere. Treat each link like a password; it is never shown back in full.</p>
     </div>
     <div class="help-card help-wide" id="invites-card" hidden>
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg> Invites — who can use Daybook</div>
@@ -3861,6 +3910,7 @@ function clearPrivateSession() {
   _meetingBriefs = {}; _meetingFor = null; _meetingShown = '';
   _askThread = []; _askAnswers = {}; _askFor = null; _askShown = '';
   _aboutProfile = null; _aboutFor = null; _aboutDirty = false; _aboutVotes = [];
+  _calendarLinks = null; _calendarFor = null; _meetings = null; _calendarRemoved = {};
   var askOut = document.getElementById('ask-out'); if (askOut) { askOut.hidden = true; askOut.innerHTML = ''; }
   var askHistory = document.getElementById('ask-history'); if (askHistory) { askHistory.hidden = true; askHistory.innerHTML = ''; }
   _accounts = null; _accountsFor = null; _callsCache = null; _callsLoading = false;
@@ -5419,8 +5469,121 @@ async function renderAbout() {
   if (!core || !core.PROFILE_FIELDS || window.daybookMember) return;
   await loadAboutProfile();
   if (!_aboutDirty) paintAboutProfile(core.cleanProfile(_aboutProfile));
+  await loadCalendar();
+  paintCalendar();
   await renderAboutLearned();
 }
+// ── Your calendars (functions/calendar.js) ──
+var CALENDAR_SERVICES = [
+  {service: 'Google', label: 'Google Calendar', hosts: ['calendar.google.com'], placeholder: 'https://calendar.google.com/calendar/ical/…/private-…/basic.ics'},
+  {service: 'Outlook', label: 'Outlook / Microsoft 365', hosts: ['outlook.office365.com', 'outlook.office.com', 'outlook.live.com'], placeholder: 'https://outlook.office365.com/owa/calendar/…/calendar.ics'}
+];
+var _calendarLinks = null, _calendarFor = null, _meetings = null, _calendarRemoved = {};
+// A pasted link for one service, or '' when it is not that service's https link.
+function calendarLinkFor(spec, value) {
+  var text = String(value || '').trim(), url;
+  try { url = new URL(text); } catch (e) { return ''; }
+  return url.protocol === 'https:' && spec.hosts.indexOf(url.hostname.toLowerCase()) >= 0 && text.length <= 1500 ? text : '';
+}
+// Which calendar a saved link is, without its secret part: the Google
+// calendar's address, or the end of Outlook's calendar id.
+function calendarLinkLabel(link) {
+  var url = String(link && link.url || ''), google = /\/calendar\/ical\/([^\/]+)\//.exec(url);
+  if (google) { try { return decodeURIComponent(google[1]); } catch (e) { return 'your Google calendar'; } }
+  var parts = url.split('/').filter(Boolean), id = parts.length > 1 ? parts[parts.length - 2] : '';
+  return id ? 'calendar …' + id.slice(-4) : 'your calendar';
+}
+function calendarLinksHtml(links) {
+  return CALENDAR_SERVICES.map(function(spec) {
+    var saved = (links || []).filter(function(l) { return l && l.service === spec.service; })[0], kept = saved && !_calendarRemoved[spec.service];
+    var head = '<span class="about-label">' + esc(spec.label) + '</span>', inputId = 'calendar-' + spec.service;
+    var input = '<input type="url" id="' + inputId + '" autocomplete="off" spellcheck="false" placeholder="' + esc(kept ? 'Paste a new link to replace it' : spec.placeholder) +
+      '" aria-label="' + esc((kept ? 'New ' : '') + spec.label + ' link') + '">';
+    return '<div class="calendar-link">' + head + (kept ? '<div class="calendar-saved">Saved: ' + esc(calendarLinkLabel(saved)) +
+      '<button type="button" class="tool-chip" data-calendar-remove="' + spec.service + '">Remove</button></div>' : '') + input + '</div>';
+  }).join('');
+}
+function meetingTime(iso) {
+  var at = new Date(iso);
+  return isNaN(at) ? '' : at.toLocaleString('en-AU', {weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'});
+}
+function calendarComingHtml(record) {
+  if (!record) return '<p class="about-hint">Not read yet.</p>';
+  var items = record.items || [], sources = record.sources || [];
+  var read = sources.map(function(src) {
+    return esc(src.service) + ': ' + (src.ok ? src.events + (src.events === 1 ? ' event' : ' events') + ', ' + src.matched + ' naming your accounts' : 'could not read (' + esc(src.error || 'error') + ')');
+  }).join(' · ');
+  var html = '<div class="calendar-coming"><span class="about-label">Coming up (next 36 hours, your time)</span>';
+  html += items.length ? '<ul>' + items.map(function(m) {
+    return '<li>' + esc(meetingTime(m.start)) + ' · ' + esc(m.title) + ' · <b>' + esc((m.accounts || []).join(', ')) + '</b>' + (m.calendar ? ' · ' + esc(m.calendar) : '') + '</li>';
+  }).join('') + '</ul>' : '<p class="about-hint">No meetings naming your accounts.</p>';
+  html += '<p class="about-hint">' + (record.checkedAt ? 'Checked ' + esc(meetingTime(record.checkedAt)) + (read ? ' · ' + read : '') : read) + '</p></div>';
+  return html;
+}
+function paintCalendar() {
+  var linksEl = document.getElementById('calendar-links'), comingEl = document.getElementById('calendar-coming');
+  if (linksEl) linksEl.innerHTML = calendarLinksHtml(_calendarLinks);
+  if (comingEl) comingEl.innerHTML = (_calendarLinks && _calendarLinks.length) ? calendarComingHtml(_meetings) : '';
+}
+async function loadCalendar() {
+  var uid = window._firebaseUid || null;
+  if (!uid || window.daybookMember || typeof window.fbLoadCalendar !== 'function' || _calendarFor === uid) return;
+  _calendarFor = uid;
+  try {
+    var both = await Promise.all([window.fbLoadCalendar(uid), window.fbLoadMeetings(uid)]);
+    _calendarLinks = both[0] || []; _meetings = both[1];
+  } catch (e) { _calendarLinks = []; _meetings = null; _calendarFor = null; }
+}
+// The links to keep: a new paste replaces that service's saved link; a saved
+// one stays unless removed. {links, bad: [labels of pastes that are not links]}.
+function calendarLinksToSave() {
+  var links = [], bad = [];
+  CALENDAR_SERVICES.forEach(function(spec) {
+    var box = document.getElementById('calendar-' + spec.service), pasted = box ? String(box.value || '').trim() : '';
+    var saved = (_calendarLinks || []).filter(function(l) { return l && l.service === spec.service; })[0];
+    if (pasted) {
+      var url = calendarLinkFor(spec, pasted);
+      if (url) links.push({service: spec.service, url: url}); else bad.push(spec.label);
+    } else if (saved && !_calendarRemoved[spec.service]) links.push({service: spec.service, url: saved.url});
+  });
+  return {links: links, bad: bad};
+}
+async function saveCalendarLinks() {
+  var button = document.getElementById('calendar-save');
+  if (!window._firebaseUid || typeof window.fbSaveCalendar !== 'function') { setText('calendar-status', 'Sign in to connect a calendar.'); return; }
+  var next = calendarLinksToSave();
+  if (next.bad.length) { setText('calendar-status', 'That is not a ' + next.bad.join(' or ') + ' calendar link. Copy the whole link (it starts with https://).'); return; }
+  if (button) button.disabled = true;
+  try {
+    await window.fbSaveCalendar(next.links);
+    _calendarLinks = next.links; _calendarRemoved = {};
+    paintCalendar();
+    if (!next.links.length) { _meetings = null; setText('calendar-status', 'No calendar connected.'); }
+    else {
+      setText('calendar-status', 'Saved. Reading your calendars…');
+      try {
+        _meetings = await window.fbCheckCalendarNow();
+        setText('calendar-status', 'Saved and read.');
+      } catch (e) {
+        console.error('Calendar check failed:', e);
+        setText('calendar-status', 'Saved. The first read did not finish (' + ((e && e.message) || 'try again') + '); it reads again at 6:00 and 18:00.');
+      }
+      paintCalendar();
+    }
+  } catch (e) {
+    console.error('Calendar save failed:', e);
+    setText('calendar-status', 'Could not save. Check the connection and try again.');
+  }
+  if (button) button.disabled = false;
+}
+document.addEventListener('click', function(event) {
+  var target = event.target && event.target.closest ? event.target.closest('#calendar-links [data-calendar-remove]') : null;
+  if (!target) return;
+  _calendarRemoved[target.getAttribute('data-calendar-remove')] = true;
+  paintCalendar();
+  setText('calendar-status', 'Tap Save and check now to remove it.');
+});
+
 function aboutItem(title, steers, body) {
   return '<div class="about-item"><div class="about-item-head"><strong>' + esc(title) + '</strong><span class="about-steers">Steers: ' + esc(steers) + '</span></div>' + body + '</div>';
 }
