@@ -14,7 +14,8 @@
 // answer can never cite a record he does not have or a link nobody fetched.
 
 const {urlKey} = require("./briefing-evidence");
-const {profileBrief} = require("./briefing-prompt-core");
+const BriefingCore = require("./briefing-prompt-core");
+const {profileBrief} = BriefingCore;
 
 function text(value) {
   return String(value == null ? "" : value).trim();
@@ -42,8 +43,11 @@ const LOOKUP_LIMIT = 12;
 const MAX_THREAD = 3;
 const KEEP_ANSWERS = 20;
 // The search index's source names, as the lookup tool offers them.
-const ASK_SOURCES = ["Briefing", "News", "Research", "Decisions", "Reflections", "Evidence", "Dossier", "Meeting",
+const ASK_SOURCES = ["Profile", "Activity", "Briefing", "News", "Research", "Decisions", "Reflections", "Evidence", "Dossier", "Meeting",
   "Weekly read", "Numbers", "Radar", "Markets", "Sports"];
+// What he has told Daybook about himself, and what it has picked up from him
+// (the About you page). Few records, so a lookup may read them all at once.
+const ABOUT_SOURCES = ["Profile", "Activity"];
 
 // The question as typed. Null when too short to be one.
 function cleanQuestion(raw) {
@@ -62,6 +66,8 @@ function cleanThread(raw) {
 // Whose words each record is. Only his notes, his decision journal and the
 // note on a saved item are his own; the AI-written items are marked as such.
 const ORIGIN = {
+  Profile: "His own profile (his words, from About you)",
+  Activity: "What he recorded or tapped in the app (counts and lists, not his words)",
   Reflections: "His own note",
   Decisions: "His decision journal",
   Evidence: "A page he saved to Evidence (any \"Note:\" part is his own words)",
@@ -86,13 +92,13 @@ const SYSTEM = "You answer questions about an insurance and business-interruptio
 const SEARCH_TOOL = {
   type: "function",
   name: "search_daybook",
-  description: "Look up Bob's own Daybook: his briefings, news he was shown, research reports, decisions, notes, " +
-    "saved evidence, dossiers, meeting briefs, weekly reads, Your numbers, and the Radar, Markets and Sports feeds. " +
-    "Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
+  description: "Look up Bob's own Daybook: his profile and what the app has picked up from him (Profile, Activity), his briefings, " +
+    "news he was shown, research reports, decisions, notes, saved evidence, dossiers, meeting briefs, weekly reads, Your numbers, " +
+    "and the Radar, Markets and Sports feeds. Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
   parameters: {
     type: "object",
     properties: {
-      terms: {type: "array", items: {type: "string"}, description: "1 to 8 words or short phrases to find, including names, tickers, other names and synonyms (e.g. [\"ETH\", \"Ethereum\"])."},
+      terms: {type: "array", items: {type: "string"}, description: "1 to 8 words or short phrases to find, including names, tickers, other names and synonyms (e.g. [\"ETH\", \"Ethereum\"]). Leave it empty only with sources Profile and/or Activity, to read all of them."},
       sources: {type: "array", items: {type: "string", enum: ASK_SOURCES}, description: "Optional: only these kinds of record."},
       since: {type: "string", description: "Optional: earliest date, YYYY-MM-DD."},
       until: {type: "string", description: "Optional: latest date, YYYY-MM-DD."},
@@ -116,8 +122,10 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
     "",
     "HOW TO ANSWER:",
     "- Look up his Daybook with search_daybook before answering, at least once and at most " + MAX_LOOKUPS + " times. Choose terms that would appear in the records: names, tickers, other names, synonyms. Narrow by sources or dates when the question implies it (\"since August\" is since the 1st of August this year).",
+    "- A question about Bob himself (who he is, what he cares about, his habits, his work, his goals): look up sources Profile and Activity first, with terms empty to read them all, and answer from them. Never cite a briefing story, news item or report as evidence of who he is.",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
-    "  - His own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\" is right.",
+    "  - His profile, his own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\", \"you describe yourself as…\" is right.",
+    "  - Activity is what he did in the app (votes, open calls, what he opens): describe it as what he did, never as what he said.",
     "  - A dossier, meeting brief or weekly read is AI-written for him; a saved page or report is something he kept: never present these as his view.",
     "  - A briefing story or news item he was shown: at most \"your 25 Sep briefing said…\". Being shown something is not interest.",
     web
@@ -234,6 +242,84 @@ function cleanAnswer(raw, registry, searched, web) {
   };
 }
 
+// His profile boxes and what Daybook has picked up from him, as index rows
+// (the About you page, in a form a lookup can return and an answer can cite).
+// Only what he wrote or did; nothing inferred.
+const PAGE_NAMES = {today: "Today", command: "Command", evidence: "Evidence", timeline: "Timeline", history: "History", trends: "Trends",
+  research: "Research", radar: "Radar", journal: "Journal", pse: "PSE", miro: "Markets", sports: "Sports", help: "Help", decisions: "Decisions", about: "About you"};
+function aboutRecords(docs, todayKey) {
+  docs = docs || {};
+  const out = [];
+  const profileDoc = docs.profile || null, profile = BriefingCore.cleanProfile(profileDoc && profileDoc.profile);
+  const savedOn = profileDoc && profileDoc.updatedAt ? text(profileDoc.updatedAt).slice(0, 10) : "";
+  BriefingCore.PROFILE_FIELDS.forEach((field) => {
+    const value = profile[field.key];
+    if (!value) return;
+    out.push({id: "profile:" + field.key, source: "Profile", title: "Your profile: " + field.label, detail: clip(value, 420), body: value,
+      meta: savedOn ? "About you, saved " + savedOn : "About you, the starting profile", page: "about", ref: field.key, saved: profileDoc && profileDoc.updatedAt, entities: []});
+  });
+  const at = todayKey ? todayKey + "T00:00:00Z" : "";
+  const votes = BriefingCore.readerVotes((docs.dailyBoost && docs.dailyBoost.entries) || {}, todayKey);
+  const tally = (list) => {
+    const counts = {};
+    list.forEach((v) => { if (v.section) counts[v.section] = (counts[v.section] || 0) + 1; });
+    return Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b)).map((k) => k + " " + counts[k]).join(", ");
+  };
+  if (votes.up.length || votes.down.length) {
+    out.push({id: "activity:votes", source: "Activity", title: "Your story votes (last 30 days)",
+      detail: [votes.up.length + " more like this" + (tally(votes.up) ? " (" + tally(votes.up) + ")" : ""), votes.down.length ? votes.down.length + " less like this" + (tally(votes.down) ? " (" + tally(votes.down) + ")" : "") : ""].filter(Boolean).join("; "),
+      body: votes.up.map((v) => "More: " + v.headline).concat(votes.down.map((v) => "Less: " + v.headline)).join(" · "),
+      meta: "Votes on briefing stories", page: "about", ref: "votes", saved: at, entities: []});
+  }
+  const calls = arr(docs.decisions).filter((d) => d && (text(d.status) || "open") !== "closed" && (text(d.action) || "watched") !== "skipped");
+  if (calls.length) {
+    out.push({id: "activity:calls", source: "Activity", title: "Your open calls",
+      detail: calls.slice(0, 10).map((d) => text(d.asset || d.subject) + " (" + [text(d.action), text(d.createdDate), d.conviction ? "conviction " + d.conviction + "/5" : "", text(d.reason) ? "" : "no reason recorded"].filter(Boolean).join(", ") + ")").join("; "),
+      meta: "Decision journal", page: "about", ref: "calls", saved: at, entities: []});
+  }
+  const accounts = arr(docs.accounts && docs.accounts.accounts).map((a) => text(a && a.name)).filter(Boolean);
+  if (accounts.length) {
+    out.push({id: "activity:accounts", source: "Activity", title: "Your accounts", detail: accounts.length + " accounts: " + accounts.join(", "),
+      meta: "His own list (Evidence, Your accounts)", page: "about", ref: "accounts", saved: at, entities: []});
+  }
+  const goals = arr(docs.goals && docs.goals.goals).filter((g) => g && !g.archived && text(g.text)).slice(0, 3);
+  if (goals.length) {
+    out.push({id: "activity:goals", source: "Activity", title: "Your goals", detail: goals.map((g) => text(g.text) + (text(g.nextMove) ? " (next: " + text(g.nextMove) + ")" : "")).join("; "),
+      meta: "Your goals on Today", page: "about", ref: "goals", saved: at, entities: []});
+  }
+  const weights = (docs.prefs && docs.prefs.sourceWeights) || {}, quiet = arr(docs.prefs && docs.prefs.quietSources);
+  const changed = Object.keys(weights).filter((k) => weights[k] !== 1).sort().map((k) => k + ": " + (weights[k] < 1 ? "Low" : "High")).concat(quiet.map((k) => k + ": quiet"));
+  if (changed.length) {
+    out.push({id: "activity:priorities", source: "Activity", title: "Your Morning 5 priorities", detail: changed.join(", ") + "; every other source Normal",
+      meta: "Command settings", page: "about", ref: "priorities", saved: at, entities: []});
+  }
+  // What he opens most over the last 14 days: pages, and Your numbers.
+  const days = (docs.usage && docs.usage.days) || {}, totals = {};
+  const since = todayKey ? new Date(Date.parse(todayKey + "T00:00:00Z") - 13 * 86400000).toISOString().slice(0, 10) : "";
+  Object.keys(days).filter((d) => !since || (d >= since && d <= todayKey)).forEach((d) => Object.keys(days[d] || {}).forEach((key) => {
+    const name = key === "open_grounding-panel" ? "Your numbers" : /^page_/.test(key) ? PAGE_NAMES[key.slice(5)] : key === "fn_runaskdaybook" ? "Ask Daybook" : "";
+    if (name) totals[name] = (totals[name] || 0) + (Number(days[d][key]) || 0);
+  }));
+  const used = Object.keys(totals).filter((k) => totals[k] > 0).sort((a, b) => totals[b] - totals[a] || a.localeCompare(b)).slice(0, 8);
+  if (used.length) {
+    out.push({id: "activity:usage", source: "Activity", title: "What you open most (last 14 days)", detail: used.map((k) => k + " " + totals[k]).join(" · "),
+      meta: "Usage counts", page: "about", ref: "usage", saved: at, entities: []});
+  }
+  return out;
+}
+
+// One lookup. With no terms, it reads every Profile and Activity record (they
+// are few, and a question about him has no words to match); otherwise the
+// usual planned search.
+function lookupRecords(index, plan, searchCore, now) {
+  if (!arr(plan.terms).length) {
+    const sources = arr(plan.sources);
+    if (!sources.length || !sources.every((source) => ABOUT_SOURCES.indexOf(source) >= 0)) return [];
+    return arr(index).filter((item) => sources.indexOf(item.source) >= 0).slice(0, plan.limit || LOOKUP_LIMIT);
+  }
+  return searchCore.searchPlan(index, plan, {now});
+}
+
 // The search index's input, from the documents the server read for him. The
 // reflections mirror the app's (daily-boost.js dailyBoostSearchEntries).
 function askIndexInput(docs, core) {
@@ -262,6 +348,7 @@ function askIndexInput(docs, core) {
     meetingBriefs: docs.meetings && docs.meetings.items,
     mirrors: docs.mirrors && docs.mirrors.mirrors,
     grounding: docs.grounding,
+    records: aboutRecords(docs, docs.todayKey),
     news: docs.news,
     radar: docs.radar,
     markets: docs.markets,
@@ -323,5 +410,5 @@ function keepAnswers(items, id, answer) {
 
 module.exports = {
   cleanQuestion, cleanThread, originOf, buildAskPrompt, buildAskInput, cleanPlan, newRegistry, lookupOutput, cleanAnswer,
-  askIndexInput, runLookups, providerError, keepAnswers, SYSTEM, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
+  askIndexInput, aboutRecords, lookupRecords, runLookups, providerError, keepAnswers, SYSTEM, ABOUT_SOURCES, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
 };

@@ -39,7 +39,7 @@ test("a lookup plan is parsed and bounded: terms, known sources, real dates", ()
 test("the server's index matches the app's: briefings, decisions, evidence, notes and numbers", () => {
   const index = Core.buildIndex(Ask.askIndexInput(docs, boostCore));
   const sources = [...new Set(index.map((item) => item.source))].sort();
-  assert.deepEqual(sources, ["Briefing", "Decisions", "Evidence", "Numbers", "Reflections"]);
+  assert.deepEqual(sources, ["Activity", "Briefing", "Decisions", "Evidence", "Numbers", "Profile", "Reflections"], "About you rides along as Profile and Activity");
   assert.equal(index.filter((item) => item.source === "Reflections").length, 1, "a day with no note or story is left out");
   assert.equal(index.find((item) => item.source === "Reflections").title, "2026-09-24 · Spark 3");
   const eth = Core.searchPlan(index, Ask.cleanPlan({terms: ["ETH", "Ethereum"], sources: ["Decisions"]}), {now});
@@ -137,4 +137,47 @@ test("the stored map keeps the latest twenty answers", () => {
   let items = {};
   for (let i = 0; i < 25; i++) items = Ask.keepAnswers(items, "a" + i, {generatedAt: new Date(now + i * 1000).toISOString()});
   assert.equal(Object.keys(items).length, 20); assert.ok(!items.a0 && items.a24);
+});
+
+// About you, as records Ask can look up and cite (1 Oct: "describe me in one
+// word" cited a court story, because his profile was not a source).
+test("About you records: his profile boxes in his words, and only what he recorded or tapped", () => {
+  const todayKey = "2026-10-01";
+  const records = Ask.aboutRecords({
+    profile: {profile: {work: "A forensic BI specialist.", files: "QBE pole strikes", matters: "", lookFor: "", other: "Keen on AI tools"}, updatedAt: "2026-10-01T03:20:14Z"},
+    dailyBoost: {entries: {"2026-09-29": {feedback: [{headline: "Trucking operator back", section: "interruptions", vote: 1}, {headline: "Crypto flows", section: "markets", vote: -1}]}}},
+    decisions: [{asset: "ETH", action: "took", status: "open", createdDate: "2026-07-21", conviction: 4, reason: ""}, {asset: "RTX", status: "closed"}],
+    accounts: {accounts: [{name: "QBE"}, {name: "Allianz"}]},
+    prefs: {sourceWeights: {Sports: 0.5, Radar: 1}, quietSources: []},
+    usage: {days: {"2026-09-30": {page_today: 30, page_evidence: 11, "open_grounding-panel": 5, card_more: 2}, "2026-09-01": {page_help: 99}}},
+    goals: {goals: []},
+  }, todayKey);
+  const byId = Object.fromEntries(records.map((r) => [r.id, r]));
+  assert.deepEqual(records.filter((r) => r.source === "Profile").map((r) => r.id), ["profile:work", "profile:files", "profile:other"], "an emptied box is left out");
+  assert.equal(byId["profile:other"].detail, "Keen on AI tools"); assert.equal(byId["profile:other"].meta, "About you, saved 2026-10-01"); assert.equal(byId["profile:other"].page, "about");
+  assert.equal(byId["activity:votes"].detail, "1 more like this (interruptions 1); 1 less like this (markets 1)");
+  assert.equal(byId["activity:calls"].detail, "ETH (took, 2026-07-21, conviction 4/5, no reason recorded)", "a closed call is not open");
+  assert.equal(byId["activity:accounts"].detail, "2 accounts: QBE, Allianz");
+  assert.equal(byId["activity:priorities"].detail, "Sports: Low; every other source Normal");
+  assert.equal(byId["activity:usage"].detail, "Today 30 · Evidence 11 · Your numbers 5", "the last 14 days, pages and Your numbers only");
+  assert.ok(!byId["activity:goals"], "no goals, no record");
+  const bare = Ask.aboutRecords({}, todayKey);
+  assert.deepEqual(bare.map((r) => r.source), ["Profile", "Profile", "Profile", "Profile"], "with nothing saved: the starting profile only, no activity invented");
+  assert.equal(bare[0].meta, "About you, the starting profile");
+});
+test("a question about him reads all of About you; other lookups still need words", () => {
+  const index = Core.buildIndex(Object.assign(Ask.askIndexInput(docs, boostCore), {records: Ask.aboutRecords({decisions: docs.decisions, profile: {profile: {other: "Keen on AI tools"}}}, "2026-10-01")}));
+  const about = Ask.lookupRecords(index, Ask.cleanPlan({terms: [], sources: ["Profile", "Activity"]}), Core, now);
+  assert.ok(about.length >= 5 && about.every((r) => r.source === "Profile" || r.source === "Activity"));
+  assert.deepEqual(Ask.lookupRecords(index, Ask.cleanPlan({terms: [], sources: ["Briefing"]}), Core, now), [], "no words, no briefing lookup");
+  assert.deepEqual(Ask.lookupRecords(index, Ask.cleanPlan({terms: []}), Core, now), []);
+  assert.equal(Ask.lookupRecords(index, Ask.cleanPlan({terms: ["AI tools"], sources: ["Profile"]}), Core, now)[0].id, "profile:other", "words work too");
+  const registry = Ask.newRegistry();
+  const out = JSON.parse(Ask.lookupOutput(about, registry));
+  assert.ok(out.results.some((r) => r.kind === "His own profile (his words, from About you)"));
+  assert.ok(out.results.some((r) => r.kind === "What he recorded or tapped in the app (counts and lists, not his words)"));
+  const prompt = Ask.buildAskPrompt({question: "describe me in one word", today: "t", accounts: [], web: false});
+  assert.match(prompt, /A question about Bob himself .* look up sources Profile and Activity first, with terms empty to read them all/);
+  assert.match(prompt, /Never cite a briefing story, news item or report as evidence of who he is\./);
+  assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("Profile"));
 });

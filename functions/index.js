@@ -812,13 +812,17 @@ async function loadAskIndex(db, uid) {
   // His own documents, newest first, as the app's Search reads them.
   const own = (name, n) => db.collection(name).where("uid", "==", uid).orderBy("saved", "desc").limit(n).get()
     .then((snap) => snap.docs.map((doc) => Object.assign({id: doc.id}, doc.data()))).catch(() => []);
-  const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports] = await Promise.all([
+  const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
+    profile, accounts, usage, goals] = await Promise.all([
     own(BRIEFINGS_COLL, 100), own(REPORTS_COLL, 50), own(JOURNAL_COLL, 100),
     get(COMMAND_PREF_PREFIX + uid), get("dossiers-" + uid), get("meeting-briefs-" + uid), get("weekly-mirror-" + uid), get("daily-boost-" + uid),
     get("grounding-latest"), latest("news"), latest("radar"), latest("miro"), latest("sports"),
+    // About you: his profile, and what the app has picked up from him.
+    get("profile-" + uid), get("accounts-" + uid), get("usage-" + uid), get("goals-" + uid),
   ]);
   const index = IntelligenceSearchCore.buildIndex(Ask.askIndexInput(
-    {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports}, DailyBoostCore));
+    {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
+      profile, accounts, usage, goals, todayKey: phtDateKey()}, DailyBoostCore));
   askIndexCache = {uid, at: Date.now(), index};
   return index;
 }
@@ -906,7 +910,7 @@ exports.askDaybook = onCall(
       const result = await Ask.runLookups({
         firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web, profile: await loadProfile(db, uid)}), tool_choice: "auto"},
         call: async (body) => track(await openaiResponse(Object.assign({model, tools, include}, body), "ask", Math.max(20000, Math.min(120000, deadline - Date.now())))),
-        lookup: (plan) => Ask.lookupOutput(IntelligenceSearchCore.searchPlan(index, plan, {now}), registry),
+        lookup: (plan) => Ask.lookupOutput(Ask.lookupRecords(index, plan, IntelligenceSearchCore, now), registry),
       });
       json = result.json;
       lookups = result.lookups;
