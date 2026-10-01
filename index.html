@@ -3324,6 +3324,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
       <p><b>More → About you</b> holds one profile in five boxes: your work, your clients and files, what moves your numbers, what to look out for, and anything else. The briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research all read it from their next run, so a change in your work mix reaches all of them at once. It starts as the profile those features already used; <b>Put back the starting profile</b> returns to it. Your words change only the facts about you: the rules (sources, no invented links, no trading advice) stay fixed.</p>
       <p>Below it, <b>What it has picked up from you</b> lists what already steers Daybook, each with what it steers: your story votes (with <b>Take back</b>), open calls, Radar setups, accounts, goals and Morning 5 priorities, plus what you open most. Nothing there is guessed. Later, Daybook will suggest profile lines from what you use, for you to approve.</p>
       <p><b>Your calendars</b> — paste your Google Calendar secret iCal address and your Outlook published ICS link (<b>Where to find each link</b> shows how). Daybook reads them read-only at 6:00 and 18:00 and keeps only the next 36 hours of meetings whose title names one of your accounts (other names count: AAMI for Suncorp). Nothing else from your calendars is kept or sent anywhere. Treat each link like a password; it is never shown back in full.</p>
+      <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
     </div>
     <div class="help-card help-wide" id="invites-card" hidden>
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg> Invites — who can use Daybook</div>
@@ -5365,7 +5366,7 @@ function meetingBriefHtml(b) {
   var at = b.generatedAt ? new Date(b.generatedAt) : null;
   var when = at && !isNaN(at) ? at.toLocaleDateString('en-AU', {day:'numeric', month:'short'}) + ', ' + at.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
   var html = '<div class="dossier meeting-brief"><div class="dossier-head"><span class="dossier-kicker">' + uiIcon('clipboard') + ' Meeting brief · ' + esc(b.topic || '') + '</span><span class="dossier-meta">' +
-    esc([b.materialCount ? b.materialCount + ' of your items' : 'web search only', when].filter(Boolean).join(' · ')) + '</span></div>';
+    esc([b.fromCalendar ? 'from your calendar' : '', b.materialCount ? b.materialCount + ' of your items' : 'web search only', when].filter(Boolean).join(' · ')) + '</span></div>';
   html += '<p class="dossier-summary">' + esc(b.where_things_stand) + '</p>';
   html += part('Lately', (b.recent || []).length ? '<ul>' + b.recent.map(function(r) {
     var source = r.source ? esc(r.source) : r.url ? 'source' : '';
@@ -5589,6 +5590,18 @@ document.addEventListener('click', function(event) {
   paintCalendar();
   setText('calendar-status', 'Tap Save and check now to remove it.');
 });
+
+// A meeting in the Morning 5 (lib/ui-shell.js commandOpenItem): its brief when
+// one is ready, else the meeting brief box on Evidence with the meeting filled in.
+async function openMeetingFromCommand(item) {
+  if (item && item.target) { await openEvidencePageResult({source: 'Meeting', ref: item.target}); return; }
+  switchPage('evidence', document.querySelector('.ntab[data-page="evidence"]'));
+  var input = document.getElementById('meeting-topic'), panel = document.getElementById('meeting-panel');
+  if (input) input.value = String(item && item.title || '').replace(/^(Today|Tomorrow) \d{2}:\d{2} · /, '');
+  if (panel) panel.scrollIntoView({block: 'start', behavior: 'smooth'});
+  setText('meeting-status', 'No brief yet for this meeting. Tap Build brief, or it is built the evening before.');
+  if (input) input.focus();
+}
 
 function aboutItem(title, steers, body) {
   return '<div class="about-item"><div class="about-item-head"><strong>' + esc(title) + '</strong><span class="about-steers">Steers: ' + esc(steers) + '</span></div>' + body + '</div>';
@@ -7029,7 +7042,7 @@ var commandPrefsAvailable = false;
 var commandFilter = 'all';
 var commandLoadToken = 0;
 var commandCenterInputs = null;
-var commandSources = ['Briefing','News','Numbers','Radar','Markets','Decisions','Sports'];
+var commandSources = ['Briefing','News','Numbers','Radar','Markets','Decisions','Sports','Meetings'];
 var commandPreferences = {sourceWeights:{}, quietSources:[], daily:{date:'',pinned:[],dismissed:[]}, delivery:{enabled:false,quietStart:'22:00',quietEnd:'06:00',sourceThresholds:{}}, deliveryState:{audit:[]}, review:{days:{}}};
 var commandPreferenceSaveChain = Promise.resolve();
 var commandPreferenceRevision = 0;
@@ -7505,10 +7518,12 @@ function renderCommandCenter() {
   return Promise.all([
     read(window.fbLoadRadar), read(window.fbLoadMiro), read(window.fbLoadSports),
     read(window.fbLoadDecisions), read(window.fbLoadFeedHealth), read(window.fbLoadCommandPrefs),
-    read(window.fbLoadNews), read(window.fbLoadGrounding)
+    read(window.fbLoadNews), read(window.fbLoadGrounding),
+    // A member has no calendars: read nothing, rather than report it as unavailable.
+    read(window.daybookMember || !window.fbLoadMeetings ? function() { return null; } : function() { return window.fbLoadMeetings(window._firebaseUid); })
   ]).then(function (data) {
     if (token !== commandLoadToken) return;
-    var names = ['Radar','Markets','Sports','Decisions','Feed health','Preferences','News','Numbers'];
+    var names = ['Radar','Markets','Sports','Decisions','Feed health','Preferences','News','Numbers','Meetings'];
     var failed = data.map(function(result,i) { return result.ok ? '' : names[i]; }).filter(Boolean);
     setText('command-load-status',failed.length ? 'Partial results — unavailable: ' + failed.join(', ') + '. Refresh to retry.' : 'All sources loaded.');
     commandPrefsAvailable = data[5].ok;
@@ -7523,6 +7538,7 @@ function renderCommandCenter() {
       decisions: data[3],
       news: data[6],
       grounding: data[7],
+      meetings: data[8],
       health: window._feedHealthData,
       sportsFollows: commandSportsFollows(data[2])
     };

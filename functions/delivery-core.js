@@ -1,6 +1,6 @@
 "use strict";
 
-const DELIVERY_SOURCES = ["Briefing", "News", "Numbers", "Radar", "Markets", "Decisions", "Sports"];
+const DELIVERY_SOURCES = ["Briefing", "News", "Numbers", "Radar", "Markets", "Decisions", "Sports", "Meetings"];
 
 function clampThreshold(value) {
   const parsed = Number(value);

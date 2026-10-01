@@ -150,6 +150,29 @@ function cleanBrief(raw, searched, material) {
   };
 }
 
+// His material for a brief built from his calendar, with the app closed: the
+// same bounds as the app's gathering (the last six weeks, at most 24 items and
+// six of any one kind, newest first), from the server's search index (the rows
+// the app's Search reads). Earlier AI briefs, reads, figures and feeds are left
+// out, as in the app. searchPlan is IntelligenceSearchCore's.
+const MATERIAL_SOURCES = ["Briefing", "News", "Research", "Decisions", "Reflections", "Evidence", "Dossier"];
+function materialFromIndex(index, terms, now, searchPlan) {
+  const since = new Date(now - 42 * 86400000).toISOString().slice(0, 10);
+  const hits = arr(searchPlan(index, {terms: arr(terms).slice(0, 8), sources: MATERIAL_SOURCES, since, limit: 40}, {now}));
+  const perKind = {}, rows = [];
+  hits.slice().sort((a, b) => (Number(b.saved) || 0) - (Number(a.saved) || 0)).forEach((item) => {
+    if (rows.length >= MAX_MATERIAL || (perKind[item.source] || 0) >= 6) return;
+    perKind[item.source] = (perKind[item.source] || 0) + 1;
+    const note = item.source === "Evidence" ? text(item.body).replace(/^Note: /, "His note: ") : "";
+    rows.push({
+      kind: item.source, date: item.saved ? new Date(item.saved).toISOString().slice(0, 10) : "", title: item.title,
+      text: [text(item.detail) || text(item.excerpt), note].filter(Boolean).join(" "),
+      url: item.source === "News" ? item.ref : "",
+    });
+  });
+  return cleanMaterial(rows);
+}
+
 // The stored map keeps the latest twenty briefs, oldest dropped first.
 const KEEP_BRIEFS = 20;
 function keepBriefs(items, id, brief) {
@@ -161,4 +184,4 @@ function keepBriefs(items, id, brief) {
   return out;
 }
 
-module.exports = {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, originOf, SYSTEM, KEEP_BRIEFS, MAX_MATERIAL};
+module.exports = {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, materialFromIndex, originOf, SYSTEM, KEEP_BRIEFS, MAX_MATERIAL, MATERIAL_SOURCES};

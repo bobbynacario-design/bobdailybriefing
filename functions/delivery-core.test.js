@@ -166,3 +166,8 @@ test("the push's spark leans towards his goals exactly as the app does", () => {
   assert.notEqual(todaysSparkTitle(core, {}, day, lean), todaysSparkTitle(core, {}, day), "a goal can change the day's spark");
   assert.equal(todaysSparkTitle(core, {"2026-09-28": {spark: 11, updatedAt: 1}}, day, lean), core.sparkTitle(11), "a stored day keeps its spark");
 });
+
+test("meetings from his calendar can go out in the morning push, at the usual threshold", () => {
+  const {normalizeDelivery} = require("./delivery-core");
+  assert.equal(normalizeDelivery({}).sourceThresholds.Meetings, 80);
+});

@@ -135,5 +135,11 @@ function mergeMeetings(lists) {
     .sort((a, b) => a.start.localeCompare(b.start)).slice(0, MAX_MEETINGS);
 }
 
-module.exports = {cleanLink, cleanLinks, eventsBetween, matchMeetings, readResult, mergeMeetings,
+// The meetings a brief is built for now: no brief yet, starting between 30
+// minutes and 30 hours from now (tomorrow's at the 18:00 run, today's at 06:00).
+function dueForBriefs(items, now) {
+  return arr(items).filter((m) => m && !m.briefId && Date.parse(m.start) > now + 30 * 60000 && Date.parse(m.start) < now + 30 * 3600000);
+}
+
+module.exports = {cleanLink, cleanLinks, eventsBetween, matchMeetings, readResult, mergeMeetings, dueForBriefs,
   LINK_HOSTS, WINDOW_HOURS, MAX_LINKS, MAX_ICS_BYTES, MAX_MEETINGS};

@@ -17,7 +17,7 @@ const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing
 const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
 const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS, profileBrief} = require("./briefing-prompt-core");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
-const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
+const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, materialFromIndex, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
 const {
   parseYahooChart, parseOpenMeteo, buildFacts, applyFacts,
 } = require("./market-facts");
@@ -81,6 +81,8 @@ const MIRROR_DAILY_CAP = parseInt(process.env.MIRROR_DAILY_CAP || "3", 10);
 const DOSSIER_DAILY_CAP = parseInt(process.env.DOSSIER_DAILY_CAP || "10", 10);
 // Meeting briefs: one page before a call; five a day is plenty.
 const MEETING_DAILY_CAP = parseInt(process.env.MEETING_DAILY_CAP || "5", 10);
+// Meeting briefs built from his calendar the evening before (Bob chose up to 3 a day).
+const MEETING_AUTO_CAP = parseInt(process.env.MEETING_AUTO_CAP || "3", 10);
 // Ask Daybook questions a day (Bob chose 20 on 2026-10-01).
 const ASK_DAILY_CAP = parseInt(process.env.ASK_DAILY_CAP || "20", 10);
 const REPORTS_COLL = "reports-bob";
@@ -732,12 +734,16 @@ exports.generateMeetingBrief = onCall(
     memory: "512MiB",
     secrets: [OPENAI_API_KEY],
   },
-  protectGeneration("meeting", async (request) => {
-    const db = getFirestore();
-    const uid = request.auth.uid;
-    const topic = cleanTopic(request.data.topic);
-    const material = cleanMaterial(request.data.material);
-    const dateLabel = String(request.data.dateLabel || "").slice(0, 60);
+  protectGeneration("meeting", async (request) => makeMeetingBrief(getFirestore(), request.auth.uid, {
+    topic: cleanTopic(request.data.topic), material: cleanMaterial(request.data.material),
+    dateLabel: String(request.data.dateLabel || "").slice(0, 60), usageFeature: "meeting-brief",
+  }))
+);
+
+// One meeting brief: the web-searched prompt, the honesty checks, and the
+// latest-twenty store. Build brief on Evidence and his calendar both use it;
+// extra carries what a calendar brief adds (the meeting it was built for).
+async function makeMeetingBrief(db, uid, {topic, material, dateLabel, usageFeature, extra}) {
     const model = DEFAULT_MODEL;
     let response;
     try {
@@ -769,7 +775,7 @@ exports.generateMeetingBrief = onCall(
       logger.error("OpenAI API error (meeting brief)", {status: response.status, message: msg});
       throw new HttpsError("internal", msg);
     }
-    await recordUsage(db, "meeting-brief", model, extractUsage(json), phtDateKey());
+    await recordUsage(db, usageFeature || "meeting-brief", model, extractUsage(json), phtDateKey());
 
     let brief;
     try {
@@ -785,13 +791,13 @@ exports.generateMeetingBrief = onCall(
     brief.materialCount = material.length;
     brief.model = model;
     brief.generatedAt = new Date().toISOString();
+    Object.assign(brief, extra || {});
     const id = "m" + Date.now().toString(36);
     const ref = db.collection(BRIEFINGS_COLL).doc("meeting-briefs-" + uid);
     const stored = await ref.get().then((snap) => (snap.exists ? snap.data().items || {} : {})).catch(() => ({}));
     await ref.set({uid, kind: "meeting-briefs", items: keepBriefs(stored, id, brief), updatedAt: brief.generatedAt});
     return {id, brief};
-  })
-);
+}
 
 // ─────────────────────────────────────────────────────────────
 // Ask Daybook (functions/ask-daybook.js): a question answered from his own
@@ -1295,9 +1301,10 @@ async function sharedCommandInputs(db) {
 }
 
 async function userCommandInputs(db, uid, prefs, shared, now) {
-  const [briefingSnap, decisionsSnap] = await Promise.all([
+  const [briefingSnap, decisionsSnap, meetingsSnap] = await Promise.all([
     db.collection(BRIEFINGS_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(5).get(),
     db.collection(JOURNAL_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(100).get(),
+    db.collection(BRIEFINGS_COLL).doc("meetings-" + uid).get().catch(() => null),
   ]);
   let briefing = null;
   briefingSnap.docs.some((doc) => {
@@ -1310,6 +1317,7 @@ async function userCommandInputs(db, uid, prefs, shared, now) {
   return Object.assign({}, shared, {
     briefing,
     decisions,
+    meetings: meetingsSnap && meetingsSnap.exists ? meetingsSnap.data() : null,
     preferences: prefs,
     today: phtParts(now).date,
   });
@@ -1575,12 +1583,46 @@ async function readCalendars(db, uid, now) {
       return {meetings: [], source: Calendar.readResult(link.service, [], [], error.message)};
     }
   }));
+  const before = await coll.doc("meetings-" + uid).get().then((snap) => (snap.exists ? snap.data().items || [] : [])).catch(() => []);
+  const built = {};
+  before.forEach((m) => { if (m && m.id && m.briefId) built[m.id] = m.briefId; });
   const record = {
     uid, kind: "meetings", checkedAt: new Date(now).toISOString(),
-    items: Calendar.mergeMeetings(results.map((r) => r.meetings)),
+    items: Calendar.mergeMeetings(results.map((r) => r.meetings)).map((m) => (built[m.id] ? Object.assign({}, m, {briefId: built[m.id]}) : m)),
     sources: results.map((r) => r.source),
   };
   await coll.doc("meetings-" + uid).set(record);
+  return record;
+}
+
+// Briefs for his matched meetings in the next 30 hours that have none yet:
+// tomorrow's at 18:00, today's at 06:00. Up to MEETING_AUTO_CAP a day; the
+// meeting's id is the request id, so a meeting is never paid for twice.
+async function prepareMeetingBriefs(db, uid, record, now) {
+  const due = Calendar.dueForBriefs(record.items, now);
+  if (!due.length) return record;
+  const [index, accountsSnap] = await Promise.all([loadAskIndex(db, uid), db.collection(BRIEFINGS_COLL).doc("accounts-" + uid).get().catch(() => null)]);
+  const kept = accountsSnap && accountsSnap.exists ? cleanAccounts((accountsSnap.data() || {}).accounts) : [];
+  const accounts = kept.length ? kept : DEFAULT_ACCOUNTS;
+  const today = new Intl.DateTimeFormat("en-AU", {timeZone: "Asia/Manila", weekday: "long", day: "numeric", month: "long", year: "numeric"}).format(new Date(now));
+  for (const meeting of due) {
+    const named = accounts.filter((a) => (meeting.accounts || []).indexOf(a.name) >= 0);
+    const terms = [].concat(...named.map((a) => [a.name].concat(a.aliases || []))).filter((t, i, all) => t && all.indexOf(t) === i).slice(0, 8);
+    const when = new Intl.DateTimeFormat("en-AU", {timeZone: "Asia/Manila", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23"}).format(new Date(meeting.start));
+    try {
+      const result = await guardedGeneration({db, uid, feature: "meeting-auto", period: phtDateKey(now), cap: MEETING_AUTO_CAP, requestId: meeting.id, input: {meeting: meeting.id}},
+        () => makeMeetingBrief(db, uid, {
+          topic: cleanTopic(meeting.title + " (" + when + " Manila)"), material: materialFromIndex(index, terms, now, IntelligenceSearchCore.searchPlan),
+          dateLabel: today, usageFeature: "meeting-brief-auto",
+          extra: {fromCalendar: true, meetingId: meeting.id, meetingStart: meeting.start, meetingTitle: meeting.title},
+        }));
+      meeting.briefId = result && result.id;
+    } catch (error) {
+      logger.warn("Calendar brief not built", {uid, meeting: meeting.id, code: error.code, message: error.message});
+      if (error.code === "resource-exhausted") break;
+    }
+  }
+  await db.collection(BRIEFINGS_COLL).doc("meetings-" + uid).set(record);
   return record;
 }
 
@@ -1597,7 +1639,7 @@ exports.checkCalendarNow = onCall(
 // 06:00 and 18:00 Manila: the morning catches today's meetings, the evening
 // tomorrow's (so a brief can be ready the night before).
 exports.checkCalendars = onSchedule(
-  {schedule: "0 6,18 * * *", timeZone: "Asia/Manila", region: "asia-southeast1", timeoutSeconds: 120, memory: "256MiB"},
+  {schedule: "0 6,18 * * *", timeZone: "Asia/Manila", region: "asia-southeast1", timeoutSeconds: 540, memory: "512MiB", secrets: [OPENAI_API_KEY]},
   async () => {
     const db = getFirestore();
     const docs = await db.collection(BRIEFINGS_COLL).where("kind", "==", "calendar").limit(20).get();
@@ -1605,7 +1647,8 @@ exports.checkCalendars = onSchedule(
       const uid = doc.data().uid;
       if (!uid || (await daybookRoleForUid(uid)) !== "owner") continue;
       try {
-        await readCalendars(db, uid, Date.now());
+        const now = Date.now();
+        await prepareMeetingBriefs(db, uid, await readCalendars(db, uid, now), now);
       } catch (error) {
         logger.error("Calendar check failed", {uid, message: error.message});
       }

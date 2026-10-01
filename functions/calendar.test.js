@@ -94,3 +94,12 @@ test("daylight saving: a Sydney meeting keeps its local time when the clocks go 
   const meetings = Cal.matchMeetings(events, [{name: "Allianz", aliases: ["TIO"]}], "Google");
   assert.equal(meetings.length, 2); assert.notEqual(meetings[0].id, meetings[1].id, "each occurrence has its own id");
 });
+
+test("a brief is due for a meeting with none yet, from 30 minutes to 30 hours ahead", () => {
+  const now = Date.parse("2026-10-01T10:00:00Z"); // 18:00 Manila
+  const at = (hours) => new Date(now + hours * 3600000).toISOString();
+  const items = [{id: "soon", start: at(0.25)}, {id: "tonight", start: at(2)}, {id: "tomorrow", start: at(14)}, {id: "built", start: at(14), briefId: "mx"},
+    {id: "later", start: at(31)}, {id: "past", start: at(-2)}];
+  assert.deepEqual(Cal.dueForBriefs(items, now).map((m) => m.id), ["tonight", "tomorrow"]);
+  assert.deepEqual(Cal.dueForBriefs(null, now), []);
+});

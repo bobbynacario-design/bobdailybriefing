@@ -397,6 +397,23 @@ test('calendars: saving reads them at once and shows what it found, without the 
   // The page and its section are the owner's.
   assert.ok(html.includes('<section class="command-panel about-panel owner-only" id="about-calendar"'));
 });
+test('a meeting in the Morning 5 opens its brief, or Build brief with the meeting filled in',async()=>{
+  const calls=[];
+  const {context,element}=environment(['openMeetingFromCommand'],{openEvidencePageResult:async item=>calls.push('open:'+item.source+':'+item.ref),switchPage:page=>calls.push('page:'+page)});
+  context.document.querySelector=()=>null;
+  element('meeting-panel').scrollIntoView=()=>calls.push('scroll'); element('meeting-topic').focus=()=>calls.push('focus');
+  await context.openMeetingFromCommand({source:'Meetings',title:'Tomorrow 08:00 · Suncorp weekly catch-up',target:'mabc'});
+  assert.deepEqual(calls,['open:Meeting:mabc'],'a ready brief opens');
+  calls.length=0;
+  await context.openMeetingFromCommand({source:'Meetings',title:'Today 19:30 · QBE file review',target:''});
+  assert.deepEqual(calls,['page:evidence','scroll','focus']);
+  assert.equal(element('meeting-topic').value,'QBE file review','the meeting, without its time');
+  assert.match(element('meeting-status').textContent,/No brief yet for this meeting\. Tap Build brief/);
+  // Wired: the Morning 5 opener sends meetings here, and a member's Command reads no meetings quietly.
+  assert.ok(readFileSync(new URL('../lib/ui-shell.js',import.meta.url),'utf8').includes("if (item.source === 'Meetings' && root.openMeetingFromCommand) { await root.openMeetingFromCommand(item); return; }"));
+  assert.ok(html.includes("read(window.daybookMember || !window.fbLoadMeetings ? function() { return null; } : function() { return window.fbLoadMeetings(window._firebaseUid); })"));
+  assert.ok(html.includes("var commandSources = ['Briefing','News','Numbers','Radar','Markets','Decisions','Sports','Meetings'];"));
+});
 test('feed health: a member sees no Briefing pill, since their account has no briefings',()=>{
   const specStart=html.indexOf('var FEED_SPEC = [');
   const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[]});

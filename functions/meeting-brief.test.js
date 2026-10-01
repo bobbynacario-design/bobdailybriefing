@@ -98,3 +98,23 @@ test("the stored map keeps the latest twenty briefs", () => {
   assert.equal(Object.keys(items).length, KEEP_BRIEFS);
   assert.ok(!items.m0 && items.m24);
 });
+
+test("material for a calendar brief: his last six weeks on the account, six of a kind, his notes marked", () => {
+  const {materialFromIndex, MATERIAL_SOURCES} = require("./meeting-brief");
+  const now = Date.parse("2026-10-01T10:00:00Z"), day = (n) => now - n * 86400000;
+  let asked = null;
+  const rows = [
+    ...Array.from({length: 8}, (_, i) => ({source: "Briefing", title: "Suncorp story " + i, detail: "d" + i, saved: day(i + 1)})),
+    {source: "Evidence", title: "Suncorp lifts reserves", detail: "Summary.", body: "Note: check the APRA data", saved: day(2)},
+    {source: "News", title: "Suncorp bid talk", detail: "Bankers ready", ref: "https://news.example.com/a", saved: day(1)},
+  ];
+  const searchPlan = (index, plan) => { asked = plan; return rows; };
+  const material = materialFromIndex([], ["Suncorp", "AAMI"], now, searchPlan);
+  assert.deepEqual(asked.terms, ["Suncorp", "AAMI"]); assert.equal(asked.since, "2026-08-20"); assert.deepEqual(asked.sources, MATERIAL_SOURCES);
+  assert.ok(!MATERIAL_SOURCES.includes("Meeting") && !MATERIAL_SOURCES.includes("Radar"), "no earlier AI briefs, no feeds");
+  assert.equal(material.filter((m) => m.kind === "Briefing").length, 6, "six of one kind at most");
+  const ev = material.find((m) => m.kind === "Evidence");
+  assert.equal(ev.text, "Summary. His note: check the APRA data", "his note is marked as his");
+  assert.equal(material.find((m) => m.kind === "News").url, "https://news.example.com/a");
+  assert.equal(material[0].date >= material[material.length - 1].date, true, "newest first");
+});
