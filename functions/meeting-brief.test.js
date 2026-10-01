@@ -36,7 +36,11 @@ test("the prompt carries the topic, his material as data, and the rules that kee
   assert.match(prompt, /his_threads: only from HIS MATERIAL/);
   assert.match(prompt, /questions: exactly 3, specific to this topic and this week/);
   assert.match(prompt, /Never give investment advice/);
-  assert.ok(prompt.includes("Most of his files are third-party recoveries for QBE"), "the one-line work profile");
+  assert.ok(prompt.startsWith("Bob is a forensic business-interruption and claims-quantum specialist"), "his profile (About you) opens it");
+  assert.ok(prompt.includes("His files: Most of his files are third-party property damage claims for QBE"));
+  assert.ok(prompt.includes("The angles that matter are how a claimant built its costs or lost income."));
+  const edited = buildMeetingPrompt("Suncorp", [], "", {work: "I assess BI claims for Allianz.", files: "Small-business BI.", matters: "", other: ""});
+  assert.ok(edited.startsWith("About Bob: I assess BI claims for Allianz.\nHis files: Small-business BI.\nThe angles"), "his edited profile replaces it");
   assert.match(buildMeetingPrompt("Suncorp", [], ""), /HIS MATERIAL: none of his saved items mention this topic/);
 });
 

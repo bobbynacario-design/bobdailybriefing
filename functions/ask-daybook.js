@@ -14,6 +14,7 @@
 // answer can never cite a record he does not have or a link nobody fetched.
 
 const {urlKey} = require("./briefing-evidence");
+const {profileBrief} = require("./briefing-prompt-core");
 
 function text(value) {
   return String(value == null ? "" : value).trim();
@@ -102,12 +103,10 @@ const SEARCH_TOOL = {
 };
 
 // The user message: who he is, his accounts, the rules, and the question.
-function buildAskPrompt({question, today, accounts, web}) {
-  const lines = [
-    "Bob is a forensic business-interruption (BI) consultant who works with Australian insurers and Philippine consulting firms.",
-    "Most of his files are third-party recoveries for QBE (vehicles damaging utility and road assets; heavy-vehicle loss of income) and small-business BI for Allianz.",
-    "Today is " + today + " (Manila).",
-  ];
+// His profile (About you; profileBrief in briefing-prompt-core.js) opens the
+// prompt in place of the line this file used to carry.
+function buildAskPrompt({question, today, accounts, web, profile}) {
+  const lines = profileBrief(profile).concat(["Today is " + today + " (Manila)."]);
   const named = arr(accounts).filter((a) => a && text(a.name)).slice(0, 40);
   if (named.length) {
     lines.push("", "HIS ACCOUNTS (name | other names), useful as lookup terms:");
@@ -145,13 +144,13 @@ function buildAskPrompt({question, today, accounts, web}) {
 
 // The Responses API input: the system line, the thread as earlier turns, then
 // this question.
-function buildAskInput({question, thread, today, accounts, web}) {
+function buildAskInput({question, thread, today, accounts, web, profile}) {
   const input = [{role: "system", content: SYSTEM}];
   cleanThread(thread).forEach((turn) => {
     input.push({role: "user", content: turn.q});
     input.push({role: "assistant", content: turn.a});
   });
-  input.push({role: "user", content: buildAskPrompt({question, today, accounts, web})});
+  input.push({role: "user", content: buildAskPrompt({question, today, accounts, web, profile})});
   return input;
 }
 

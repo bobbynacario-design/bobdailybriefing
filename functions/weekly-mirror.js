@@ -1,5 +1,7 @@
 "use strict";
 
+const {profileBrief} = require("./briefing-prompt-core");
+
 // functions/weekly-mirror.js
 //
 // PURE — no I/O, no clock of its own. Builds the "Your week, read back" prompt
@@ -293,9 +295,10 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goa
 const SYSTEM = "You read back a person's week to them from what they recorded in a private app. " +
   "You are candid, specific and kind — a sharp friend, not a therapist and not a cheerleader. Return strict JSON only.";
 
-function buildMirrorPrompt(input) {
-  return [
-    "Bob is a forensic business-interruption consultant who works with Australian insurers and Philippine consulting firms.",
+// His profile (About you; profileBrief in briefing-prompt-core.js) opens the
+// prompt in place of the line this file used to carry.
+function buildMirrorPrompt(input, profile) {
+  return profileBrief(profile).concat([
     "Below is everything he recorded in his daily app over the last seven days: the daily spark and quest, the note he wrote,",
     "the briefing stories he noted, opened and voted on, reminders he set, experiments, and decisions from his journal.",
     "Read it back to him so he understands himself a little better and finds one thing worth doing that he has not done.",
@@ -340,7 +343,7 @@ function buildMirrorPrompt(input) {
     "- Each string at most 60 words; week_in_a_line at most 25.",
     "",
     input.text,
-  ].join("\n");
+  ]).join("\n");
 }
 
 // Strict structured output: every key required, nothing extra.

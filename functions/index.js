@@ -15,7 +15,7 @@ const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
-const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS} = require("./briefing-prompt-core");
+const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS, profileBrief} = require("./briefing-prompt-core");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
 const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
 const {
@@ -356,15 +356,16 @@ exports.generateBobDailyBriefing = onCall(
     }
 
     const db = getFirestore();
-    const [{evidence, reason: groundingReason}, context, facts, feedback] = await Promise.all([
+    const [{evidence, reason: groundingReason}, context, facts, feedback, profile] = await Promise.all([
       loadNewsEvidence(db),
       loadStandingContext(db, request.auth.uid),
       loadMarketFacts(db),
       loadReaderFeedback(db, request.auth.uid),
+      loadProfile(db, request.auth.uid),
     ]);
     const prompt = buildBriefingPrompt({
       dateLabel: String((request.data && request.data.date) || "").trim(),
-      evidence, context, facts, feedback,
+      evidence, context, facts, feedback, profile,
     });
     const model = String((request.data && request.data.model) || DEFAULT_MODEL);
 
@@ -591,7 +592,7 @@ exports.generateWeeklyMirror = onCall(
         headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
         body: JSON.stringify({
           model,
-          input: [{role: "system", content: MIRROR_SYSTEM}, {role: "user", content: buildMirrorPrompt(input)}],
+          input: [{role: "system", content: MIRROR_SYSTEM}, {role: "user", content: buildMirrorPrompt(input, await loadProfile(db, uid))}],
           text: {format: {type: "json_schema", name: "weekly_mirror", schema: MIRROR_SCHEMA, strict: true}},
         }),
         signal: AbortSignal.timeout(150000),
@@ -674,7 +675,7 @@ exports.generateStoryDossier = onCall(
         headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
         body: JSON.stringify({
           model,
-          input: [{role: "system", content: DOSSIER_SYSTEM}, {role: "user", content: buildDossierPrompt(story)}],
+          input: [{role: "system", content: DOSSIER_SYSTEM}, {role: "user", content: buildDossierPrompt(story, await loadProfile(db, uid))}],
           tools: [{type: "web_search", search_context_size: "medium"}],
           tool_choice: "auto",
           // Every page the search returned, so the dossier's sources can be checked.
@@ -744,7 +745,7 @@ exports.generateMeetingBrief = onCall(
         headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
         body: JSON.stringify({
           model,
-          input: [{role: "system", content: MEETING_SYSTEM}, {role: "user", content: buildMeetingPrompt(topic, material, dateLabel)}],
+          input: [{role: "system", content: MEETING_SYSTEM}, {role: "user", content: buildMeetingPrompt(topic, material, dateLabel, await loadProfile(db, uid))}],
           tools: [{type: "web_search", search_context_size: "medium"}],
           tool_choice: "auto",
           include: ["web_search_call.action.sources"],
@@ -822,6 +823,18 @@ async function loadAskIndex(db, uid) {
   return index;
 }
 
+// His profile (About you), or null for the starting profile. Never throws: a
+// failed read gives the starting profile, which is what every feature used before.
+async function loadProfile(db, uid) {
+  try {
+    const snap = await db.collection(BRIEFINGS_COLL).doc("profile-" + uid).get();
+    return snap.exists ? (snap.data().profile || null) : null;
+  } catch (error) {
+    logger.warn("Profile read failed; using the starting profile", {message: error.message});
+    return null;
+  }
+}
+
 async function openaiResponse(body, label, timeoutMs) {
   let response;
   try {
@@ -891,7 +904,7 @@ exports.askDaybook = onCall(
     let lookups = 0;
     try {
       const result = await Ask.runLookups({
-        firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web}), tool_choice: "auto"},
+        firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web, profile: await loadProfile(db, uid)}), tool_choice: "auto"},
         call: async (body) => track(await openaiResponse(Object.assign({model, tools, include}, body), "ask", Math.max(20000, Math.min(120000, deadline - Date.now())))),
         lookup: (plan) => Ask.lookupOutput(IntelligenceSearchCore.searchPlan(index, plan, {now}), registry),
       });
@@ -924,15 +937,14 @@ exports.askDaybook = onCall(
 // ─────────────────────────────────────────────────────────────
 // Deep-research report generation (long-running, async)
 // ─────────────────────────────────────────────────────────────
-function buildDeepResearchPrompt(topic) {
+function buildDeepResearchPrompt(topic, profile) {
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila",
   });
 
   return [
-    "You are a deep-research analyst preparing a long-form intelligence report for Bob,",
-    "a forensic business-interruption (BI) consultant who works with Australian insurance",
-    "companies and Philippine consulting firms. Today is " + today + " (Asia/Manila).",
+    "You are a deep-research analyst preparing a long-form intelligence report for Bob. Today is " + today + " (Asia/Manila).",
+  ].concat(profileBrief(profile), [
     "",
     "RESEARCH TOPIC:",
     topic,
@@ -959,7 +971,7 @@ function buildDeepResearchPrompt(topic) {
     "- Tie findings to Bob's angle: insurance/reinsurance, claims, business interruption, underwriting,",
     "  catastrophe exposure, forensic accounting, audit, or consulting opportunities.",
     "- Cite reputable, current, primary sources inline. Be thorough but precise; do not pad.",
-  ].join("\n");
+  ]).join("\n");
 }
 
 exports.generateDeepResearchReport = onCall(
@@ -1004,7 +1016,7 @@ exports.generateDeepResearchReport = onCall(
           role: "developer",
           content: "You are a meticulous deep-research analyst. Produce a thorough, well-sourced Markdown report that begins with the requested YAML front-matter.",
         },
-        {role: "user", content: buildDeepResearchPrompt(topic)},
+        {role: "user", content: buildDeepResearchPrompt(topic, await loadProfile(db, uid))},
       ],
       tools: [{type: "web_search"}],
       tool_choice: "auto",

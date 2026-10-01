@@ -1,5 +1,7 @@
 "use strict";
 
+const {profileBrief} = require("./briefing-prompt-core");
+
 // functions/story-dossier.js
 //
 // PURE — no I/O. "Go deeper" on one briefing story: the prompt for a short
@@ -49,10 +51,11 @@ function cleanStory(raw) {
 const SYSTEM = "You prepare short, factual working dossiers on news stories for an insurance and business-interruption " +
   "consultant. You search the web to check what you say. Return strict JSON only.";
 
-function buildDossierPrompt(story) {
-  return [
-    "Bob is a forensic business-interruption (BI) consultant who works with Australian insurers and Philippine consulting firms.",
-    "Most of his files are third-party recoveries for QBE (vehicles damaging utility and road assets; heavy-vehicle loss of income) and small-business BI for Allianz, so the angles that matter are how a claimant built its costs or lost income.",
+// His profile (About you; profileBrief in briefing-prompt-core.js) opens the
+// prompt in place of the line this file used to carry.
+function buildDossierPrompt(story, profile) {
+  return profileBrief(profile).concat([
+    "The angles that matter are how a claimant built its costs or lost income.",
     "He wants to go deeper on one story from his briefing" + (story.date ? " of " + story.date : "") + ". Search the web to check it and find what surrounds it.",
     "",
     "THE STORY (as his briefing gave it):",
@@ -87,7 +90,7 @@ function buildDossierPrompt(story) {
     "- If something is not known yet, say so in plain words rather than filling the gap.",
     "- Never give investment advice: no buying, selling, holding or sizing anything.",
     "- Plain English, Australian spelling, no emojis, no markdown inside the strings.",
-  ].filter((line) => line !== "").join("\n");
+  ]).filter((line) => line !== "").join("\n");
 }
 
 // What is stored and shown: known fields, bounded, and sources kept only when

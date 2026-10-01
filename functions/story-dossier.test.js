@@ -32,7 +32,9 @@ test("the prompt carries the story and the rules that keep the dossier honest", 
   assert.match(prompt, /client_questions: exactly 3, specific to this story/);
   assert.match(prompt, /each url copied exactly from a web search result/);
   assert.match(prompt, /Never give investment advice/);
-  assert.ok(prompt.includes("Most of his files are third-party recoveries for QBE"), "the one-line work profile");
+  assert.ok(prompt.startsWith("Bob is a forensic business-interruption and claims-quantum specialist"), "his profile (About you) opens it");
+  assert.ok(prompt.includes("His files: Most of his files are third-party property damage claims for QBE"));
+  assert.ok(prompt.includes("The angles that matter are how a claimant built its costs or lost income."));
   assert.ok(prompt.includes("- would_change: give a date only if a search result states it"), "a due date must come from a source");
   assert.match(prompt, /"bi_angle": "2-3 sentences: the loss mechanism, the covers that could respond/);
   assert.doesNotMatch(buildDossierPrompt(cleanStory({headline: "Only a headline here"})), /- Source:|- Link:|- Summary:/, "absent fields leave no empty lines");

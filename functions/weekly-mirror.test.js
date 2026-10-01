@@ -114,6 +114,9 @@ test("a blank My take line is dropped, and a written one is kept as his take", (
 
 test("the prompt keeps today out of evidence, energy to his words, and themes to what recurs", () => {
   const prompt = buildMirrorPrompt(buildMirrorInput({entries: week(), decisions: [], mirrors: {}, todayKey: TODAY, core}));
+  assert.ok(prompt.startsWith("Bob is a forensic business-interruption and claims-quantum specialist"), "his profile (About you) opens it");
+  assert.ok(buildMirrorPrompt(buildMirrorInput({entries: week(), decisions: [], mirrors: {}, todayKey: TODAY, core}), {work: "An Allianz BI assessor.", files: "", matters: "", other: ""})
+    .startsWith("Bob is an Allianz BI assessor.\nBelow is everything he recorded"), "his edited profile replaces it");
   assert.match(prompt, /The last day is today and is still in progress when this is read\. An unfinished quest or experiment on it is not a miss/);
   assert.match(prompt, /Never use today's unfinished items as evidence in any field/);
   assert.match(prompt, /Never infer either list from something not done or a day not recorded/);
