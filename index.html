@@ -2422,25 +2422,119 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 /* Your accounts */
 .acct-badges{display:flex;flex-wrap:wrap;gap:.3rem;margin:.1rem 0 .5rem}.acct-badge{font-family:var(--mono);font-size:10px;letter-spacing:.03em;padding:.14rem .5rem;border-radius:6px;border:1px solid var(--line);background:var(--gold-dim);color:var(--txt);cursor:pointer}.acct-badge:hover{border-color:var(--line-hover)}.acct-badge.is-call{background:var(--blue-dim)}
 .accounts-panel{margin-bottom:1rem}.accounts-panel .command-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}.acct-group{margin:.5rem 0 .2rem}.acct-group-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.2rem}.acct-row{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;padding:.3rem 0;border-bottom:1px solid var(--rim)}.acct-name{flex:1 1 9rem;font-size:13px;color:var(--txt)}.acct-count{font-family:var(--mono);font-size:10.5px;color:var(--txt3)}.acct-chips{display:flex;flex-wrap:wrap;gap:.3rem}.acct-more{margin-top:.6rem}.acct-more summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--txt2)}.acct-quiet{font-size:12.5px;color:var(--txt3);margin:.3rem 0}.acct-edit-label{display:block;font-size:12px;color:var(--txt2);margin:.4rem 0 .3rem}#accounts-text{width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:.5rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt)}
+/* About you: a status strip, the profile as cards that read as text until
+   Edit, calendars as status rows, and what it picked up as a card grid. */
+.about-glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;margin:0 0 1rem}
+.about-glance-tile{display:flex;align-items:center;gap:.7rem;min-width:0;padding:.75rem .9rem;border:1px solid var(--rim);border-radius:12px;background:var(--bg2);color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
+.about-glance-tile:hover{border-color:var(--line-hover);background:var(--bg3)}
+.about-glance-tile>.ico{width:32px;height:32px;padding:7px;border-radius:9px;background:var(--gold-dim);color:var(--gold)}
+.about-glance-text{display:grid;gap:.15rem;min-width:0}
+.about-glance-k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
+.about-glance-v{font-size:13.5px;line-height:1.4;color:var(--txt);overflow-wrap:anywhere}
+.about-panel{margin-bottom:1rem;scroll-margin-top:84px}
+.about-panel .command-panel-head{align-items:center;margin-bottom:.35rem}
+.about-intro{font-size:13px;line-height:1.6;color:var(--txt2);margin:0 0 1rem;max-width:78ch}
+.about-state{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;padding:.22rem .6rem;border-radius:999px;border:1px solid var(--line);color:var(--txt2);white-space:nowrap}
+.about-state.is-own{border-color:transparent;background:var(--gold-dim);color:var(--gold)}
+.about-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;margin:0 0 .9rem}
+.about-field{min-width:0;padding:.85rem 1rem .95rem;border:1px solid var(--rim);border-radius:11px;background:var(--bg3);transition:border-color .15s}
+.about-field-work,.about-field-files,.about-field-other{grid-column:1/-1}
+.about-field:hover{border-color:var(--rim2)}.about-field.is-editing{border-color:var(--gold)}
+.about-field-head{display:flex;align-items:center;gap:.5rem;margin-bottom:.55rem}
+.about-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
+.about-badge{font-family:var(--mono);font-size:10px;padding:.1rem .45rem;border-radius:999px;border:1px solid var(--rim2);color:var(--txt3);white-space:nowrap}
+.about-badge.is-own{border-color:transparent;background:var(--gold-dim);color:var(--gold)}
+.about-edit{margin-left:auto;font-family:var(--mono);font-size:11px;padding:.28rem .75rem;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--txt2);cursor:pointer;transition:border-color .15s,color .15s}
+.about-edit:hover{border-color:var(--line-hover);color:var(--txt)}.about-field.is-editing .about-edit{border-color:var(--gold);color:var(--gold)}
+.about-read{cursor:text}.about-read p{margin:0 0 .45rem;font-size:14px;line-height:1.65;color:var(--txt2);max-width:82ch}.about-read p:last-child{margin-bottom:0}
+.about-read>p:first-child::first-letter{text-transform:uppercase}
+.about-field-work .about-read p{font-family:var(--serif);font-size:17px;line-height:1.5;color:var(--txt)}
+.about-lines{list-style:none;margin:0;padding:0;display:grid;gap:.6rem;counter-reset:about-line}
+.about-lines li{position:relative;padding-left:2.1rem;font-size:14px;line-height:1.65;color:var(--txt2);max-width:86ch;counter-increment:about-line}
+.about-lines li::before{content:counter(about-line);position:absolute;left:0;top:.12rem;width:1.4rem;height:1.4rem;border-radius:50%;background:var(--gold-dim);color:var(--gold);font-family:var(--mono);font-size:11px;line-height:1.4rem;text-align:center}
+.about-empty{margin:0;font-size:13px;font-style:italic;color:var(--txt3)}
+.about-editor{display:grid;gap:.45rem}.about-editor[hidden],.about-read[hidden],.calendar-row-input[hidden]{display:none}.about-hint{margin:0;font-size:12.5px;line-height:1.5;color:var(--txt3)}
+.about-editor textarea{width:100%;min-width:0;min-height:4.6rem;background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.65rem .8rem;font-family:var(--sans);font-size:14px;line-height:1.65;resize:vertical;overflow:hidden}
+.about-editor textarea:focus{border-color:var(--gold);outline:none}
+.about-count{font-family:var(--mono);font-size:10.5px;color:var(--txt3);justify-self:end}
+.about-savebar{display:none;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem .8rem;padding:.6rem .8rem;margin:0 0 .9rem;border:1px solid var(--rim);border-radius:10px;background:var(--bg3)}
+.about-savebar.is-dirty,.about-savebar:has(.about-status:not(:empty)){display:flex}
+.about-savebar.is-dirty{position:sticky;bottom:1rem;z-index:20;border-color:var(--gold);background:var(--bg2);box-shadow:0 10px 28px rgba(0,0,0,.4)}
+body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
+.about-savebar-btns{display:none;gap:.5rem;margin-left:auto}.about-savebar.is-dirty .about-savebar-btns{display:flex}
+.about-primary{background:var(--gold);border-color:var(--gold);color:var(--bg);font-weight:600}
+.about-primary:hover{background:var(--gold2);border-color:var(--gold2);color:var(--bg)}.about-primary:disabled{opacity:.6;cursor:wait}
+.about-status{font-size:13px;color:var(--txt2)}
+.about-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .8rem;margin-bottom:.4rem}
+.about-foot{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.4rem 1.2rem;padding-top:.8rem;border-top:1px solid var(--rim)}
+.about-foot p{margin:0;font-size:12.5px;line-height:1.6;color:var(--txt3);max-width:72ch}
+.about-link-btn{background:none;border:0;padding:.2rem 0;font:inherit;font-size:12.5px;color:var(--txt2);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;cursor:pointer}
+.about-link-btn:hover{color:var(--txt);text-decoration-color:currentColor}
+.about-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.about-sublabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3)}
+.about-chips{display:flex;flex-wrap:wrap;gap:.4rem}
+.about-chip{display:inline-flex;align-items:center;gap:.35rem;font-family:var(--mono);font-size:11px;padding:.18rem .55rem;border-radius:6px;border:1px solid var(--line);background:var(--bg2);color:var(--txt)}
+.about-chip small{font-size:10px;color:var(--txt3)}.about-chip.is-account{background:var(--gold-dim);border-color:transparent}
+.about-chip.is-confirmed::before,.about-chip.is-forming::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}.about-chip.is-forming::before{background:var(--amber)}
+.calendar-links{display:grid;gap:.6rem;margin:0 0 1rem}
+.calendar-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.5rem .8rem;padding:.75rem .9rem;border:1px solid var(--rim);border-radius:11px;background:var(--bg3)}
+.calendar-dot{align-self:start;margin-top:.4rem;width:10px;height:10px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+.calendar-row.is-ok .calendar-dot{background:var(--green);box-shadow:0 0 0 3px var(--green-dim)}
+.calendar-row.is-error .calendar-dot{background:var(--amber);box-shadow:0 0 0 3px rgba(240,168,50,.16)}
+.calendar-row.is-off .calendar-dot,.calendar-row.is-removed .calendar-dot{background:transparent;border:1.5px solid var(--txt3);box-shadow:none}
+.calendar-row.is-removed{border-style:dashed}
+.calendar-row-name{font-size:14px;font-weight:600;color:var(--txt)}
+.calendar-row-sub{display:grid;gap:.1rem;margin-top:.1rem;font-size:12.5px;line-height:1.5;color:var(--txt2);overflow-wrap:anywhere}
+.calendar-read{color:var(--txt3)}.calendar-read.is-error{color:var(--amber)}
+.calendar-row-actions{display:flex;flex-wrap:wrap;gap:.4rem}
+.calendar-row-input{grid-column:2/-1}
+.calendar-row-input input{width:100%;min-width:0;background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.55rem .75rem;font-family:var(--mono);font-size:12px}
+.calendar-row-input input:focus{border-color:var(--gold);outline:none}
+.calendar-coming{margin:0 0 1rem}
+.calendar-coming-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.3rem .8rem;margin-bottom:.5rem}
+.calendar-checked{font-size:12px;color:var(--txt3)}
+.calendar-meetings{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}
+.calendar-meeting{display:grid;grid-template-columns:5.6rem minmax(0,1fr) auto;align-items:center;gap:.5rem .9rem;padding:.7rem .85rem;border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:10px;background:var(--bg3)}
+.calendar-when{display:grid;gap:.15rem;font-family:var(--mono)}.calendar-when b{font-size:14px;font-weight:500;color:var(--txt)}.calendar-when span{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3)}
+.calendar-title{display:block;font-size:14px;font-weight:600;color:var(--txt);overflow-wrap:anywhere}
+.calendar-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .6rem;margin-top:.3rem;font-size:12px;color:var(--txt3)}
+.calendar-meta .is-ready{color:var(--green)}
+.calendar-none{margin:0;padding:.7rem .85rem;font-size:13px;color:var(--txt3);border:1px dashed var(--rim2);border-radius:10px}
+.calendar-how{margin-top:.9rem;padding-top:.8rem;border-top:1px solid var(--rim);font-size:13px;color:var(--txt2)}.calendar-how summary{cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--txt)}.calendar-how p,.calendar-how ul{margin:.5rem 0;line-height:1.6;max-width:80ch}
+.about-learned{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+.about-item{display:flex;flex-direction:column;min-width:0;padding:.85rem 1rem;border:1px solid var(--rim);border-radius:11px;background:var(--bg3)}
+.about-item.is-wide{grid-column:1/-1}
+.about-item-head{display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem}
+.about-item-head .ico{width:1.05em;height:1.05em;color:var(--gold)}
+.about-item-head strong{font-size:14px;font-weight:600;color:var(--txt)}
+.about-item-when{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--txt3);white-space:nowrap}
+.about-item-body{flex:1;display:flex;flex-direction:column;font-size:13.5px;line-height:1.6;color:var(--txt2)}
+.about-item-body p{margin:0 0 .4rem}.about-item-body p:last-child{margin-bottom:0}
+.about-item-body ul{list-style:none;margin:0;padding:0}
+.about-item-body>.tool-chip{align-self:flex-start;margin-top:auto}.about-item-body>:has(+ .tool-chip){margin-bottom:.75rem}
+.about-steers{margin-top:.8rem;padding-top:.55rem;border-top:1px solid var(--rim);font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;color:var(--txt3)}
+.about-quiet{font-size:12.5px;color:var(--txt3)}
+.about-tally{display:flex;flex-wrap:wrap;gap:.3rem 1rem;font-family:var(--mono);font-size:12px}
+.about-tally .is-up,.about-vote.is-up .about-vote-mark{color:var(--green)}.about-tally .is-down,.about-vote.is-down .about-vote-mark{color:var(--red)}
+.about-votes{margin-top:.6rem!important}
+.about-vote{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline;gap:.6rem;padding:.45rem 0;border-top:1px solid var(--rim)}
+.about-vote-mark{font-size:11px}.about-vote-text{color:var(--txt);overflow-wrap:anywhere}
+.about-vote-sec{margin-left:.4rem;font-family:var(--mono);font-size:10.5px;color:var(--txt3)}
+.about-calls li{padding:.45rem 0;border-top:1px solid var(--rim)}.about-calls li:first-child{padding-top:0;border-top:0}
+.about-calls b{font-family:var(--mono);font-weight:500;color:var(--txt);margin-right:.4rem}
+.about-big{margin:0 0 .25rem!important;font-family:var(--serif);font-size:30px;line-height:1.1;color:var(--txt)}.about-big small{margin-left:.4rem;font-family:var(--sans);font-size:13px;color:var(--txt2)}
+.about-goals li{padding:.35rem 0;border-top:1px solid var(--rim);color:var(--txt)}.about-goals li:first-child{padding-top:0;border-top:0}
+.about-bars{display:grid;gap:.35rem;margin-bottom:.7rem!important}
+.about-bars li{display:grid;grid-template-columns:minmax(5rem,9rem) minmax(0,1fr) 2.6rem;align-items:center;gap:.6rem;font-size:12.5px}
+.about-bar-track{height:6px;border-radius:3px;background:var(--rim2);overflow:hidden}.about-bar-track span{display:block;height:100%;border-radius:3px;background:var(--gold)}
+.about-bars b{font-family:var(--mono);font-weight:500;color:var(--txt);text-align:right}
+@media(max-width:768px){.about-fields,.about-learned{grid-template-columns:1fr}.about-savebar.is-dirty{bottom:calc(76px + env(safe-area-inset-bottom))}}
+@media(max-width:560px){.about-glance{grid-template-columns:1fr;gap:.4rem}.about-glance-tile{padding:.5rem .7rem;gap:.6rem;border-radius:10px}.about-glance-tile>.ico{width:26px;height:26px;padding:5px;border-radius:7px}.about-glance-v{font-size:13px}
+  .about-field-work .about-read p{font-size:15.5px}
+  .calendar-row{grid-template-columns:auto minmax(0,1fr)}.calendar-row-actions{grid-column:2/-1}
+  .calendar-meeting{grid-template-columns:4.6rem minmax(0,1fr)}.calendar-meeting>.tool-chip{grid-column:2;justify-self:start}
+  .about-field{padding:.75rem .8rem .85rem}.about-item{padding:.75rem .8rem}}
 /* Meeting brief */
-.about-panel{margin-bottom:1rem}.about-fields{display:grid;gap:1rem;margin:.4rem 0 .8rem}
-.about-field{display:grid;gap:.3rem}.about-label{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--txt)}
-.about-hint{font-size:13px;color:var(--txt3)}.about-count{font-family:var(--mono);font-size:11px;color:var(--txt3);justify-self:end}
-.about-field textarea{width:100%;min-width:0;background:var(--bg3);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.6rem .75rem;font-family:var(--sans);font-size:14px;line-height:1.6;resize:vertical}
-.about-field textarea:focus{border-color:var(--gold);outline:none}
-.about-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-bottom:.4rem}.about-save{border-color:var(--gold);color:var(--gold)}
-.about-status{font-size:13px;color:var(--txt2)}.about-state{font-family:var(--mono);font-size:11px;color:var(--txt3)}
-.calendar-links{display:grid;gap:.8rem;margin:.4rem 0 .8rem}.calendar-link{display:grid;gap:.3rem}
-.calendar-link input{width:100%;min-width:0;background:var(--bg3);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.55rem .75rem;font-family:var(--mono);font-size:12px}
-.calendar-link input:focus{border-color:var(--gold);outline:none}.calendar-saved{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;font-size:13px;color:var(--txt2)}
-.calendar-coming{margin:.6rem 0}.calendar-coming li{font-size:13.5px;line-height:1.6;color:var(--txt2)}.calendar-coming ul{margin:.3rem 0 0;padding-left:1.1rem}
-.calendar-how{margin-top:.6rem;font-size:13px;color:var(--txt2)}.calendar-how summary{cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--txt)}.calendar-how p{margin:.5rem 0;line-height:1.6}
-.about-item{padding:.8rem 0;border-top:1px solid var(--rim)}.about-item:first-child{border-top:0}
-.about-item-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.3rem .8rem}
-.about-item-head strong{font-size:14px;color:var(--txt)}.about-steers{font-family:var(--mono);font-size:11px;color:var(--txt3)}
-.about-item p,.about-item li{font-size:13.5px;line-height:1.6;color:var(--txt2)}.about-item p{margin:.35rem 0 0}
-.about-item ul{margin:.35rem 0 0;padding-left:1.1rem}.about-item li{margin:.15rem 0}
-.about-item .tool-chip{margin-top:.45rem}.about-vote{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem}
 .meeting-panel{margin-bottom:1rem}.meeting-panel .command-panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:flex-start}.meeting-intro{font-size:12.5px;line-height:1.6;color:var(--txt2);margin:.2rem 0 .6rem}.meeting-form{display:flex;flex-wrap:wrap;gap:.5rem}.meeting-form input{flex:1 1 220px;min-width:0;padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font-size:14px}.meeting-status{font-family:var(--mono);font-size:11px;color:var(--txt3);margin:.5rem 0 0;min-height:1em}.meeting-status.is-warn{color:var(--amber);font-size:12px}.meeting-brief{margin:.7rem 0 0}.meeting-brief a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}#meeting-history{max-width:100%;font-size:12px}
 /* Called it? */
 .called-it .called-row{display:grid;grid-template-columns:minmax(0,1fr) auto 3.2em;gap:.6rem;align-items:baseline;padding:.35rem 0;border-bottom:1px solid var(--rim);font-size:12.5px;color:var(--txt2)}.called-it .called-row b{font-family:var(--mono);color:var(--txt);text-align:right}.called-split{font-family:var(--mono);font-size:10.5px;color:var(--txt3);margin:.5rem 0 .2rem}.called-read{font-size:13px;line-height:1.55;color:var(--txt);margin:.5rem 0 0}.called-waiting{font-size:12px;color:var(--amber);margin:.35rem 0 0}
@@ -3272,17 +3366,24 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     <div class="hero-sub">The profile the AI features read, and what Daybook has picked up from what you record and tap.</div>
     <div class="hero-divider"></div>
   </div>
+  <nav class="about-glance owner-only" aria-label="On this page">
+    <button type="button" class="about-glance-tile" onclick="aboutJump('about-profile')"><svg class="ico" aria-hidden="true"><use href="#i-note"/></svg><span class="about-glance-text"><span class="about-glance-k">Your profile</span><span class="about-glance-v" id="about-glance-profile">Loading…</span></span></button>
+    <button type="button" class="about-glance-tile" onclick="aboutJump('about-calendar')"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg><span class="about-glance-text"><span class="about-glance-k">Your calendars</span><span class="about-glance-v" id="about-glance-calendar">Loading…</span></span></button>
+    <button type="button" class="about-glance-tile" onclick="aboutJump('about-learned-panel')"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg><span class="about-glance-text"><span class="about-glance-k">Picked up from you</span><span class="about-glance-v" id="about-glance-learned">Loading…</span></span></button>
+  </nav>
   <section class="command-panel about-panel owner-only" id="about-profile" aria-labelledby="about-profile-title">
-    <div class="command-panel-head"><div><div class="command-panel-title" id="about-profile-title">Your profile</div><div class="command-panel-meta">Read by the briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research, from their next run</div></div><span class="about-state" id="about-state"></span></div>
+    <div class="command-panel-head"><div class="command-panel-title" id="about-profile-title">Your profile</div><span class="about-state" id="about-state"></span></div>
+    <p class="about-intro">Read by the briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research, from their next run. Tap Edit on any part to put it in your own words.</p>
     <div class="about-fields" id="about-fields"><p class="rel-none-txt">Loading your profile…</p></div>
-    <div class="about-actions"><button type="button" class="tool-chip about-save" id="about-save" onclick="saveAboutProfile()">Save profile</button><button type="button" class="tool-chip" id="about-reset" onclick="resetAboutProfile()">Put back the starting profile</button><span class="about-status" id="about-status" role="status"></span></div>
-    <p class="meeting-intro">Your words replace only the facts about you. The rules for using them stay fixed: nothing here can make an AI feature invent a link, drop its sources or give trading advice.</p>
+    <div class="about-savebar" id="about-savebar"><span class="about-status" id="about-status" role="status"></span><span class="about-savebar-btns"><button type="button" class="tool-chip" id="about-undo" onclick="undoAboutProfile()">Undo changes</button><button type="button" class="tool-chip about-primary" id="about-save" onclick="saveAboutProfile()">Save profile</button></span></div>
+    <div class="about-foot"><p>Your words replace only the facts about you. The rules for using them stay fixed: nothing here can make an AI feature invent a link, drop its sources or give trading advice.</p><button type="button" class="about-link-btn" id="about-reset" onclick="resetAboutProfile()">Put back the starting profile</button></div>
   </section>
   <section class="command-panel about-panel owner-only" id="about-calendar" aria-labelledby="about-calendar-title">
-    <div class="command-panel-head"><div><div class="command-panel-title" id="about-calendar-title">Your calendars</div><div class="command-panel-meta">Read-only, twice a day (6:00 and 18:00). Only meetings whose title names one of your accounts are kept.</div></div></div>
+    <div class="command-panel-head"><div class="command-panel-title" id="about-calendar-title">Your calendars</div></div>
+    <p class="about-intro">Read-only, twice a day (6:00 and 18:00). Only meetings whose title names one of your accounts are kept, and up to three a day get a brief the evening before.</p>
     <div class="calendar-links" id="calendar-links"></div>
-    <div class="about-actions"><button type="button" class="tool-chip about-save" id="calendar-save" onclick="saveCalendarLinks()">Save and check now</button><span class="about-status" id="calendar-status" role="status"></span></div>
     <div id="calendar-coming"></div>
+    <div class="about-actions"><button type="button" class="tool-chip about-primary" id="calendar-save" onclick="saveCalendarLinks()">Save and check now</button><span class="about-status" id="calendar-status" role="status"></span></div>
     <details class="calendar-how"><summary>Where to find each link</summary>
       <p><b>Google Calendar</b> (on a computer): Settings ⚙ → under <b>Settings for my calendars</b>, pick your calendar → <b>Integrate calendar</b> → copy <b>Secret address in iCal format</b>.</p>
       <p><b>Outlook / Microsoft 365</b> — a one-time setting; you keep using the Outlook app afterwards:</p>
@@ -3296,8 +3397,9 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </details>
   </section>
   <section class="command-panel about-panel owner-only" id="about-learned-panel" aria-labelledby="about-learned-title">
-    <div class="command-panel-head"><div><div class="command-panel-title" id="about-learned-title">What it has picked up from you</div><div class="command-panel-meta">Each one says what it steers. Nothing here is guessed: it is what you recorded or tapped.</div></div></div>
-    <div id="about-learned"><p class="rel-none-txt">Loading…</p></div>
+    <div class="command-panel-head"><div class="command-panel-title" id="about-learned-title">What it has picked up from you</div></div>
+    <p class="about-intro">Each one says what it steers. Nothing here is guessed: it is what you recorded or tapped.</p>
+    <div class="about-learned" id="about-learned"><p class="rel-none-txt">Loading…</p></div>
   </section>
 </div>
 
@@ -3321,7 +3423,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
     </div>
     <div class="help-card help-wide owner-only">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-eye"/></svg> About you — what Daybook knows</div>
-      <p><b>More → About you</b> holds one profile in five boxes: your work, your clients and files, what moves your numbers, what to look out for, and anything else. The briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research all read it from their next run, so a change in your work mix reaches all of them at once. It starts as the profile those features already used; <b>Put back the starting profile</b> returns to it. Your words change only the facts about you: the rules (sources, no invented links, no trading advice) stay fixed.</p>
+      <p><b>More → About you</b> holds one profile in five parts: your work, your clients and files, what moves your numbers, what to look out for, and anything else. Each reads as text and is marked <b>Starting text</b> or <b>Your words</b>; tap <b>Edit</b> on one to change it, then <b>Save profile</b>. The briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research all read it from their next run, so a change in your work mix reaches all of them at once. It starts as the profile those features already used; <b>Put back the starting profile</b> returns to it. Your words change only the facts about you: the rules (sources, no invented links, no trading advice) stay fixed.</p>
       <p>Below it, <b>What it has picked up from you</b> lists what already steers Daybook, each with what it steers: your story votes (with <b>Take back</b>), open calls, Radar setups, accounts, goals and Morning 5 priorities, plus what you open most. Nothing there is guessed. Later, Daybook will suggest profile lines from what you use, for you to approve.</p>
       <p><b>Your calendars</b> — paste your Google Calendar secret iCal address and your Outlook published ICS link (<b>Where to find each link</b> shows how). Daybook reads them read-only at 6:00 and 18:00 and keeps only the next 36 hours of meetings whose title names one of your accounts (other names count: AAMI for Suncorp). Nothing else from your calendars is kept or sent anywhere. Treat each link like a password; it is never shown back in full.</p>
       <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
@@ -5419,12 +5521,31 @@ function paintMeetingHistory() {
 // what he recorded or tapped, each with what it steers. Nothing here is
 // inferred, so nothing here can be wrong about him in a way he cannot see.
 var _aboutProfile = null, _aboutFor = null, _aboutDirty = false, _aboutVotes = [];
+// A part as it reads: his lines as paragraphs, his files as a ranked list.
+function aboutReadHtml(key, value) {
+  var lines = String(value || '').split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+  if (!lines.length) return '<p class="about-empty">' + (key === 'work' ? 'Empty: the starting text is used.' : key === 'other' ? 'Nothing yet. Add anything every AI feature should keep in mind.' : 'Empty: left out of every prompt.') + '</p>';
+  if (key === 'files' && lines.length > 1) return '<ol class="about-lines">' + lines.map(function(l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ol>';
+  return lines.map(function(l) { return '<p>' + esc(l) + '</p>'; }).join('');
+}
+// Whose words a part is in, as saved (an emptied "Your work" is the starting text).
+function aboutBadge(key, value) {
+  var core = window.BriefingPromptCore, raw = {};
+  raw[key] = String(value || '');
+  var clean = core.cleanProfile(raw)[key];
+  if (clean !== core.DEFAULT_PROFILE[key]) return {own: true, text: clean ? 'Your words' : 'Left out'};
+  return {own: false, text: clean ? 'Starting text' : 'Optional'};
+}
 function aboutFieldsHtml(profile) {
   return window.BriefingPromptCore.PROFILE_FIELDS.map(function(f) {
-    var value = profile[f.key] || '', rows = f.key === 'files' ? 7 : f.key === 'work' ? 2 : 4;
-    return '<label class="about-field" for="about-' + f.key + '"><span class="about-label">' + esc(f.label) + '</span><span class="about-hint">' + esc(f.hint) + '</span>' +
-      '<textarea id="about-' + f.key + '" data-about-field="' + f.key + '" maxlength="' + f.max + '" rows="' + rows + '" oninput="aboutEdited(this)">' + esc(value) + '</textarea>' +
-      '<span class="about-count" id="about-count-' + f.key + '">' + value.length + ' / ' + f.max + '</span></label>';
+    var value = profile[f.key] || '', rows = f.key === 'files' ? 7 : f.key === 'work' ? 2 : 4, badge = aboutBadge(f.key, value);
+    return '<div class="about-field about-field-' + f.key + '" id="about-card-' + f.key + '"><div class="about-field-head"><span class="about-label" id="about-label-' + f.key + '">' + esc(f.label) + '</span>' +
+      '<span class="about-badge' + (badge.own ? ' is-own' : '') + '" id="about-badge-' + f.key + '">' + badge.text + '</span>' +
+      '<button type="button" class="about-edit" data-about-edit="' + f.key + '" aria-expanded="false" aria-controls="about-editor-' + f.key + '" aria-describedby="about-label-' + f.key + '">Edit</button></div>' +
+      '<div class="about-read" id="about-read-' + f.key + '">' + aboutReadHtml(f.key, value) + '</div>' +
+      '<div class="about-editor" id="about-editor-' + f.key + '" hidden><p class="about-hint" id="about-hint-' + f.key + '">' + esc(f.hint) + '</p>' +
+      '<textarea id="about-' + f.key + '" data-about-field="' + f.key + '" maxlength="' + f.max + '" rows="' + rows + '" aria-labelledby="about-label-' + f.key + '" aria-describedby="about-hint-' + f.key + '" oninput="aboutEdited(this)">' + esc(value) + '</textarea>' +
+      '<span class="about-count" id="about-count-' + f.key + '">' + value.length + ' / ' + f.max + '</span></div></div>';
   }).join('');
 }
 function aboutValues() {
@@ -5433,15 +5554,55 @@ function aboutValues() {
   return out;
 }
 function paintAboutProfile(profile) {
-  var fields = document.getElementById('about-fields');
+  var core = window.BriefingPromptCore, fields = document.getElementById('about-fields'), bar = document.getElementById('about-savebar'), state = document.getElementById('about-state');
+  var own = core.PROFILE_FIELDS.filter(function(f) { return aboutBadge(f.key, profile[f.key]).own; }).length;
   if (fields) fields.innerHTML = aboutFieldsHtml(profile);
-  setText('about-state', window.BriefingPromptCore.isDefaultProfile(profile) ? 'The starting profile' : 'In your own words');
+  if (bar) bar.className = 'about-savebar' + (_aboutDirty ? ' is-dirty' : '');
+  if (state) state.className = 'about-state' + (own ? ' is-own' : '');
+  setText('about-state', core.isDefaultProfile(profile) ? 'The starting profile' : 'In your own words');
+  setText('about-glance-profile', _aboutDirty ? 'Changes not saved yet' : own ? own + ' of ' + core.PROFILE_FIELDS.length + ' parts in your words' : 'The starting profile');
+}
+function aboutGrow(box) {
+  box.style.height = 'auto';
+  box.style.height = (box.scrollHeight + 2) + 'px';
 }
 function aboutEdited(box) {
   _aboutDirty = true;
-  var field = box && box.getAttribute('data-about-field');
-  if (field) setText('about-count-' + field, box.value.length + ' / ' + box.getAttribute('maxlength'));
+  var field = box && box.getAttribute('data-about-field'), bar = document.getElementById('about-savebar');
+  if (field) {
+    setText('about-count-' + field, box.value.length + ' / ' + box.getAttribute('maxlength'));
+    var read = document.getElementById('about-read-' + field), badgeEl = document.getElementById('about-badge-' + field), badge = aboutBadge(field, box.value);
+    if (read) read.innerHTML = aboutReadHtml(field, box.value);
+    if (badgeEl) { badgeEl.className = 'about-badge' + (badge.own ? ' is-own' : ''); badgeEl.textContent = badge.text; }
+  }
+  if (box && box.scrollHeight) aboutGrow(box);
+  if (bar) bar.className = 'about-savebar is-dirty';
   setText('about-status', 'Not saved yet.');
+  setText('about-glance-profile', 'Changes not saved yet');
+}
+// Edit opens one part in place; Done shows it as text again (still unsaved).
+function aboutOpenEditor(key, open) {
+  var card = document.getElementById('about-card-' + key), editor = document.getElementById('about-editor-' + key), read = document.getElementById('about-read-' + key);
+  var button = card && card.querySelector('[data-about-edit]'), box = document.getElementById('about-' + key);
+  if (!card || !editor) return;
+  editor.hidden = !open;
+  if (read) read.hidden = open;
+  card.classList.toggle('is-editing', open);
+  if (button) { button.textContent = open ? 'Done' : 'Edit'; button.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+  if (open && box) { aboutGrow(box); box.focus(); }
+  else if (button) button.focus();
+}
+document.addEventListener('click', function(event) {
+  var target = event.target && event.target.closest ? event.target.closest('#about-fields [data-about-edit], #about-fields .about-read') : null;
+  if (!target) return;
+  // Selecting text to copy it is not a request to edit.
+  if (!target.hasAttribute('data-about-edit') && window.getSelection && String(window.getSelection())) return;
+  var key = target.getAttribute('data-about-edit') || target.id.replace('about-read-', ''), editor = document.getElementById('about-editor-' + key);
+  aboutOpenEditor(key, !!(editor && editor.hidden));
+});
+function aboutJump(id) {
+  var el = document.getElementById(id);
+  if (el) el.scrollIntoView({block: 'start', behavior: 'smooth'});
 }
 async function saveAboutProfile() {
   var core = window.BriefingPromptCore, button = document.getElementById('about-save');
@@ -5461,9 +5622,14 @@ async function saveAboutProfile() {
 }
 function resetAboutProfile() {
   if (!confirm('Put back the starting profile? What is in these boxes now is replaced.')) return;
-  paintAboutProfile(window.BriefingPromptCore.DEFAULT_PROFILE);
   _aboutDirty = true;
+  paintAboutProfile(window.BriefingPromptCore.DEFAULT_PROFILE);
   setText('about-status', 'Starting profile put back. Tap Save profile to use it.');
+}
+function undoAboutProfile() {
+  _aboutDirty = false;
+  paintAboutProfile(window.BriefingPromptCore.cleanProfile(_aboutProfile));
+  setText('about-status', '');
 }
 async function loadAboutProfile() {
   var uid = window._firebaseUid || null;
@@ -5485,7 +5651,7 @@ var CALENDAR_SERVICES = [
   {service: 'Google', label: 'Google Calendar', hosts: ['calendar.google.com'], placeholder: 'https://calendar.google.com/calendar/ical/…/private-…/basic.ics'},
   {service: 'Outlook', label: 'Outlook / Microsoft 365', hosts: ['outlook.office365.com', 'outlook.office.com', 'outlook.live.com'], placeholder: 'https://outlook.office365.com/owa/calendar/…/calendar.ics'}
 ];
-var _calendarLinks = null, _calendarFor = null, _meetings = null, _calendarRemoved = {};
+var _calendarLinks = null, _calendarFor = null, _meetings = null, _calendarRemoved = {}, _calendarReplacing = {};
 // A pasted link for one service, or '' when it is not that service's https link.
 function calendarLinkFor(spec, value) {
   var text = String(value || '').trim(), url;
@@ -5500,14 +5666,26 @@ function calendarLinkLabel(link) {
   var parts = url.split('/').filter(Boolean), id = parts.length > 1 ? parts[parts.length - 2] : '';
   return id ? 'calendar …' + id.slice(-4) : 'your calendar';
 }
-function calendarLinksHtml(links) {
+// One status row per calendar: connected (and what its last read found), set
+// to be removed, or not connected. The paste box shows only when there is no
+// link yet or he taps Replace, but it is always there to be read on save.
+function calendarLinksHtml(links, record) {
+  var sources = (record && record.sources) || [];
   return CALENDAR_SERVICES.map(function(spec) {
-    var saved = (links || []).filter(function(l) { return l && l.service === spec.service; })[0], kept = saved && !_calendarRemoved[spec.service];
-    var head = '<span class="about-label">' + esc(spec.label) + '</span>', inputId = 'calendar-' + spec.service;
-    var input = '<input type="url" id="' + inputId + '" autocomplete="off" spellcheck="false" placeholder="' + esc(kept ? 'Paste a new link to replace it' : spec.placeholder) +
+    var saved = (links || []).filter(function(l) { return l && l.service === spec.service; })[0], removed = !!(saved && _calendarRemoved[spec.service]), kept = saved && !removed;
+    var read = kept ? sources.filter(function(s) { return s && s.service === spec.service; })[0] : null;
+    var state = !saved ? 'is-off' : removed ? 'is-removed' : !read ? 'is-saved' : read.ok ? 'is-ok' : 'is-error';
+    var sub = !saved ? '<span>Not connected. Paste its secret link below.</span>' : removed ? '<span>Saved: ' + esc(calendarLinkLabel(saved)) + '</span><span class="calendar-read">Removed when you tap Save and check now.</span>'
+      : '<span>Saved: ' + esc(calendarLinkLabel(saved)) + '</span>' + (!read ? '' : read.ok
+        ? '<span class="calendar-read">' + read.events + (read.events === 1 ? ' event' : ' events') + ' in the next 36 hours, ' + read.matched + ' naming your accounts</span>'
+        : '<span class="calendar-read is-error">Could not read: ' + esc(read.error || 'error') + '</span>');
+    var actions = !saved ? '' : removed ? '<button type="button" class="tool-chip" data-calendar-keep="' + spec.service + '">Keep it</button>'
+      : '<button type="button" class="tool-chip" data-calendar-replace="' + spec.service + '">' + (_calendarReplacing[spec.service] ? 'Cancel' : 'Replace') + '</button><button type="button" class="tool-chip" data-calendar-remove="' + spec.service + '">Remove</button>';
+    var inputId = 'calendar-' + spec.service, showInput = !saved || (kept && _calendarReplacing[spec.service]);
+    var input = '<input type="url" id="' + inputId + '" autocomplete="off" spellcheck="false" placeholder="' + esc(kept ? 'Paste the new link to replace it' : spec.placeholder) +
       '" aria-label="' + esc((kept ? 'New ' : '') + spec.label + ' link') + '">';
-    return '<div class="calendar-link">' + head + (kept ? '<div class="calendar-saved">Saved: ' + esc(calendarLinkLabel(saved)) +
-      '<button type="button" class="tool-chip" data-calendar-remove="' + spec.service + '">Remove</button></div>' : '') + input + '</div>';
+    return '<div class="calendar-row ' + state + '"><span class="calendar-dot" aria-hidden="true"></span><div><div class="calendar-row-name">' + esc(spec.label) + '</div><div class="calendar-row-sub">' + sub + '</div></div>' +
+      (actions ? '<div class="calendar-row-actions">' + actions + '</div>' : '') + '<div class="calendar-row-input"' + (showInput ? '' : ' hidden') + '>' + input + '</div></div>';
   }).join('');
 }
 function meetingTime(iso) {
@@ -5515,22 +5693,29 @@ function meetingTime(iso) {
   return isNaN(at) ? '' : at.toLocaleString('en-AU', {weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'});
 }
 function calendarComingHtml(record) {
-  if (!record) return '<p class="about-hint">Not read yet.</p>';
-  var items = record.items || [], sources = record.sources || [];
-  var read = sources.map(function(src) {
-    return esc(src.service) + ': ' + (src.ok ? src.events + (src.events === 1 ? ' event' : ' events') + ', ' + src.matched + ' naming your accounts' : 'could not read (' + esc(src.error || 'error') + ')');
-  }).join(' · ');
-  var html = '<div class="calendar-coming"><span class="about-label">Coming up (next 36 hours, your time)</span>';
-  html += items.length ? '<ul>' + items.map(function(m) {
-    return '<li>' + esc(meetingTime(m.start)) + ' · ' + esc(m.title) + ' · <b>' + esc((m.accounts || []).join(', ')) + '</b>' + (m.calendar ? ' · ' + esc(m.calendar) : '') + '</li>';
-  }).join('') + '</ul>' : '<p class="about-hint">No meetings naming your accounts.</p>';
-  html += '<p class="about-hint">' + (record.checkedAt ? 'Checked ' + esc(meetingTime(record.checkedAt)) + (read ? ' · ' + read : '') : read) + '</p></div>';
-  return html;
+  if (!record) return '<p class="calendar-none">Not read yet. Tap Save and check now, or it reads at 6:00 and 18:00.</p>';
+  var items = record.items || [];
+  var html = '<div class="calendar-coming"><div class="calendar-coming-head"><span class="about-sublabel">Coming up · next 36 hours</span>' +
+    (record.checkedAt ? '<span class="calendar-checked">Checked ' + esc(meetingTime(record.checkedAt)) + '</span>' : '') + '</div>';
+  html += items.length ? '<ul class="calendar-meetings">' + items.map(function(m, i) {
+    var at = new Date(m.start), ok = !isNaN(at);
+    var day = ok ? at.toLocaleDateString('en-AU', {weekday: 'short', day: 'numeric', month: 'short'}) : '', time = ok ? at.toLocaleTimeString('en-AU', {hour: 'numeric', minute: '2-digit'}) : '';
+    return '<li class="calendar-meeting"><span class="calendar-when"><b>' + esc(time) + '</b><span>' + esc(day) + '</span></span><span><span class="calendar-title">' + esc(m.title) + '</span><span class="calendar-meta">' +
+      (m.accounts || []).map(function(a) { return '<span class="about-chip is-account">' + esc(a) + '</span>'; }).join('') + (m.calendar ? '<span>' + esc(m.calendar) + '</span>' : '') +
+      (m.briefId ? '<span class="is-ready">Brief ready</span>' : '<span>No brief yet</span>') + '</span></span>' +
+      '<button type="button" class="tool-chip" data-meeting-open="' + i + '">' + (m.briefId ? 'Open brief' : 'Build brief') + '</button></li>';
+  }).join('') + '</ul>' : '<p class="calendar-none">No meetings naming your accounts.</p>';
+  return html + '</div>';
 }
-function paintCalendar() {
-  var linksEl = document.getElementById('calendar-links'), comingEl = document.getElementById('calendar-coming');
-  if (linksEl) linksEl.innerHTML = calendarLinksHtml(_calendarLinks);
-  if (comingEl) comingEl.innerHTML = (_calendarLinks && _calendarLinks.length) ? calendarComingHtml(_meetings) : '';
+// keepTyped: a repaint for Replace, Remove or Keep keeps what he has pasted.
+function paintCalendar(keepTyped) {
+  var linksEl = document.getElementById('calendar-links'), comingEl = document.getElementById('calendar-coming'), typed = {};
+  if (keepTyped) CALENDAR_SERVICES.forEach(function(spec) { var box = document.getElementById('calendar-' + spec.service); if (box && box.value) typed[spec.service] = box.value; });
+  if (linksEl) linksEl.innerHTML = calendarLinksHtml(_calendarLinks, _meetings);
+  Object.keys(typed).forEach(function(service) { var box = document.getElementById('calendar-' + service); if (box) box.value = typed[service]; });
+  var connected = (_calendarLinks || []).map(function(l) { return l && l.service; }).filter(Boolean), ahead = (_meetings && _meetings.items || []).length;
+  if (comingEl) comingEl.innerHTML = connected.length ? calendarComingHtml(_meetings) : '';
+  setText('about-glance-calendar', !connected.length ? 'Not connected' : connected.join(' + ') + ' · ' + (ahead ? ahead + (ahead === 1 ? ' meeting' : ' meetings') + ' ahead' : 'no meetings ahead'));
 }
 async function loadCalendar() {
   var uid = window._firebaseUid || null;
@@ -5563,7 +5748,7 @@ async function saveCalendarLinks() {
   if (button) button.disabled = true;
   try {
     await window.fbSaveCalendar(next.links);
-    _calendarLinks = next.links; _calendarRemoved = {};
+    _calendarLinks = next.links; _calendarRemoved = {}; _calendarReplacing = {};
     paintCalendar();
     if (!next.links.length) { _meetings = null; setText('calendar-status', 'No calendar connected.'); }
     else {
@@ -5584,11 +5769,26 @@ async function saveCalendarLinks() {
   if (button) button.disabled = false;
 }
 document.addEventListener('click', function(event) {
-  var target = event.target && event.target.closest ? event.target.closest('#calendar-links [data-calendar-remove]') : null;
+  var target = event.target && event.target.closest ? event.target.closest('#calendar-links button, #calendar-coming [data-meeting-open]') : null;
   if (!target) return;
-  _calendarRemoved[target.getAttribute('data-calendar-remove')] = true;
-  paintCalendar();
-  setText('calendar-status', 'Tap Save and check now to remove it.');
+  if (target.hasAttribute('data-meeting-open')) {
+    var m = (_meetings && _meetings.items || [])[Number(target.getAttribute('data-meeting-open'))];
+    if (m) openMeetingFromCommand({target: m.briefId || '', title: m.title});
+    return;
+  }
+  var remove = target.getAttribute('data-calendar-remove'), keep = target.getAttribute('data-calendar-keep'), replace = target.getAttribute('data-calendar-replace');
+  // A paste in a box that is about to hide must not be saved from there.
+  var hiding = document.getElementById('calendar-' + (remove || (replace && _calendarReplacing[replace] ? replace : '')));
+  if (hiding) hiding.value = '';
+  if (remove) { _calendarRemoved[remove] = true; _calendarReplacing[remove] = false; paintCalendar(true); setText('calendar-status', 'Tap Save and check now to remove it.'); }
+  else if (keep) { delete _calendarRemoved[keep]; paintCalendar(true); setText('calendar-status', ''); }
+  else if (replace) {
+    _calendarReplacing[replace] = !_calendarReplacing[replace];
+    paintCalendar(true);
+    var box = document.getElementById('calendar-' + replace);
+    if (_calendarReplacing[replace] && box) box.focus();
+    setText('calendar-status', _calendarReplacing[replace] ? 'Paste the new link, then tap Save and check now.' : '');
+  }
 });
 
 // A meeting in the Morning 5 (lib/ui-shell.js commandOpenItem): its brief when
@@ -5603,8 +5803,16 @@ async function openMeetingFromCommand(item) {
   if (input) input.focus();
 }
 
-function aboutItem(title, steers, body) {
-  return '<div class="about-item"><div class="about-item-head"><strong>' + esc(title) + '</strong><span class="about-steers">Steers: ' + esc(steers) + '</span></div>' + body + '</div>';
+// One card: what it is, what Daybook holds, and what it steers.
+function aboutItem(title, steers, body, opts) {
+  opts = opts || {};
+  return '<div class="about-item' + (opts.wide ? ' is-wide' : '') + '"><div class="about-item-head">' + (opts.icon ? '<svg class="ico" aria-hidden="true"><use href="#i-' + opts.icon + '"/></svg>' : '') +
+    '<strong>' + esc(title) + '</strong>' + (opts.when ? '<span class="about-item-when">' + esc(opts.when) + '</span>' : '') + '</div>' +
+    '<div class="about-item-body">' + body + '</div><div class="about-steers">Steers: ' + esc(steers) + '</div></div>';
+}
+function aboutDate(day) {
+  var at = new Date(String(day || '') + 'T00:00:00');
+  return isNaN(at) ? String(day || '') : at.toLocaleDateString('en-AU', {day: 'numeric', month: 'short', year: 'numeric'});
 }
 // What it has picked up, from what is already loaded or one small read each.
 // html is built from esc()'d parts only.
@@ -5612,32 +5820,43 @@ function aboutLearnedHtml(d) {
   var html = '';
   var votes = d.votes || {up: [], down: []}, all = votes.up.concat(votes.down);
   _aboutVotes = all;
-  html += aboutItem('Your story votes (last 30 days)', 'the briefing', all.length
-    ? '<p>' + votes.up.length + ' “more like this” and ' + votes.down.length + ' “less like this”. The briefing reads them as examples and a count by section.</p><ul>' +
-      all.slice(0, 12).map(function(v, i) { return '<li class="about-vote"><span>' + (v.vote === 1 ? '▲' : '▼') + ' ' + esc(v.headline) + (v.section ? ' · ' + esc(v.section) : '') + '</span><button type="button" class="tool-chip" data-about-vote="' + i + '">Take back</button></li>'; }).join('') +
-      '</ul>' + (all.length > 12 ? '<p>And ' + (all.length - 12) + ' more.</p>' : '')
-    : '<p>No votes yet. Tap “More like this” or “Less like this” on a briefing story and it shows here.</p>');
+  html += aboutItem('Your story votes', 'the briefing', all.length
+    ? '<p class="about-tally"><span class="is-up">▲ ' + votes.up.length + ' more like this</span><span class="is-down">▼ ' + votes.down.length + ' less like this</span></p>' +
+      '<p class="about-quiet">The briefing reads them as examples and a count by section.</p><ul class="about-votes">' +
+      all.slice(0, 12).map(function(v, i) {
+        var up = v.vote === 1;
+        return '<li class="about-vote ' + (up ? 'is-up' : 'is-down') + '"><span class="about-vote-mark" aria-hidden="true">' + (up ? '▲' : '▼') + '</span><span class="about-vote-text"><span class="about-sr">' + (up ? 'More like this: ' : 'Less like this: ') + '</span>' + esc(v.headline) +
+          (v.section ? '<span class="about-vote-sec">' + esc(v.section) + '</span>' : '') + '</span><button type="button" class="about-link-btn" data-about-vote="' + i + '">Take back</button></li>';
+      }).join('') + '</ul>' + (all.length > 12 ? '<p class="about-quiet">And ' + (all.length - 12) + ' more.</p>' : '')
+    : '<p>No votes yet. Tap “More like this” or “Less like this” on a briefing story and it shows here.</p>', {icon: 'sparkle', when: 'last 30 days', wide: true});
   var calls = d.calls || [];
   html += aboutItem('Your open calls', 'the briefing (as private context, never as news)', calls.length
-    ? '<ul>' + calls.map(function(c) { return '<li>' + esc([c.asset, c.action, c.createdDate, c.conviction ? 'conviction ' + c.conviction + '/5' : ''].filter(Boolean).join(' · ')) + (c.reason ? ' — ' + esc(c.reason) : ' — no reason recorded') + '</li>'; }).join('') + '</ul>'
-    : '<p>No open calls in your decision journal.</p>');
+    ? '<ul class="about-calls">' + calls.map(function(c) {
+      return '<li><b>' + esc(c.asset) + '</b>' + esc([c.action, aboutDate(c.createdDate), c.conviction ? 'conviction ' + c.conviction + '/5' : ''].filter(Boolean).join(' · ')) +
+        '<br><span class="about-quiet">' + (c.reason ? esc(c.reason) : 'No reason recorded') + '</span></li>';
+    }).join('') + '</ul>'
+    : '<p>No open calls in your decision journal.</p>', {icon: 'decisions'});
   var setups = d.setups || [];
   html += aboutItem('Radar setups it sees', 'the briefing', setups.length
-    ? '<p>' + setups.map(function(s) { return esc(s.symbol + ' (' + s.status + ')'); }).join(', ') + '.</p>' : '<p>No confirmed or forming setups today.</p>');
-  html += aboutItem('Your accounts', 'the briefing’s account badges, the meeting brief and Ask Daybook',
-    '<p>' + d.accounts + (d.accounts === 1 ? ' account' : ' accounts') + (d.ownAccounts ? ', your own list.' : ', the starter list.') + '</p><button type="button" class="tool-chip" data-about-go="accounts">Edit on Evidence</button>');
+    ? '<div class="about-chips">' + setups.map(function(s) { return '<span class="about-chip is-' + (s.status === 'confirmed' ? 'confirmed' : 'forming') + '">' + esc(s.symbol) + ' <small>' + esc(s.status) + '</small></span>'; }).join('') + '</div>'
+    : '<p>No confirmed or forming setups today.</p>', {icon: 'radar', when: 'today'});
+  html += aboutItem('Your accounts', 'the briefing’s account badges, the meeting brief, your calendars and Ask Daybook',
+    '<p class="about-big">' + d.accounts + '<small>' + (d.accounts === 1 ? 'account' : 'accounts') + '</small></p><p class="about-quiet">' + (d.ownAccounts ? 'Your own list.' : 'The starter list.') + '</p>' +
+    '<button type="button" class="tool-chip" data-about-go="accounts">Edit on Evidence →</button>', {icon: 'evidence'});
   var goals = d.goals || [];
   html += aboutItem('Your goals', 'your daily spark and the weekly read', goals.length
-    ? '<ul>' + goals.map(function(g) { return '<li>' + esc(g.text) + (g.nextMove ? ' — next: ' + esc(g.nextMove) : '') + '</li>'; }).join('') + '</ul>'
-    : '<p>None set.</p><button type="button" class="tool-chip" data-about-go="goals">Set your goals on Today</button>');
+    ? '<ul class="about-goals">' + goals.map(function(g) { return '<li>' + esc(g.text) + (g.nextMove ? '<br><span class="about-quiet">Next: ' + esc(g.nextMove) + '</span>' : '') + '</li>'; }).join('') + '</ul>'
+    : '<p>None set.</p><button type="button" class="tool-chip" data-about-go="goals">Set your goals on Today →</button>', {icon: 'pin'});
   var weights = d.weights || [];
-  html += aboutItem('Your Morning 5 priorities', 'Command and the morning push', weights.length
-    ? '<p>' + weights.map(esc).join(', ') + '. Everything else is Normal.</p><button type="button" class="tool-chip" data-about-go="command">Change on Command</button>'
-    : '<p>Every source at Normal.</p><button type="button" class="tool-chip" data-about-go="command">Change on Command</button>');
-  var used = d.used || [];
-  html += aboutItem('What you open most (last 14 days)', 'nothing yet', used.length
-    ? '<p>' + used.map(function(u) { return esc(u.label) + ' ' + u.count; }).join(' · ') + '.</p><p>From mid-October, Daybook will use this to suggest profile lines for you to approve. Nothing is added without you.</p>'
-    : '<p>Not enough use recorded yet.</p>');
+  html += aboutItem('Your Morning 5 priorities', 'Command and the morning push', (weights.length
+    ? '<div class="about-chips">' + weights.map(function(w) { return '<span class="about-chip">' + esc(w) + '</span>'; }).join('') + '</div><p class="about-quiet" style="margin-top:.45rem">Everything else is Normal.</p>'
+    : '<p>Every source at Normal.</p>') + '<button type="button" class="tool-chip" data-about-go="command">Change on Command →</button>', {icon: 'command'});
+  var used = d.used || [], most = used.reduce(function(max, u) { return Math.max(max, Number(u.count) || 0); }, 0) || 1;
+  html += aboutItem('What you open most', 'nothing yet', used.length
+    ? '<ul class="about-bars">' + used.map(function(u) {
+      return '<li><span>' + esc(u.label) + '</span><span class="about-bar-track" aria-hidden="true"><span style="width:' + Math.max(4, Math.round((Number(u.count) || 0) / most * 100)) + '%"></span></span><b>' + (Number(u.count) || 0) + '</b></li>';
+    }).join('') + '</ul><p class="about-quiet">From mid-October, Daybook will use this to suggest profile lines for you to approve. Nothing is added without you.</p>'
+    : '<p>Not enough use recorded yet.</p>', {icon: 'bars', when: 'last 14 days'});
   return html;
 }
 function aboutWeightText(prefs) {
@@ -5654,7 +5873,7 @@ async function renderAboutLearned() {
     commandPrefsAvailable ? Promise.resolve(commandPreferences) : read(window.fbLoadCommandPrefs)]);
   var day = window.DailyBoostCore ? window.DailyBoostCore.dateKey() : '';
   var usage = results[2] && results[2].days ? usageSummary(results[2].days, day, 14) : null;
-  out.innerHTML = aboutLearnedHtml({
+  var d = {
     votes: core.readerVotes(window.dailyBoostFeedbackEntries ? window.dailyBoostFeedbackEntries() : {}, day),
     calls: (results[0] || []).filter(function(e) { return e && (e.status || 'open') !== 'closed' && (e.action || 'watched') !== 'skipped'; }),
     setups: ((results[1] && results[1].signals) || []).filter(function(s) { return s && (s.status === 'confirmed' || s.status === 'forming'); })
@@ -5663,7 +5882,10 @@ async function renderAboutLearned() {
     goals: window.dailyBoostGoals ? window.dailyBoostGoals() : [],
     weights: aboutWeightText(results[3]),
     used: usage ? usage.used.filter(function(u) { return /^page_/.test(u.key) || /^open_/.test(u.key); }).slice(0, 6) : []
-  });
+  };
+  out.innerHTML = aboutLearnedHtml(d);
+  var voteCount = d.votes.up.length + d.votes.down.length, plural = function(n, one) { return n + ' ' + one + (n === 1 ? '' : 's'); };
+  setText('about-glance-learned', plural(voteCount, 'vote') + ' · ' + plural(d.calls.length, 'open call') + ' · ' + plural(d.accounts, 'account'));
 }
 document.addEventListener('click', function(event) {
   var target = event.target && event.target.closest ? event.target.closest('#about-learned [data-about-vote], #about-learned [data-about-go]') : null;

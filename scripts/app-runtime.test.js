@@ -300,7 +300,7 @@ test('Search: a key typed on the tick box or a button goes into the box, and tic
   assert.ok(html.includes('aria-labelledby="intel-search-label" onkeydown="intelligenceSearchTypeAhead(event)"'));
 });
 // About you: the one profile every AI feature reads, and what it has picked up.
-const ABOUT_FNS=['aboutFieldsHtml','aboutValues','paintAboutProfile','aboutEdited','saveAboutProfile','resetAboutProfile','aboutItem','aboutLearnedHtml','aboutWeightText'];
+const ABOUT_FNS=['aboutReadHtml','aboutBadge','aboutFieldsHtml','aboutValues','paintAboutProfile','aboutEdited','saveAboutProfile','resetAboutProfile','undoAboutProfile','aboutItem','aboutDate','aboutLearnedHtml','aboutWeightText'];
 function aboutEnvironment(extra={}){
   const env=environment(ABOUT_FNS,{esc:escHtml,_firebaseUid:'bob',confirm:()=>true,...extra});
   vm.runInContext(readFileSync(new URL('../lib/briefing-prompt-core.js',import.meta.url),'utf8'),env.context);
@@ -314,33 +314,55 @@ test('About you: the five boxes start from the profile the AI used, and a save k
   context.paintAboutProfile(core.cleanProfile(null));
   const fields=element('about-fields').innerHTML;
   assert.equal((fields.match(/<textarea /g)||[]).length,5);
-  assert.match(fields,/<span class="about-label">Your clients and files<\/span>/); assert.match(fields,/Most of his files are third-party property damage claims for QBE/);
+  assert.match(fields,/<span class="about-label" id="about-label-files">Your clients and files<\/span>/); assert.match(fields,/Most of his files are third-party property damage claims for QBE/);
   assert.match(fields,/maxlength="1200"/); assert.equal(element('about-state').textContent,'The starting profile');
+  // Each part reads as text until Edit; the box is there, hidden, to be read on save.
+  assert.equal((fields.match(/<div class="about-editor" id="about-editor-[a-zA-Z]+" hidden>/g)||[]).length,5);
+  assert.equal((fields.match(/data-about-edit="/g)||[]).length,5);
+  assert.match(fields,/<ol class="about-lines"><li>Most of his files are third-party/,'his files read as a ranked list, one per line');
+  assert.equal((fields.match(/>Starting text</g)||[]).length,4); assert.match(fields,/id="about-badge-other">Optional</);
+  assert.match(fields,/aria-labelledby="about-label-work" aria-describedby="about-hint-work"/);
+  assert.equal(element('about-glance-profile').textContent,'The starting profile');
   // The boxes he edits (stand-ins for the textareas).
   const values={work:'I assess <BI> claims for Allianz.',files:'  Small-business BI  \n\n Some QBE pole strikes ',matters:'',lookFor:'storms',other:''};
   Object.keys(values).forEach(k=>{element('about-'+k).value=values[k];});
   const box=element('about-work'); box.getAttribute=n=>n==='data-about-field'?'work':n==='maxlength'?'300':null;
   context.aboutEdited(box);
   assert.equal(element('about-count-work').textContent,'33 / 300'); assert.equal(element('about-status').textContent,'Not saved yet.');
+  assert.equal(element('about-read-work').innerHTML,'<p>I assess &lt;BI> claims for Allianz.</p>','the text view follows the box');
+  assert.equal(element('about-badge-work').textContent,'Your words'); assert.equal(element('about-badge-work').className,'about-badge is-own');
+  assert.equal(element('about-savebar').className,'about-savebar is-dirty'); assert.equal(element('about-glance-profile').textContent,'Changes not saved yet');
   await context.saveAboutProfile();
   assert.deepEqual({...saved},{work:'I assess <BI> claims for Allianz.',files:'Small-business BI\nSome QBE pole strikes',matters:'',lookFor:'storms',other:''});
   assert.match(element('about-status').textContent,/^Saved\. The next briefing, answer, dossier or brief uses it\./);
-  assert.equal(element('about-state').textContent,'In your own words');
-  assert.match(element('about-fields').innerHTML,/I assess &lt;BI> claims/,'escaped in the box');
+  assert.equal(element('about-state').textContent,'In your own words'); assert.equal(element('about-savebar').className,'about-savebar');
+  assert.equal(element('about-glance-profile').textContent,'4 of 5 parts in your words');
+  const after=element('about-fields').innerHTML;
+  assert.match(after,/I assess &lt;BI> claims/,'escaped in the box');
+  assert.match(after,/id="about-badge-matters">Left out</); assert.match(after,/Empty: left out of every prompt\./);
   context.resetAboutProfile();
   assert.match(element('about-fields').innerHTML,/Most of his files are third-party/); assert.match(element('about-status').textContent,/Tap Save profile to use it/);
+  assert.equal(element('about-savebar').className,'about-savebar is-dirty','putting the start back is a change to save');
+  context.undoAboutProfile();
+  assert.match(element('about-fields').innerHTML,/I assess &lt;BI> claims/,'Undo goes back to what is saved'); assert.equal(element('about-status').textContent,'');
+  assert.equal(element('about-savebar').className,'about-savebar');
 });
 test('About you: what it has picked up says what each thing steers, and never guesses',()=>{
   const {context}=aboutEnvironment();
   const out=context.aboutLearnedHtml({votes:{up:[{headline:'Trucking <operator> back',section:'interruptions',vote:1}],down:[]},
     calls:[{asset:'ETH',action:'took',createdDate:'2026-07-21',conviction:4,reason:''}],setups:[{symbol:'ETH',status:'forming'}],
     accounts:24,ownAccounts:true,goals:[],weights:context.aboutWeightText({sourceWeights:{Sports:0.5,Markets:0.5,Radar:1},quietSources:[]}),used:[{label:'Evidence',count:44}]});
-  assert.match(out,/<strong>Your story votes \(last 30 days\)<\/strong><span class="about-steers">Steers: the briefing<\/span>/);
-  assert.match(out,/▲ Trucking &lt;operator> back · interruptions<\/span><button type="button" class="tool-chip" data-about-vote="0">Take back<\/button>/);
-  assert.match(out,/ETH · took · 2026-07-21 · conviction 4\/5 — no reason recorded/);
-  assert.match(out,/ETH \(forming\)\./); assert.match(out,/24 accounts, your own list\./);
-  assert.match(out,/None set\./); assert.match(out,/Markets: Low, Sports: Low\. Everything else is Normal\./);
-  assert.match(out,/Steers: nothing yet/); assert.match(out,/Evidence 44/); assert.match(out,/Nothing is added without you\./);
+  assert.match(out,/<strong>Your story votes<\/strong><span class="about-item-when">last 30 days<\/span>/);
+  assert.match(out,/<div class="about-steers">Steers: the briefing<\/div>/);
+  assert.match(out,/<p class="about-tally"><span class="is-up">▲ 1 more like this<\/span><span class="is-down">▼ 0 less like this<\/span><\/p>/);
+  assert.match(out,/<span class="about-sr">More like this: <\/span>Trucking &lt;operator> back<span class="about-vote-sec">interruptions<\/span><\/span><button type="button" class="about-link-btn" data-about-vote="0">Take back<\/button>/);
+  assert.match(out,/<b>ETH<\/b>took · 21 July 2026 · conviction 4\/5<br><span class="about-quiet">No reason recorded<\/span>/);
+  assert.match(out,/<span class="about-chip is-forming">ETH <small>forming<\/small><\/span>/);
+  assert.match(out,/<p class="about-big">24<small>accounts<\/small><\/p><p class="about-quiet">Your own list\.<\/p>/);
+  assert.match(out,/None set\./); assert.match(out,/<span class="about-chip">Markets: Low<\/span><span class="about-chip">Sports: Low<\/span><\/div><p[^>]*>Everything else is Normal\./);
+  assert.match(out,/Steers: nothing yet/); assert.match(out,/<li><span>Evidence<\/span><span class="about-bar-track" aria-hidden="true"><span style="width:100%"><\/span><\/span><b>44<\/b><\/li>/);
+  assert.match(out,/Nothing is added without you\./);
+  assert.equal((out.match(/<div class="about-item( is-wide)?">/g)||[]).length,7); assert.equal((out.match(/class="about-item is-wide"/g)||[]).length,1);
   // The page and its tab are the owner's, like the AI features it describes.
   ['<button class="ntab owner-only" data-page="about"','<button class="mob-tab owner-only" id="mob-about"','<section class="command-panel about-panel owner-only" id="about-profile"']
     .forEach(s=>assert.ok(html.includes(s),s));
@@ -368,6 +390,17 @@ test('calendars: each box takes only its own service’s https link, and a saved
   assert.match(shown,/Saved: bob@gmail\.com/,'which calendar it is'); assert.ok(!shown.includes('private-0123456789abcdef'),'the secret part is never shown');
   assert.equal(context.calendarLinkLabel({url:'https://outlook.office365.com/owa/calendar/abc@x.com/0f1e2d3c4b5a/calendar.ics'}),'calendar …4b5a');
   assert.match(shown,/data-calendar-remove="Google"/); assert.match(shown,/aria-label="Outlook \/ Microsoft 365 link"/);
+  // A saved calendar is a status row, its paste box hidden until Replace; one not connected shows its box.
+  assert.match(shown,/<div class="calendar-row is-saved">/); assert.match(shown,/<div class="calendar-row is-off">/);
+  assert.match(shown,/<div class="calendar-row-input" hidden><input type="url" id="calendar-Google"/);
+  assert.match(shown,/<div class="calendar-row-input"><input type="url" id="calendar-Outlook"/);
+  assert.match(shown,/data-calendar-replace="Google">Replace</);
+  vm.runInContext('_calendarReplacing={Google:true};',context); context.paintCalendar();
+  assert.match(element('calendar-links').innerHTML,/<div class="calendar-row-input"><input type="url" id="calendar-Google"[^>]*placeholder="Paste the new link to replace it" aria-label="New Google Calendar link">/);
+  assert.match(element('calendar-links').innerHTML,/data-calendar-replace="Google">Cancel</);
+  vm.runInContext('_calendarReplacing={};_calendarRemoved={Google:true};',context); context.paintCalendar();
+  assert.match(element('calendar-links').innerHTML,/<div class="calendar-row is-removed">[\s\S]*Removed when you tap Save and check now\.[\s\S]*data-calendar-keep="Google">Keep it</);
+  assert.equal(element('about-glance-calendar').textContent,'Google · no meetings ahead');
 });
 test('calendars: a paste replaces, a saved link stays, a removed one goes, and a bad paste is named',()=>{
   const {context,element}=calendarEnvironment();
@@ -389,8 +422,18 @@ test('calendars: saving reads them at once and shows what it found, without the 
   assert.deepEqual(JSON.parse(JSON.stringify(saved)),[{service:'Google',url:GOOGLE_LINK}]);
   assert.equal(element('calendar-status').textContent,'Saved and read.');
   const coming=element('calendar-coming').innerHTML;
-  assert.match(coming,/Suncorp weekly catch-up · <b>Suncorp<\/b> · Outlook/);
-  assert.match(coming,/Google: 23 events, 0 naming your accounts · Outlook: could not read \(the calendar answered HTTP 404 \(was the link reset\?\)\)/);
+  assert.match(coming,/<span class="calendar-title">Suncorp weekly catch-up<\/span><span class="calendar-meta"><span class="about-chip is-account">Suncorp<\/span><span>Outlook<\/span><span>No brief yet<\/span><\/span><\/span><button type="button" class="tool-chip" data-meeting-open="0">Build brief<\/button>/);
+  assert.match(coming,/Coming up · next 36 hours<\/span><span class="calendar-checked">Checked /);
+  // What each read found sits on that calendar's row; a calendar not connected shows no stale read.
+  const rows=element('calendar-links').innerHTML;
+  assert.match(rows,/<div class="calendar-row is-ok">[\s\S]*<span class="calendar-read">23 events in the next 36 hours, 0 naming your accounts<\/span>/);
+  assert.ok(!rows.includes('could not read') && !rows.includes('Could not read'),'Outlook is not connected, so its old error is not shown');
+  assert.equal(element('about-glance-calendar').textContent,'Google · 1 meeting ahead');
+  vm.runInContext('_calendarLinks=[{service:"Google",url:'+JSON.stringify(GOOGLE_LINK)+'},{service:"Outlook",url:"https://outlook.office365.com/owa/calendar/a/b/calendar.ics"}];_meetings.items[0].briefId="brief-1";',context);
+  context.paintCalendar();
+  assert.match(element('calendar-links').innerHTML,/<div class="calendar-row is-error">[\s\S]*<span class="calendar-read is-error">Could not read: the calendar answered HTTP 404 \(was the link reset\?\)<\/span>/);
+  assert.match(element('calendar-coming').innerHTML,/<span class="is-ready">Brief ready<\/span><\/span><\/span><button type="button" class="tool-chip" data-meeting-open="0">Open brief<\/button>/);
+  assert.equal(element('about-glance-calendar').textContent,'Google + Outlook · 1 meeting ahead');
   element('calendar-Google').value='https://example.com/x.ics';
   await context.saveCalendarLinks();
   assert.match(element('calendar-status').textContent,/That is not a Google Calendar calendar link/);
