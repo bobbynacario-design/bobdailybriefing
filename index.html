@@ -10680,8 +10680,16 @@ function renderGroundingLine(data, anchor) {
     if (g.unmatchedUrls) {
       parts.push(g.unmatchedUrls + ' unmatched link' + (g.unmatchedUrls === 1 ? '' : 's') + ' withheld');
     }
-    el.className = 'qa-line ' + (g.unmatchedUrls ? 'warn' : 'ok');
-    el.textContent = parts.join(' / ') + '. URL matching does not verify every claim.';
+    // The day's news lands from a scheduled job. A briefing generated before it is
+    // built on an earlier morning's news; say so rather than show a green line.
+    var day = /([A-Z][a-z]+) (\d{1,2}), (\d{4})$/.exec(String(data && data.date || ''));
+    var month = day ? ['January','February','March','April','May','June','July','August','September','October','November','December'].indexOf(day[1]) : -1;
+    var snap = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(g.snapshotDate || ''));
+    var behind = month >= 0 && snap ? Math.round((Date.UTC(Number(day[3]), month, Number(day[2])) - Date.UTC(Number(snap[1]), Number(snap[2]) - 1, Number(snap[3]))) / 86400000) : 0;
+    el.className = 'qa-line ' + (g.unmatchedUrls || behind > 0 ? 'warn' : 'ok');
+    el.textContent = (behind > 0 ? 'Built on ' + (behind === 1 ? 'yesterday’s' : behind + '-day-old') + ' news (' + (g.snapshot || g.snapshotDate) +
+      '): today’s had not arrived when this was generated. Regenerate once it lands for today’s stories. ' : '') +
+      parts.join(' / ') + '. URL matching does not verify every claim.';
   } else {
     el.className = 'qa-line warn';
     el.textContent = 'Insurance NOT grounded (' + (g.reason || 'unavailable') +

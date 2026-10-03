@@ -832,6 +832,21 @@ test('a card saved to Evidence points at the saved briefing, or the key autoSave
   context._briefingHistory=[{key:'stored-key',data:{date:'Friday, September 25, 2026'}}];
   assert.equal(context.currentBriefingKey(),'stored-key');
 });
+test('the verification line warns when the briefing was built on an earlier morning\'s news', () => {
+  const {context,element}=environment(['renderGroundingLine']);
+  const g={mode:'grounded',snapshot:'news-2026-10-01',snapshotDate:'2026-10-01',grounded:4,ungrounded:0,feedsOk:14,feedsTotal:15};
+  context.renderGroundingLine({date:'Friday, October 2, 2026',grounding:g},{parentNode:{}});
+  assert.equal(element('grounding-line').className,'qa-line warn');
+  assert.match(element('grounding-line').textContent,/^Built on yesterday’s news \(news-2026-10-01\): today’s had not arrived when this was generated\. Regenerate once it lands for today’s stories\. Insurance sources matched to news-2026-10-01/);
+  context.renderGroundingLine({date:'Saturday, October 3, 2026',grounding:g},{parentNode:{}});
+  assert.match(element('grounding-line').textContent,/^Built on 2-day-old news/);
+  context.renderGroundingLine({date:'Saturday, October 3, 2026',grounding:{...g,snapshot:'news-2026-10-03',snapshotDate:'2026-10-03'}},{parentNode:{}});
+  assert.equal(element('grounding-line').className,'qa-line ok');
+  assert.doesNotMatch(element('grounding-line').textContent,/Built on/);
+  // An older briefing saved without a snapshot date says nothing about it.
+  context.renderGroundingLine({date:'Saturday, October 3, 2026',grounding:{mode:'grounded',grounded:2,ungrounded:0}},{parentNode:{}});
+  assert.equal(element('grounding-line').className,'qa-line ok');
+});
 test('the verification line says when the reader\'s feedback shaped the briefing', () => {
   const {context,element}=environment(['renderGroundingLine']);
   context.renderGroundingLine({grounding:{mode:'grounded',grounded:2,ungrounded:0},context:{feedback:{up:4,down:2,days:3}}},{parentNode:{}});
