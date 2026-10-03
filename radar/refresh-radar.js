@@ -34,7 +34,7 @@ import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
 import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
-import { tagCatalysts, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
+import { tagCatalysts, focusPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
 import { recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -414,6 +414,8 @@ async function main() {
     (catResult.served && catResult.served.some(function (m) { return m !== CATALYST_MODEL; })
       ? ' · served by ' + catResult.served.join(',') : ''));
 
+  var picks = focusPicks(result.signals);
+  var symbolsOf = function (list) { return list.map(function (s) { return s.symbol; }); };
   var doc = {
     generatedAt: new Date().toISOString(),
     asOf: result.asOf,
@@ -430,6 +432,9 @@ async function main() {
       searches: cu.searches || 0, seconds: catResult.seconds,
       error: ANTHROPIC_KEY ? catResult.error : 'not configured'
     },
+    // The names the Radar shows first, by the app's own rules, so Search and
+    // Ask can say which are today's Taker and Wildcard picks.
+    picks: { taker: symbolsOf(picks.taker), wildcard: symbolsOf(picks.wildcard) },
     signals: result.signals
   };
 

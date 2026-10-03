@@ -3,7 +3,7 @@
 //   node radar/catalysts.test.js
 import assert from 'assert';
 import {
-  tagCatalysts, focusNames, collectSources, runCatalystCall, applyCatalysts,
+  tagCatalysts, focusPicks, focusNames, collectSources, runCatalystCall, applyCatalysts,
   usageForLedger, SAVE_TOOL
 } from './catalysts.js';
 
@@ -65,6 +65,21 @@ await t('focusNames: 3 Taker names, then early Wildcards outside them', function
   assert.deepEqual(f.slice(0, 3), ['T1', 'T2', 'T3']);
   // Standout (highest upside) first, then the rest by score.
   assert.deepEqual(f.slice(3), ['W1', 'T4', 'W2']);
+});
+
+await t('focusPicks: keeps the Taker and Wildcard lists apart, even with fewer than 3 Takers', function () {
+  var list = [
+    sig({ symbol: 'T1', status: 'confirmed', score: 80 }),
+    sig({ symbol: 'W1', status: 'forming', score: 50, early: true, target: 130 }),
+    sig({ symbol: 'W2', status: 'forming', score: 45, early: true }),
+    sig({ symbol: 'NO1', status: 'invalidated', score: 90, early: true })
+  ];
+  var picks = focusPicks(list);
+  var sym = function (s) { return s.symbol; };
+  assert.deepEqual(picks.taker.map(sym), ['T1']);
+  assert.deepEqual(picks.wildcard.map(sym), ['W1', 'W2']);
+  // focusNames is the same names as one list, Taker first.
+  assert.deepEqual(focusNames(list).map(sym), ['T1', 'W1', 'W2']);
 });
 
 await t('focusNames: an early name below the upside bar is not a Wildcard', function () {

@@ -136,6 +136,10 @@ radar gave Opus 5.5 27/30 sourced catalysts (~$0.62 a run, tokens + searches)
 against 16/30 for Sonnet 5.5. The tokens and the searches (1¢ each) go to the
 cost ledger as `radar-catalyst` and `radar-search`.
 
+The doc also names those picks, `picks: {taker: [...], wildcard: [...]}`
+(symbols, from `focusPicks` in `catalysts.js`), so Search and Ask Daybook can
+say which names are today's Taker and Wildcard without re-running the rules.
+
 Each card gains a colour-coded event chip (earnings/guidance = blue,
 analyst = purple, regulatory = amber, macro = teal, product/partnership = green)
 plus the one-line catalyst, its date and a link to the source.

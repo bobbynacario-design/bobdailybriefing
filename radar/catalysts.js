@@ -38,7 +38,7 @@ var SYSTEM = 'You produce factual, concise market catalyst tags for a personal r
 function upsidePct(s) {
   return s && s.entry > 0 && s.target != null ? (s.target - s.entry) / s.entry * 100 : null;
 }
-function focusNames(signals) {
+function focusPicks(signals) {
   signals = signals || [];
   function takerRank(s) {
     var rs = s.relStrength20d, lead = rs == null ? 0 : (rs >= 0 ? Math.min(rs, 12) * 0.5 : rs * 0.4);
@@ -62,7 +62,12 @@ function focusNames(signals) {
   eligible.slice().sort(function (a, b) { return b.score - a.score; }).forEach(function (s) {
     if (wild.length < 3 && s !== standout) wild.push(s);
   });
-  return taker.concat(wild);
+  return { taker: taker, wildcard: wild };
+}
+// The six (or fewer) as one list, Taker first: the names that get a read.
+function focusNames(signals) {
+  var picks = focusPicks(signals);
+  return picks.taker.concat(picks.wildcard);
 }
 
 function buildPrompt(signals, focus, today) {
@@ -317,6 +322,6 @@ async function tagCatalysts(opts) {
 }
 
 export {
-  tagCatalysts, focusNames, buildPrompt, collectSources, runCatalystCall, applyCatalysts,
+  tagCatalysts, focusPicks, focusNames, buildPrompt, collectSources, runCatalystCall, applyCatalysts,
   usageForLedger, SAVE_TOOL, EVENT_TYPES, DEFAULT_MODEL
 };
