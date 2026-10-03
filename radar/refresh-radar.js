@@ -623,6 +623,17 @@ async function main() {
     });
     console.log('  ' + mc.verdict);
   }
+  var ez = journalBody.earlyZone;
+  if (ez) {
+    console.log('\n  --- early zone (forming, up-day volume >= ' + ez.threshold + 'x down-day) ---');
+    ['all', 'live'].forEach(function (k) {
+      var w = ez[k];
+      if (!w) return;
+      console.log('    ' + k.padEnd(5) + ' early n=' + w.early.n + ' excess ' + w.early.avgExcessReturn +
+        ' | other forming n=' + w.otherForming.n + ' excess ' + w.otherForming.avgExcessReturn +
+        ' | confirmed n=' + w.confirmed.n + ' excess ' + w.confirmed.avgExcessReturn);
+    });
+  }
 
   STAGE.set('write');
   await writeDoc(db, dateKey, doc);

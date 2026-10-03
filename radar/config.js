@@ -127,6 +127,21 @@ var PREVIOUS_WEIGHTS = {
   riskQuality: 0.10,
   regime: 0.10
 };
+// The early zone: a FORMING name whose up-day volume is at least this many
+// times its down-day volume over 20 sessions (scoring.js sets `early`). Same
+// research run as above, v3 scores, trade excess:
+//   - forming names split cleanly on accumulation. At 1.6x they earned +1.41%
+//     (fit) / +1.59% (holdout) against confirmed names' +1.48% / +2.07%;
+//     every other forming name earned about nothing (+0.11% / -0.12%). It
+//     held in 2024, 2025 (where it beat confirmed) and 2026, on ETFs (+1.02%),
+//     single names (+1.94%) and crypto (+0.94%); 43% confirm within 5 days.
+//   - every cut from 1.2x to 2.5x splits the same way, rising with the cut, so
+//     1.6x is not a lucky edge. It was picked on the fit window alone, as the
+//     cut whose Wildcard picks did best there (+0.68 pts vs the day, against
+//     +0.65 for the old rule); 2x left the box empty on half the days.
+//   - the Wildcard box (index.html) now picks from this zone, by score.
+var EARLY_ACCUMULATION_MIN = 1.6;
+
 var MODEL = {
   label: 'v3-accumulation',
   previousLabel: 'v2-riskQuality',
@@ -217,6 +232,7 @@ var CONFIG = {
   weights: WEIGHTS,
   previousWeights: PREVIOUS_WEIGHTS,
   model: MODEL,
+  earlyAccumulationMin: EARLY_ACCUMULATION_MIN,
   themeRegime: THEME_REGIME,
   lookbackBars: LOOKBACK_BARS,
   barsLookbackDays: BARS_LOOKBACK_DAYS,

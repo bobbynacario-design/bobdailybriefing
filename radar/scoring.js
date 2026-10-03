@@ -395,6 +395,10 @@ function scoreUniverse(barsByAsset, config) {
     });
 
     var status = classify(sub, close, rr.stop, themeReg.score);
+    // Early zone: still forming, but up-day volume already well ahead of
+    // down-day volume (config.earlyAccumulationMin has the research).
+    var earlyMin = config.earlyAccumulationMin;
+    var early = status === 'forming' && earlyMin != null && acc.ratio != null && acc.ratio >= earlyMin;
 
     signals.push({
       symbol: sym,
@@ -402,6 +406,7 @@ function scoreUniverse(barsByAsset, config) {
       benchmark: item.benchmark,
       score: Math.round(score),
       status: status,
+      early: early,
       close: round(close, 2),
       sma20: round(s20, 2),
       sma50: round(s50, 2),

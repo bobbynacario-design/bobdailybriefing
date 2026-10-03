@@ -690,6 +690,34 @@ function modelCheck(entries, config, horizon) {
   };
 }
 
+// ── early zone: do early forming names keep earning like confirmed ones? ──
+// The Wildcard box picks from forming names with heavy up-day volume because,
+// across the history, they earned most of what confirmed names did while every
+// other forming name earned about nothing. This keeps measuring that split,
+// over all dates and over live dates only, so the claim can fail in the open.
+function earlyZone(entries, config) {
+  var min = config.earlyAccumulationMin;
+  if (min == null) return null;
+  var liveFrom = config.model && config.model.liveFrom;
+  function split(list) {
+    var early = list.filter(function (e) { return e.status === 'forming' && e.early; });
+    var other = list.filter(function (e) { return e.status === 'forming' && !e.early; });
+    var conf = list.filter(function (e) { return e.status === 'confirmed'; });
+    return {
+      early: early.length ? groupStats(early) : emptyGroup(),
+      otherForming: other.length ? groupStats(other) : emptyGroup(),
+      confirmed: conf.length ? groupStats(conf) : emptyGroup()
+    };
+  }
+  return {
+    threshold: min,
+    method: 'Early = forming, with volume on up days at least ' + min + 'x volume on down days over the last 20 sessions.',
+    all: split(entries),
+    liveFrom: liveFrom || null,
+    live: liveFrom ? split(entries.filter(function (e) { return e.date >= liveFrom; })) : null
+  };
+}
+
 function buildJournal(barsByAsset, config, opts) {
   opts = opts || {};
   var jc = config.journal || {};
@@ -853,6 +881,7 @@ function buildJournal(barsByAsset, config, opts) {
       coverage: coverage,
       weightCalibration: weightCalibration(entries, config.weights || {}),
       modelCheck: mCheck,
+      earlyZone: earlyZone(entries, config),
       recentOutcomes: recentOutcomes
     };
   }
@@ -938,6 +967,8 @@ function buildJournal(barsByAsset, config, opts) {
       entries.push({
         date: D, symbol: sym, theme: s.theme, status: s.status, score: s.score, idx: idxD,
         subScores: s.subScores,
+        // The early-zone flag as scored that day (forming + heavy up-day volume).
+        early: s.early === true,
         // marketRegime = global SPY/QQQ backdrop (100/60/25) for this date;
         // themeRegime = the signal's own theme breadth, which drove its status
         // gate. Both are captured at score time, so neither can look ahead.
@@ -961,5 +992,5 @@ export {
   buildJournal, resolveOutcome, scoreBucket, weightCalibration,
   // exported for offline tests
   ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage, regimeLabel, bandSpread,
-  bySelectionStats, selectionControl, modelCheck, topFiveVsDay, blendScore
+  bySelectionStats, selectionControl, modelCheck, topFiveVsDay, blendScore, earlyZone
 };
