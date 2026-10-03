@@ -40,6 +40,11 @@ function isoDay(value) {
 
 const MAX_LOOKUPS = 3;
 const LOOKUP_LIMIT = 12;
+// How much of a record's text a lookup returns. A story is long, so 450 keeps
+// lookups cheap; a Radar name is short and every labelled part of it answers
+// some question (the score's reason, catalyst, read, levels, tripwire).
+const CLIP_TEXT = 450;
+const CLIP_FOR = {Radar: 1200};
 const MAX_THREAD = 3;
 const KEEP_ANSWERS = 20;
 // The search index's source names, as the lookup tool offers them.
@@ -123,6 +128,7 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
     "HOW TO ANSWER:",
     "- Look up his Daybook with search_daybook before answering, at least once and at most " + MAX_LOOKUPS + " times. Choose terms that would appear in the records: names, tickers, other names, synonyms. Narrow by sources or dates when the question implies it (\"since August\" is since the 1st of August this year).",
     "- A question about Bob himself (who he is, what he cares about, his habits, his work, his goals): look up sources Profile and Activity first, with terms empty to read them all, and answer from them. Never cite a briefing story, news item or report as evidence of who he is.",
+    "- A question about the Radar (the app's daily market scan: a name's score, status, reason, catalyst, levels or tripwire, or today's Taker and Wildcard picks): look up sources Radar; the term \"radar\" reads today's names, highest score first, and \"Taker\" or \"Wildcard\" finds those picks. A name is early only when its meta says early. The Radar holds today's scan only, so it cannot say how a name has changed; say so if asked. Its levels are the scan's own, never a recommendation.",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
     "  - His profile, his own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\", \"you describe yourself as…\" is right.",
     "  - Activity is what he did in the app (votes, open calls, what he opens): describe it as what he did, never as what he said.",
@@ -201,7 +207,7 @@ function lookupOutput(hits, registry) {
   const results = arr(hits).map((item) => {
     const parts = [item.detail, item.excerpt, item.body].map(text).filter(Boolean).filter((part, i, all) => all.indexOf(part) === i);
     return {ref: refFor(registry, item), kind: originOf(item.source), date: dayOf(item.saved), title: clip(item.title, 200),
-      text: clip(parts.join(" — "), 450), meta: clip(item.meta, 100)};
+      text: clip(parts.join(" — "), CLIP_FOR[item.source] || CLIP_TEXT), meta: clip(item.meta, 100)};
   });
   return JSON.stringify(results.length ? {results} : {results: [], note: "Nothing in his Daybook matched these terms."});
 }

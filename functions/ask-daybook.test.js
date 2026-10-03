@@ -181,3 +181,22 @@ test("a question about him reads all of About you; other lookups still need word
   assert.match(prompt, /Never cite a briefing story, news item or report as evidence of who he is\./);
   assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("Profile"));
 });
+
+test("a Radar lookup returns the whole card, highest score first, and the prompt says how to ask it", () => {
+  const long = "x ".repeat(400).trim();
+  const signal = (symbol, score, o) => Object.assign({symbol, score, status: "forming", theme: "AI semis", why: symbol + " holds its averages. " + long,
+    entry: 100, stop: 95, target: 110, rr: 2, invalidation: "The idea is off if " + symbol + " closes back below 95."}, o);
+  const index = Core.buildIndex(Ask.askIndexInput({radar: {generatedAt: "2026-10-01T00:00:00Z", picks: {taker: ["SOXX"], wildcard: []},
+    signals: [signal("AMD", 40), signal("SOXX", 88, {read: {why: "Chips rallied.", wouldBreak: "A close below 95."}})]},
+  briefings: [{id: "b", saved: now, data: {date: "1 Oct 2026", sections: {ai: [{headline: "Chip story", body: long}]}}}]}, boostCore));
+  const out = JSON.parse(Ask.lookupOutput(Core.searchPlan(index, {terms: ["radar"], sources: ["Radar"]}, {now}), Ask.newRegistry())).results;
+  assert.deepEqual(out.map((r) => r.title), ["SOXX", "AMD"], "by score");
+  assert.equal(out[0].meta, "Taker pick · forming · score 88");
+  assert.ok(out[0].text.length > 450 && out[0].text.length <= 1200, "a Radar record gets the longer clip");
+  assert.match(out[0].text, /What would break it: A close below 95./);
+  const story = JSON.parse(Ask.lookupOutput(Core.searchPlan(index, {terms: ["chip story"]}, {now}), Ask.newRegistry())).results[0];
+  assert.ok(story.text.length <= 450, "other records keep the short clip");
+  const prompt = Ask.buildAskPrompt({question: "What are today's Taker picks?", today: "t", accounts: [], web: false});
+  assert.match(prompt, /A question about the Radar .* look up sources Radar; the term "radar" reads today's names, highest score first/);
+  assert.match(prompt, /A name is early only when its meta says early./); assert.match(prompt, /The Radar holds today's scan only/); assert.match(prompt, /never a recommendation/);
+});
