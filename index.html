@@ -1466,7 +1466,10 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .radar-catalyst-asof{color:var(--txt3);font-family:var(--mono);font-size:10px;white-space:nowrap}
 .radar-catalyst-src{color:var(--txt3);font-family:var(--mono);font-size:10px;white-space:nowrap;text-decoration:underline;text-underline-offset:2px}
 .radar-catalyst-src:hover{color:var(--gold)}
-.radar-invalidation{color:var(--txt3);font-style:italic}
+/* Footer: the invalidation line keeps at least 12rem; when it can't have that
+   beside the decision buttons, the buttons drop to their own row (right-aligned,
+   see .radar-decision-actions) instead of squeezing it to a word per line. */
+.radar-invalidation{color:var(--txt3);font-style:italic;flex:1 1 12rem}
 .radar-taker{background:var(--bg2);border:1px solid rgba(201,168,76,.18);border-left:3px solid var(--gold);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem}
 .radar-taker-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.8rem}
 .radar-taker-title{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.1em;text-transform:uppercase}
@@ -1683,7 +1686,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 /* DECISIONS */
 .decision-actions{display:flex;justify-content:space-between;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap}
 .decision-kicker{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.06em;text-transform:uppercase;line-height:1.6}
-.radar-decision-actions{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+.radar-decision-actions{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;justify-content:flex-end;margin-left:auto}
 .radar-decision-btn{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;padding:.32rem .55rem;border-radius:6px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s;white-space:nowrap}
 .radar-decision-btn:hover{border-color:var(--rim2);color:var(--txt)}
 .radar-decision-btn.watch{color:var(--amber);border-color:rgba(240,168,50,.25);background:rgba(240,168,50,.08)}
