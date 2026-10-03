@@ -191,11 +191,13 @@ test("a Radar lookup returns the whole card, highest score first, and the prompt
   radarJournal: {byScoreBucket: {"80-100": {n: 2858, excessWinRate: 55.7, avgExcessReturn: 2.23}}},
   briefings: [{id: "b", saved: now, data: {date: "1 Oct 2026", sections: {ai: [{headline: "Chip story", body: long}]}}}]}, boostCore));
   const out = JSON.parse(Ask.lookupOutput(Core.searchPlan(index, {terms: ["radar"], sources: ["Radar"]}, {now}), Ask.newRegistry())).results;
-  assert.deepEqual(out.map((r) => r.title), ["SOXX", "AMD"], "by score");
-  assert.equal(out[0].meta, "Taker pick · forming · score 88");
-  assert.ok(out[0].text.length > 450 && out[0].text.length <= 1200, "a Radar record gets the longer clip");
-  assert.ok(out[0].text.includes("What would break it: A close below 95."));
-  assert.ok(out[0].text.includes("Score band 80-100 record over 2858 past signals: 55.7% beat their benchmark, average excess +2.23%."), "the server reads the journal");
+  assert.deepEqual(out.map((r) => r.title), ["Radar overview: today's Taker and Wildcard picks", "SOXX", "AMD"], "the overview, then by score");
+  assert.ok(out[0].text.startsWith("Taker picks: SOXX 88. Wildcard picks: none. — By score band: 80-100 (55.7% beat their benchmark, average excess +2.23%): SOXX (Taker)."), "the overview reaches the model whole");
+  assert.equal(out[0].kind, "The Radar's overview of today's scan, computed by the app (not AI-written)"); assert.equal(out[1].kind, "A Radar signal (the app's daily market scan)");
+  assert.equal(out[1].meta, "Taker pick · forming · score 88");
+  assert.ok(out[1].text.length > 450 && out[1].text.length <= 1200, "a Radar record gets the longer clip");
+  assert.ok(out[1].text.includes("What would break it: A close below 95."));
+  assert.ok(out[1].text.includes("Score band 80-100 record over 2858 past signals: 55.7% beat their benchmark, average excess +2.23%."), "the server reads the journal");
   const story = JSON.parse(Ask.lookupOutput(Core.searchPlan(index, {terms: ["chip story"]}, {now}), Ask.newRegistry())).results[0];
   assert.ok(story.text.length <= 450, "other records keep the short clip");
   const prompt = Ask.buildAskPrompt({question: "What are today's Taker picks?", today: "t", accounts: [], web: false});
@@ -206,6 +208,9 @@ test("a Radar lookup returns the whole card, highest score first, and the prompt
   assert.ok(prompt.includes("open with its score, status and pick (from meta). State as a caveat what its record shows against it"));
   assert.ok(prompt.includes("under 50% beat their benchmark, or average excess between -0.25 and +0.25 points, the card's own noise line"), "the band caveat is concrete");
   assert.match(prompt, /never as a forecast/);
-  assert.ok(prompt.includes("lead with what stands out across them") && prompt.includes("Never repeat the same status words for every name."), "a list leads with what stands out");
+  assert.ok(prompt.includes("Its \"Radar overview\" record is computed across the whole scan"), "the model knows the overview");
+  assert.ok(prompt.includes("A question about today's picks, several Radar names or the Radar as a whole: build the answer from the Radar overview record and cite it."), "picks answers come from the overview");
+  assert.ok(prompt.includes("say plainly which group has no clear edge") && prompt.includes("never open each name with its own status"), "no per-name status");
+  assert.ok(prompt.includes("- A question about one Radar name: open with its score"), "the one-name rule is for one name only");
   assert.match(prompt, /never one this answer already covers/);
 });

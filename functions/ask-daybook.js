@@ -87,8 +87,11 @@ const ORIGIN = {
   Markets: "A Markets scenario read (AI panel)",
   Sports: "A sports feed item",
 };
-function originOf(source) {
-  return ORIGIN[source] || "An item from his app (" + source + ")";
+// A record whose kind is not its source's: the Radar overview is computed by
+// the app across the scan, not one name and not AI-written.
+const ORIGIN_BY_ID = {"radar:overview": "The Radar's overview of today's scan, computed by the app (not AI-written)"};
+function originOf(source, id) {
+  return ORIGIN_BY_ID[id] || ORIGIN[source] || "An item from his app (" + source + ")";
 }
 
 const SYSTEM = "You answer questions about an insurance and business-interruption consultant's own saved material, " +
@@ -128,9 +131,9 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
     "HOW TO ANSWER:",
     "- Look up his Daybook with search_daybook before answering, at least once and at most " + MAX_LOOKUPS + " times. Choose terms that would appear in the records: names, tickers, other names, synonyms. Narrow by sources or dates when the question implies it (\"since August\" is since the 1st of August this year).",
     "- A question about Bob himself (who he is, what he cares about, his habits, his work, his goals): look up sources Profile and Activity first, with terms empty to read them all, and answer from them. Never cite a briefing story, news item or report as evidence of who he is.",
-    "- A question about the Radar (the app's daily market scan: a name's score, status, reason, catalyst, levels or tripwire, or today's Taker and Wildcard picks): look up sources Radar; the term \"radar\" reads today's names, highest score first, and \"Taker\" or \"Wildcard\" finds those picks. A name is early only when its meta says early. The Radar holds today's scan only, so it cannot say how a name has changed; say so if asked. Its levels are the scan's own, never a recommendation.",
-    "- Answering about one Radar name: open with its score, status and pick (from meta). State as a caveat what its record shows against it: volume below its 20-day norm (under 1×), and a score band with no clear edge (under 50% beat their benchmark, or average excess between -0.25 and +0.25 points, the card's own noise line). Give the band's record as how names in that band have done before, never as a forecast.",
-    "- Answering about several Radar names: lead with what stands out across them (a shared theme, how many are on volume below their norm, which are in a band with no clear edge), group the names that share it, and give a name its own detail only where it differs. Never repeat the same status words for every name.",
+    "- A question about the Radar (the app's daily market scan: a name's score, status, reason, catalyst, levels or tripwire, or today's Taker and Wildcard picks): look up sources Radar; the term \"radar\" reads today's names, highest score first, and \"Taker\" or \"Wildcard\" finds those picks. Its \"Radar overview\" record is computed across the whole scan: the picks with their scores, grouped by score band with each band's record, volume, early flags, themes and status counts. A name is early only when its meta says early. The Radar holds today's scan only, so it cannot say how a name has changed; say so if asked. Its levels are the scan's own, never a recommendation.",
+    "- A question about one Radar name: open with its score, status and pick (from meta). State as a caveat what its record shows against it: volume below its 20-day norm (under 1×), and a score band with no clear edge (under 50% beat their benchmark, or average excess between -0.25 and +0.25 points, the card's own noise line). Give the band's record as how names in that band have done before, never as a forecast.",
+    "- A question about today's picks, several Radar names or the Radar as a whole: build the answer from the Radar overview record and cite it. Give the picks grouped by score band as it groups them, with each band's record, and say plainly which group has no clear edge; then how many are on volume below their norm, and the themes. Name each pick once, with its score. Say once what all share (e.g. \"all six are early\"); never repeat status words such as forming or early for each name, and never open each name with its own status.",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
     "  - His profile, his own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\", \"you describe yourself as…\" is right.",
     "  - Activity is what he did in the app (votes, open calls, what he opens): describe it as what he did, never as what he said.",
@@ -209,7 +212,7 @@ function dayOf(saved) {
 function lookupOutput(hits, registry) {
   const results = arr(hits).map((item) => {
     const parts = [item.detail, item.excerpt, item.body].map(text).filter(Boolean).filter((part, i, all) => all.indexOf(part) === i);
-    return {ref: refFor(registry, item), kind: originOf(item.source), date: dayOf(item.saved), title: clip(item.title, 200),
+    return {ref: refFor(registry, item), kind: originOf(item.source, item.id), date: dayOf(item.saved), title: clip(item.title, 200),
       text: clip(parts.join(" — "), CLIP_FOR[item.source] || CLIP_TEXT), meta: clip(item.meta, 100)};
   });
   return JSON.stringify(results.length ? {results} : {results: [], note: "Nothing in his Daybook matched these terms."});
