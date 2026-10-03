@@ -1,0 +1,30 @@
+name: Radar research export
+
+# RESEARCH ONLY: runs on pushes to the radar-research branch, never on main.
+# Writes nothing to Firestore. The rows (ratios and outcomes, no raw prices)
+# come back as an artifact that GitHub deletes after a day.
+on:
+  push:
+    branches: [radar-research]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node radar/research-export.js
+        env:
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: radar-research-rows
+          path: radar/research-rows.json
+          retention-days: 1
