@@ -2344,6 +2344,14 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .ask-actions{display:flex;flex-wrap:wrap;gap:.4rem}
 .ask-status{font-size:15px;color:var(--txt2);margin:0}.ask-status.is-warn{color:var(--amber)}
 .ask-meta{font-family:var(--mono);font-size:11px;color:var(--txt3);margin-top:.55rem}
+/* Send to…: opens as its own row under the chips, never a floating menu, so
+   it cannot run off a phone screen. */
+.ask-send>summary{list-style:none;display:inline-flex}.ask-send>summary::-webkit-details-marker{display:none}
+.ask-send[open]{flex-basis:100%}.ask-send[open]>summary{border-color:var(--gold);color:var(--gold)}
+.ask-send-menu,.ask-send-check{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.45rem}.ask-send-check[hidden]{display:none}
+.ask-send-check label{font-size:13px;color:var(--txt2);display:inline-flex;align-items:center;gap:.4rem}
+.ask-send-check input{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.35rem .5rem;font:inherit;font-size:13px}
+.ask-send-status{font-size:13px;color:var(--txt2);margin:.4rem 0 0}.ask-send-status:empty{display:none}
 .search-coverage{padding:.6rem 1rem;display:flex;gap:.7rem;align-items:center;justify-content:space-between;font-size:12px;color:var(--txt2)}
 #grounding-numbers a{color:var(--amber)}
 .gn-grid{display:grid;grid-template-columns:minmax(0,1fr);column-gap:3rem;align-items:start}
@@ -3223,6 +3231,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
           <option value="briefing">Briefing</option>
           <option value="weekly">Weekly read</option>
           <option value="evidence">Evidence</option>
+          <option value="ask">Ask Daybook</option>
           <option value="manual">Manual</option>
         </select>
       </div>
@@ -3526,7 +3535,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li>Every claim carries a ref: <b>S1</b> opens that record where it lives; <b>W1</b> opens a web page. A claim with no ref it found is dropped, and when your Daybook has nothing on it, it says so rather than guessing.</li>
         <li>It keeps straight whose words are whose, as the meeting brief does: <b>you noted</b> only for your notes, decisions and the note on a saved page. A dossier, meeting brief or weekly read is AI-written; a briefing story is something you were shown.</li>
         <li><b>Also check the web</b> is off unless you tick it. About $0.05–0.10 a question from your Daybook, about $0.30–0.35 with the web; up to twenty a day. Nothing is sent until you tap, and it never gives trading advice.</li>
-        <li>A follow-up carries the last three exchanges, so “and Suncorp?” works: one of its suggested questions, a short question, or one that opens like a follow-up (“and…”, “what about…”, “is that…”). Any other question starts afresh, as does <b>New question</b>. When your Daybook has nothing on it, the answer says so. The latest twenty answers are kept under <b>Earlier questions</b>; <b>＋ Evidence</b> saves one with its sources.</li>
+        <li>A follow-up carries the last three exchanges, so “and Suncorp?” works: one of its suggested questions, a short question, or one that opens like a follow-up (“and…”, “what about…”, “is that…”). Any other question starts afresh, as does <b>New question</b>. When your Daybook has nothing on it, the answer says so. The latest twenty answers are kept under <b>Earlier questions</b>.</li>
+        <li><b>Send to…</b> takes an answer elsewhere: <b>Evidence</b> keeps it with its sources; <b>Decision draft</b> starts a journal entry about the one Radar name or call it covers (otherwise the question), with a review in a week, and nothing is saved until you tap Save decision; <b>To check…</b> adds a dated “Ask again” to To check, so it comes back that day and in your Morning 5; <b>My take</b> starts your reflection on Today; <b>Copy as text</b> puts it on the clipboard with its sources.</li>
       </ul>
     </div>
 
@@ -4669,7 +4679,16 @@ function askAnswerHtml(a, following) {
   if (list.length) html += '<ol class="ask-sources">' + list.join('') + '</ol>';
   html += '<div class="ask-actions">' + (a.follow_ups || []).map(function(q) {
     return '<button type="button" class="tool-chip" data-ask-follow="' + esc(q) + '">' + esc(q) + '</button>';
-  }).join('') + '<button type="button" class="tool-chip" id="ask-save" onclick="saveAskAnswer()">＋ Evidence</button><button type="button" class="tool-chip" id="ask-new" onclick="newAskQuestion()">New question</button></div>';
+  }).join('') + '<button type="button" class="tool-chip" id="ask-new" onclick="newAskQuestion()">New question</button>' +
+    '<details class="ask-send" id="ask-send"><summary class="tool-chip">Send to…</summary><div class="ask-send-menu">' +
+      '<button type="button" class="tool-chip" id="ask-save" onclick="saveAskAnswer()">Evidence</button>' +
+      '<button type="button" class="tool-chip" data-ask-send="decision">Decision draft</button>' +
+      '<button type="button" class="tool-chip" data-ask-send="check">To check…</button>' +
+      '<button type="button" class="tool-chip" data-ask-send="take">My take</button>' +
+      '<button type="button" class="tool-chip" data-ask-send="copy">Copy as text</button></div>' +
+      '<div class="ask-send-check" id="ask-send-check" hidden><label>Check on <input type="date" id="ask-check-date"></label>' +
+      '<button type="button" class="tool-chip" data-ask-send="confirm-check">Add to To check</button></div>' +
+      '<p class="ask-send-status" id="ask-send-status" role="status"></p></details></div>';
   var at = a.generatedAt ? new Date(a.generatedAt) : null;
   html += '<div class="ask-meta">' + esc([(a.looked_up || 0) + ' of your items looked at', a.lookups ? a.lookups + (a.lookups === 1 ? ' lookup' : ' lookups') : '',
     a.web ? 'with the web' : 'your Daybook only', at && !isNaN(at) ? at.toLocaleString('en-AU', {day:'numeric', month:'short', hour:'numeric', minute:'2-digit'}) : ''].filter(Boolean).join(' · ')) + '</div></div>';
@@ -4747,21 +4766,66 @@ function openAskSource(ref) {
   closeIntelligenceSearch();
   openIndexedIntelligenceItem({id: s.id, source: s.source, title: s.title, page: s.page, ref: s.appRef});
 }
-// Saved to Evidence as a document: the answer without its ref marks, then the
-// sources it cited.
+// An answer as plain text: no ref marks, then the sources it cited. Evidence,
+// a decision draft and Copy as text all use it.
+function askAnswerText(a) {
+  var sources = (a.sources || []).map(function(s) { return s.ref + ' ' + [s.source, s.title, s.date].filter(Boolean).join(' · '); })
+    .concat((a.web_sources || []).map(function(w) { return w.ref + ' ' + w.title + ' ' + w.url; }));
+  return [String(a.answer).replace(/\s*\[[SW]\d+\]/g, '')].concat(a.not_found ? [a.not_found] : [], sources.length ? ['Sources:'].concat(sources) : []).join('\n');
+}
+// Saved to Evidence as a document.
 function saveAskAnswer() {
   var a = _askAnswers[_askShown];
   if (!a) return;
-  var sources = (a.sources || []).map(function(s) { return s.ref + ' ' + [s.source, s.title, s.date].filter(Boolean).join(' · '); })
-    .concat((a.web_sources || []).map(function(w) { return w.ref + ' ' + w.title + ' ' + w.url; }));
-  openEvidencePicker({id: 'ask:' + _askShown + ':answer', source: 'Ask', title: 'Ask: ' + a.question,
-    detail: [String(a.answer).replace(/\s*\[[SW]\d+\]/g, '')].concat(a.not_found ? [a.not_found] : [], sources.length ? ['Sources:'].concat(sources) : []).join('\n'),
+  openEvidencePicker({id: 'ask:' + _askShown + ':answer', source: 'Ask', title: 'Ask: ' + a.question, detail: askAnswerText(a),
     meta: 'Ask Daybook · ' + String(a.generatedAt || '').slice(0, 10), page: 'evidence', ref: _askShown});
 }
+// What a decision drafted from an answer is about: the one Radar name or
+// decision it cites, when it cites only that; otherwise the question.
+function askDecisionSubject(a) {
+  var cited = a.sources || [], first = cited[0];
+  var one = first && (first.source === 'Radar' || first.source === 'Decisions') &&
+    cited.every(function(s) { return s.source === first.source && s.title === first.title; });
+  return one ? first.title : a.question;
+}
+// Send to…: Evidence (saveAskAnswer), a decision draft, a dated check in To
+// check, your take on Today, or the clipboard. Only the draft and the take
+// leave Search; nothing is saved without his own tap where it lands.
+function handleAskSend(action, button) {
+  var a = _askAnswers[_askShown];
+  if (!a) return;
+  var status = document.getElementById('ask-send-status'), picker = document.getElementById('ask-send-check');
+  var say = function(message) { if (status) status.textContent = message; };
+  var asked = 'Ask Daybook · ' + String(a.generatedAt || '').slice(0, 10);
+  var today = window.DailyBoostCore ? window.DailyBoostCore.dateKey() : manilaDateKey();
+  var inWeek = new Date(Date.parse(today + 'T00:00:00Z') + 7 * 86400000).toISOString().slice(0, 10);
+  if (action === 'decision') {
+    closeIntelligenceSearch();
+    openDecisionFromInsight({title: askDecisionSubject(a), source: 'ask', detail: 'Asked: ' + a.question + '\n' + askAnswerText(a),
+      reviewDate: inWeek, label: asked});
+  } else if (action === 'check') {
+    if (picker) picker.hidden = false;
+    var date = document.getElementById('ask-check-date');
+    if (date) { date.min = today; date.value = date.value || inWeek; date.focus(); }
+  } else if (action === 'confirm-check') {
+    var result = window.addDailyBoostCheck && window.addDailyBoostCheck({metric: 'Ask again: ' + a.question, headline: a.question,
+      source: asked, url: '', due: (document.getElementById('ask-check-date') || {}).value || ''});
+    say(result ? result.message : 'Sign in to save a check.');
+    if (result && result.ok && picker) picker.hidden = true;
+  } else if (action === 'take') {
+    closeIntelligenceSearch();
+    switchPage('today', document.querySelector('.ntab[data-page="today"]'));
+    var noted = window.noteDailyBoostInsight && window.noteDailyBoostInsight(a.question);
+    if (!noted) showToast('Open your reflection on Today to add your take; sign in if needed.', 'warn');
+  } else if (action === 'copy') {
+    copyCardText('Q: ' + a.question + '\n' + askAnswerText(a), button, 'Answer copied');
+  }
+}
 document.addEventListener('click', function(event) {
-  var target = event.target && event.target.closest ? event.target.closest('#ask-out [data-ask-ref], #ask-out [data-ask-follow]') : null;
+  var target = event.target && event.target.closest ? event.target.closest('#ask-out [data-ask-ref], #ask-out [data-ask-follow], #ask-out [data-ask-send]') : null;
   if (!target) return;
   if (target.hasAttribute('data-ask-ref')) { openAskSource(target.getAttribute('data-ask-ref')); return; }
+  if (target.hasAttribute('data-ask-send')) { handleAskSend(target.getAttribute('data-ask-send'), target); return; }
   var q = target.getAttribute('data-ask-follow'), input = document.getElementById('intel-search-input');
   if (input) input.value = q;
   runAskDaybook(q, true);  // a suggested follow-up always continues the thread
@@ -5120,7 +5184,7 @@ var _usage = {day: '', counts: {}, timer: null, pruned: false};
 function usageKey(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60); }
 var USAGE_ATTRS = [['data-card-act', 'card_'], ['data-aha-act', 'aha_'], ['data-dossier-act', 'dossier_'], ['data-aha-link', 'aha_link', true],
   ['data-account', 'account_brief', true], ['data-account-timeline', 'account_timeline', true], ['data-call', 'call_badge', true],
-  ['data-evidence-more', 'evidence_show_all', true], ['data-ask-ref', 'ask_ref', true], ['data-ask-follow', 'ask_follow', true], ['data-track', '']];
+  ['data-evidence-more', 'evidence_show_all', true], ['data-ask-ref', 'ask_ref', true], ['data-ask-follow', 'ask_follow', true], ['data-ask-send', 'ask_send_'], ['data-track', '']];
 function usageNameFor(el) {
   if (!el || !el.getAttribute) return '';
   for (var i = 0; i < USAGE_ATTRS.length; i++) {
@@ -5170,7 +5234,7 @@ document.addEventListener('visibilitychange', function() { if (document.visibili
 
 // Plain names for what the Help readout shows; anything else shows its key.
 var USAGE_LABELS = {
-  fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence',
+  fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence', ask_send_decision:'Ask: decision draft', ask_send_check:'Ask: to check', ask_send_take:'Ask: my take', ask_send_copy:'Ask: copy as text', 'ask_send_confirm-check':'Ask: check added',
   page_today:'Today', page_command:'Morning 5', page_evidence:'Evidence', page_decisions:'Decisions', page_research:'Research', page_timeline:'Timeline',
   page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_pse:'PSE', page_trends:'Trends',
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
@@ -8344,7 +8408,7 @@ function openDecisionFormManual() {
 function openDecisionFromInsight(input) {
   input = input || {};
   var title = String(input.title || 'Insight to review').trim().slice(0,160);
-  var source = ['briefing','weekly','evidence','manual'].indexOf(input.source) >= 0 ? input.source : 'manual';
+  var source = ['briefing','weekly','evidence','ask','manual'].indexOf(input.source) >= 0 ? input.source : 'manual';
   var detail = String(input.detail || '').trim().slice(0,2400);
   var btn = document.querySelector('.ntab[data-page="decisions"]');
   switchPage('decisions', btn);
@@ -11551,9 +11615,9 @@ function briefingCitation(st, dateLabel) {
   return '“' + String(st && st.headline || '').trim() + '”' + (tail ? ' — ' + tail : '') + '.' + (url ? ' ' + url : '');
 }
 
-function copyCardText(text, button) {
+function copyCardText(text, button, message) {
   function done() {
-    showToast('Citation copied', 'ok');
+    showToast(message || 'Citation copied', 'ok');
     var label = button.textContent; button.textContent = '✓ Copied';
     setTimeout(function() { button.textContent = label; }, 1500);
   }

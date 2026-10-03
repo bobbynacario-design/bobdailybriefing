@@ -172,7 +172,7 @@ test('search results for the personal sources open where they live',async()=>{
   assert.ok(html.includes("  if (item.source === 'Dossier') return openDossierResult(item.ref);"),'wired into the opener search uses');
 });
 // Ask Daybook (functions/ask-daybook.js), in the Search overlay.
-const ASK_FNS=['looksLikeFollowUp','askAnswerHtml','paintAskHistory','runAskDaybook','askError','showAskAnswer','newAskQuestion','openAskSource','saveAskAnswer','askCostText','paintAskCost'];
+const ASK_FNS=['looksLikeFollowUp','askAnswerHtml','paintAskHistory','runAskDaybook','askError','showAskAnswer','newAskQuestion','openAskSource','saveAskAnswer','askCostText','paintAskCost','askAnswerText','askDecisionSubject','handleAskSend'];
 function askEnvironment(extra={}){
   const env=environment(ASK_FNS,{esc:escHtml,_firebaseUid:'bob',aiWorkingHtml:text=>'<working>'+text,runIntelligenceSearch:()=>{},...extra});
   vm.runInContext(html.match(/var _askThread = [^\n]*;/)[0],env.context);
@@ -244,6 +244,40 @@ test('Ask Daybook: errors are plain, and a saved answer keeps its sources but no
   // Members never see it: the bar, the answer and the key hint are owner-only.
   ['<div class="ask-bar owner-only" id="ask-bar">','<div class="ask-out owner-only" id="ask-out" hidden','<span class="owner-only"> · a question + Enter asks</span>','<div class="help-card owner-only">\n      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg> Ask Daybook']
     .forEach(s=>assert.ok(html.includes(s),s));
+});
+// Send to… (October 2026): an answer goes to Evidence, a decision draft, To check, your take or the clipboard.
+test('Ask Daybook: Send to… takes an answer to a decision draft, To check, your take or the clipboard',()=>{
+  const calls=[];
+  const {context,element}=askEnvironment({closeIntelligenceSearch:()=>calls.push('close'),openDecisionFromInsight:input=>calls.push({decision:input}),
+    switchPage:id=>calls.push('page:'+id),showToast:(m,kind)=>calls.push('toast:'+kind),copyCardText:(text,button,message)=>calls.push({copy:text,message}),
+    manilaDateKey:()=>'2026-10-03',DailyBoostCore:{dateKey:()=>'2026-10-03'},
+    addDailyBoostCheck:check=>{calls.push({check});return {ok:true,message:'Added to To check for Sat 10 Oct.'};},noteDailyBoostInsight:title=>{calls.push({take:title});return true;}});
+  context.document.querySelector=()=>null;
+  const out=context.askAnswerHtml({question:'Why is SOXX on the radar?',answer:'Score 88 [S1].',sources:[{ref:'S1',source:'Radar',title:'SOXX',date:'2026-10-03'}]});
+  assert.ok(out.includes('<details class="ask-send" id="ask-send"><summary class="tool-chip">Send to…</summary>'),'one Send to… button');
+  ['onclick="saveAskAnswer()">Evidence<','data-ask-send="decision"','data-ask-send="check"','data-ask-send="take"','data-ask-send="copy"'].forEach(part=>assert.ok(out.includes(part),part));
+  vm.runInContext("_askAnswers.a1={question:'Why is SOXX on the radar?',answer:'The scan scores it 88 [S1].',sources:[{ref:'S1',source:'Radar',title:'SOXX',date:'2026-10-03'}],generatedAt:'2026-10-03T09:49:53Z'}; _askShown='a1';",context);
+  context.handleAskSend('decision');
+  const draft=calls.find(c=>c.decision).decision;
+  assert.equal(calls[0],'close','Search closes before the journal opens');
+  assert.equal(draft.title,'SOXX','an answer about one Radar name is a draft about that name');
+  assert.equal(draft.source,'ask'); assert.equal(draft.reviewDate,'2026-10-10'); assert.equal(draft.label,'Ask Daybook · 2026-10-03');
+  assert.equal(draft.detail,['Asked: Why is SOXX on the radar?','The scan scores it 88.','Sources:','S1 Radar · SOXX · 2026-10-03'].join('\n'),'no ref marks; the sources follow');
+  assert.equal(context.askDecisionSubject({question:'Which picks?',sources:[{source:'Radar',title:'SOXX'},{source:'Radar',title:'AMD'}]}),'Which picks?','several names: the question');
+  assert.equal(context.askDecisionSubject({question:'Why ETH?',sources:[{source:'Decisions',title:'ETH'},{source:'Briefing',title:'ETH ETFs'}]}),'Why ETH?','a mix of kinds: the question');
+  element('ask-check-date').focus=()=>{};
+  context.handleAskSend('check');
+  assert.equal(element('ask-send-check').hidden,false); assert.equal(element('ask-check-date').value,'2026-10-10','a week out by default'); assert.equal(element('ask-check-date').min,'2026-10-03');
+  context.handleAskSend('confirm-check');
+  assert.deepEqual({...calls.find(c=>c.check).check},{metric:'Ask again: Why is SOXX on the radar?',headline:'Why is SOXX on the radar?',source:'Ask Daybook · 2026-10-03',url:'',due:'2026-10-10'});
+  assert.equal(element('ask-send-status').textContent,'Added to To check for Sat 10 Oct.'); assert.equal(element('ask-send-check').hidden,true);
+  context.handleAskSend('take');
+  assert.ok(calls.includes('page:today')); assert.equal(calls.find(c=>c.take).take,'Why is SOXX on the radar?');
+  context.handleAskSend('copy');
+  const copied=calls.find(c=>c.copy);
+  assert.equal(copied.copy,['Q: Why is SOXX on the radar?','The scan scores it 88.','Sources:','S1 Radar · SOXX · 2026-10-03'].join('\n')); assert.equal(copied.message,'Answer copied');
+  // The journal can hold an Ask draft, and each destination is counted.
+  assert.ok(html.includes('<option value="ask">Ask Daybook</option>')); assert.ok(html.includes("['data-ask-send', 'ask_send_']"));
 });
 test('Ask Daybook: Enter asks a question, still opens a search result, and never asks for a member',()=>{
   const calls=[];
