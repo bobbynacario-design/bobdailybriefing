@@ -201,8 +201,11 @@ test("a Radar lookup returns the whole card, highest score first, and the prompt
   const prompt = Ask.buildAskPrompt({question: "What are today's Taker picks?", today: "t", accounts: [], web: false});
   assert.match(prompt, /A question about the Radar .* look up sources Radar; the term "radar" reads today's names, highest score first/);
   assert.ok(prompt.includes("A name is early only when its meta says early.")); assert.match(prompt, /The Radar holds today's scan only/); assert.match(prompt, /never a recommendation/);
-  assert.ok(prompt.includes("its catalyst and its \"Why it's moving\" / \"What would break it\" read are AI-written from news it found: \"the Radar's read says…\", never plain fact"), "the read is AI-written");
-  assert.ok(prompt.includes("open each with its score, status and pick (from meta). Pass on any caveat its record states"));
-  assert.match(prompt, /never as a forecast/); assert.match(prompt, /say once what they share/);
+  assert.ok(prompt.includes("Its \"Score reason\", score, status, early flag, levels and score-band record are computed from prices and volume"), "the score reason is computed");
+  assert.ok(prompt.includes("Its catalyst and its \"Why it's moving\" / \"What would break it\" read are AI-written from news it found: \"the Radar's read says…\", never plain fact"), "the read is AI-written");
+  assert.ok(prompt.includes("open with its score, status and pick (from meta). State as a caveat what its record shows against it"));
+  assert.ok(prompt.includes("under 50% beat their benchmark, or average excess between -0.25 and +0.25 points, the card's own noise line"), "the band caveat is concrete");
+  assert.match(prompt, /never as a forecast/);
+  assert.ok(prompt.includes("lead with what stands out across them") && prompt.includes("Never repeat the same status words for every name."), "a list leads with what stands out");
   assert.match(prompt, /never one this answer already covers/);
 });
