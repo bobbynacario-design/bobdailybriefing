@@ -1,0 +1,40 @@
+name: Radar catalyst model test
+
+# RESEARCH ONLY: a one-off side-by-side of the catalyst job on gpt-5.5 and
+# Claude. Runs on pushes to radar-research that touch the test; reads today's
+# radar doc, writes nothing to Firestore, keeps its artifact for one day.
+on:
+  push:
+    branches: [radar-research]
+    paths:
+      - radar/research-catalysts.js
+      - .github/workflows/radar-catalyst-test.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix radar ci
+      - run: npm --prefix radar install --no-save @anthropic-ai/sdk
+      - run: node radar/research-catalysts.js
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: radar-catalyst-test
+          path: radar/catalyst-test.json
+          retention-days: 1
+          if-no-files-found: ignore
