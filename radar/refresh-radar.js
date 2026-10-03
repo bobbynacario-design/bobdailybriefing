@@ -10,7 +10,7 @@
 //   npm install
 //   set APCA_API_KEY_ID=...        (or ALPACA_KEY_ID)
 //   set APCA_API_SECRET_KEY=...    (or ALPACA_SECRET_KEY)
-//   set OPENAI_API_KEY=...         (optional — enables V2 catalyst tagging)
+//   set ANTHROPIC_API_KEY=...      (optional — enables catalysts and focus reads)
 //   node refresh-radar.js
 //
 // A run is a no-op if today's radar-<PHT date> doc already exists (so the 08:30
@@ -34,7 +34,8 @@ import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
 import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
-import { extractUsage, recordUsage } from '../lib/llm-usage.js';
+import { tagCatalysts, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
+import { recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
 import { computeDrift, groupByUid } from '../lib/decision-drift.js';
@@ -88,12 +89,12 @@ var COLL = 'briefings-bob';
 var ALPACA_KEY = process.env.APCA_API_KEY_ID || process.env.ALPACA_KEY_ID || '';
 var ALPACA_SECRET = process.env.APCA_API_SECRET_KEY || process.env.ALPACA_SECRET_KEY || '';
 
-// V2 — catalyst tagging (display-only). Reuses the app's OpenAI integration
-// (same /v1/responses endpoint + web_search tool as the briefing function).
+// Catalysts and the focus reads (display-only), on Claude: see catalysts.js.
 // Optional: if no key is set, the run still completes and writes signals
 // without catalysts, so the radar never depends on the news layer.
-var OPENAI_KEY = process.env.OPENAI_API_KEY || '';
-var OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
+var ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
+var CATALYST_MODEL = process.env.RADAR_CATALYST_MODEL || CATALYST_DEFAULT_MODEL;
+var CATALYST_EFFORT = process.env.RADAR_CATALYST_EFFORT || 'medium';
 
 // ── helpers ──
 
@@ -266,96 +267,6 @@ async function fetchAll() {
   return barsByAsset;
 }
 
-// ── V2: catalyst tagging via OpenAI (display-only) ──
-// Pulls the text out of an OpenAI /v1/responses payload (mirrors the app's
-// briefing function, which uses the same endpoint).
-function extractText(json) {
-  if (typeof json.output_text === 'string' && json.output_text) return json.output_text;
-  var chunks = [];
-  (json.output || []).forEach(function (item) {
-    (item.content || []).forEach(function (c) {
-      if (c && typeof c.text === 'string') chunks.push(c.text);
-    });
-  });
-  return chunks.join('\n');
-}
-
-// Strip ```json fences and parse the first JSON object found.
-function parseLooseJson(raw) {
-  var s = String(raw).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  var start = s.indexOf('{');
-  var end = s.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('no JSON object in model output');
-  return JSON.parse(s.slice(start, end + 1));
-}
-
-// For each scored signal, ask OpenAI (with web_search) for the single most
-// relevant recent catalyst and an event type. Returns a map symbol -> {catalyst,
-// eventType}. Never throws: any failure logs and yields {} so the daily run
-// still writes the (catalyst-free) signals.
-async function fetchCatalysts(signals) {
-  if (!OPENAI_KEY) {
-    console.log('OPENAI_API_KEY not set — skipping catalyst tagging (signals written without catalysts).');
-    return { catalysts: {}, usage: null };
-  }
-  var list = signals.map(function (s) {
-    return s.symbol + ' (' + s.theme + ', ' + s.status + ', 20d vs ' + s.benchmark + ': ' +
-      (s.relStrength20d == null ? 'n/a' : s.relStrength20d) + ' pts)';
-  }).join('\n');
-
-  var EVENT_TYPES = 'earnings | guidance | product | macro | regulatory | analyst | partnership | legal | supply | none';
-  var prompt =
-    'You are tagging market catalysts for a personal daily market radar. For EACH ticker below, ' +
-    'search recent news (roughly the last 7 days) and identify the single most relevant catalyst or ' +
-    'news item currently driving it.\n\n' +
-    'Return STRICT JSON only — an object keyed by ticker symbol, each value an object with:\n' +
-    '  "catalyst": one factual plain sentence (<=140 chars) describing the news/driver. NO advice, ' +
-    'NO "buy"/"sell"/"should", no price targets. If nothing material is found, use "".\n' +
-    '  "eventType": one of [' + EVENT_TYPES + '].\n' +
-    '  "asOf": the news date as YYYY-MM-DD if known, else "recent".\n\n' +
-    'Tickers (crypto symbols are the coins themselves):\n' + list + '\n\n' +
-    'Output JSON only, no prose, no code fences.';
-
-  var body = {
-    model: OPENAI_MODEL,
-    input: [
-      { role: 'system', content: 'You produce factual, concise JSON. Return strict JSON only. Never give financial advice.' },
-      { role: 'user', content: prompt }
-    ],
-    tools: [{ type: 'web_search', search_context_size: 'low' }],
-    tool_choice: 'auto'
-  };
-
-  try {
-    console.log('Tagging catalysts via OpenAI (' + OPENAI_MODEL + ', web_search) for ' + signals.length + ' symbols...');
-    var res = await fetchRetry('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + OPENAI_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    }, 'OpenAI');
-    var text = await res.text();
-    if (!res.ok) {
-      console.log('  OpenAI error ' + res.status + ': ' + text.slice(0, 200) + ' — skipping catalysts.');
-      return { catalysts: {}, usage: null };
-    }
-    var json = JSON.parse(text);
-    var map = parseLooseJson(extractText(json));
-    var clean = {};
-    Object.keys(map).forEach(function (sym) {
-      var v = map[sym] || {};
-      clean[sym.toUpperCase()] = {
-        catalyst: typeof v.catalyst === 'string' ? v.catalyst.slice(0, 200) : '',
-        eventType: typeof v.eventType === 'string' ? v.eventType.toLowerCase() : 'none',
-        asOf: typeof v.asOf === 'string' ? v.asOf : 'recent'
-      };
-    });
-    return { catalysts: clean, usage: extractUsage(json) };
-  } catch (e) {
-    console.log('  Catalyst tagging failed (' + (e.message || e) + ') — skipping catalysts.');
-    return { catalysts: {}, usage: null };
-  }
-}
-
 // ── PH market snapshot (NOT scored — no free historical per-stock PSE feed) ──
 // Moved to radar/ph-snapshot.js so the after-close run (radar/refresh-ph.js) can
 // reuse it without re-running the whole US radar. buildPhSnapshot is imported.
@@ -448,7 +359,7 @@ async function main() {
 
   // Idempotence guard. The 08:30 catch-up trigger exists only to cover a 06:00
   // run that never fired or died on a cold network; when 06:00 succeeded there
-  // is no new data and no reason to pay for a second OpenAI catalyst call.
+  // is no new data and no reason to pay for a second catalyst call.
   if (process.env.RADAR_FORCE === '1' || process.argv.includes('--force')) {
     console.log('--force: re-running and overwriting radar-' + dateKey + '.');
   } else {
@@ -479,25 +390,29 @@ async function main() {
   STAGE.set('score');
   var result = scoreUniverse(barsByAsset, CONFIG);
 
-  // V2: tag each signal with a recent catalyst (display-only; score unchanged).
+  // Tag each signal with a sourced catalyst, and write the why / what-would-
+  // break-it read on the cards shown first (display-only; score unchanged).
   STAGE.set('catalysts');
-  var catResult = await fetchCatalysts(result.signals);
-  var catalysts = catResult.catalysts;
-  var tagged = 0;
-  result.signals.forEach(function (s) {
-    var c = catalysts[s.symbol];
-    if (c && c.catalyst) {
-      s.catalyst = c.catalyst;
-      s.eventType = c.eventType || 'none';
-      s.catalystAsOf = c.asOf || 'recent';
-      tagged++;
-    } else {
-      s.catalyst = '';
-      s.eventType = 'none';
-      s.catalystAsOf = '';
-    }
+  if (!ANTHROPIC_KEY) {
+    console.log('ANTHROPIC_API_KEY not set — skipping catalyst tagging (signals written without catalysts).');
+  } else {
+    console.log('Tagging catalysts via Claude (' + CATALYST_MODEL + ', effort ' + CATALYST_EFFORT +
+      ', web search) for ' + result.signals.length + ' symbols...');
+  }
+  var catResult = await tagCatalysts({
+    signals: result.signals, apiKey: ANTHROPIC_KEY, model: CATALYST_MODEL,
+    effort: CATALYST_EFFORT, today: dateKey
   });
-  console.log('Catalysts tagged: ' + tagged + '/' + result.signals.length);
+  var cs = catResult.stats || { tagged: 0, unsourced: 0, reads: 0, readsUnsourced: 0 };
+  var cu = catResult.usage || {};
+  if (catResult.error && ANTHROPIC_KEY) console.log('  Catalyst tagging failed (' + catResult.error + ') — signals written without catalysts.');
+  console.log('Catalysts tagged: ' + cs.tagged + '/' + result.signals.length +
+    (cs.unsourced ? ' (' + cs.unsourced + ' dropped: source not in its own searches)' : '') +
+    ' · reads ' + cs.reads + '/' + catResult.focus.length +
+    (cs.readsUnsourced ? ' (' + cs.readsUnsourced + ' dropped unsourced)' : '') +
+    (catResult.usage ? ' · ' + cu.searches + ' searches, ' + cu.calls + ' turn(s), ' + catResult.seconds + 's' : '') +
+    (catResult.served && catResult.served.some(function (m) { return m !== CATALYST_MODEL; })
+      ? ' · served by ' + catResult.served.join(',') : ''));
 
   var doc = {
     generatedAt: new Date().toISOString(),
@@ -507,6 +422,14 @@ async function main() {
     // without this the app can only express a decision's result as a raw
     // return, never as excess over the benchmark that signal was judged against.
     benchmarks: result.benchmarks,
+    // How the catalyst step went, so the app can say why a day has none
+    // (no key, a failed call) instead of showing a radar that looks quiet.
+    catalystRun: {
+      model: catResult.model, effort: catResult.effort, focus: catResult.focus,
+      tagged: cs.tagged, unsourced: cs.unsourced, reads: cs.reads, readsUnsourced: cs.readsUnsourced,
+      searches: cu.searches || 0, seconds: catResult.seconds,
+      error: ANTHROPIC_KEY ? catResult.error : 'not configured'
+    },
     signals: result.signals
   };
 
@@ -646,8 +569,15 @@ async function main() {
     status: 'ok', asOf: result.asOf, durationMs: Date.now() - RUN_STARTED
   });
 
-  // Record the catalyst call's token usage to the shared LLM cost ledger (no-throw).
-  if (catResult.usage) await recordUsage(db, 'radar-catalyst', OPENAI_MODEL, catResult.usage, dateKey, 1);
+  // Record the catalyst call's cost to the shared LLM ledger (no-throw): tokens
+  // under the model, and the web searches (billed per search, not per token)
+  // as their own line so the Help tab can price them.
+  if (catResult.usage) {
+    await recordUsage(db, 'radar-catalyst', CATALYST_MODEL, usageForLedger(catResult.usage), dateKey, catResult.usage.calls);
+    if (catResult.usage.searches) {
+      await recordUsage(db, 'radar-search', 'web-search', null, dateKey, catResult.usage.searches, { perDay: false });
+    }
+  }
 
   // Decision drift digest (non-fatal — never blocks or invalidates the radar).
   STAGE.set('drift');

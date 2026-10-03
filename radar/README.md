@@ -38,7 +38,7 @@ Alpaca (equity daily OHLCV, IEX feed) ---+
                                          +--> barsByAsset --> scoreUniverse --> signals
 CoinGecko (crypto daily close+volume) ---+                                        |
                                                                                   |
-OpenAI /v1/responses + web_search --> catalyst per signal ------------------------+  (display-only)
+Claude + web search (catalysts.js) --> sourced catalyst per signal, focus reads --+  (display-only)
                                                                                   |
 barsByAsset --> buildJournal (re-score last 60d, track outcomes) -----------------+
                                                                                   |
@@ -116,16 +116,29 @@ sits above the cards.
 
 ### V2 — catalyst / news tagging (display-only)
 
-In the same daily run, after scoring, the script asks **OpenAI** (`/v1/responses`
-with the `web_search` tool, model `gpt-5.5`) for the single most relevant recent
-catalyst per symbol and an event type, then bakes `catalyst` / `eventType` /
-`catalystAsOf` onto each signal. **Scoring is unchanged** — catalysts are context,
-not a score input. If the OpenAI key is missing or the call fails, the run still
-writes signals without catalysts.
+In the same daily run, after scoring, `catalysts.js` asks **Claude Opus 5.5**
+(effort medium, server-side web search, up to 25 searches) for the single most
+relevant recent catalyst per symbol, an event type, its date and the article it
+came from, then bakes `catalyst` / `eventType` / `catalystAsOf` /
+`catalystUrl` / `catalystSource` onto each signal. **Scoring is unchanged** —
+catalysts are context, not a score input. If the key is missing or the call
+fails, the run still writes signals without catalysts, and `catalystRun` on the
+doc says why. The step gives up after 8 minutes so it can never cost the day's
+radar.
+
+A catalyst is kept only when its URL appeared in that run's own search results;
+anything else is dropped as possibly invented. The same call writes a short
+`read` (why it is moving, what would break it, 1–3 sources) for the six names
+the Radar shows first, Taker Nuggets and Wildcard Upside, picked by the same
+rules as `index.html`. Switched from OpenAI `gpt-5.5` on 2026-10-03: that call
+had timed out on every run since 2026-08-12, and a side-by-side test on the live
+radar gave Opus 5.5 27/30 sourced catalysts (~$0.62 a run, tokens + searches)
+against 16/30 for Sonnet 5.5. The tokens and the searches (1¢ each) go to the
+cost ledger as `radar-catalyst` and `radar-search`.
 
 Each card gains a colour-coded event chip (earnings/guidance = blue,
 analyst = purple, regulatory = amber, macro = teal, product/partnership = green)
-plus the one-line catalyst and its date.
+plus the one-line catalyst, its date and a link to the source.
 
 ### V3 — calibration harness (benchmark-excess)
 
@@ -360,7 +373,8 @@ existing `radar-<date>` doc:
 ## How to run
 
 All secrets live in `radar/.env` (gitignored): Alpaca keys + optional
-`OPENAI_API_KEY`. The Firebase admin key is `radar/serviceAccountKey.json`
+`ANTHROPIC_API_KEY` (catalysts; `RADAR_CATALYST_MODEL` / `RADAR_CATALYST_EFFORT`
+override the model and effort). The Firebase admin key is `radar/serviceAccountKey.json`
 (gitignored).
 
 ```
@@ -398,7 +412,7 @@ plan, and `WakeToRun` is off — an unplugged, sleeping box will still miss 06:0
 and rely on the catch-up.
 
 **Data providers:** Alpaca (equities/ETFs, free IEX daily bars), CoinGecko (free,
-no key, crypto), OpenAI (catalysts; reuses the app's existing integration).
+no key, crypto), Claude (catalysts and focus reads, via `@anthropic-ai/sdk`).
 
 **PH market-health (🇵🇭 PSE tab, `radar-ph`):** NOT scored — there is no free
 per-stock PSE feed. `radar/ph-snapshot.js` builds a PSEi health read from free

@@ -144,7 +144,8 @@ jobs:
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Catalysts and focus reads run on Claude (radar/catalysts.js).
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # Empty on scheduled runs; '1' only for a manual run with force ticked.
           RADAR_FORCE: ${{ github.event.inputs.force == 'true' && '1' || '' }}
 

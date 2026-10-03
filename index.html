@@ -1461,6 +1461,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .radar-event{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;border:1px solid currentColor}
 .radar-catalyst-txt{flex:1;min-width:55%}
 .radar-catalyst-asof{color:var(--txt3);font-family:var(--mono);font-size:10px;white-space:nowrap}
+.radar-catalyst-src{color:var(--txt3);font-family:var(--mono);font-size:10px;white-space:nowrap;text-decoration:underline;text-underline-offset:2px}
+.radar-catalyst-src:hover{color:var(--gold)}
 .radar-invalidation{color:var(--txt3);font-style:italic}
 .radar-taker{background:var(--bg2);border:1px solid rgba(201,168,76,.18);border-left:3px solid var(--gold);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem}
 .radar-taker-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.8rem}
@@ -1759,6 +1761,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .llm-tbl th{color:var(--txt3);font-weight:400;font-size:10px;letter-spacing:.05em;text-transform:uppercase}
 .llm-tbl td.num,.llm-tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
 .llm-tbl tr.llm-tot td{border-top:1px solid var(--rim2);border-bottom:none;color:var(--txt);font-weight:600}
+#llm-usage-out > .src{display:block;white-space:normal;line-height:1.6}
 
 /* ── PSE (PH snapshot) ── */
 .pse-caveat{font-size:12px;line-height:1.6;color:var(--txt2);background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:10px;padding:.7rem .9rem;margin-bottom:1.1rem}
@@ -3557,7 +3560,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <div class="llm-grid">
         <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
         <div class="llm-notes">
-          <p>Every OpenAI call across the app (the daily <b>briefing</b>, <b>Ask Daybook</b> questions, <b>Go deeper</b> dossiers, the <b>weekly read</b>, <b>meeting briefs</b>, on-demand <b>deep-research</b> reports, the <b>radar</b> catalyst tagger, and the <b>Markets</b> persona panel) records its token usage to a shared ledger. The table ranks the spend by feature, in USD, using OpenAI's published rates — raw API cost, no markup.</p>
+          <p>Every AI call across the app (the daily <b>briefing</b>, <b>Ask Daybook</b> questions, <b>Go deeper</b> dossiers, the <b>weekly read</b>, <b>meeting briefs</b>, on-demand <b>deep-research</b> reports and the <b>Markets</b> persona panel on OpenAI; the <b>radar</b> catalysts and reads on Claude) records its token usage to a shared ledger. Claude's web searches are billed per search, so they get their own line. The table ranks the spend by feature, in USD, using each provider's published rates — raw API cost, no markup.</p>
           <p class="help-key">The ledger stores tokens only; cost is computed from a single rate table, so the figure is auditable (see the "rates as of" line). Deep-research models are shown <i>unpriced</i> until their rates are confirmed — the tracker never guesses.</p>
         </div>
       </div>
@@ -3575,7 +3578,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
           </ul>
         </li>
         <li><b>The "why" sentence</b> — why it's moving, in words.</li>
-        <li><b><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event).</li>
+        <li><b><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event), with a link to the article. Claude searches the web each morning; a catalyst whose link didn't come from those searches is dropped, never shown.</li>
         <li><b>Plan line</b> — <span class="src">Upside · Entry · Stop · Target · R:R</span>. <b>Upside</b> is target distance from entry, useful for comparing reward size. The <b>stop is the useful risk number</b>: the level where the idea is wrong.</li>
       </ul>
       <p><b>Taker Nuggets</b> is the more opportunistic read — the names to press <i>now</i>. It pulls the best actionable signals from the current filter and names the stance. Confirmed structure earns priority, but a forming name already <b>leading its benchmark</b> can outrank a merely-decent confirmed one — that's edge showing up early.</p>
@@ -6290,7 +6293,18 @@ function radarEventColor(type) {
   };
   return map[type] || 'var(--txt3)';
 }
-// Catalyst row (V2) — only when a catalyst exists. Display-only context.
+// The site a source link points at, for a compact label ("reuters.com").
+function radarSourceHost(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return 'source'; }
+}
+function radarSourceLink(url, title, cls) {
+  if (!/^https?:\/\//i.test(String(url || ''))) return '';
+  return '<a class="' + cls + '" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"' +
+    (title ? ' title="' + esc(title) + '"' : '') + '>' + esc(radarSourceHost(url)) + ' ↗</a>';
+}
+// Catalyst row — only when a catalyst exists. Display-only context. Since the
+// move to Claude (October 2026) each one carries the article it came from;
+// older docs have no catalystUrl and render without the link.
 function radarCatalyst(s) {
   if (!s || !s.catalyst) return '';
   var type = (s.eventType || 'news');
@@ -6298,8 +6312,21 @@ function radarCatalyst(s) {
     ? '<span class="radar-catalyst-asof">· ' + esc(s.catalystAsOf) + '</span>' : '';
   return '<div class="radar-catalyst">' +
       '<span class="radar-event" style="color:' + radarEventColor(type) + '">' + uiIcon('news') + ' ' + esc(type) + '</span>' +
-      '<span class="radar-catalyst-txt">' + esc(s.catalyst) + ' ' + asOf + '</span>' +
+      '<span class="radar-catalyst-txt">' + esc(s.catalyst) + ' ' + asOf + ' ' +
+        radarSourceLink(s.catalystUrl, s.catalystSource, 'radar-catalyst-src') + '</span>' +
     '</div>';
+}
+// Says why a day has no catalysts, so a failed tagging run reads as that and
+// not as a quiet news day. Silent when tagging worked, or on docs from before
+// the run summary existed.
+function radarCatalystNote(run) {
+  if (!run) return '';
+  var why = '';
+  if (run.error === 'not configured') why = 'catalyst tagging is not set up for this run (no Claude key).';
+  else if (run.error) why = 'the tagging call failed (' + run.error + '). Scores and levels are unaffected.';
+  else if (!run.tagged) why = 'no name had a sourced catalyst in the last week.';
+  if (!why) return '';
+  return '<div class="radar-calib-warn jsel-mut"><b>No catalysts today:</b> ' + esc(why) + '</div>';
 }
 // 52-week range bar (reuses the PSE range styles). Display-only context: where
 // today's close sits in its 1-year range, plus how far below the 52wk high.
@@ -6732,7 +6759,7 @@ function renderRadar() {
       regimeEl.innerHTML = '<div class="radar-regime-line">Regime: ' +
         '<span class="rel-badge ' + rg.cls + '">' + rg.txt + '</span>' +
         '<span class="radar-asof">as of ' + esc(data.asOf || '—') + '</span></div>' +
-        radarCalibrationWarning();
+        radarCalibrationWarning() + radarCatalystNote(data.catalystRun);
     }
     if (sub) sub.textContent = data.signals.length + ' opportunities ranked by score';
     radarSignals = data.signals;
@@ -10510,17 +10537,22 @@ function renderSports() {
 
 // ── LLM USAGE & COST (Help tab report) ──
 // Single source of truth for pricing (the ledger stores tokens only). USD per
-// 1,000 tokens, from OpenAI's published rates. A null entry = model known but
+// 1,000 tokens, from each provider's published rates. A null entry = model known but
 // intentionally unpriced (rates unconfirmed) — never guess; show as "unpriced".
+// A perCall entry is a fee per use with no tokens: Claude's web search, $10 per
+// 1,000 searches, recorded with calls = searches.
 var LLM_PRICING_USD_PER_1K = {
   'gpt-5.5': { input: 0.005, output: 0.030, cacheRead: 0.0005 },
+  'claude-opus-5-5': { input: 0.004, output: 0.020, cacheRead: 0.0002, cacheWrite: 0.005 },
+  'web-search': { perCall: 0.01 },
   // Deep-research rates not confirmed for this lane -> unpriced on purpose.
   'o4-mini-deep-research': null,
   'o3-deep-research': null
 };
-var LLM_RATES_AS_OF = '2026-06-23';
-// OpenAI counts cached tokens as a subset of input tokens (billed cheaper), so
-// charge (input - cached) at the input rate + cached at the cache-read rate.
+var LLM_RATES_AS_OF = 'gpt-5.5 2026-06-23, Claude 2026-10-03';
+// Cached tokens (and Claude's cache writes) are subsets of input tokens, so
+// charge the rest of the input at the input rate, cached at the cache-read
+// rate, and cache writes at their own (higher) rate.
 // A model served from this machine has no API cost, so it is priced at a true
 // zero rather than left "unpriced" — which would wrongly imply the rate is merely
 // unknown and drop it from the total. The refresh scripts prefix any local
@@ -10531,9 +10563,11 @@ function llmPriceUsd(model, e) {
   if (String(model || '').indexOf(LLM_LOCAL_PREFIX) === 0) return 0;
   var r = LLM_PRICING_USD_PER_1K[model];
   if (!r) return null; // unknown or intentionally-unpriced
-  var cached = e.cachedTokens || 0;
-  var uncached = Math.max(0, (e.inputTokens || 0) - cached);
-  return (uncached * (r.input || 0) + cached * (r.cacheRead || 0) + (e.outputTokens || 0) * (r.output || 0)) / 1000;
+  if (r.perCall != null) return (e.calls || 0) * r.perCall;
+  var cached = e.cachedTokens || 0, written = e.cacheWriteTokens || 0;
+  var uncached = Math.max(0, (e.inputTokens || 0) - cached - written);
+  return (uncached * (r.input || 0) + cached * (r.cacheRead || 0) +
+    written * (r.cacheWrite != null ? r.cacheWrite : (r.input || 0)) + (e.outputTokens || 0) * (r.output || 0)) / 1000;
 }
 function llmUsd(v) {
   if (v == null) return '—';
@@ -10554,16 +10588,19 @@ function renderLlmUsage() {
     var rows = Object.keys(d.entries).map(function (k) {
       var e = d.entries[k];
       var cost = llmPriceUsd(e.model, e);
+      var r = LLM_PRICING_USD_PER_1K[e.model];
       return { feature: e.feature, model: e.model, calls: e.calls || 0,
         inT: e.inputTokens || 0, outT: e.outputTokens || 0, cached: e.cachedTokens || 0,
-        cost: cost, firstSeen: e.firstSeen };
+        perUse: !!(r && r.perCall != null), cost: cost, firstSeen: e.firstSeen };
     });
     // Rank by est. cost desc; unpriced (null) sink to the bottom.
     rows.sort(function (a, b) { return (b.cost == null ? -1 : b.cost) - (a.cost == null ? -1 : a.cost); });
 
     var totCalls = 0, totIn = 0, totOut = 0, totCost = 0, anyUnpriced = false;
     rows.forEach(function (r) {
-      totCalls += r.calls; totIn += r.inT; totOut += r.outT;
+      // A per-use fee's "calls" are searches, not API calls.
+      if (!r.perUse) totCalls += r.calls;
+      totIn += r.inT; totOut += r.outT;
       if (r.cost == null) anyUnpriced = true; else totCost += r.cost;
     });
     var since = rows.reduce(function (m, r) { return (!m || (r.firstSeen && r.firstSeen < m)) ? r.firstSeen : m; }, null);
@@ -10573,9 +10610,9 @@ function renderLlmUsage() {
       '<th class="num">Output</th><th class="num">Est. cost</th></tr></thead><tbody>';
     rows.forEach(function (r) {
       html += '<tr><td>' + esc(r.feature) + '</td><td>' + esc(r.model) + '</td>' +
-        '<td class="num">' + llmInt(r.calls) + '</td>' +
-        '<td class="num">' + llmInt(r.inT) + (r.cached ? ' <span class="src">(' + llmInt(r.cached) + ' cached)</span>' : '') + '</td>' +
-        '<td class="num">' + llmInt(r.outT) + '</td>' +
+        '<td class="num">' + llmInt(r.calls) + (r.perUse ? ' searches' : '') + '</td>' +
+        '<td class="num">' + (r.perUse ? '—' : llmInt(r.inT) + (r.cached ? ' <span class="src">(' + llmInt(r.cached) + ' cached)</span>' : '')) + '</td>' +
+        '<td class="num">' + (r.perUse ? '—' : llmInt(r.outT)) + '</td>' +
         '<td class="num">' + (r.cost == null ? '<span class="src">unpriced</span>' : llmUsd(r.cost)) + '</td></tr>';
     });
     html += '<tr class="llm-tot"><td>Total</td><td></td><td class="num">' + llmInt(totCalls) + '</td>' +
@@ -10595,7 +10632,8 @@ function renderLlmUsage() {
     }
     html += '<div class="src" style="margin-top:.35rem">' +
       (since ? 'Since ' + esc(String(since).slice(0, 10)) + ' · ' : '') +
-      'rates as of ' + LLM_RATES_AS_OF + ' (gpt-5.5 $5/$30 per 1M in/out, $0.50 cached)' +
+      'rates as of ' + LLM_RATES_AS_OF + ' (gpt-5.5 $5/$30 per 1M in/out, $0.50 cached; ' +
+      'Claude Opus 5.5 $4/$20, $0.20 cached, $5 cache writes; web search 1¢ each)' +
       (anyUnpriced ? ' · deep-research shown unpriced (rates unconfirmed — never guessed)' : '') +
       (rows.some(function (r) { return String(r.model || '').indexOf(LLM_LOCAL_PREFIX) === 0; })
         ? ' · local/* models run on your own machine and cost $0 in API terms (electricity is not modelled here)' : '') +
