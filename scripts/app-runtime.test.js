@@ -832,6 +832,43 @@ test('a card saved to Evidence points at the saved briefing, or the key autoSave
   context._briefingHistory=[{key:'stored-key',data:{date:'Friday, September 25, 2026'}}];
   assert.equal(context.currentBriefingKey(),'stored-key');
 });
+// Wildcard Upside (October 2026): early forming names only, ranked by score.
+const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards'];
+const wildEnv=(signals,taker={})=>environment(WILD,{esc:v=>String(v ?? ''),radarSignals:signals,radarTakerSymbols:taker,radarFilter:'All',radarStatusFilter:'All'});
+const sig=(symbol,o)=>Object.assign({symbol,theme:'T',status:'forming',early:false,score:60,entry:100,stop:96,target:108,accumulation:1.2,relStrength20d:2},o);
+test('Wildcard picks only early forming names, by score, never a Taker name', () => {
+  const list=[
+    sig('EARLY_HI',{early:true,score:70,accumulation:2.1}),
+    sig('EARLY_LO',{early:true,score:55,accumulation:1.7}),
+    sig('PLAIN',{score:90}),                                      // forming but not early: excluded however high it scores
+    sig('CONF',{status:'confirmed',early:false,score:95}),        // confirmed: Taker territory
+    sig('TAKEN',{early:true,score:99,accumulation:3})             // early, but Taker already has it
+  ];
+  const {context,element}=wildEnv(list,{TAKEN:true});
+  context.renderRadarWildcards(list);
+  const out=element('radar-wildcards').innerHTML;
+  assert.match(out,/EARLY_HI[\s\S]*EARLY_LO/,'both early names, higher score first');
+  ['PLAIN','CONF','TAKEN'].forEach(s=>assert.ok(!out.includes(s),s+' must not appear'));
+  assert.match(out,/up-day volume 2\.1× down-day volume over 20 sessions/);
+  assert.equal(context.radarWildcardRank(sig('X',{score:61})),61,'the rank is the score itself');
+  assert.equal(context.radarWildcardRank(sig('X',{target:null})),-999,'no target, no rank');
+});
+test('Wildcard says when the radar doc predates the early flag, instead of showing an empty zone', () => {
+  const old=[{symbol:'OLD',status:'forming',score:70,entry:100,stop:96,target:108}];
+  const {context,element}=wildEnv(old);
+  context.renderRadarWildcards(old);
+  assert.match(element('radar-wildcards').innerHTML,/Early names appear from the next radar run/);
+  const none=[sig('PLAIN',{})];
+  const fresh=wildEnv(none);
+  fresh.context.renderRadarWildcards(none);
+  assert.match(fresh.element('radar-wildcards').innerHTML,/No forming names with heavy up-day volume/);
+});
+test('an early name carries an early chip with its up-day volume', () => {
+  const {context}=environment(['radarContext'],{uiIcon:()=>''});
+  assert.match(context.radarContext({early:true,accumulation:1.84}),/early · up-day vol 1\.8×/);
+  assert.equal(context.radarContext({early:false}),'');
+});
+
 test('the verification line warns when the briefing was built on an earlier morning\'s news', () => {
   const {context,element}=environment(['renderGroundingLine']);
   const g={mode:'grounded',snapshot:'news-2026-10-01',snapshotDate:'2026-10-01',grounded:4,ungrounded:0,feedsOk:14,feedsTotal:15};

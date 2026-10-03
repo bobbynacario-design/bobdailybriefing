@@ -3586,13 +3586,14 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li><b>Regime rationale</b> — in risk-off tape, the box leans harder on visible relative strength and confirmed structure; forming names become stalks rather than chases.</li>
         <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
       </ul>
-      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box — early, deliberately non-consensus names. It never repeats a name already in Taker Nuggets, and it hunts the <b>forming</b> zone where relative strength and volume are turning up <i>before</i> the &ldquo;confirmed&rdquo; screen — the one everyone else runs — lights up:</p>
+      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box. It never repeats a name already in Taker Nuggets, and it picks only from <b>early</b> names: still <b>forming</b>, but with volume on up days already at least 1.6× volume on down days over the last 20 sessions. Those names carry an <span class="help-pill" style="color:var(--green)">early</span> chip on their card.</p>
       <ul>
-        <li><b>Leadership-first</b> — ranked by emerging relative strength, volume thrust and live catalysts, <i>not</i> raw target distance (that's only a capped tiebreak), so it tilts away from already-obvious top-of-screen names.</li>
-        <li><b>Adaptive asymmetry bar</b> (<span class="src">bar ≥X%</span>) — the minimum upside to qualify scales with the tape: low in a compressed risk-off field, higher when risk-on widens target distances. A name has to be unusually asymmetric <i>for today</i>.</li>
-        <li><b>Top upside</b> — one slot is always reserved for the single biggest-upside qualifier, so a standout fat-tail is never crowded out by names that merely lead harder. The other two fill by leadership rank.</li>
+        <li><b>Why that zone</b> — tested on about three years of history, early names earned most of what confirmed names did, and nearly half became confirmed within a week. Every other forming name earned about nothing.</li>
+        <li><b>Ranked by score</b> within the zone. The old ranking rewarded distance to target (mostly a measure of how jumpy a name is), names scoring under 75, and names <i>not</i> stretched above their average. All three pointed the wrong way when tested.</li>
+        <li><b>Adaptive upside bar</b> (<span class="src">bar ≥X%</span>) — the minimum upside to qualify scales with the tape: low in a compressed risk-off field, higher when risk-on widens target distances.</li>
+        <li><b>Top upside</b> — one slot is reserved for the biggest-upside early name, so a standout is never crowded out. The other two fill by score.</li>
       </ul>
-      <p>Higher variance and non-consensus by design — treat these as early watchlist ideas, not clean confirmations.</p>
+      <p>Earlier than Taker Nuggets and less proven: Taker&rsquo;s picks have earned more on the same history. Treat these as early watchlist ideas, not clean confirmations. The Journal keeps checking whether early names still beat other forming names.</p>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
         <li><b>Asset type</b> — <span class="help-pill">All</span> / <span class="help-pill">Stocks</span> / <span class="help-pill">Crypto</span> / <span class="help-pill">Commodities</span>. Each pill shows how many names sit in it. <i>Commodities</i> = metal/energy/broad-commodity ETFs (GLD, USO, GDX…); energy <i>stocks</i> like XOM stay under Stocks.</li>
@@ -6315,10 +6316,13 @@ function radar52(s) {
       '<span>' + radarLevel(s.high52) + '</span></div>' +
   '</div>';
 }
-// Context chips: market beta (vs SPY, 60d) and a "near 52w high" breakout flag.
-// Pure context — neither feeds the score; they sit alongside the structural plan.
+// Context chips: market beta (vs SPY, 60d), a "near 52w high" breakout flag and
+// the early-zone flag (forming, with up-day volume well ahead of down-day).
+// None feeds the score; they sit alongside the structural plan.
 function radarContext(s) {
   var bits = [];
+  if (s.early) bits.push('<span class="ph-chip radar-chip-brk" title="Forming, with up-day volume well ahead of down-day volume over 20 sessions">' +
+    uiIcon('bolt') + ' early' + (s.accumulation != null ? ' · up-day vol ' + s.accumulation.toFixed(1) + '×' : '') + '</span>');
   if (s.beta != null) bits.push('<span class="ph-chip">β <b>' + s.beta.toFixed(2) + '</b></span>');
   if (s.nearBreakout) bits.push('<span class="ph-chip radar-chip-brk">' + uiIcon('bolt') + ' near 52w high</span>');
   if (!bits.length) return '';
@@ -6556,43 +6560,23 @@ function radarTakerCard(s) {
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
 }
-// Wildcard rank: hunt the edge BEFORE the crowd's "confirmed" screen lights up.
-// Note rr is fixed ~2.0 by construction, so raw upside% ≈ stop distance — it
-// rewards volatility, not edge. So we lead with the early-leadership signals
-// the score under-weights: forming structure, emerging relative strength,
-// volume thrust, and a live catalyst. Upside is kept as a capped tiebreak so
-// genuine asymmetry still counts but distance alone can't win.
+// Wildcard (reworked October 2026): forming names in the EARLY zone, where up-day
+// volume already runs well ahead of down-day volume. Across ~694 scored dates
+// those earned most of what confirmed names did, while every other forming
+// name earned about nothing (radar/config.js EARLY_ACCUMULATION_MIN). Within
+// the zone the rank is the score itself. The old rank barely sorted its pool,
+// and three of its terms pointed the wrong way when tested: target distance
+// (mostly volatility), a bonus for scoring under 75, and a penalty for names
+// stretched above their average.
 function radarWildcardRank(s) {
-  var upside = radarUpsidePct(s);
-  if (upside === null) return -999;
-  // Forming is the edge zone: structure building before it's obvious. Confirmed
-  // names are already on everyone's screen, so they get little here.
-  var earlyBoost = s.status === 'forming' ? 18 : (s.status === 'confirmed' ? 4 : -60);
-  // Emerging leadership: outrunning its own benchmark over 20d. Laggards punished.
-  var rs = s.relStrength20d;
-  var leadBoost = rs == null ? 0 : (rs >= 0 ? Math.min(rs, 14) : rs * 1.5);
-  // Volume thrust = accumulation showing up before the breakout confirms.
-  var vol = s.volRatio;
-  var volThrust = vol == null ? 0 : (vol >= 1.2 ? 10 : (vol >= 1.0 ? 4 : 0));
-  var catalystBoost = s.catalyst ? 9 : 0;
-  // Pressing a 52-week high is the major level breaking BEFORE the crowd's
-  // confirmed screen lights up — exactly the early edge a wildcard wants.
-  var breakoutBoost = s.nearBreakout ? 12 : 0;
-  // Asymmetry counts, but capped so a distant target can't dominate the rank.
-  var asym = Math.min(upside, 30) * 0.7;
-  // Tilt toward names not already top-of-screen (keeps Wildcard distinct from Taker).
-  var notObvious = (s.score || 0) < 75 ? 6 : 0;
-  // Broken/over-extended risk box is a real penalty even for a wildcard.
-  var riskPenalty = s.riskQuality != null && s.riskQuality < 35 ? 14 : 0;
-  return asym + earlyBoost + leadBoost + volThrust + catalystBoost + breakoutBoost + notObvious + (s.score || 0) * 0.2 - riskPenalty;
+  return radarUpsidePct(s) === null ? -999 : (s.score || 0);
 }
 function radarWildcardWhy(s) {
-  var bits = [];
-  bits.push(s.status === 'forming' ? 'forming before the crowd confirms it' : 'still alive, not yet obvious');
+  var bits = ['forming, not yet confirmed'];
+  if (s.accumulation != null) bits.push('up-day volume ' + s.accumulation.toFixed(1) + '× down-day volume over 20 sessions');
   var rs = s.relStrength20d;
   if (rs != null && rs > 0) bits.push('leading its benchmark by +' + rs.toFixed(1) + ' pts (20d)');
-  else if (rs != null && rs <= 0) bits.push('still trailing its benchmark — early/contrarian');
-  if (s.volRatio != null && s.volRatio >= 1.2) bits.push('volume running ' + s.volRatio.toFixed(2) + '× norm');
+  else if (rs != null && rs <= 0) bits.push('still trailing its benchmark');
   if (s.nearBreakout) bits.push('pressing its 52-week high' + (s.pctFromHigh52 != null ? ' (' + Math.abs(s.pctFromHigh52).toFixed(1) + '% away)' : ''));
   bits.push(radarUpsideLabel(s).toLowerCase() + ' to target');
   if (s.catalyst) bits.push('live catalyst');
@@ -6663,17 +6647,20 @@ function renderRadarWildcards(list) {
   var el = document.getElementById('radar-wildcards');
   if (!el) return;
   var upsideFloor = radarWildcardFloor(list);
+  // A radar doc written before the early flag existed has no `early` key at all;
+  // say so rather than report an empty early zone.
+  if (!(radarSignals || list || []).some(function (s) { return 'early' in s; })) {
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">Early names appear from the next radar run.</div></div></div></div>';
+    return;
+  }
   var eligible = (list || []).filter(function (s) {
     var upside = radarUpsidePct(s);
-    // The early/non-obvious zone: anything the Taker box hasn't already claimed,
-    // that's still alive and not already a squeaky-clean top-of-screen confirmed name.
-    var notObvious = s.status === 'forming' || (s.score || 0) < 74 || (s.riskQuality != null && s.riskQuality < 55);
-    return s.status !== 'invalidated' &&
+    // The early zone, minus anything the Taker box has already claimed.
+    return s.status === 'forming' && s.early === true &&
       !radarTakerSymbols[s.symbol] &&
       upside !== null &&
       upside >= upsideFloor &&
       (s.score || 0) >= 42 &&
-      notObvious &&
       radarWildcardRank(s) > 0;
   });
   var ranked = eligible.slice().sort(function (a, b) {
@@ -6695,14 +6682,14 @@ function renderRadarWildcards(list) {
     return radarWildcardRank(b) - radarWildcardRank(a);
   });
   if (!base.length) {
-    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No early-edge names outside the Taker list clearing today&rsquo;s asymmetry bar (&ge;' + upsideFloor.toFixed(1) + '% upside). Nothing is setting up ahead of the crowd in this filter.</div></div></div></div>';
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No forming names with heavy up-day volume outside the Taker list clear today&rsquo;s upside bar (&ge;' + upsideFloor.toFixed(1) + '%). Nothing is setting up early in this filter.</div></div></div></div>';
     return;
   }
   var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
     .filter(Boolean).join(' / ');
   el.innerHTML = '<div class="radar-taker radar-wildcard">' +
     '<div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div>' +
-    '<div class="radar-taker-sub">Early edge — names building leadership and volume before the &ldquo;confirmed&rdquo; screen lights up. Higher variance, deliberately non-consensus.</div></div>' +
+    '<div class="radar-taker-sub">Early edge — forming names where up-day volume already outweighs down-day volume, before the &ldquo;confirmed&rdquo; screen lights up. Historically they earned most of what confirmed names did; other forming names earned about nothing.</div></div>' +
     '<div class="radar-taker-sub">' + esc(activeFilter || 'Ahead of the crowd') + ' · bar &ge;' + upsideFloor.toFixed(1) + '%</div></div>' +
     '<div class="radar-nuggets">' + base.map(function (s) { return radarWildcardCard(s, s.symbol === standoutSym); }).join('') + '</div>' +
   '</div>';
@@ -6831,6 +6818,7 @@ function renderJournal() {
     html += '<div class="journal-section">Excess return by status</div>';
     html += jExcessBar('Confirmed', j.byStatus.confirmed, 'var(--gold)');
     html += jExcessBar('Forming', j.byStatus.forming, 'var(--amber)');
+    html += jEarlyZoneHtml(j.earlyZone);
     html += jExcessBar('Invalidated', j.byStatus.invalidated, 'var(--red)');
 
     html += '<div class="journal-section">Excess return by score</div>';
@@ -7103,6 +7091,23 @@ function jRegimeHtml(byRegime, coverage) {
     (coverage && coverage.note ? '<div class="journal-note">' + esc(coverage.note) + '</div>' : '');
 }
 
+// The forming band split by the early-zone flag the Wildcard box picks from, so
+// the claim behind that box is checked where it is made. The live line covers
+// only dates since the flag shipped.
+function jEarlyZoneHtml(ez) {
+  if (!ez || !ez.all) return '';
+  var t = ez.threshold;
+  var html = jExcessBar('· early (up-day vol ≥' + t + '×)', ez.all.early, 'var(--amber)') +
+    jExcessBar('· other forming', ez.all.otherForming, 'var(--amber)');
+  var lv = ez.live;
+  var liveTxt = !lv ? '' : (lv.early.n || lv.otherForming.n)
+    ? 'Live since ' + ez.liveFrom + ': early excess ' + jSign(lv.early.avgExcessReturn) + ' (n=' + lv.early.n + '), other forming ' +
+      jSign(lv.otherForming.avgExcessReturn) + ' (n=' + lv.otherForming.n + '), confirmed ' + jSign(lv.confirmed.avgExcessReturn) + ' (n=' + lv.confirmed.n + ').'
+    : 'Live since ' + ez.liveFrom + ': no outcomes yet.';
+  return html + '<div class="journal-note">The Wildcard box picks from <b>early</b> forming names: up-day volume at least ' + t +
+    '× down-day volume over 20 sessions. If early stops beating other forming names, the box has lost its reason. ' + liveTxt + '</div>';
+}
+
 // Did the October 2026 recipe change help? Both recipes are priced on the same
 // signals, split by when the dates were seen. Only the live row is a clean
 // test: the weights were chosen on the first window and checked on the second.
@@ -7120,7 +7125,7 @@ function jModelCheckHtml(mc) {
     if (!w) return '';
     var c = w.current || {}, p = w.previous || {};
     var cls = !c.days ? 'mut' : (c.top5VsDay != null && p.top5VsDay != null && c.top5VsDay > p.top5VsDay ? 'pos' : 'neg');
-    var span = w.from ? w.from + (w.to && w.to !== w.from ? ' → ' + w.to : '') : 'from ' + (mc.liveFrom || '');
+    var span = !w.to ? 'from ' + (w.from || mc.liveFrom || '') : w.from + (w.to !== w.from ? ' → ' + w.to : '');
     return '<div class="jreg-row ' + cls + '">' +
       '<span class="jreg-name">' + esc(JMC_LABEL[k]) + '</span>' +
       '<span class="jreg-basis">' + esc(JMC_BASIS[k]) + '</span>' +

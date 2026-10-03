@@ -162,7 +162,7 @@ async function main() {
       var row = {
         d: D, s: s.symbol, th: s.theme, k: kindOf[s.symbol], bm: s.benchmark, cr: crypto,
         st: s.status, sc: s.score, ss: s.subScores, mr: mReg,
-        nb: s.nearBreakout, f: {}, o: { er: 'pending', x: null, fr: null, fx5: null, fx10: null, fx20: null }
+        nb: s.nearBreakout, ea: s.early === true, f: {}, o: { er: 'pending', x: null, fr: null, fx5: null, fx10: null, fx20: null }
       };
       var f = features(sliced[s.symbol], sliced[s.benchmark], s);
       Object.keys(f).forEach(function (k) { row.f[k] = r3(f[k]); });
@@ -230,6 +230,7 @@ async function main() {
     console.log('calib ' + c + ' fit ' + g.spreadFit + ' hold ' + g.spreadHoldout + ' robust ' + g.robust);
   });
   console.log('selection: ' + j.selectionControl.verdict);
+  ['all', 'live'].forEach(function (k) { var w = j.earlyZone && j.earlyZone[k]; if (w) console.log('early ' + k + ' early ' + w.early.avgExcessReturn + ' (n' + w.early.n + ') other forming ' + w.otherForming.avgExcessReturn + ' (n' + w.otherForming.n + ') confirmed ' + w.confirmed.avgExcessReturn + ' (n' + w.confirmed.n + ')'); });
   var slim = Object.assign({}, j, { byDate: undefined, recentOutcomes: undefined });
   writeFileSync(new URL('./research-journal.json', import.meta.url), JSON.stringify(slim));
 }

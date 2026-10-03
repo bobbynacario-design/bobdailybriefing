@@ -5,7 +5,7 @@ import assert from 'assert';
 import {
   ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage,
   regimeLabel, bandSpread, resolveOutcome, buildJournal, bySelectionStats, selectionControl,
-  modelCheck, topFiveVsDay, blendScore, weightCalibration
+  modelCheck, topFiveVsDay, blendScore, weightCalibration, earlyZone
 } from './journal.js';
 import { scoreUniverse, accumulationMetrics } from './scoring.js';
 
@@ -509,6 +509,63 @@ t('the score blends only the weighted sub-scores; riskQuality is kept but unweig
   assert.ok(only.subScores.riskQuality != null, 'riskQuality is still worked out for the card and the journal');
   var none = scoreUniverse(bars, Object.assign({}, CFG, { weights: {} })).signals[0];
   assert.equal(none.score, 0);
+});
+
+t('the why line names lopsided up- or down-day volume, and only then', function () {
+  function dated(moves) {
+    return volBars(moves).map(function (b, i) { return Object.assign({}, b, { date: '2026-01-' + String(i + 1).padStart(2, '0') }); });
+  }
+  var heavyUp = [], even = [], heavyDown = [];
+  for (var i = 0; i < 10; i++) {
+    heavyUp.push([1, 300], [-1, 100]); even.push([1, 100], [-1, 100]); heavyDown.push([1, 100], [-1, 250]);
+  }
+  function why(moves) {
+    var b = dated(moves);
+    var cfg = { watchlist: [{ symbol: 'AAA', theme: 'T', benchmark: 'SPY' }], indexSymbols: ['SPY'], weights: {}, themeRegime: {} };
+    return scoreUniverse({ AAA: b, SPY: dated(even) }, cfg).signals[0].why;
+  }
+  assert.match(why(heavyUp), /with up-day volume 3\.0× down-day volume/);
+  assert.match(why(heavyDown), /down-day volume outweighing up-day volume \(0\.4×\)/);
+  assert.doesNotMatch(why(even), /up-day|down-day/, 'an even split is noise and is not mentioned');
+});
+
+t('early marks forming names with heavy up-day volume, and nothing else', function () {
+  function dated(moves) {
+    return volBars(moves).map(function (b, i) { return Object.assign({}, b, { date: '2026-01-' + String(i + 1).padStart(2, '0') }); });
+  }
+  // A gentle uptrend (+2% / -1%) for the name and for SPY, so the name sits above
+  // its 20-day average in a supportive tape but misses confirmation on the
+  // last day's light volume: forming.
+  var heavy = [], even = [];
+  for (var i = 0; i < 10; i++) { heavy.push([2, 300], [-1, 100]); even.push([2, 100], [-1, 100]); }
+  function one(moves, min) {
+    var cfg = { watchlist: [{ symbol: 'AAA', theme: 'T', benchmark: 'SPY' }], indexSymbols: ['SPY'], weights: {}, themeRegime: {} };
+    if (min != null) cfg.earlyAccumulationMin = min;
+    return scoreUniverse({ AAA: dated(moves), SPY: dated(even) }, cfg).signals[0];
+  }
+  var s = one(heavy, 1.6);
+  assert.equal(s.status, 'forming', 'the synthetic name is forming (21 bars cannot confirm a 50-day trend)');
+  assert.equal(s.early, true);
+  assert.equal(one(even, 1.6).early, false, 'an even split is not early');
+  assert.equal(one(heavy, null).early, false, 'no threshold configured, no flag');
+});
+
+t('the early zone splits forming names and keeps a live-only read', function () {
+  var cfg = { earlyAccumulationMin: 1.6, model: { liveFrom: '2026-03-01' } };
+  var list = [
+    e({ date: '2026-02-02', status: 'forming', early: true, excessReturn: 2 }),
+    e({ date: '2026-02-02', status: 'forming', early: false, excessReturn: -1 }),
+    e({ date: '2026-02-02', status: 'confirmed', excessReturn: 3 }),
+    e({ date: '2026-03-02', status: 'forming', early: true, excessReturn: 1 })
+  ];
+  var z = earlyZone(list, cfg);
+  assert.equal(z.threshold, 1.6);
+  assert.equal(z.all.early.n, 2);
+  assert.equal(z.all.early.avgExcessReturn, 1.5);
+  assert.equal(z.all.otherForming.avgExcessReturn, -1);
+  assert.equal(z.live.early.n, 1, 'only dates since the flag shipped');
+  assert.equal(z.live.otherForming.n, 0);
+  assert.equal(earlyZone(list, {}), null, 'no threshold, no block');
 });
 
 t('blendScore prices a model from stored sub-scores', function () {
