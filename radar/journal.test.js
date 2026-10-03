@@ -4,8 +4,10 @@
 import assert from 'assert';
 import {
   ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage,
-  regimeLabel, bandSpread, resolveOutcome, buildJournal, bySelectionStats, selectionControl
+  regimeLabel, bandSpread, resolveOutcome, buildJournal, bySelectionStats, selectionControl,
+  modelCheck, topFiveVsDay, blendScore, weightCalibration
 } from './journal.js';
+import { scoreUniverse, accumulationMetrics } from './scoring.js';
 
 var n = 0;
 function t(name, fn) { fn(); n++; console.log('  PASS  ' + name); }
@@ -468,6 +470,111 @@ t('crypto is reported but never used as the control side', function () {
   var c = selectionControl(by);
   assert.ok(/Not enough history on both sides/.test(c.verdict),
     'three coins cannot control anything, so the control declines rather than using them');
+});
+
+// ── v3: accumulation and the model check ─────────────────────────────────
+function volBars(moves) {
+  // moves: [[direction, volume], ...] after one base bar. +1 up, -1 down, 0 flat.
+  var px = 100, out = [{ date: 'd0', open: px, high: px, low: px, close: px, volume: 1 }];
+  moves.forEach(function (m, i) {
+    px = px * (1 + m[0] * 0.01);
+    out.push({ date: 'd' + (i + 1), open: px, high: px, low: px, close: px, volume: m[1] });
+  });
+  return out;
+}
+
+t('accumulation is up-day volume over down-day volume across 20 sessions', function () {
+  // 10 up days at 300 and 10 down days at 100: ratio 3.
+  var moves = [];
+  for (var i = 0; i < 10; i++) { moves.push([1, 300]); moves.push([-1, 100]); }
+  var a = accumulationMetrics(volBars(moves));
+  assert.ok(close(a.ratio, 3), 'ratio ' + a.ratio);
+  assert.equal(a.score, 100, 'above the top knot');
+  // Flat days count on neither side.
+  moves[0] = [0, 99999];
+  assert.ok(close(accumulationMetrics(volBars(moves)).ratio, 2700 / 1000));
+});
+
+t('accumulation without a down day or without 21 bars is neutral, not a guess', function () {
+  var allUp = [];
+  for (var i = 0; i < 20; i++) allUp.push([1, 100]);
+  assert.deepEqual(accumulationMetrics(volBars(allUp)), { ratio: null, score: 50 });
+  assert.deepEqual(accumulationMetrics(volBars(allUp.slice(0, 10))), { ratio: null, score: 50 });
+});
+
+t('the score blends only the weighted sub-scores; riskQuality is kept but unweighted', function () {
+  var bars = universe(120);
+  var only = scoreUniverse(bars, Object.assign({}, CFG, { weights: { accumulation: 1 } })).signals[0];
+  assert.equal(only.score, Math.round(only.subScores.accumulation), 'a single weight reproduces its sub-score');
+  assert.ok(only.subScores.riskQuality != null, 'riskQuality is still worked out for the card and the journal');
+  var none = scoreUniverse(bars, Object.assign({}, CFG, { weights: {} })).signals[0];
+  assert.equal(none.score, 0);
+});
+
+t('blendScore prices a model from stored sub-scores', function () {
+  assert.equal(blendScore({ a: 0.5, b: 0.5 }, { a: 80, b: 40 }), 60);
+  assert.equal(blendScore({ a: 0.5, missing: 0.5 }, { a: 80 }), 40, 'an absent sub-score adds nothing');
+});
+
+// A day of 10 names where the CURRENT score ranks excess perfectly and the
+// PREVIOUS weights (all on `old`) rank it backwards.
+function mday(date) {
+  var out = [];
+  for (var i = 0; i < 10; i++) {
+    out.push(e({ date: date, symbol: 'M' + i, score: 10 + i * 9, excessReturn: i - 4.5,
+      subScores: { cur: 10 + i * 9, old: 100 - i * 9 } }));
+  }
+  return out;
+}
+var MCFG = { weights: { cur: 1 }, previousWeights: { old: 1 },
+  model: { label: 'new', previousLabel: 'old', chosenOnDataThrough: '2026-01-31', checkedFrom: '2026-02-01', liveFrom: '2026-03-01' } };
+
+t('top five vs the day reads the top cards, and needs a full day of names', function () {
+  var r = topFiveVsDay(mday('2026-01-05'));
+  assert.ok(close(r.value, 2.5), 'top five average 2.5 vs day average 0 -> ' + r.value);
+  assert.equal(topFiveVsDay(mday('2026-01-05').slice(0, 5)).days, 0, 'five names is not a ranking');
+});
+
+t('the model check splits chosen-on, checked and live dates and prices both models', function () {
+  var entries = mday('2026-01-10').concat(mday('2026-02-10'), mday('2026-03-10'));
+  var mc = modelCheck(entries, MCFG, 20);
+  assert.equal(mc.windows.chosenOn.current.days, 1);
+  assert.equal(mc.windows.checked.current.days, 1);
+  assert.equal(mc.windows.live.current.days, 1);
+  assert.ok(mc.windows.live.current.top5VsDay > 0 && mc.windows.live.previous.top5VsDay < 0,
+    'the old weights are applied to the same signals, not just relabelled');
+  assert.ok(mc.windows.checked.current.meanIC > 0.9 && mc.windows.checked.previous.meanIC < -0.9);
+  assert.ok(/Too early to judge: 1 live day/.test(mc.verdict), 'one day is not a verdict');
+});
+
+t('with no live dates the model check says so instead of judging', function () {
+  var mc = modelCheck(mday('2026-01-10'), MCFG, 20);
+  assert.ok(/No live outcomes yet/.test(mc.verdict));
+  assert.equal(mc.windows.live.n, 0);
+});
+
+t('enough live days produce a verdict that can come out either way', function () {
+  var live = [], flipped = [];
+  for (var d = 1; d <= 21; d++) {
+    var date = '2026-03-' + String(d + 1).padStart(2, '0');
+    live = live.concat(mday(date));
+  }
+  assert.ok(/holding up\./.test(modelCheck(live, MCFG, 20).verdict));
+  flipped = live.map(function (x) { return Object.assign({}, x, { excessReturn: -x.excessReturn }); });
+  assert.ok(/NOT holding up live/.test(modelCheck(flipped, MCFG, 20).verdict), 'the check is built to be able to fail');
+});
+
+t('a config with no model history yields no model check', function () {
+  assert.equal(modelCheck(mday('2026-01-10'), { weights: { cur: 1 } }, 20), null);
+});
+
+t('weight calibration watches accumulation and the now-unweighted riskQuality', function () {
+  var wc = weightCalibration([], { trend: 0.25, accumulation: 0.2 });
+  assert.ok(wc.method, 'degrades on no history');
+  var j = buildJournal(universe(300), Object.assign({}, CFG, { weights: { trend: 0.5, accumulation: 0.5 } }), {});
+  assert.ok('accumulation' in j.weightCalibration.components);
+  assert.ok('riskQuality' in j.weightCalibration.components);
+  assert.equal(j.weightCalibration.currentWeights.riskQuality, 0);
 });
 
 console.log('\n' + n + ' checks passed.');

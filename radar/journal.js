@@ -550,7 +550,9 @@ function tercileSpread(list, comp) {
 // — i.e. it survives out-of-sample. Otherwise weights are left as-is. This is a
 // diagnostic surfaced for human review; scoring weights stay static in config.
 function weightCalibration(entries, weights) {
-  var comps = ['trend', 'volume', 'relStrength', 'riskQuality', 'regime'];
+  // riskQuality carries no weight since v3 but is still measured: a component
+  // dropped for pointing the wrong way should keep being watched.
+  var comps = ['trend', 'volume', 'relStrength', 'accumulation', 'riskQuality', 'regime'];
   var withX = entries.filter(function (e) { return e.excessReturn != null && e.subScores; });
   var dates = [];
   withX.forEach(function (e) { if (dates.indexOf(e.date) === -1) dates.push(e.date); });
@@ -590,6 +592,101 @@ function weightCalibration(entries, weights) {
     note: anyRobust
       ? 'Some component survived out-of-sample; a conservative shrunk reweight is suggested — review before applying.'
       : 'No component robustly predicts excess out-of-sample; weights should stay as they are.'
+  };
+}
+
+// ── model check: is the October 2026 reweight still paying off? ──────────
+//
+// Changing the weights changes what every past date scores, so after the switch
+// the headline tables describe the NEW model across all of history, including
+// the dates it was chosen on. This block keeps that honest. Both models are
+// priced on the same signals: entries carry every sub-score, so the previous
+// weights apply without re-scoring anything. Three windows, by signal date:
+//   chosen on — the weights were picked here (in-sample, flattering by design)
+//   checked   — the one holdout check made before going live
+//   live      — dates nobody had seen when the change was made; the real test
+// Two measures per model: mean daily IC (does the whole order hold?) and how far
+// the day's top five beat the day's average (what the top cards would earn).
+
+function blendScore(weights, sub) {
+  var s = 0;
+  Object.keys(weights || {}).forEach(function (k) {
+    if (sub && sub[k] != null) s += weights[k] * sub[k];
+  });
+  return Math.round(s);
+}
+
+// Mean over days of (top five names' excess) minus (all names' excess), on
+// days with at least MIN_IC_NAMES measured names.
+function topFiveVsDay(list) {
+  var days = groupBy(list.filter(function (e) { return e.excessReturn != null && e.score != null; }),
+    function (e) { return e.date; });
+  var diffs = [];
+  Object.keys(days).forEach(function (d) {
+    var day = days[d];
+    if (day.length < MIN_IC_NAMES) return;
+    var all = mean(day.map(function (e) { return e.excessReturn; }));
+    var top = day.slice().sort(function (a, b) { return b.score - a.score; }).slice(0, 5);
+    diffs.push(mean(top.map(function (e) { return e.excessReturn; })) - all);
+  });
+  return { days: diffs.length, value: round(mean(diffs), 2) };
+}
+
+function modelStats(list, horizon) {
+  var ic = informationCoefficient(list, horizon);
+  var top = topFiveVsDay(list);
+  return { meanIC: ic.meanIC, top5VsDay: top.value, days: top.days, topBandExcess: bandSpread(list).topBandExcess };
+}
+
+function modelCheck(entries, config, horizon) {
+  var m = config.model, prev = config.previousWeights;
+  if (!m || !prev || !m.liveFrom) return null;
+  var withPrev = entries.map(function (e) {
+    return Object.assign({}, e, { score: blendScore(prev, e.subScores) });
+  });
+  function inWindow(from, to) {
+    return function (e) { return (!from || e.date >= from) && (!to || e.date < to); };
+  }
+  var spec = [
+    ['chosenOn', null, m.checkedFrom || null],
+    ['checked', m.checkedFrom || null, m.liveFrom],
+    ['live', m.liveFrom, null]
+  ];
+  var windows = {};
+  spec.forEach(function (w) {
+    var keep = inWindow(w[1], w[2]);
+    var cur = entries.filter(keep), old = withPrev.filter(keep);
+    var dates = Object.keys(groupBy(cur, function (e) { return e.date; })).sort();
+    windows[w[0]] = {
+      from: dates[0] || w[1], to: dates[dates.length - 1] || null, n: cur.length,
+      current: modelStats(cur, horizon),
+      previous: modelStats(old, horizon)
+    };
+  });
+
+  var live = windows.live, liveDays = live.current.days;
+  var verdict;
+  if (!liveDays) {
+    verdict = 'No live outcomes yet. Signals from ' + m.liveFrom + ' on resolve over the next ' + horizon +
+      ' trading days, so the first live reads arrive about four weeks after the switch.';
+  } else if (liveDays < horizon) {
+    verdict = 'Too early to judge: ' + liveDays + ' live day' + (liveDays === 1 ? '' : 's') +
+      ' with outcomes, less than one independent ' + horizon + '-day window.';
+  } else {
+    var c = live.current.top5VsDay, p = live.previous.top5VsDay;
+    var better = c != null && p != null && c > p;
+    verdict = 'Live since ' + m.liveFrom + ' (' + liveDays + ' days, about ' + round(liveDays / horizon, 1) +
+      ' independent windows): the new recipe’s top five beat the day’s average by ' + c +
+      ' pts against ' + p + ' for the old one' + (better ? ', so the switch is holding up.' : ', so the switch is NOT holding up live.') +
+      ' Read it as direction, not proof.';
+  }
+  return {
+    current: { label: m.label, weights: config.weights },
+    previous: { label: m.previousLabel || 'previous', weights: prev },
+    chosenOnDataThrough: m.chosenOnDataThrough || null,
+    liveFrom: m.liveFrom,
+    windows: windows,
+    verdict: verdict
   };
 }
 
@@ -707,6 +804,12 @@ function buildJournal(barsByAsset, config, opts) {
         '). Crypto history stops at CoinGecko\'s free 365-day cap while equities run years, so the oldest ' +
         'dates are equities-only' + (thinCount ? ' (' + thinCount + ' asset-dates skipped for insufficient warm-up)' : '') + '.');
     }
+    var mCheck = modelCheck(entries, config, horizon);
+    if (mCheck) {
+      caveats.push('Every date here is scored with the current model (' + mCheck.current.label + '), whose weights were chosen on dates up to ' +
+        mCheck.chosenOnDataThrough + ', so the tables are partly in-sample for that stretch. The model check splits chosen-on, checked and live dates ' +
+        'and prices the previous model on the same signals.');
+    }
     caveats.push(ic.overlapNote);
     caveats.push(regimeCov.note);
 
@@ -749,6 +852,7 @@ function buildJournal(barsByAsset, config, opts) {
       regimeCoverage: regimeCov,
       coverage: coverage,
       weightCalibration: weightCalibration(entries, config.weights || {}),
+      modelCheck: mCheck,
       recentOutcomes: recentOutcomes
     };
   }
@@ -857,5 +961,5 @@ export {
   buildJournal, resolveOutcome, scoreBucket, weightCalibration,
   // exported for offline tests
   ranks, spearman, informationCoefficient, byRegimeStats, regimeCoverage, regimeLabel, bandSpread,
-  bySelectionStats, selectionControl
+  bySelectionStats, selectionControl, modelCheck, topFiveVsDay, blendScore
 };

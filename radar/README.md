@@ -64,12 +64,19 @@ the Admin SDK bypasses rules on write):
 
 Fetches daily bars and scores each watchlist asset with a deterministic engine.
 
-**Score** = `0.30·trend + 0.25·volume + 0.25·relStrength + 0.10·riskQuality + 0.10·regime`,
-each sub-score 0–100. The weights are **round priors — chosen, not fitted.** The
-journal surfaces a `weightCalibration` diagnostic (see V3 below), but on ~60 days
-of one correlated regime — where it also finds excess basically flat — fitting
-weights is fitting to noise, so the calibration is reviewed, not applied. They
-live in `config.js` `WEIGHTS`.
+**Score** = `0.25·trend + 0.20·volume + 0.25·relStrength + 0.20·accumulation + 0.10·regime`
+(model `v3-accumulation`, October 2026), each sub-score 0–100. The weights are
+round numbers chosen by hand from a fit/holdout test, never auto-fitted; the
+journal's `weightCalibration` stays a diagnostic. `config.js` `WEIGHTS` carries
+the research: riskQuality was robustly negative on ~694 scored dates, so it was
+dropped from the blend (still computed and shown), and accumulation, the
+strongest new input, took its place. The previous weights stay in
+`PREVIOUS_WEIGHTS`, and the journal's `modelCheck` prices both on the same signals
+over chosen-on / checked / live windows.
+
+- **accumulation** — volume on up-close days over volume on down-close days across
+  the last 20 sessions; neutral 50 without 21 bars or a down day. Steep at the top
+  (`ACC_KNOTS`), because that is where its edge was measured.
 
 - **trend** — close vs SMA20/SMA50 (above both = 100 … below both = 20; capped at
   60 if SMA20 < SMA50).
@@ -79,7 +86,9 @@ live in `config.js` `WEIGHTS`.
   V2 catalyst lane) — is the risk *well-formed*? Two ATR-calibrated curves: a stop
   a healthy ATR multiple below entry (not noise-tight, not chasing-wide) and an
   entry not overextended above SMA20. The old `riskReward` was a near-constant
-  ≈2.0 that fed the score nothing.
+  ≈2.0 that fed the score nothing. **Unweighted since v3:** it pointed the wrong
+  way (stretched names kept going), but it is still computed for the card and the
+  journal keeps measuring it.
 - **regime** — **theme-specific**: the breadth of the theme's own driver basket
   above SMA20, graded 25..100 (none up → 25, half → ~62, all → 100). Crypto reads
   BTC/ETH, energy reads USO/XLE, metals read GLD/SLV/DBC, AI semis read

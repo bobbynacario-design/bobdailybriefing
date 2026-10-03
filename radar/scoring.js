@@ -30,6 +30,13 @@ var RQ_STOP_KNOTS = [
 var RQ_EXT_KNOTS = [
   [0, 80], [0.5, 100], [2.0, 70], [4.0, 40], [6.0, 20]
 ];
+// accumulation: volume on up days over volume on down days, last 20 sessions.
+// Flat-ish at the bottom and steep at the top because that is where its edge
+// was measured: the bottom six deciles earned about nothing, the top two most
+// of it (config.js has the research).
+var ACC_KNOTS = [
+  [0.6, 20], [1.0, 40], [1.5, 60], [2.0, 85], [2.5, 100]
+];
 
 // Linear interpolation across sorted [x, y] knots, clamped outside the range.
 function interp(knots, v) {
@@ -95,6 +102,23 @@ function volumeMetrics(bars) {
   if (!avg20) return { ratio: null, score: 50 };
   var r = today / avg20;
   return { ratio: r, score: interp(VOLUME_KNOTS, r) };
+}
+
+// accumulation: total volume on up-close days over total volume on down-close
+// days, across the last 20 sessions (each compared with the session before).
+// Above 1 = heavier trade on the way up. Null (neutral 50) without 21 bars or
+// without a single down day to divide by.
+function accumulationMetrics(bars) {
+  if (bars.length < 21) return { ratio: null, score: 50 };
+  var up = 0, down = 0;
+  for (var i = bars.length - 20; i < bars.length; i++) {
+    var c = bars[i].close, p = bars[i - 1].close;
+    if (c > p) up += bars[i].volume || 0;
+    else if (c < p) down += bars[i].volume || 0;
+  }
+  if (!(down > 0)) return { ratio: null, score: 50 };
+  var r = up / down;
+  return { ratio: r, score: interp(ACC_KNOTS, r) };
 }
 
 // relStrength: asset 20d return minus benchmark 20d return, in percentage points.
@@ -272,7 +296,7 @@ function fmtNum(v) {
   return v.toFixed(dp);
 }
 
-function buildWhy(sym, bench, status, sub, volRatio, relSpread) {
+function buildWhy(sym, bench, status, sub, volRatio, relSpread, accRatio) {
   var trendPhrase = sub.trend >= 100 ? 'holding above both its 20- and 50-day averages'
     : sub.trend >= 70 ? 'above its 20-day average'
     : sub.trend >= 50 ? 'above its 50-day average but below the 20-day'
@@ -283,10 +307,15 @@ function buildWhy(sym, bench, status, sub, volRatio, relSpread) {
   var rsPhrase = relSpread == null ? ('vs ' + bench)
     : relSpread >= 0 ? ('leading ' + bench + ' by +' + relSpread.toFixed(1) + ' pts over 20 days')
     : ('lagging ' + bench + ' by ' + relSpread.toFixed(1) + ' pts over 20 days');
+  // Only said when it is lopsided enough to matter; in between it is noise.
+  var accPhrase = accRatio == null ? ''
+    : accRatio >= 1.5 ? (', with up-day volume ' + accRatio.toFixed(1) + '× down-day volume')
+    : accRatio <= 0.67 ? (', with down-day volume outweighing up-day volume (' + accRatio.toFixed(1) + '×)')
+    : '';
   var frame = status === 'confirmed' ? 'a strong, confirmed move worth the defined risk'
     : status === 'invalidated' ? 'a setup that has lost its edge for now'
     : 'an early, still-forming move';
-  return sym + ' is ' + trendPhrase + ' ' + volPhrase + ', ' + rsPhrase + ' — ' + frame + '.';
+  return sym + ' is ' + trendPhrase + ' ' + volPhrase + ', ' + rsPhrase + accPhrase + ' — ' + frame + '.';
 }
 
 function buildInvalidation(sym, stop, status) {
@@ -341,6 +370,7 @@ function scoreUniverse(barsByAsset, config) {
     var benchCloses = benchBars ? benchBars.map(function (b) { return b.close; }) : null;
 
     var vol = volumeMetrics(bars);
+    var acc = accumulationMetrics(bars);
     var rs = relStrengthMetrics(closes, benchCloses);
     var rr = riskRewardMetrics(close, priorLow, s20);
     var atrVal = atr(bars, 14);
@@ -351,16 +381,18 @@ function scoreUniverse(barsByAsset, config) {
       trend: trendScore(close, s20, s50),
       volume: vol.score,
       relStrength: rs.score,
+      accumulation: acc.score,
       riskQuality: riskQuality(rr.entry, rr.stop, s20, atrVal),
       regime: themeReg.score
     };
 
-    var score =
-      weights.trend * sub.trend +
-      weights.volume * sub.volume +
-      weights.relStrength * sub.relStrength +
-      weights.riskQuality * sub.riskQuality +
-      weights.regime * sub.regime;
+    // Every sub-score is computed and stored; only the ones config.weights names
+    // count. riskQuality is still worked out (the card and the journal read it)
+    // but carries no weight since the October 2026 reweight.
+    var score = 0;
+    Object.keys(weights || {}).forEach(function (k) {
+      if (sub[k] != null) score += weights[k] * sub[k];
+    });
 
     var status = classify(sub, close, rr.stop, themeReg.score);
 
@@ -374,6 +406,8 @@ function scoreUniverse(barsByAsset, config) {
       sma20: round(s20, 2),
       sma50: round(s50, 2),
       volRatio: round(vol.ratio, 2),
+      // Up-day volume / down-day volume over 20 sessions (the accumulation input).
+      accumulation: round(acc.ratio, 2),
       relStrength20d: round(rs.spread, 1),
       entry: round(rr.entry, 2),
       stop: round(rr.stop, 2),
@@ -391,13 +425,14 @@ function scoreUniverse(barsByAsset, config) {
       // theme regime that drove this signal's regime sub-score + status gate.
       regimeScore: themeReg.score,
       regimeBasis: themeReg.basis,
-      // all five sub-scores, so the journal can calibrate each component's
-      // predictive power for forward excess (weight calibration).
+      // every sub-score, weighted or not, so the journal can calibrate each
+      // component's predictive power for forward excess (weight calibration)
+      // and price the previous model on the same signals.
       subScores: {
         trend: sub.trend, volume: sub.volume, relStrength: sub.relStrength,
-        riskQuality: sub.riskQuality, regime: sub.regime
+        accumulation: sub.accumulation, riskQuality: sub.riskQuality, regime: sub.regime
       },
-      why: buildWhy(sym, item.benchmark, status, sub, vol.ratio, rs.spread),
+      why: buildWhy(sym, item.benchmark, status, sub, vol.ratio, rs.spread, acc.ratio),
       invalidation: buildInvalidation(sym, rr.stop, status)
     });
   });
@@ -420,4 +455,4 @@ function scoreUniverse(barsByAsset, config) {
   return { asOf: asOf, regime: regime, benchmarks: benchmarks, signals: signals };
 }
 
-export { scoreUniverse, interp, trendScore, sma, ret20 };
+export { scoreUniverse, interp, trendScore, sma, ret20, accumulationMetrics };
