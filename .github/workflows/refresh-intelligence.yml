@@ -18,6 +18,14 @@ on:
         default: radar
         type: choice
         options: [radar, markets, news, grounding]
+      force:
+        # Radar only. A manual run normally no-ops once today's radar doc exists;
+        # this re-scores and overwrites it (one OpenAI catalyst call), e.g. to put
+        # a scoring change live the same day.
+        description: Radar only - re-run even if today's radar is already written
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -137,6 +145,8 @@ jobs:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Empty on scheduled runs; '1' only for a manual run with force ticked.
+          RADAR_FORCE: ${{ github.event.inputs.force == 'true' && '1' || '' }}
 
   markets:
     if: github.event.schedule == '15 22 * * *' || github.event.inputs.feed == 'markets'
