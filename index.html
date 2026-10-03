@@ -1451,9 +1451,12 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .radar-subfilter-label{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.08em;text-transform:uppercase;margin-right:.1rem}
 .radar-pill.sub{font-size:9px;padding:.28rem .6rem}
 .radar-pill-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:.4rem;vertical-align:middle}
-.radar-card .card-top{align-items:center}
+/* The header wraps only when symbol + score block don't fit (phones, and the
+   two-column grid at tablet widths); the score block then drops to its own
+   row, still right-aligned. Where it fits, it stays on one row as before. */
+.radar-card .card-top{align-items:center;flex-wrap:wrap;row-gap:.4rem}
 .radar-theme{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.05em;text-transform:uppercase;font-weight:400;margin-left:.5rem;white-space:nowrap}
-.radar-score-wrap{display:flex;align-items:center;gap:.65rem;flex-shrink:0}
+.radar-score-wrap{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:.4rem .65rem;flex-shrink:0;max-width:100%;margin-left:auto}
 .radar-upside{font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--green);background:var(--green-dim);border:1px solid rgba(45,184,122,.28);border-radius:20px;padding:2px 8px;white-space:nowrap}
 .radar-score{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--gold);line-height:1}
 .radar-plan{display:block;white-space:normal;line-height:1.7;margin-bottom:.7rem;color:var(--txt2)}
