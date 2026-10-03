@@ -833,8 +833,8 @@ test('a card saved to Evidence points at the saved briefing, or the key autoSave
   assert.equal(context.currentBriefingKey(),'stored-key');
 });
 // Wildcard Upside (October 2026): early forming names only, ranked by score.
-const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards'];
-const wildEnv=(signals,taker={})=>environment(WILD,{esc:v=>String(v ?? ''),radarSignals:signals,radarTakerSymbols:taker,radarFilter:'All',radarStatusFilter:'All'});
+const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarReadHtml','radarSourceLink','radarSourceHost'];
+const wildEnv=(signals,taker={})=>environment(WILD,{esc:v=>String(v ?? ''),uiIcon:()=>'',URL,radarSignals:signals,radarTakerSymbols:taker,radarFilter:'All',radarStatusFilter:'All'});
 const sig=(symbol,o)=>Object.assign({symbol,theme:'T',status:'forming',early:false,score:60,entry:100,stop:96,target:108,accumulation:1.2,relStrength20d:2},o);
 test('Wildcard picks only early forming names, by score, never a Taker name', () => {
   const list=[
@@ -862,6 +862,45 @@ test('Wildcard says when the radar doc predates the early flag, instead of showi
   const fresh=wildEnv(none);
   fresh.context.renderRadarWildcards(none);
   assert.match(fresh.element('radar-wildcards').innerHTML,/No forming names with heavy up-day volume/);
+});
+// Explain the moves (October 2026): the read the radar run writes for the six
+// names shown first, with its sources; a name without one falls back to its catalyst.
+const escRead=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const readEnv=()=>environment(['radarReadHtml','radarSourceLink','radarSourceHost'],{esc:escRead,uiIcon:()=>'',URL});
+test('a focus card shows why it is moving, what would break it, and its sources, all escaped', () => {
+  const {context}=readEnv();
+  const out=context.radarReadHtml({symbol:'A',read:{why:'Beat <b>estimates</b>.',wouldBreak:'A close below 95.',
+    sources:[{url:'https://www.reuters.com/a',title:'R "story"'},{url:'javascript:alert(1)',title:'x'}]}});
+  assert.match(out,/Why it&rsquo;s moving<\/span>Beat &lt;b&gt;estimates&lt;\/b&gt;\./);
+  assert.match(out,/What would break it<\/span>A close below 95\./);
+  assert.match(out,/href="https:\/\/www\.reuters\.com\/a" target="_blank" rel="noopener noreferrer" title="R &quot;story&quot;">reuters\.com ↗/);
+  assert.ok(!out.includes('javascript:'),'only http(s) links are rendered');
+});
+test('a card without a read shows its catalyst and link, and an old card shows nothing', () => {
+  const {context}=readEnv();
+  const cat=context.radarReadHtml({catalyst:'Deal signed.',catalystAsOf:'2026-10-02',catalystUrl:'https://ft.com/z',catalystSource:'FT'});
+  assert.match(cat,/radar-read-cat[\s\S]*Deal signed\.[\s\S]*2026-10-02[\s\S]*ft\.com ↗/);
+  assert.equal(context.radarReadHtml({catalyst:''}),'');
+  assert.equal(context.radarReadHtml({}),'');
+});
+test('the Radar says why a day has no catalysts, and stays quiet when tagging worked', () => {
+  const {context}=environment(['radarCatalystNote'],{esc:escRead});
+  assert.match(context.radarCatalystNote({error:'not configured'}),/not set up/);
+  assert.match(context.radarCatalystNote({error:'overloaded',tagged:0}),/tagging call failed \(overloaded\)/);
+  assert.match(context.radarCatalystNote({error:'',tagged:0}),/no name had a sourced catalyst/);
+  assert.equal(context.radarCatalystNote({error:'',tagged:22}),'');
+  assert.equal(context.radarCatalystNote(undefined),'');
+});
+// The cost table prices Claude's cache writes above input, and web searches per use.
+const pricingSource=()=>{const s=html.indexOf('var LLM_PRICING_USD_PER_1K = {');return html.slice(s,html.indexOf('\n};',s)+3)+'\n'+html.slice(html.indexOf('var LLM_LOCAL_PREFIX'),html.indexOf('\n',html.indexOf('var LLM_LOCAL_PREFIX')));};
+test('the cost table prices Claude tokens with cache writes, and web searches at a cent each', () => {
+  const {context}=environment(['llmPriceUsd']);
+  vm.runInContext(pricingSource(),context);
+  const claude=context.llmPriceUsd('claude-opus-5-5',{inputTokens:312251,cachedTokens:268355,cacheWriteTokens:43870,outputTokens:9955});
+  assert.ok(Math.abs(claude-(26*4+268355*0.2+43870*5+9955*20)/1e6)<1e-9,'uncached in at $4, cache reads $0.20, writes $5, out $20 per 1M');
+  assert.equal(context.llmPriceUsd('web-search',{calls:25}),0.25);
+  assert.ok(Math.abs(context.llmPriceUsd('gpt-5.5',{inputTokens:1000,cachedTokens:400,outputTokens:100})-(600*0.005+400*0.0005+100*0.030)/1000)<1e-12,'OpenAI pricing unchanged');
+  assert.equal(context.llmPriceUsd('o3-deep-research',{inputTokens:5}),null);
 });
 test('an early name carries an early chip with its up-day volume', () => {
   const {context}=environment(['radarContext'],{uiIcon:()=>''});
