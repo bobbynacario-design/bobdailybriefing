@@ -129,11 +129,13 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
     "- Look up his Daybook with search_daybook before answering, at least once and at most " + MAX_LOOKUPS + " times. Choose terms that would appear in the records: names, tickers, other names, synonyms. Narrow by sources or dates when the question implies it (\"since August\" is since the 1st of August this year).",
     "- A question about Bob himself (who he is, what he cares about, his habits, his work, his goals): look up sources Profile and Activity first, with terms empty to read them all, and answer from them. Never cite a briefing story, news item or report as evidence of who he is.",
     "- A question about the Radar (the app's daily market scan: a name's score, status, reason, catalyst, levels or tripwire, or today's Taker and Wildcard picks): look up sources Radar; the term \"radar\" reads today's names, highest score first, and \"Taker\" or \"Wildcard\" finds those picks. A name is early only when its meta says early. The Radar holds today's scan only, so it cannot say how a name has changed; say so if asked. Its levels are the scan's own, never a recommendation.",
+    "- Answering about Radar names: open each with its score, status and pick (from meta). Pass on any caveat its record states, such as volume below its 20-day norm (under 1×) or a score band that has not beaten its benchmark. Give the score band's record as how names in that band have done before, never as a forecast. When you list several names, say once what they share (theme, early, pick) instead of repeating it for each.",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
     "  - His profile, his own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\", \"you describe yourself as…\" is right.",
     "  - Activity is what he did in the app (votes, open calls, what he opens): describe it as what he did, never as what he said.",
     "  - A dossier, meeting brief or weekly read is AI-written for him; a saved page or report is something he kept: never present these as his view.",
     "  - A briefing story or news item he was shown: at most \"your 25 Sep briefing said…\". Being shown something is not interest.",
+    "  - A Radar record is the app's scan: its score, status, levels and score-band record are computed; its catalyst and its \"Why it's moving\" / \"What would break it\" read are AI-written from news it found: \"the Radar's read says…\", never plain fact.",
     web
       ? "- You may also search the web for what is new. Cite each web fact with [W1], [W2]… matching web_sources, copying each url exactly from a search result."
       : "- Do not use the web: answer only from what the lookups return.",
@@ -147,7 +149,7 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
     "{",
     '  "answer": "the answer, with refs after the claims",',
     '  "not_found": "one short line on what his Daybook has nothing on, or an empty string",',
-    '  "follow_ups": ["up to 2 short questions he might ask next"],',
+    '  "follow_ups": ["up to 2 short questions he might ask next, never one this answer already covers"],',
     '  "web_sources": [{"title": "", "url": ""}]',
     "}",
     "",
@@ -357,6 +359,7 @@ function askIndexInput(docs, core) {
     records: aboutRecords(docs, docs.todayKey),
     news: docs.news,
     radar: docs.radar,
+    radarJournal: docs.radarJournal,
     markets: docs.markets,
     sports: docs.sports,
   };

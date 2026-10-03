@@ -188,15 +188,21 @@ test("a Radar lookup returns the whole card, highest score first, and the prompt
     entry: 100, stop: 95, target: 110, rr: 2, invalidation: "The idea is off if " + symbol + " closes back below 95."}, o);
   const index = Core.buildIndex(Ask.askIndexInput({radar: {generatedAt: "2026-10-01T00:00:00Z", picks: {taker: ["SOXX"], wildcard: []},
     signals: [signal("AMD", 40), signal("SOXX", 88, {read: {why: "Chips rallied.", wouldBreak: "A close below 95."}})]},
+  radarJournal: {byScoreBucket: {"80-100": {n: 2858, excessWinRate: 55.7, avgExcessReturn: 2.23}}},
   briefings: [{id: "b", saved: now, data: {date: "1 Oct 2026", sections: {ai: [{headline: "Chip story", body: long}]}}}]}, boostCore));
   const out = JSON.parse(Ask.lookupOutput(Core.searchPlan(index, {terms: ["radar"], sources: ["Radar"]}, {now}), Ask.newRegistry())).results;
   assert.deepEqual(out.map((r) => r.title), ["SOXX", "AMD"], "by score");
   assert.equal(out[0].meta, "Taker pick · forming · score 88");
   assert.ok(out[0].text.length > 450 && out[0].text.length <= 1200, "a Radar record gets the longer clip");
-  assert.match(out[0].text, /What would break it: A close below 95./);
+  assert.ok(out[0].text.includes("What would break it: A close below 95."));
+  assert.ok(out[0].text.includes("Score band 80-100 record over 2858 past signals: 55.7% beat their benchmark, average excess +2.23%."), "the server reads the journal");
   const story = JSON.parse(Ask.lookupOutput(Core.searchPlan(index, {terms: ["chip story"]}, {now}), Ask.newRegistry())).results[0];
   assert.ok(story.text.length <= 450, "other records keep the short clip");
   const prompt = Ask.buildAskPrompt({question: "What are today's Taker picks?", today: "t", accounts: [], web: false});
   assert.match(prompt, /A question about the Radar .* look up sources Radar; the term "radar" reads today's names, highest score first/);
-  assert.match(prompt, /A name is early only when its meta says early./); assert.match(prompt, /The Radar holds today's scan only/); assert.match(prompt, /never a recommendation/);
+  assert.ok(prompt.includes("A name is early only when its meta says early.")); assert.match(prompt, /The Radar holds today's scan only/); assert.match(prompt, /never a recommendation/);
+  assert.ok(prompt.includes("its catalyst and its \"Why it's moving\" / \"What would break it\" read are AI-written from news it found: \"the Radar's read says…\", never plain fact"), "the read is AI-written");
+  assert.ok(prompt.includes("open each with its score, status and pick (from meta). Pass on any caveat its record states"));
+  assert.match(prompt, /never as a forecast/); assert.match(prompt, /say once what they share/);
+  assert.match(prompt, /never one this answer already covers/);
 });

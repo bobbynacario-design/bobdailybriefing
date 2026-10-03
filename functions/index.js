@@ -823,16 +823,18 @@ async function loadAskIndex(db, uid) {
   const own = (name, n) => db.collection(name).where("uid", "==", uid).orderBy("saved", "desc").limit(n).get()
     .then((snap) => snap.docs.map((doc) => Object.assign({id: doc.id}, doc.data()))).catch(() => []);
   const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
-    profile, accounts, usage, goals] = await Promise.all([
+    profile, accounts, usage, goals, radarJournal] = await Promise.all([
     own(BRIEFINGS_COLL, 100), own(REPORTS_COLL, 50), own(JOURNAL_COLL, 100),
     get(COMMAND_PREF_PREFIX + uid), get("dossiers-" + uid), get("meeting-briefs-" + uid), get("weekly-mirror-" + uid), get("daily-boost-" + uid),
     get("grounding-latest"), latest("news"), latest("radar"), latest("miro"), latest("sports"),
     // About you: his profile, and what the app has picked up from him.
     get("profile-" + uid), get("accounts-" + uid), get("usage-" + uid), get("goals-" + uid),
+    // How each Radar score band has done before (the card's "Band record").
+    get("radar-journal"),
   ]);
   const index = IntelligenceSearchCore.buildIndex(Ask.askIndexInput(
     {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
-      profile, accounts, usage, goals, todayKey: phtDateKey()}, DailyBoostCore));
+      profile, accounts, usage, goals, radarJournal, todayKey: phtDateKey()}, DailyBoostCore));
   askIndexCache = {uid, at: Date.now(), index};
   return index;
 }

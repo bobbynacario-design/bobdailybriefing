@@ -3522,7 +3522,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <ul>
         <li>Open <b>Search</b> (Ctrl+K), type a question in plain English and tap <b>Ask Daybook</b> (or Ctrl+Enter). For example: “What have I got on QBE since August?”, “Why did I make the ETH call?”, “What is the NSW field-worker labour rate?”</li>
         <li>It looks things up in your Daybook up to three times, choosing its own words, sources and dates: briefings, news, reports, decisions, notes, evidence, dossiers, meeting briefs, weekly reads, Your numbers and the feeds. Your accounts’ other names count as lookup words.</li>
-        <li>From the <b>Radar</b> it reads today’s scan: each name’s score and status, the reason for the score, its catalyst and read, its levels and tripwire, and which names are today’s Taker and Wildcard picks. For example: “Why is SOXX on the radar?”, “What are today’s Wildcard picks?”. It has no earlier days, so it can’t say how a name has changed.</li>
+        <li>From the <b>Radar</b> it reads today’s scan: each name’s score and status, the reason for the score, its catalyst and read (AI-written, and said so), its levels and tripwire, how names in its score band have done before, and which names are today’s Taker and Wildcard picks. For example: “Why is SOXX on the radar?”, “What are today’s Wildcard picks?”. It has no earlier days, so it can’t say how a name has changed.</li>
         <li>Every claim carries a ref: <b>S1</b> opens that record where it lives; <b>W1</b> opens a web page. A claim with no ref it found is dropped, and when your Daybook has nothing on it, it says so rather than guessing.</li>
         <li>It keeps straight whose words are whose, as the meeting brief does: <b>you noted</b> only for your notes, decisions and the note on a saved page. A dossier, meeting brief or weekly read is AI-written; a briefing story is something you were shown.</li>
         <li><b>Also check the web</b> is off unless you tick it. About $0.05–0.10 a question from your Daybook, about $0.30–0.35 with the web; up to twenty a day. Nothing is sent until you tap, and it never gives trading advice.</li>
@@ -4387,7 +4387,7 @@ function loadIntelligenceSearchData() {
   var state = intelligenceSearchState;
   state.loading = true;
   setText('intel-search-status','Loading account archive and feed snapshots…');
-  var names = ['Briefings','Research','Decisions','Radar','Markets','Sports','News','Evidence','Dossiers','Meeting briefs','Weekly reads','Your numbers'];
+  var names = ['Briefings','Research','Decisions','Radar','Markets','Sports','News','Evidence','Dossiers','Meeting briefs','Weekly reads','Your numbers','Radar journal'];
   var uid = window._firebaseUid || null;
   // Your own saved work, besides the archive: evidence sets, Go deeper dossiers,
   // meeting briefs, weekly reads (the owner's only) and Your numbers.
@@ -4396,7 +4396,10 @@ function loadIntelligenceSearchData() {
     function() { return savedDossiers(); },
     function() { return uid && window.fbLoadMeetingBriefs ? window.fbLoadMeetingBriefs(uid) : {}; },
     function() { return uid && !window.daybookMember && window.fbLoadWeeklyMirror ? window.fbLoadWeeklyMirror(uid) : {}; },
-    window.fbLoadGrounding];
+    window.fbLoadGrounding,
+    // How each Radar score band has done before. Optional: it only adds a line
+    // to each Radar record, so without it Search is not partial.
+    function() { return window.fbLoadJournal ? window.fbLoadJournal() : null; }];
   state.promise = Promise.all(loaders.map(function(loader,i) { return intelligenceSearchRead(loader,i < 3 ? [] : null); })).then(function(results) {
     if (state !== intelligenceSearchState) return [];
     var data = results.map(function(result) { return result.value; });
@@ -4406,7 +4409,7 @@ function loadIntelligenceSearchData() {
     window._reportFeed = state.reports;
     var builtins = typeof BUILTIN_REPORTS !== 'undefined' ? BUILTIN_REPORTS : [];
     state.index = window.IntelligenceSearchCore.buildIndex({briefings:state.briefings,reports:builtins.concat(state.reports),decisions:data[2],radar:data[3],markets:data[4],sports:data[5],news:data[6],
-      evidence:data[7],dossiers:data[8],meetingBriefs:data[9],mirrors:data[10],grounding:data[11]});
+      evidence:data[7],dossiers:data[8],meetingBriefs:data[9],mirrors:data[10],grounding:data[11],radarJournal:data[12]});
     state.loaded = true; state.loading = false; state.loadedAt = Date.now(); state.promise = null;
     setText('intel-search-coverage',(state.failures.length ? 'Unavailable: ' + state.failures.join(', ') + '. Results are partial. ' : 'All sources loaded. ') + 'Archive: ' + state.briefings.length + ' briefings (up to 100).');
     runIntelligenceSearch((document.getElementById('intel-search-input') || {}).value || '');
