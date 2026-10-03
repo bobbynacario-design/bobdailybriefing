@@ -89,22 +89,50 @@ var COINGECKO_IDS = {
   SOL: 'solana'
 };
 
-// Component weights (sum to 1.0). Deliberately round PRIORS — chosen, not fitted.
-// journal.js surfaces a weightCalibration diagnostic (forward-excess tercile
-// spread on a fit/holdout split), and on the current sample only riskQuality had
-// a robust OOS spread — but it was NEGATIVE, and the same journal finds aggregate
-// excess basically flat. Fitting weights to ~60 days of one correlated regime is
-// fitting to noise; the project defers auto-tuning the heuristics from journal
-// stats (overfitting risk on short history). So the calibration stays
-// SURFACED-ONLY: review it in the journal doc, do not apply it, until there is
-// multi-regime, non-overlapping history that can support a reweight. (These were
-// briefly set to a shrunk fit 0.308/0.258/0.258/0.073/0.103 and reverted here.)
+// Component weights (sum to 1.0). Round numbers, chosen by hand from a test,
+// never auto-fitted: the journal's weightCalibration stays a diagnostic.
+//
+// v3-accumulation (October 2026) replaced riskQuality with accumulation.
+// The history was there to support it this time: ~694 scored dates over
+// three tapes, against the ~60 days of one tape that ruled out a reweight before.
+// Method: every past date re-scored point-in-time with the shipped engine (the
+// journal's own fill and stop/target rules; research branch radar-research),
+// weights CHOSEN on dates up to 2025-10-30 only, then checked once on
+// 2025-10-31 .. 2026-10-02:
+//   - riskQuality was robustly NEGATIVE in both windows (per-day IC -0.056 /
+//     -0.059): it penalised names stretched above their 20-day average, and
+//     stretched names were the ones that kept going.
+//   - accumulation (up-day volume / down-day volume, 20 sessions) was the
+//     strongest new input in both windows (IC +0.043 / +0.064). Rejected as
+//     inconsistent: 6- and 12-month momentum, 52-week-high distance, volatility.
+//   Holdout, old -> new weights: mean IC 0.029 -> 0.048; the day's top five
+//   beat the day's average by +0.94 -> +1.34 pts; the 80-100 band earned
+//   +1.95% -> +2.59% excess. It held in 2024, 2025 and 2026 separately, on the
+//   ETFs and the hand-picked names alike, and on plain 10/20-day excess with no
+//   stops; nudging weights or knots by 20% moved little. The gain is in
+//   risk-on tape; in mixed and risk-off tape it was about even, not worse.
+// PREVIOUS_WEIGHTS stays so the journal can price both models on the same
+// signals and say whether the switch keeps paying off live.
 var WEIGHTS = {
+  trend: 0.25,
+  volume: 0.20,
+  relStrength: 0.25,
+  accumulation: 0.20,
+  regime: 0.10
+};
+var PREVIOUS_WEIGHTS = {
   trend: 0.30,
   volume: 0.25,
   relStrength: 0.25,
   riskQuality: 0.10,
   regime: 0.10
+};
+var MODEL = {
+  label: 'v3-accumulation',
+  previousLabel: 'v2-riskQuality',
+  chosenOnDataThrough: '2025-10-30',   // weights picked on dates up to here
+  checkedFrom: '2025-10-31',           // the one holdout check, through liveFrom
+  liveFrom: '2026-10-05'               // first trading day it scores live
 };
 
 // Theme-specific regime drivers. The regime sub-score (and the confirm/invalidate
@@ -164,7 +192,7 @@ var JOURNAL = {
   entryMode: 'next-session',            // fill at next open (equity) / next close (crypto)
   ambiguousResolution: 'conservative',  // same-bar stop+target -> count the stop
   recentCap: 120,                       // how many recent outcomes to persist
-  scoringModelMeasured: 'v2-riskQuality' // label: which scoring model the journal measured
+  scoringModelMeasured: MODEL.label     // label: which scoring model the journal measured
 };
 
 // PH market snapshot (NOT scored — there is no free historical per-stock PSE
@@ -187,6 +215,8 @@ var CONFIG = {
   indexSymbols: INDEX_SYMBOLS,
   coingeckoIds: COINGECKO_IDS,
   weights: WEIGHTS,
+  previousWeights: PREVIOUS_WEIGHTS,
+  model: MODEL,
   themeRegime: THEME_REGIME,
   lookbackBars: LOOKBACK_BARS,
   barsLookbackDays: BARS_LOOKBACK_DAYS,

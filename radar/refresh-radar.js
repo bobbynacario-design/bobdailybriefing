@@ -602,7 +602,7 @@ async function main() {
 
   var wc = journalBody.weightCalibration;
   console.log('\n  --- weight calibration (holdout from ' + wc.holdoutFrom + ') ---');
-  ['trend', 'volume', 'relStrength', 'riskQuality', 'regime'].forEach(function (c) {
+  ['trend', 'volume', 'relStrength', 'accumulation', 'riskQuality', 'regime'].forEach(function (c) {
     var g = wc.components[c] || {};
     console.log('    ' + c.padEnd(12) +
       ' spreadFit=' + (g.spreadFit == null ? '—' : g.spreadFit + 'pp') +
@@ -611,6 +611,18 @@ async function main() {
       '   w ' + wc.currentWeights[c] + ' -> ' + wc.suggestedWeights[c]);
   });
   console.log('  ' + wc.note);
+
+  var mc = journalBody.modelCheck;
+  if (mc) {
+    console.log('\n  --- model check: ' + mc.current.label + ' vs ' + mc.previous.label + ' on the same signals ---');
+    ['chosenOn', 'checked', 'live'].forEach(function (k) {
+      var w = mc.windows[k];
+      console.log('    ' + k.padEnd(9) + ' ' + (w.from || '—') + '..' + (w.to || '—') + '  days=' + w.current.days +
+        '  top5 vs day ' + w.current.top5VsDay + ' (was ' + w.previous.top5VsDay + ')' +
+        '  IC ' + w.current.meanIC + ' (was ' + w.previous.meanIC + ')');
+    });
+    console.log('  ' + mc.verdict);
+  }
 
   STAGE.set('write');
   await writeDoc(db, dateKey, doc);
