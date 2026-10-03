@@ -31,11 +31,14 @@ const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHE
 const Ask = require("./ask-daybook");
 const Calendar = require("./calendar");
 const IntelligenceSearchCore = require("./intelligence-search-core");
+const {dispatchFeed} = require("./news-dispatch");
 
 initializeApp();
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const OPENAI_WEBHOOK_SECRET = defineSecret("OPENAI_WEBHOOK_SECRET");
+// A fine-grained GitHub token for this repo with Actions read and write only.
+const GITHUB_DISPATCH_TOKEN = defineSecret("GITHUB_DISPATCH_TOKEN");
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
 const GENERATION_OWNERS = (process.env.GENERATION_OWNER_EMAILS || "bobbynacario@gmail.com").split(",").map(s => s.trim().toLowerCase());
 function protectGeneration(feature, handler) {
@@ -1653,6 +1656,17 @@ exports.checkCalendars = onSchedule(
         logger.error("Calendar check failed", {uid, message: error.message});
       }
     }
+  }
+);
+
+// 05:30 Manila: start the news job on time, so the day's news snapshot is in
+// before the briefing is generated (functions/news-dispatch.js says why).
+// A refused dispatch throws, and the scheduler retries it.
+exports.dispatchMorningNews = onSchedule(
+  {schedule: "30 5 * * *", timeZone: "Asia/Manila", region: "asia-southeast1", timeoutSeconds: 60, retryCount: 2, secrets: [GITHUB_DISPATCH_TOKEN]},
+  async () => {
+    const result = await dispatchFeed(fetch, GITHUB_DISPATCH_TOKEN.value(), "news");
+    logger.info("Morning news dispatched", result);
   }
 );
 
