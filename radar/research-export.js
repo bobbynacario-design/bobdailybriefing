@@ -13,7 +13,7 @@
 import { writeFileSync } from 'fs';
 import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
-import { resolveOutcome } from './journal.js';
+import { resolveOutcome, buildJournal } from './journal.js';
 import { fetchRetry } from '../lib/http.js';
 
 var KEY = process.env.APCA_API_KEY_ID || '';
@@ -207,6 +207,31 @@ async function main() {
     generatedAt: new Date().toISOString(), horizon: H, emitFrom: emit[0], emitTo: emit[emit.length - 1], rows: rows
   }));
   console.log(rows.length + ' rows, ' + emit.length + ' dates, ' + Math.round((Date.now() - t0) / 1000) + 's');
+
+  // Verification: the real buildJournal on the real bars with the branch's config,
+  // exactly as refresh-radar.js calls it, minus the Firestore write.
+  var j = buildJournal(bars, CONFIG, CONFIG.journal);
+  console.log('\n=== buildJournal (' + j.journalConfig.scoringModelMeasured + ') ===');
+  ['80-100', '60-79', '40-59', '0-39'].forEach(function (k) {
+    var g = j.byScoreBucket[k];
+    console.log('band ' + k + ' n=' + g.n + ' avgExcess=' + g.avgExcessReturn);
+  });
+  console.log('IC ' + j.informationCoefficient.meanIC + ' days+ ' + j.informationCoefficient.positiveDayRate + '% :: ' + j.informationCoefficient.verdict);
+  var mc = j.modelCheck;
+  ['chosenOn', 'checked', 'live'].forEach(function (k) {
+    var w = mc.windows[k];
+    console.log('model ' + k + ' ' + w.from + '..' + w.to + ' days=' + w.current.days +
+      ' top5 ' + w.current.top5VsDay + ' (was ' + w.previous.top5VsDay + ') IC ' + w.current.meanIC + ' (was ' + w.previous.meanIC + ')' +
+      ' topBand ' + w.current.topBandExcess + ' (was ' + w.previous.topBandExcess + ')');
+  });
+  console.log('verdict: ' + mc.verdict);
+  Object.keys(j.weightCalibration.components).forEach(function (c) {
+    var g = j.weightCalibration.components[c];
+    console.log('calib ' + c + ' fit ' + g.spreadFit + ' hold ' + g.spreadHoldout + ' robust ' + g.robust);
+  });
+  console.log('selection: ' + j.selectionControl.verdict);
+  var slim = Object.assign({}, j, { byDate: undefined, recentOutcomes: undefined });
+  writeFileSync(new URL('./research-journal.json', import.meta.url), JSON.stringify(slim));
 }
 
 main().catch(function (e) { console.error('research export failed: ' + (e.message || e)); process.exit(1); });

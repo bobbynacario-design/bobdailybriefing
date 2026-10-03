@@ -26,5 +26,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: radar-research-rows
-          path: radar/research-rows.json
+          path: |
+            radar/research-rows.json
+            radar/research-journal.json
           retention-days: 1
