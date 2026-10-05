@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rankNews, dedupeKey, scoreItem } from './rank.js';
+import { rankNews, dedupeKey, scoreItem, takeInTurn } from './rank.js';
 import { CONFIG as REAL_CONFIG } from './config.js';
 
 var NOW = Date.parse('2026-08-29T00:00:00.000Z');
@@ -225,4 +225,65 @@ test('network and trucking stories with a keyword hit keep reserved places; fluf
   assert.ok(titles.indexOf('Driver of the year named') < 0, 'no keyword hit, no reserved place');
   assert.equal(doc.items.filter(function (e) { return e.lane === 'beats'; }).length, 1);
   assert.equal(doc.items[doc.items.length - 1].title, 'Flood closes the highway for trucks', 'still ordered by score');
+});
+
+// 4-6 Oct 2026: trucking took every reserved place and no network story reached
+// the list; three of the five were NHVR's static pages.
+test('reserved places go to each beat in turn, and a feed drops its non-news pages', function () {
+  var config = JSON.parse(JSON.stringify(CONFIG));
+  config.feeds.push({ id: 'trucks', url: 'https://x/trucks', source: 'Trucking', section: 'Trucking', priority: 3, lane: 'beats', beat: 'trucking', skipUrl: /\/node\/\d+\/?$/i });
+  config.feeds.push({ id: 'grid', url: 'https://x/grid', source: 'Grid', section: 'Networks', priority: 1, lane: 'beats', beat: 'network' });
+  config.window.beatSlots = 3;
+  config.window.beatOrder = ['network', 'trucking'];
+  var doc = rankNews([
+    ok('reg', [1, 2, 3, 4].map(function (n) { return item({ title: 'Reinsurance ' + n, url: 'https://n/' + n }); })),
+    ok('trucks', [item({ title: 'Flood closes the highway for trucks', url: 'https://t/1' }), item({ title: 'Flood delays freight', url: 'https://t/2' }),
+      item({ title: 'Heavy vehicle page', summary: 'flood', url: 'https://t/node/4998' })]),
+    ok('grid', [item({ title: 'Flood damages the distribution network', url: 'https://g/1' }), item({ title: 'Grid award night', url: 'https://g/2' })])
+  ], config, { now: NOW });
+  var beats = doc.items.filter(function (e) { return e.lane === 'beats'; }).map(function (e) { return e.title; }).sort();
+  assert.deepEqual(beats, ['Flood closes the highway for trucks', 'Flood damages the distribution network', 'Flood delays freight'], 'the network story keeps a place; fluff still does not');
+  assert.equal(doc.items.filter(function (e) { return e.title === 'Flood damages the distribution network'; })[0].beat, 'network');
+  var trucks = doc.feeds.filter(function (f) { return f.id === 'trucks'; })[0];
+  assert.equal(trucks.skipped, 1); assert.equal(trucks.kept, 2);
+  assert.ok(!doc.items.some(function (e) { return /node/.test(e.url); }), 'a static page never enters the list');
+});
+
+test('takeInTurn alternates beats in order and hands an empty beat\'s turn on', function () {
+  var e = function (beat, n) { return { beat: beat, n: n }; };
+  var list = [e('trucking', 1), e('trucking', 2), e('trucking', 3), e('network', 1), e('', 1)];
+  assert.deepEqual(takeInTurn(list, ['network', 'trucking'], 4).map(function (x) { return x.beat + x.n; }), ['network1', 'trucking1', '1', 'trucking2']);
+  assert.deepEqual(takeInTurn(list, ['network', 'trucking'], 0), []);
+  assert.deepEqual(takeInTurn([e('trucking', 1)], ['network', 'trucking'], 3).map(function (x) { return x.n; }), [1]);
+});
+
+test('the real config recognises the network businesses and his pole-strike costs, and skips NHVR pages', function () {
+  var esd = REAL_CONFIG.feeds.find(function (f) { return f.id === 'esd'; });
+  ['Powerlink appoints Zinfra for critical CQ transmission works', 'Ausgrid seeks cost pass-through for storm repairs', 'Ergon Energy crews restore power'].forEach(function (title) {
+    var tier = scoreItem({ title: title, summary: '', publishedAt: iso(1) }, esd, REAL_CONFIG, NOW).tier;
+    assert.ok(tier === 'core' || tier === 'context', title + ' qualifies for a beat place (' + tier + ')');
+  });
+  assert.equal(scoreItem({ title: 'Ergonomic chairs for the office', summary: '', publishedAt: iso(1) }, esd, REAL_CONFIG, NOW).tier, 'general', '"ergon energy", not "ergon"');
+  var nhvr = REAL_CONFIG.feeds.find(function (f) { return f.id === 'nhvr'; });
+  ['https://www.nhvr.gov.au/node/4998', 'https://www.nhvr.gov.au/events/tasmanian-safety-collaboration-forum-2026'].forEach(function (url) { assert.ok(nhvr.skipUrl.test(url), url); });
+  assert.ok(!nhvr.skipUrl.test('https://www.nhvr.gov.au/news/2026/new-fatigue-rules'), 'a news release is kept');
+  REAL_CONFIG.feeds.filter(function (f) { return f.lane === 'beats'; }).forEach(function (f) { assert.ok(f.beat === 'network' || f.beat === 'trucking', f.id + ' has a beat'); });
+  assert.ok(REAL_CONFIG.feeds.some(function (f) { return f.id === 'reneweconomy'; }));
+});
+
+// 6 Oct 2026: a RenewEconomy story on Pacific diesel aid took a network place
+// through "diesel", a trucking term.
+test('a beat story takes a reserved place only with a hit on its own beat\'s terms', function () {
+  var tiered = REAL_CONFIG.keywords.core.concat(REAL_CONFIG.keywords.context);
+  Object.keys(REAL_CONFIG.beatTerms).forEach(function (beat) {
+    REAL_CONFIG.beatTerms[beat].forEach(function (term) { assert.ok(tiered.indexOf(term) >= 0, beat + ' term "' + term + '" is a core or context keyword, so it can tag'); });
+  });
+  var rank = function (feedId, title) {
+    var doc = rankNews([ok(feedId, [item({ title: title, url: 'https://x/' + feedId })])], REAL_CONFIG, { now: NOW });
+    return doc.items[0];
+  };
+  assert.equal(rank('reneweconomy', 'Australia pledges $13 million to help Pacific nations quit diesel').beatHit, false, 'diesel is trucking, not network');
+  assert.equal(rank('reneweconomy', 'Powerlink appoints Zinfra for critical CQ transmission works').beatHit, true);
+  assert.equal(rank('truckbus', 'Diesel price spike hits haulage operators').beatHit, true);
+  assert.equal(rank('in-daily', 'Ausgrid outage claims rise').beatHit, undefined, 'only beat stories carry it');
 });

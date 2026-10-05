@@ -38,8 +38,11 @@ const MAX_EVIDENCE_ITEMS = 14;
 // Of those, up to this many come from the network and trucking feeds (lane
 // "beats") when they hit a core or context term: on score alone the insurance
 // trade press filled every place and his claim-cost beats never reached the
-// briefing.
+// briefing. They are taken in turn from each beat, network first, because on
+// tier alone "prime mover" trucking stories (core) beat every network story
+// (context): on 4-6 Oct 2026 all three places went to trucking.
 const BEAT_EVIDENCE = 3;
+const BEAT_ORDER = ["network", "trucking"];
 
 // A news doc older than this is not used. Its own items are already bounded by
 // the feed's 10-day window, so a doc a couple of days stale is still true; one
@@ -82,6 +85,37 @@ function docAgeDays(newsDoc, nowMs) {
   return (nowMs - ms) / 86400000;
 }
 
+// Up to `limit` items, one from each beat in turn (`order` first, then any other
+// beat, then items with none), each beat's own in the order given. A beat with
+// nothing left gives its turn to the next. A doc written before items carried a
+// beat puts them all in one group, which is the old top-by-rank.
+// news/rank.js has the same helper; change both together.
+function takeInTurn(items, order, limit) {
+  const groups = {};
+  const names = arr(order).slice();
+  arr(items).forEach((item) => {
+    const beat = text(item.beat);
+    if (!groups[beat]) {
+      groups[beat] = [];
+      if (names.indexOf(beat) < 0) names.push(beat);
+    }
+    groups[beat].push(item);
+  });
+  const live = names.filter((name) => groups[name]);
+  const out = [];
+  for (let round = 0; out.length < limit; round++) {
+    let added = false;
+    live.forEach((name) => {
+      if (out.length < limit && groups[name][round]) {
+        out.push(groups[name][round]);
+        added = true;
+      }
+    });
+    if (!added) break;
+  }
+  return out;
+}
+
 // Rank the doc's items for GROUNDING, which is not the same as ranking them for
 // reading. The feed's own score already blends recency and feed priority; here
 // the tier does most of the work, because a core-vocabulary story is the kind
@@ -111,8 +145,11 @@ function buildEvidence(newsDoc, options) {
     .filter((item) => text(item.title) && text(item.url))
     .slice()
     .sort((a, b) => groundingRank(b) - groundingRank(a));
-  const beats = ranked.filter((item) => item.lane === "beats" && (item.tier === "core" || item.tier === "context"))
-    .slice(0, Math.min(BEAT_EVIDENCE, limit));
+  // news/rank.js marks whether a beat story hit its own beat's terms; a doc
+  // written before that falls back to any core or context hit.
+  const beatHit = (item) => item.lane === "beats" &&
+    (typeof item.beatHit === "boolean" ? item.beatHit : item.tier === "core" || item.tier === "context");
+  const beats = takeInTurn(ranked.filter(beatHit), BEAT_ORDER, Math.min(BEAT_EVIDENCE, limit));
   const usable = ranked.filter((item) => beats.indexOf(item) < 0).slice(0, limit - beats.length)
     .concat(beats).sort((a, b) => groundingRank(b) - groundingRank(a));
 

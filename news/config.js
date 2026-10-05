@@ -59,12 +59,25 @@ var FEEDS = [
   // obvious sources (Utility Magazine, Big Rigs, Fully Loaded/ATN, Roads Online)
   // refuse non-browser clients with HTTP 403; they are deliberately left out
   // rather than fetched under a disguised user agent.
-  { id: 'ena',           url: 'https://www.energynetworks.com.au/feed/',                    source: 'Energy Networks Australia', section: 'Networks',           priority: 3, lane: 'beats' },
-  { id: 'esd',           url: 'https://esdnews.com.au/feed/',                               source: 'Energy Source & Distribution', section: 'Networks',        priority: 3, lane: 'beats' },
-  { id: 'aemc',          url: 'https://www.aemc.gov.au/rss.xml',                            source: 'AEMC',                  section: 'Network regulation',      priority: 2, lane: 'beats' },
-  { id: 'ata',           url: 'https://www.truck.net.au/rss.xml',                           source: 'Australian Trucking Association', section: 'Trucking',     priority: 3, lane: 'beats' },
-  { id: 'nhvr',          url: 'https://www.nhvr.gov.au/rss.xml',                            source: 'NHVR',                  section: 'Heavy vehicles',          priority: 2, lane: 'beats' },
-  { id: 'truckbus',      url: 'https://www.truckandbus.net.au/feed/',                       source: 'Truck & Bus',           section: 'Trucking',                priority: 2, lane: 'beats' }
+  //
+  // `beat` splits the reserved places (WINDOW.beatSlots) between the two, so
+  // one cannot take them all. `skipUrl` drops a feed's non-news pages.
+  { id: 'ena',           url: 'https://www.energynetworks.com.au/feed/',                    source: 'Energy Networks Australia', section: 'Networks',           priority: 3, lane: 'beats', beat: 'network' },
+  { id: 'esd',           url: 'https://esdnews.com.au/feed/',                               source: 'Energy Source & Distribution', section: 'Networks',        priority: 3, lane: 'beats', beat: 'network' },
+  { id: 'aemc',          url: 'https://www.aemc.gov.au/rss.xml',                            source: 'AEMC',                  section: 'Network regulation',      priority: 2, lane: 'beats', beat: 'network' },
+  // Added 2026-10-06: ENA publishes every week or two and ESD is mostly
+  // generation, so network news was thin. RenewEconomy returned RSS to this
+  // module's USER_AGENT with 10 items from the last three days. Its generation
+  // stories hit no network term, so they never take a reserved place, and at
+  // priority 2 they score below the insurance press.
+  { id: 'reneweconomy',  url: 'https://reneweconomy.com.au/feed/',                          source: 'RenewEconomy',          section: 'Energy',                  priority: 2, lane: 'beats', beat: 'network' },
+  { id: 'ata',           url: 'https://www.truck.net.au/rss.xml',                           source: 'Australian Trucking Association', section: 'Trucking',     priority: 3, lane: 'beats', beat: 'trucking' },
+  // NHVR's feed also carries its static pages (/node/4998 "Driver information")
+  // and event listings; on 4-6 Oct 2026 those took three of the five beat
+  // places used, through "heavy vehicle" in their summaries.
+  { id: 'nhvr',          url: 'https://www.nhvr.gov.au/rss.xml',                            source: 'NHVR',                  section: 'Heavy vehicles',          priority: 2, lane: 'beats', beat: 'trucking',
+    skipUrl: /\/node\/\d+\/?$|\/events\/|\/avm-search\/?$/i },
+  { id: 'truckbus',      url: 'https://www.truckandbus.net.au/feed/',                       source: 'Truck & Bus',           section: 'Trucking',                priority: 2, lane: 'beats', beat: 'trucking' }
 ];
 
 // The rolling window. `lookbackDays` is 10 rather than 1 because of the weekly
@@ -78,8 +91,10 @@ var WINDOW = {
   maxItems: 40,          // Firestore caps a doc at 1 MiB; 40 trimmed items sits far under
   // Network and trucking stories rarely outscore insurance trade press (priority
   // and "insurer" terms), so without this none reached the kept list. Up to this
-  // many "beats" stories that hit a core or context term keep a place of their own.
+  // many "beats" stories that hit a core or context term keep a place of their own,
+  // taken in turn from each beat in beatOrder (network first: half his files).
   beatSlots: 8,
+  beatOrder: ['network', 'trucking'],
   maxSummaryChars: 320,  // summaries are already 1-2 sentences; this only guards outliers
   keepUndated: true      // an item with no parseable date is kept and FLAGGED, never silently dropped
 };
@@ -104,7 +119,10 @@ var KEYWORDS = {
     // Whole phrases: matching is by substring, so "aer" alone would hit "aerial".
     'betterment', 'loss of use', 'linesworker', 'network charges', 'network tariff',
     'pole replacement', 'traffic control', 'traffic management', 'incident response',
-    'prime mover', 'freight rate', 'parts shortage', 'repair times', 'credit hire'
+    'prime mover', 'freight rate', 'parts shortage', 'repair times', 'credit hire',
+    // The assets and invoices in his pole-strike files (added 2026-10-06).
+    'pole strike', 'power pole', 'stobie', 'streetlight', 'traffic signal', 'asset damage',
+    'cost pass-through', 'cost pass through', 'pass-through application', 'labour rate', 'contractor rate'
   ],
   // Tier 2 — the regulatory and peril environment those engagements sit in.
   context: [
@@ -115,7 +133,14 @@ var KEYWORDS = {
     'reserving', 'fraud',
     'australian energy regulator', 'aemc', 'determination', 'enterprise agreement', 'heavy vehicle',
     'distribution network', 'power outage', 'blackout', 'diesel', 'fuel tax', 'haulage',
-    'roadworks', 'road maintenance', 'payment terms'
+    'roadworks', 'road maintenance', 'payment terms',
+    // The network businesses by name, so a story about one is recognised as the
+    // network beat (added 2026-10-06; on 4-6 Oct no network story hit a term).
+    // "ergon energy", not "ergon", which would match "ergonomic".
+    'electricity network', 'energy regulator', 'network business', 'transmission works', 'network outage',
+    'ausgrid', 'essential energy', 'endeavour energy', 'energex', 'ergon energy', 'energy queensland',
+    'sa power networks', 'powercor', 'citipower', 'united energy', 'ausnet', 'jemena', 'evoenergy',
+    'tasnetworks', 'western power', 'horizon power', 'transgrid', 'powerlink', 'electranet'
   ],
   // Tier 3 — general trade news. Present so the feed is not empty on a quiet
   // week, weighted low so it can never outrank the tiers above.
@@ -139,11 +164,35 @@ var SCORING = {
   titleBonus: 1.4            // a term in the TITLE counts more than one in the summary
 };
 
+// What earns a beat story a reserved place: a hit on its OWN beat's terms (each
+// one is also in KEYWORDS, which is what tags it). Any core or context hit was
+// the old test, and it let a RenewEconomy story on Pacific diesel aid take a
+// network place through "diesel" (6 Oct 2026). A beat with no list here falls
+// back to any core or context hit.
+var BEAT_TERMS = {
+  network: [
+    'linesworker', 'network charges', 'network tariff', 'pole replacement', 'pole strike', 'power pole', 'stobie',
+    'streetlight', 'traffic signal', 'asset damage', 'cost pass-through', 'cost pass through', 'pass-through application',
+    'labour rate', 'contractor rate', 'incident response', 'australian energy regulator', 'energy regulator', 'aemc',
+    'determination', 'enterprise agreement', 'distribution network', 'electricity network', 'network business',
+    'transmission works', 'network outage', 'power outage', 'blackout', 'outage', 'bushfire', 'storm',
+    'ausgrid', 'essential energy', 'endeavour energy', 'energex', 'ergon energy', 'energy queensland',
+    'sa power networks', 'powercor', 'citipower', 'united energy', 'ausnet', 'jemena', 'evoenergy',
+    'tasnetworks', 'western power', 'horizon power', 'transgrid', 'powerlink', 'electranet'
+  ],
+  trucking: [
+    'prime mover', 'freight rate', 'parts shortage', 'repair times', 'credit hire', 'loss of use',
+    'heavy vehicle', 'haulage', 'diesel', 'fuel tax', 'payment terms', 'traffic control', 'traffic management',
+    'roadworks', 'road maintenance', 'enterprise agreement', 'flood', 'storm'
+  ]
+};
+
 var CONFIG = {
   feeds: FEEDS,
   window: WINDOW,
   keywords: KEYWORDS,
-  scoring: SCORING
+  scoring: SCORING,
+  beatTerms: BEAT_TERMS
 };
 
 export { CONFIG };

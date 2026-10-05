@@ -85,6 +85,30 @@ function ageDays(publishedAt, nowMs) {
   return Math.max(0, (nowMs - ms) / 86400000);
 }
 
+// Up to `limit` entries, one from each beat in turn (`order` first, then any
+// other beat, then entries with none), each beat's own in the order given. A
+// beat with nothing left gives its turn to the next.
+// functions/briefing-evidence.js has the same helper; change both together.
+function takeInTurn(entries, order, limit) {
+  var groups = {};
+  var names = arr(order).slice();
+  arr(entries).forEach(function (entry) {
+    var beat = text(entry.beat);
+    if (!groups[beat]) { groups[beat] = []; if (names.indexOf(beat) < 0) names.push(beat); }
+    groups[beat].push(entry);
+  });
+  names = names.filter(function (name) { return groups[name]; });
+  var out = [];
+  for (var round = 0; out.length < limit; round++) {
+    var added = false;
+    names.forEach(function (name) {
+      if (out.length < limit && groups[name][round]) { out.push(groups[name][round]); added = true; }
+    });
+    if (!added) break;
+  }
+  return out;
+}
+
 function scoreItem(item, feed, config, nowMs) {
   var scoring = config.scoring;
   var keywords = config.keywords;
@@ -152,6 +176,7 @@ function rankNews(feedResults, config, options) {
       fetched: items.length,
       kept: 0,
       duplicates: 0,
+      skipped: 0,
       newestAt: newestMs == null ? null : new Date(newestMs).toISOString()
     };
   });
@@ -174,6 +199,8 @@ function rankNews(feedResults, config, options) {
     arr(result.items).forEach(function (item) {
       var key = dedupeKey(item);
       if (!key) return;
+      // A feed's non-news pages (config skipUrl), counted so the row shows them.
+      if (feed.skipUrl && feed.skipUrl.test(text(item.url))) { perFeed[feed.id].skipped++; return; }
 
       if (seen[key]) {
         if (seen[key].alsoIn.indexOf(feed.id) < 0) seen[key].alsoIn.push(feed.id);
@@ -202,6 +229,7 @@ function rankNews(feedResults, config, options) {
         ageDays: age == null ? null : Math.round(age * 10) / 10,
         feedId: feed.id,
         lane: feed.lane || 'insurance',
+        beat: feed.beat || null,
         source: feed.source,
         section: feed.section,
         alsoIn: [],
@@ -210,6 +238,14 @@ function rankNews(feedResults, config, options) {
         tags: scored.tags,
         components: scored.components
       };
+      // Whether a beat story may take a reserved place: a hit on its own beat's
+      // terms (config.beatTerms), else any core or context hit. Carried on the
+      // item so functions/briefing-evidence.js applies the same test.
+      if (entry.lane === 'beats') {
+        var terms = config.beatTerms && config.beatTerms[entry.beat];
+        entry.beatHit = terms ? entry.tags.some(function (tag) { return terms.indexOf(tag) >= 0; })
+          : entry.tier === 'core' || entry.tier === 'context';
+      }
       seen[key] = entry;
       kept.push(entry);
       perFeed[feed.id].kept++;
@@ -227,11 +263,12 @@ function rankNews(feedResults, config, options) {
 
   var uniqueCount = kept.length;
   // Reserved places for the network and trucking feeds (window.beatSlots): only
-  // stories that hit a core or context term, so awards and driver profiles never
-  // take one. The rest of the list is filled by rank as before.
-  var reserved = kept.filter(function (entry) {
-    return entry.lane === 'beats' && (entry.tier === 'core' || entry.tier === 'context');
-  }).slice(0, config.window.beatSlots || 0);
+  // stories with a beat hit (above), so awards and driver profiles never take
+  // one. They are taken in turn from each beat (window.beatOrder), so one beat
+  // cannot fill them all: on 4-6 Oct 2026 trucking took every place used and no
+  // network story reached the list. The rest is filled by rank as before.
+  var reserved = takeInTurn(kept.filter(function (entry) { return entry.beatHit === true; }),
+    config.window.beatOrder, config.window.beatSlots || 0);
   var items = kept.filter(function (entry) { return reserved.indexOf(entry) < 0; })
     .slice(0, Math.max(0, config.window.maxItems - reserved.length)).concat(reserved).sort(byRank);
 
@@ -268,6 +305,7 @@ function rankNews(feedResults, config, options) {
       fetched: stats.fetched,
       kept: stats.kept,
       duplicates: stats.duplicates,
+      skipped: stats.skipped || 0,
       newestAt: stats.newestAt,
       newestAgeDays: age == null ? null : Math.round(age * 10) / 10,
       stale: !!stale,
@@ -303,4 +341,4 @@ function rankNews(feedResults, config, options) {
   };
 }
 
-export { rankNews, scoreItem, dedupeKey, recencyScore };
+export { rankNews, scoreItem, dedupeKey, recencyScore, takeInTurn };

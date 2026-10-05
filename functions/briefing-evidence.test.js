@@ -291,3 +291,26 @@ test("up to three network or trucking stories with a keyword hit are offered alo
   assert.equal(offered.filter((t) => /^Insurance story/.test(t)).length, 11);
   assert.match(out.block, /^VERIFIED AUSTRALIAN INSURANCE, NETWORK AND TRUCKING STORIES FETCHED TODAY/);
 });
+
+// 4-6 Oct 2026: "prime mover" trucking stories are core and every network story
+// was context, so on tier alone trucking took all three places.
+test("the beat places go to each beat in turn, network first, so trucking cannot take them all", () => {
+  const insurance = Array.from({length: 20}, (_, i) => item({title: "Insurance story " + i, url: "https://news.example/i" + i, score: 60 - i, tier: "core"}));
+  const beats = [
+    item({title: "Prime mover auction", url: "https://tb.example/1", score: 25, tier: "core", lane: "beats", beat: "trucking"}),
+    item({title: "Prime mover road test", url: "https://tb.example/2", score: 21, tier: "core", lane: "beats", beat: "trucking"}),
+    item({title: "Heavy vehicle forum", url: "https://nhvr.example/1", score: 23, tier: "context", lane: "beats", beat: "trucking"}),
+    item({title: "Powerlink appoints Zinfra for transmission works", url: "https://esd.example/1", score: 20, tier: "context", lane: "beats", beat: "network"}),
+    item({title: "Ausgrid outage review", url: "https://renew.example/1", score: 18, tier: "context", lane: "beats", beat: "network"}),
+  ];
+  const offered = buildEvidence(newsDoc({items: insurance.concat(beats)}), {now: NOW}).items.map((i) => i.title).filter((t) => !/^Insurance story/.test(t)).sort();
+  assert.deepEqual(offered, ["Ausgrid outage review", "Powerlink appoints Zinfra for transmission works", "Prime mover auction"]);
+  // A doc written before items carried a beat keeps the old top-by-rank.
+  const old = beats.map((b) => Object.assign({}, b, {beat: undefined}));
+  const oldOffered = buildEvidence(newsDoc({items: insurance.concat(old)}), {now: NOW}).items.map((i) => i.title).filter((t) => !/^Insurance story/.test(t)).sort();
+  assert.deepEqual(oldOffered, ["Heavy vehicle forum", "Prime mover auction", "Prime mover road test"]);
+  // A story the feed marked as missing its own beat's terms gets no beat place.
+  const marked = beats.map((b) => Object.assign({}, b, {beatHit: b.title !== "Ausgrid outage review"}));
+  const markedOffered = buildEvidence(newsDoc({items: insurance.concat(marked)}), {now: NOW}).items.map((i) => i.title).filter((t) => !/^Insurance story/.test(t)).sort();
+  assert.deepEqual(markedOffered, ["Powerlink appoints Zinfra for transmission works", "Prime mover auction", "Prime mover road test"]);
+});
