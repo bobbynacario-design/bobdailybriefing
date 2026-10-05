@@ -2962,7 +2962,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
   <div id="auto-load-banner"></div>
 
-  <div class="briefing-actions"><button class="btn-sec owner-only" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button><button class="nav-btn" onclick="copyAsText()">Copy briefing</button><button class="nav-btn" onclick="exportPDF()">Export PDF</button><button class="nav-btn" onclick="commandGo('command')">Open Morning 5</button></div>
+  <div class="briefing-actions"><button class="btn-sec owner-only" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button><button class="nav-btn" onclick="shareBriefing(this)" title="Every story with its link, plus each Go deeper already built: the share sheet on a phone, the clipboard on a computer">Share briefing</button><button class="nav-btn" onclick="copyAsText()">Copy briefing</button><button class="nav-btn" onclick="exportPDF()">Export PDF</button><button class="nav-btn" onclick="commandGo('command')">Open Morning 5</button></div>
   <details class="import-panel"><summary>Import / advanced</summary>
   <div class="paste-zone">
     <div class="paste-label">Generate or Paste Briefing JSON Here</div>
@@ -3491,7 +3491,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> Reading the briefing</div>
       <ul>
-        <li><b>Go deeper</b> — on any story, a short dossier opens under the card: what happened, how it came about, the key numbers, the BI and claims angle, who is exposed, three questions to ask a client, what would change the read, and its sources (only pages the search really returned). It is kept, so opening it again costs nothing; <b>Save to Evidence</b> files it with its sources, and <b>Open as decision</b> starts a journal draft from it. <b>Rebuild</b> (tap twice) searches again and replaces it. What would change the read only gives a date when a source states one. Up to ten new ones a day.</li>
+        <li><b>Go deeper</b> — on any story, a short dossier opens under the card: what happened, how it came about, the key numbers, the BI and claims angle, who is exposed, three questions to ask a client, what would change the read, and its sources (only pages the search really returned). It is kept, so opening it again costs nothing; <b>Save to Evidence</b> files it with its sources, <b>Share</b> sends the story, its link and the dossier as plain text, and <b>Open as decision</b> starts a journal draft from it. <b>Rebuild</b> (tap twice) searches again and replaces it. What would change the read only gives a date when a source states one. Up to ten new ones a day.</li>
+        <li><b>Share briefing</b> — beside Copy briefing: every story with its link and why it matters, plus each Go deeper already built on the day's stories, as plain text for an email, WhatsApp or Teams. On a phone it opens the share sheet; on a computer it copies, ready to paste. It never builds a dossier, so it costs nothing, and whoever gets it needs no Daybook account.</li>
         <li><b>How stories are ranked</b> — <span class="help-pill" style="color:var(--green)">HIGH</span> means you would act on it or raise it this week; being about insurance or BI earns a story its place, not the label. So some days have one or two highs, and some none. A market close (PSEi, ASX, the peso) is not a story on its own: those numbers are in the strip at the top, and a move only earns a card through its cause. The <b>→ Why it matters</b> line starts with the substance, never a stock opener.</li>
         <li><b>Wildcard</b> — after the sections, one real story from outside your usual beats, chosen through the day's lens: Sunday <b>Slow change</b>, Monday <b>A number that matters</b>, Tuesday <b>History rhymes</b>, Wednesday <b>Against the grain</b>, Thursday <b>Far field</b>, Friday <b>How it was solved</b>, Saturday <b>Somewhere else</b>. <b>→ Back to your work</b> offers a link to your field as a question to test, never forced. It is kept only when the search really returned its page, so some days there is none. It has Note, Copy citation, Evidence and Go deeper.</li>
         <li><b>Your work and your accounts</b> — the briefing is told what your files turn on (utility and road-asset damage claims for QBE, heavy-vehicle loss of income, small-business BI for Allianz) and favours stories that move those numbers: network labour and contractor rates, traffic control, repair and parts lead times, hire and freight rates, court rulings on betterment or overheads, outages and storms. Its news list now carries electricity-network and trucking trade feeds (Energy Networks Australia, ESD News, AEMC, the Australian Trucking Association, NHVR, Truck &amp; Bus) alongside the insurance press, and it searches those beats before general news. It also looks for news on <b>your accounts</b>. A story that names one gets a badge on its card (tap it for a meeting brief on that account); one that names an open market call gets a <b>Your call</b> badge (tap it to open the call).</li>
@@ -5240,7 +5241,7 @@ var USAGE_LABELS = {
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
   card_more:'More like this', card_less:'Less like this', card_remind:'Remind me',
   aha_save:'Aha: save insight', aha_decision:'Aha: open as decision', aha_note:'Aha: write my take', aha_check:'Aha: check later', aha_link:'Aha: jump to a story',
-  dossier_save:'Dossier: save to Evidence', dossier_decision:'Dossier: open as decision', dossier_rebuild:'Dossier: rebuild', dossier_close:'Dossier: close',
+  dossier_save:'Dossier: save to Evidence', dossier_share:'Dossier: share', fn_sharebriefing:'Share briefing', dossier_decision:'Dossier: open as decision', dossier_rebuild:'Dossier: rebuild', dossier_close:'Dossier: close',
   account_brief:'Account: meeting brief', account_timeline:'Account: timeline', call_badge:'Your call badge', evidence_show_all:'Evidence: show all',
   'btn_meeting-run':'Build meeting brief', 'btn_accounts-edit':'Edit accounts', 'btn_openai-generate-btn':'Generate briefing',
   'btn_boost-mirror-run':'Read my week back', 'btn_boost-goals-edit':'Set goals', 'btn_boost-done':'Quest done', 'btn_boost-swap':'Try another quest',
@@ -11220,12 +11221,14 @@ function aiTickSoon() {
 // builds one from a web search (usually under a minute) and keeps it, so the
 // same story never costs twice. Everything shown is escaped.
 var _dossiers = {}, _dossiersFor = null;
-async function savedDossiers() {
+// fresh reads them again, for dossiers built on another device since; a failed
+// fresh read keeps what was already loaded.
+async function savedDossiers(fresh) {
   var uid = window._firebaseUid || null;
   if (!uid || typeof window.fbLoadDossiers !== 'function') return {};
-  if (_dossiersFor !== uid) {
-    _dossiersFor = uid; _dossiers = {};
-    try { _dossiers = (await window.fbLoadDossiers(uid)) || {}; } catch (e) { _dossiers = {}; }
+  if (_dossiersFor !== uid || fresh) {
+    if (_dossiersFor !== uid) { _dossiersFor = uid; _dossiers = {}; }
+    try { _dossiers = (await window.fbLoadDossiers(uid)) || {}; } catch (e) {}
   }
   return _dossiers;
 }
@@ -11267,6 +11270,7 @@ function dossierHtml(d) {
   html += part('Sources', (d.sources || []).length ? '<ul class="dossier-sources">' + d.sources.map(function(src) { return '<li><a href="' + esc(src.url) + '" target="_blank" rel="noopener noreferrer">' + esc(src.title || src.url) + ' ↗</a></li>'; }).join('') + '</ul>' : '');
   html += '<p class="dossier-note">An analytical read built from what the search found, not advice.</p>';
   return html + '<div class="dossier-actions"><button type="button" class="card-act" data-dossier-act="save">＋ Save to Evidence</button>' +
+    '<button type="button" class="card-act" data-dossier-act="share" title="Send this story, its link and this dossier: the share sheet on a phone, the clipboard on a computer">↗ Share</button>' +
     '<button type="button" class="card-act" data-dossier-act="decision">Open as decision</button>' +
     '<button type="button" class="card-act" data-dossier-act="rebuild" title="Search again and replace this dossier. Counts towards the ten a day.">Rebuild</button>' +
     '<button type="button" class="card-act" data-dossier-act="close">Close</button></div>';
@@ -11289,6 +11293,89 @@ function dossierSnapshot(d) {
   (d.sources || []).forEach(function(src) { lines.push('Source: ' + (src.title ? src.title + ' — ' : '') + src.url); });
   return lines.join('\n').slice(0, 4000);
 }
+
+// ── Share: the briefing, or one story with its Go deeper, as plain text ──
+// Whoever it goes to has no Daybook account, so the text carries everything:
+// each story's link, and every Go deeper already built on the day's stories.
+// Sharing never builds a dossier, so it costs no model call. Plain text reads
+// the same in an email, WhatsApp or Teams.
+function shareUrl(value) { return /^https?:\/\//i.test(String(value || '')) ? String(value) : ''; }
+function dossierShareLines(d) {
+  if (!d || !d.summary) return [];
+  var lines = ['GOING DEEPER', d.summary];
+  var block = function(title, items) { if (items.length) lines.push('', title + ':'); lines.push.apply(lines, items); };
+  block('How it came about', (d.background || []).map(function(item) { return '• ' + item; }));
+  block('The numbers', (d.numbers || []).map(function(n) { return '• ' + n.figure + (n.what ? ' — ' + n.what : '') + (n.source ? ' (' + n.source + ')' : ''); }));
+  if (d.bi_angle) lines.push('', 'The BI and claims angle: ' + d.bi_angle);
+  if ((d.exposed || []).length) lines.push('', 'Who is exposed: ' + d.exposed.map(capFirst).join('; '));
+  block('Questions to ask a client', (d.client_questions || []).map(function(q, i) { return (i + 1) + '. ' + q; }));
+  if (d.would_change) lines.push('', 'What would change this read: ' + d.would_change);
+  block('Sources', (d.sources || []).filter(function(src) { return shareUrl(src.url); }).map(function(src) { return '• ' + (src.title ? src.title + ' — ' : '') + src.url; }));
+  return lines;
+}
+// One story: headline, what happened, why it matters, its source and link, then
+// its dossier when one was built. badge is 'HIGH' or ''.
+function storyShareLines(st, dossier, badge) {
+  var lines = [String(st.headline || '').trim() + (badge ? ' [' + badge + ']' : '')];
+  if (st.body) lines.push(st.body);
+  if (st.relevance) lines.push('Why it matters: ' + st.relevance);
+  if (st.bridge) lines.push('Back to your work: ' + st.bridge);
+  var url = shareUrl(st.url);
+  if (st.source || url) lines.push('Source: ' + [st.source, url].filter(Boolean).join(' — '));
+  var deeper = dossierShareLines(dossier);
+  return deeper.length ? lines.concat([''], deeper) : lines;
+}
+// The whole briefing. dossierFor(story) returns that story's saved dossier or null.
+function briefingShare(data, dossierFor) {
+  var body = [], stories = 0, deeper = 0;
+  var add = function(st, badge) {
+    var d = dossierFor(st);
+    stories++; if (d && d.summary) deeper++;
+    body.push.apply(body, storyShareLines(st, d, badge)); body.push('');
+  };
+  if (data.aha && data.aha.title) {
+    body.push('── TODAY’S AHA' + (AHA_KIND_LABELS[data.aha.kind] ? ' · ' + AHA_KIND_LABELS[data.aha.kind] : '') + ' ──', data.aha.title);
+    if (data.aha.insight) body.push(data.aha.insight);
+    (data.aha.chain || []).forEach(function(step, i) { body.push((i + 1) + '. ' + step); });
+    if (data.aha.wrong_if) body.push('Wrong if: ' + data.aha.wrong_if);
+    body.push('');
+  }
+  Object.keys(SEC_META).forEach(function(id) {
+    var list = id === 'watch' ? [] : (data.sections && data.sections[id]) || [];
+    if (!list.length) return;
+    body.push('── ' + SEC_META[id].label + ' ──', '');
+    list.forEach(function(st) { add(st, scoreRelevance(st) === 'high' ? 'HIGH' : ''); });
+  });
+  if (data.wildcard && data.wildcard.headline) { body.push('── WILDCARD · ' + wildcardLensLabel(data.wildcard.lens) + ' ──', ''); add(data.wildcard, ''); }
+  if (data.watch) body.push('── ONE THING TO WATCH ──', data.watch + (data.watch_source ? ' (' + data.watch_source + ')' : ''), '');
+  var title = 'Daybook briefing · ' + (data.date || '');
+  var head = [title, stories + (stories === 1 ? ' story' : ' stories') + ' with links' + (deeper ? ' · Go deeper on ' + deeper : ''), ''];
+  return {title:title, stories:stories, deeper:deeper,
+    text:head.concat(body, ['From the day’s news and web searches: an analytical read, not advice.']).join('\n')};
+}
+// A phone opens its share sheet (Mail, WhatsApp, Messages…); a computer copies,
+// ready to paste into an email or Teams. Closing the sheet is not an error.
+function shareOrCopy(title, text, button, copied) {
+  var phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  if (phone && navigator.share) {
+    navigator.share({title:title, text:text}).catch(function(error) {
+      if (!error || error.name !== 'AbortError') copyCardText(text, button, copied);
+    });
+  } else copyCardText(text, button, copied);
+}
+async function shareBriefing(button) {
+  if (!_currentData) { showToast('Open a briefing first', 'warn'); return; }
+  var data = _currentData, uid = window._firebaseUid || null;
+  // A phone shares from what is already loaded: a share sheet opened after a
+  // network wait can be refused. A computer reads again first.
+  var phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  var saved = phone && _dossiersFor === uid ? _dossiers : await savedDossiers(!phone);
+  var share = briefingShare(data, function(st) {
+    var key = window.BriefingPromptCore.storyDossierKey({headline:st.headline, url:shareUrl(st.url)});
+    return (key && saved[key]) || null;
+  });
+  shareOrCopy(share.title, share.text, button, 'Briefing copied: ' + share.stories + ' stories with links' + (share.deeper ? ', Go deeper on ' + share.deeper : '') + '. Paste it into an email or chat.');
+}
 function renderDossier(panel, d, sec, idx) {
   panel.innerHTML = dossierHtml(d);
   panel.querySelector('[data-dossier-act="close"]').addEventListener('click', function() {
@@ -11299,6 +11386,14 @@ function renderDossier(panel, d, sec, idx) {
     var key = currentBriefingKey(), story = d.story || {};
     openEvidencePicker({id:'briefing:' + key + ':' + sec + ':' + idx + ':dossier', source:'Briefing', title:'Dossier: ' + (story.headline || ''),
       detail:dossierSnapshot(d), meta:[_currentData && _currentData.date, 'Go deeper', story.source].filter(Boolean).join(' · '), page:'today', ref:key, url:story.url || ''});
+  });
+  var share = panel.querySelector('[data-dossier-act="share"]');
+  share.addEventListener('click', function() {
+    // The card's own story carries the body and why-it-matters; the dossier only the headline and link.
+    var st = (_currentData && (sec === 'wildcard' ? _currentData.wildcard : ((_currentData.sections || {})[sec] || [])[Number(idx)])) || d.story || {};
+    var title = 'Go deeper · ' + (st.headline || '');
+    shareOrCopy(title, storyShareLines(st, d, '').concat(['', 'From Daybook' + (_currentData && _currentData.date ? ', ' + _currentData.date : '') + ': an analytical read built from a web search, not advice.']).join('\n'),
+      share, 'Story, link and Go deeper copied. Paste it into an email or chat.');
   });
   panel.querySelector('[data-dossier-act="decision"]').addEventListener('click', function() {
     var story = d.story || {}, inAWeek = new Date(Date.parse(manilaDateKey() + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10);
@@ -11557,6 +11652,8 @@ function renderBriefing(options) {
   if (window.refreshDailyBoost) window.refreshDailyBoost();
   applyStoryRuns();
   applyAccountBadges(); loadAccounts().then(applyAccountBadges);
+  // So Share briefing on a phone already has any Go deeper built on another device.
+  savedDossiers(true);
 }
 
 function setTick(vi,mi,val,mov) {
@@ -11627,7 +11724,8 @@ function copyCardText(text, button, message) {
     document.body.appendChild(ta); ta.select();
     var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
     document.body.removeChild(ta);
-    if (ok) done(); else showToast('Could not copy. Citation: ' + text, 'warn');
+    // A shared briefing is thousands of characters: too long to show in a toast.
+    if (ok) done(); else showToast(text.length > 400 ? 'Could not copy. The browser blocked the clipboard; try again.' : 'Could not copy. Citation: ' + text, 'warn');
   }
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
   else fallback();

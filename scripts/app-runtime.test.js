@@ -1190,6 +1190,48 @@ test('the dossier renders escaped, skips empty parts, and copies to Evidence as 
   assert.equal(context.capFirst(''),'');
 });
 
+// Share: whoever gets it has no Daybook account, so the plain text carries each
+// story's link and every Go deeper already built; a phone shares, a computer copies.
+test('Share briefing carries every story link and the Go deeper built on it, as plain text', () => {
+  const {context}=environment(['capFirst','shareUrl','dossierShareLines','storyShareLines','briefingShare','scoreRelevance'],{HIGH_KEYS:[],MED_KEYS:[],
+    SEC_META:{insurance:{label:'INSURANCE SIGNALS'},ai:{label:'AI & TECHNOLOGY'},watch:{label:'ONE THING TO WATCH'}},AHA_KIND_LABELS:{connection:'Connection'},wildcardLensLabel:lens=>lens==='history'?'History rhymes':'Wildcard'});
+  const data={date:'Tuesday, October 6, 2026',aha:null,watch:'AER decision by 21 October',watch_source:'AER',
+    sections:{insurance:[{headline:'El Nino outcomes',body:'Hotter spring.',relevance:'Bushfire BI.',relevance_level:'high',source:'insuranceNEWS',url:'https://insurancenews.com.au/el-nino'},
+      {headline:'Renewal notices',body:'52 notices.',relevance:'Complaints.',relevance_level:'med',source:'IB',url:'javascript:alert(1)'}],ai:[]},
+    wildcard:{lens:'history',headline:'Nobel for optogenetics',body:'Light switches neurons.',bridge:'Mechanism over correlation.',source:'AP',url:'https://apnews.com/x'}};
+  const dossier={summary:'BirdsEyeView sees <fire> risk.',background:['BoM says El Nino is under way.'],numbers:[{figure:'+2.45 °C',what:'Nino3.4',source:'BoM'}],bi_angle:'Prevention of access.',
+    exposed:['bushfire-prone retailers'],client_questions:['Mapped the feeds?','Waiting periods?'],would_change:'Cyclone outlook.',sources:[{title:'BoM outlook',url:'https://bom.gov.au/x'},{title:'Not a web link',url:'ftp://x'}]};
+  const share=context.briefingShare(data,st=>st.url==='https://insurancenews.com.au/el-nino'?dossier:null);
+  assert.equal(share.title,'Daybook briefing · Tuesday, October 6, 2026');
+  assert.equal(share.stories,3,'two section stories and the wildcard'); assert.equal(share.deeper,1);
+  const lines=share.text.split('\n');
+  assert.equal(lines[1],'3 stories with links · Go deeper on 1');
+  ['El Nino outcomes [HIGH]','Why it matters: Bushfire BI.','Source: insuranceNEWS — https://insurancenews.com.au/el-nino','GOING DEEPER','BirdsEyeView sees <fire> risk.',
+    '• +2.45 °C — Nino3.4 (BoM)','The BI and claims angle: Prevention of access.','Who is exposed: Bushfire-prone retailers','2. Waiting periods?','What would change this read: Cyclone outlook.',
+    '• BoM outlook — https://bom.gov.au/x','Renewal notices','Source: IB','── WILDCARD · History rhymes ──','Back to your work: Mechanism over correlation.','Source: AP — https://apnews.com/x',
+    '── ONE THING TO WATCH ──','AER decision by 21 October (AER)'].forEach(line=>assert.ok(lines.includes(line),line));
+  assert.ok(!share.text.includes('javascript:') && !share.text.includes('ftp://'),'only web links travel');
+  assert.ok(!share.text.includes('AI & TECHNOLOGY'),'an empty section is left out');
+  assert.ok(lines.indexOf('GOING DEEPER')>lines.indexOf('El Nino outcomes [HIGH]') && lines.indexOf('GOING DEEPER')<lines.indexOf('Renewal notices'),'the dossier sits under its own story');
+  const none=context.briefingShare({date:'D',sections:{insurance:[{headline:'Only',source:'S',url:'https://s.com/a'}]}},()=>null);
+  assert.equal(none.text.split('\n')[1],'1 story with links'); assert.ok(!none.text.includes('GOING DEEPER'));
+  assert.equal(context.dossierShareLines({summary:''}).length,0);
+});
+test('a computer copies the share; a phone opens the share sheet and copies only if it fails', async () => {
+  const copied=[]; let shared=null, fail=null;
+  const extra=coarse=>({matchMedia:()=>({matches:coarse}),copyCardText:(text,button,message)=>copied.push(message),
+    navigator:{share:data=>{shared=data;return fail?Promise.reject(fail):Promise.resolve();}}});
+  let {context}=environment(['shareOrCopy'],extra(false));
+  context.shareOrCopy('T','text',{},'Copied'); assert.deepEqual(copied,['Copied']); assert.equal(shared,null);
+  ({context}=environment(['shareOrCopy'],extra(true)));
+  context.shareOrCopy('T','text',{},'Copied'); await new Promise(r=>setImmediate(r));
+  assert.equal(JSON.stringify(shared),JSON.stringify({title:'T',text:'text'})); assert.equal(copied.length,1,'shared, not copied');
+  fail={name:'AbortError'}; context.shareOrCopy('T','text',{},'Copied'); await new Promise(r=>setImmediate(r));
+  assert.equal(copied.length,1,'closing the sheet is not an error');
+  fail={name:'NotAllowedError'}; context.shareOrCopy('T','text',{},'Copied'); await new Promise(r=>setImmediate(r));
+  assert.equal(copied.length,2,'a refused share falls back to copying');
+});
+
 // Your accounts: a badge on each story that names one of his accounts or open
 // calls, the accounts named in a briefing, and the list's one-line text form.
 function promptCore(){
