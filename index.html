@@ -3662,6 +3662,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p>The Sports tab defaults to <b>NBA</b>, with <b>PH Local / PBA</b> beside it and FIFA retained as an archive. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
       <ul>
         <li><b>Freshness banner</b> — says DATA CURRENT, STALE DATA, FALLBACK SNAPSHOT, or REFRESH FAILED and shows the last successful provider update.</li>
+        <li><b>Feeds strip</b> — NBA, PBA and Tennis each have their own pill. A lane whose refresh failed turns amber (red once its data is over a day and a half old) with the error, even when it is still showing its last good snapshot, and Command raises it too.</li>
         <li><b>NBA</b> — schedule/results, conference standings, last-five form and margin, rest/back-to-back flags, recent game leaders, and ESPN availability entries.</li>
         <li><b>PBA</b> — official fixtures, venues, results, standings, recent point differential, and conference leaders.</li>
         <li><b>Competition Bracket</b> — uses provider-published NBA round/series data and activates for PBA when official match stages become quarterfinals, semifinals, or finals.</li>
@@ -7351,7 +7352,11 @@ var FEED_SPEC = [
   { key: 'radar',    label: 'Radar',    maxAgeH: 30,   cadence: '06:00 + 08:30 catch-up' },
   { key: 'miro',     label: 'Markets',  maxAgeH: 30,   cadence: '06:15' },
   { key: 'ph',       label: 'PSE',      maxAgeH: 30,   cadence: '06:00 + 16:30 after close' },
-  { key: 'sports',   label: 'Sports',   maxAgeH: 18,   cadence: 'NBA/PBA/tennis, twice daily' },
+  // One pill per sports lane (sports/refresh-sports.js laneHealth): a single
+  // Sports pill stayed green for three weeks while every NBA refresh failed.
+  { key: 'sports-nba',    label: 'NBA',    maxAgeH: 18, cadence: '09:00 + 15:00' },
+  { key: 'sports-pba',    label: 'PBA',    maxAgeH: 18, cadence: '08:20 + 21:30' },
+  { key: 'sports-tennis', label: 'Tennis', maxAgeH: 18, cadence: '08:00 + 20:00' },
   { key: 'grounding', label: 'Numbers', maxAgeH: 30, cadence: 'daily; sources checked when due' }
 ];
 

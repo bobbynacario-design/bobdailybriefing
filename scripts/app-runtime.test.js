@@ -501,6 +501,21 @@ test('feed health: a member sees no Briefing pill, since their account has no br
   context.daybookMember=true; context.renderFeedHealth(health);
   assert.doesNotMatch(element('feed-health').innerHTML,/Briefing/); assert.match(element('feed-health').innerHTML,/Radar <span/);
 });
+// 16 Sep - 6 Oct 2026: one Sports pill stayed green while every NBA refresh failed.
+test('feed health: each sports lane has its own pill, and a lane that kept old data says why',()=>{
+  const specStart=html.indexOf('var FEED_SPEC = [');
+  const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[]});
+  vm.runInContext(html.slice(specStart,html.indexOf('\n];',specStart)+3),context);
+  const now=new Date().toISOString(), old=new Date(Date.now()-21*86400000).toISOString();
+  context.renderFeedHealth({feeds:{sports:{status:'ok',lastOkAt:now},
+    'sports-nba':{status:'failed',lastOkAt:old,stage:'fetch (kept last good data)',message:'ESPN NBA 400: Failed to get events endpoint.'},
+    'sports-pba':{status:'ok',lastOkAt:now},'sports-tennis':{status:'ok',lastOkAt:now}}});
+  const out=element('feed-health').innerHTML;
+  assert.match(out,/feed-pill bad[^>]*><span class="feed-dot"><\/span>NBA <span class="feed-age">21d/);
+  assert.match(out,/feed-pill [^"]*"[^>]*><span class="feed-dot"><\/span>PBA/); assert.match(out,/>Tennis </);
+  assert.doesNotMatch(out,/>Sports </,'the umbrella record has no pill');
+  assert.match(out,/NBA last run failed at fetch \(kept last good data\) \(ESPN NBA 400: Failed to get events endpoint\.\); last good data 21d old\./);
+});
 
 const NUMBERS=['groundingShortName','groundingDay','groundingPeriod','groundingStatus','groundingNumbersHtml'];
 const escHtml=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');

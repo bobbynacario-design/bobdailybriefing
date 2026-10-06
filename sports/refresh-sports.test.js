@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  laneHealth,
   monthKeysBetween,
   mergeNbaEventPages,
   normNbaGame,
@@ -90,6 +91,25 @@ function event(id, date, state, home, away, homeScore, awayScore) {
 
 // 16 Sep 2026: ESPN's NBA scoreboard began answering every date range with 400
 // "Failed to get events endpoint.", so the window is read month by month.
+// 16 Sep - 6 Oct 2026: NBA failed every run and kept its old snapshot, while the
+// one 'sports' health record said ok.
+test('each scheduled lane a run asked for gets its own health record; a kept snapshot is a failure', function () {
+  var doc = { modules: {
+    nba: { refreshStatus: 'fallback', refreshError: 'ESPN NBA 400: {"code":400,"message":"Failed to get events endpoint."}', providerNote: 'Showing the last good NBA snapshot' },
+    pba: { refreshStatus: 'ok' },
+    tennis: { refreshStatus: 'error', setupNote: 'Tennis fetch failed: fetch failed' }
+  } };
+  var all = laneHealth(doc, function () { return true; });
+  assert.deepEqual(all.map(function (r) { return r.feed + '=' + r.status; }), ['sports-nba=failed', 'sports-pba=ok', 'sports-tennis=failed'], 'the paused World Cup lane has no record');
+  assert.equal(all[0].message, 'ESPN NBA 400: {"code":400,"message":"Failed to get events endpoint."}');
+  assert.equal(all[0].stage, 'fetch (kept last good data)');
+  assert.equal(all[1].stage, null); assert.equal(all[1].message, '');
+  assert.equal(all[2].message, 'Tennis fetch failed: fetch failed'); assert.equal(all[2].stage, 'fetch');
+  var nbaOnly = laneHealth(doc, function (key) { return key === 'nba'; });
+  assert.deepEqual(nbaOnly.map(function (r) { return r.feed; }), ['sports-nba'], 'a lane the run did not ask for keeps its own record');
+  assert.equal(laneHealth({ modules: {} }, function (key) { return key === 'pba'; })[0].status, 'failed', 'a missing lane is not ok');
+});
+
 test('reads the NBA window as calendar months and keeps each game inside it once', function () {
   var start = new Date('2026-08-22T03:00:00Z');
   var end = new Date('2026-11-05T03:00:00Z');

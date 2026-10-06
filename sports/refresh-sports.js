@@ -2667,6 +2667,37 @@ async function updateTennisJournal(db, module, dryRun) {
 var LANE_KEYS = ['nba', 'pba', 'tennis', 'worldcup'];
 var LANE_LOOKBACK_DAYS = 21;
 
+// ── Per-lane feed health ─────────────────────────────────────────────────────
+// One 'sports' health record used to cover every lane, and a lane that failed
+// but kept its last good snapshot still counted as ok. ESPN refused the NBA
+// date range from 16 Sep to 6 Oct 2026 and the app's Feeds strip said Sports was
+// fine for all three weeks. So each scheduled lane a run asked for gets its own
+// record (feeds sports-nba, sports-pba, sports-tennis): ok only when that lane
+// refreshed, failed with its error when it fell back. The paused World Cup lane
+// has no schedule, so it has no record.
+var HEALTH_LANES = ['nba', 'pba', 'tennis'];
+function laneHealth(doc, wants) {
+  return HEALTH_LANES.filter(function (key) { return wants(key); }).map(function (key) {
+    var mod = (doc && doc.modules && doc.modules[key]) || {};
+    var ok = mod.refreshStatus === 'ok';
+    return {
+      feed: 'sports-' + key,
+      status: ok ? 'ok' : 'failed',
+      stage: ok ? null : (mod.refreshStatus === 'fallback' ? 'fetch (kept last good data)' : 'fetch'),
+      message: ok ? '' : String(mod.refreshError || mod.setupNote || mod.providerNote || 'refresh failed')
+    };
+  });
+}
+// A run that stops before writing: every lane it was asked for failed with it.
+async function recordLanesFailed(db, stage, message) {
+  var asked = HEALTH_LANES.filter(function (key) { return wantsModule(key); });
+  for (var h = 0; h < asked.length; h++) {
+    await recordRunHealth(db, 'sports-' + asked[h], {
+      status: 'failed', stage: stage, message: message, durationMs: Date.now() - SPORTS_RUN_STARTED
+    });
+  }
+}
+
 function laneValue(docData, key) {
   if (!docData) return null;
   return key === 'worldcup' ? (docData.worldCup || null) : ((docData.modules || {})[key] || null);
@@ -2935,6 +2966,7 @@ async function main() {
         doc.modules.nba = buildNbaModule();
         doc.modules.nba.setupNote = 'NBA fetch failed: ' + (e.message || e);
       }
+      doc.modules.nba.refreshError = String(e.message || e);
     }
   }
   if (wantsModule('pba')) {
@@ -2960,6 +2992,7 @@ async function main() {
         doc.modules.pba = buildPbaModule();
         doc.modules.pba.setupNote = 'PBA fetch failed: ' + (e.message || e);
       }
+      doc.modules.pba.refreshError = String(e.message || e);
     }
   }
   if (wantsModule('tennis')) {
@@ -2988,6 +3021,7 @@ async function main() {
         doc.modules.tennis = buildTennisModule();
         doc.modules.tennis.setupNote = 'Tennis fetch failed: ' + (e.message || e);
       }
+      doc.modules.tennis.refreshError = String(e.message || e);
     }
   }
   ['nba', 'pba'].forEach(function (key) {
@@ -3066,6 +3100,7 @@ async function main() {
   if (prevReadFailed && missingLanes.length) {
     console.error('\nPrevious doc unreadable and ' + missingLanes.join(', ') +
       ' could not be recovered — NOT writing, because the write would erase those lanes. Re-run once the network is back.');
+    await recordLanesFailed(db, 'write', 'Not written: the previous sports doc could not be read, so the write would have erased ' + missingLanes.join(', ') + '.');
     process.exitCode = 1;
     return;
   }
@@ -3093,6 +3128,13 @@ async function main() {
     status: 'ok', asOf: dateKey, durationMs: Date.now() - SPORTS_RUN_STARTED,
     message: 'lanes=' + (doc.sports || []).join(',') + '; module=' + MODULE_ARG
   });
+  var lanes = laneHealth(doc, wantsModule);
+  for (var h = 0; h < lanes.length; h++) {
+    await recordRunHealth(db, lanes[h].feed, {
+      status: lanes[h].status, asOf: dateKey, stage: lanes[h].stage, message: lanes[h].message,
+      durationMs: Date.now() - SPORTS_RUN_STARTED
+    });
+  }
 }
 
 // Run only when executed directly (node refresh-sports.js), not when imported by
@@ -3108,12 +3150,15 @@ if (import.meta.url === __invoked) {
         status: 'failed', stage: 'refresh', durationMs: Date.now() - SPORTS_RUN_STARTED,
         message: e.message || String(e)
       });
+      // The run died before writing, so every lane it was asked for failed too.
+      await recordLanesFailed(_sportsDb, 'refresh', e.message || String(e));
     }
     process.exit(1);
   });
 }
 
 export {
+  laneHealth,
   mergeNoRegress,
   extractFinished,
   normMatch,
