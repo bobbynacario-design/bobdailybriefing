@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  monthKeysBetween,
+  mergeNbaEventPages,
   normNbaGame,
   normNbaStandings,
   buildNbaMomentum,
@@ -85,6 +87,22 @@ function event(id, date, state, home, away, homeScore, awayScore) {
     }]
   };
 }
+
+// 16 Sep 2026: ESPN's NBA scoreboard began answering every date range with 400
+// "Failed to get events endpoint.", so the window is read month by month.
+test('reads the NBA window as calendar months and keeps each game inside it once', function () {
+  var start = new Date('2026-08-22T03:00:00Z');
+  var end = new Date('2026-11-05T03:00:00Z');
+  assert.deepEqual(monthKeysBetween(start, end), ['202608', '202609', '202610', '202611']);
+  assert.deepEqual(monthKeysBetween(new Date('2026-12-20T00:00:00Z'), new Date('2027-01-10T00:00:00Z')), ['202612', '202701'], 'across a year end');
+  assert.deepEqual(monthKeysBetween(new Date('2026-10-06T00:00:00Z'), new Date('2026-10-06T00:00:00Z')), ['202610']);
+  var oct = { events: [{ id: '1', date: '2026-10-03T23:00Z' }, { id: '2', date: '2026-11-01T00:30Z' }] };
+  var nov = { events: [{ id: '2', date: '2026-11-01T00:30Z' }, { id: '3', date: '2026-11-05T23:30Z' }, { id: '4', date: '2026-11-06T00:00Z' }] };
+  var aug = { events: [{ id: '0', date: '2026-08-21T23:59Z' }, { id: '5', date: '2026-08-22T00:00Z' }] };
+  var ids = mergeNbaEventPages([aug, null, oct, nov], start, end).map(function (e) { return e.id; });
+  assert.deepEqual(ids, ['5', '1', '2', '3'], 'a game in two month pages counts once; the end day is included; outside the window is dropped');
+  assert.deepEqual(mergeNbaEventPages([{ events: [{ id: '', date: '2026-10-01T00:00Z' }, { id: '9', date: 'not a date' }] }], start, end), []);
+});
 
 test('normalizes completed and scheduled NBA games without fake zero scores', function () {
   var finalGame = normNbaGame(event('1', '2026-01-01T00:00:00Z', 'post', 'New York Knicks', 'Boston Celtics', '112', '108'));

@@ -143,6 +143,51 @@ function shiftedDate(date, days) {
   return d;
 }
 
+// ESPN's team-sport scoreboards stopped taking a date range on 16 Sep 2026:
+// every dates=YYYYMMDD-YYYYMMDD, past or future, answers 400 "Failed to get
+// events endpoint." (NBA, WNBA and NFL alike; tennis ranges still work). A day,
+// a month (YYYYMM) or a year still answers. So the NBA window is read one
+// calendar month at a time, each well under the 1000 limit (a limit above 1000
+// returns only 25 events), then trimmed back to the window.
+function monthKeysBetween(start, end) {
+  var keys = [];
+  var d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  while (d.getTime() <= end.getTime()) {
+    keys.push(d.toISOString().slice(0, 7).replace('-', ''));
+    d.setUTCMonth(d.getUTCMonth() + 1);
+  }
+  return keys;
+}
+
+// The month pages' events inside [start, end] (end day included), once each.
+// ESPN's months run on US Eastern time, so a late game on the last evening of a
+// month can sit in either page; the id keeps it single.
+function mergeNbaEventPages(pages, start, end) {
+  var from = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  var to = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()) + 86400000;
+  var seen = {};
+  var out = [];
+  (pages || []).forEach(function (page) {
+    ((page && page.events) || []).forEach(function (event) {
+      var at = Date.parse(event && event.date);
+      if (!event || !event.id || seen[event.id] || !isFinite(at) || at < from || at >= to) return;
+      seen[event.id] = true;
+      out.push(event);
+    });
+  });
+  return out;
+}
+
+async function fetchNbaEvents(start, end) {
+  var pages = await Promise.all(monthKeysBetween(start, end).map(function (month) {
+    return espnNba('/site/v2/sports/basketball/nba/scoreboard?dates=' + month + '&limit=1000').then(function (page) {
+      if (((page && page.events) || []).length >= 1000) console.warn('NBA: ' + month + ' hit the 1000-event limit; some games may be missing.');
+      return page;
+    });
+  }));
+  return mergeNbaEventPages(pages, start, end);
+}
+
 function nbaSeasonYear(date) {
   // ESPN labels a season by its ending year. The next season begins appearing
   // in its feed around September, so July/August still belongs to the prior one.
@@ -1805,11 +1850,11 @@ function nbaWatchlist(standings, momentum) {
 async function fetchNbaModule() {
   var now = new Date();
   var offseason = now.getUTCMonth() >= 5 && now.getUTCMonth() <= 8;
-  var start = dateKeyUtc(shiftedDate(now, offseason ? -150 : -45));
-  var end = dateKeyUtc(shiftedDate(now, offseason ? 120 : 30));
+  var start = shiftedDate(now, offseason ? -150 : -45);
+  var end = shiftedDate(now, offseason ? 120 : 30);
   var seasonYear = nbaSeasonYear(now);
   var payloads = await Promise.all([
-    espnNba('/site/v2/sports/basketball/nba/scoreboard?dates=' + start + '-' + end + '&limit=1000'),
+    fetchNbaEvents(start, end).then(function (events) { return { events: events }; }),
     espnNba('/v2/sports/basketball/nba/standings?season=' + seasonYear),
     espnNba('/site/v2/sports/basketball/nba/injuries').catch(function (e) {
       console.warn('NBA injuries unavailable:', e.message || e);
@@ -3072,6 +3117,8 @@ export {
   mergeNoRegress,
   extractFinished,
   normMatch,
+  monthKeysBetween,
+  mergeNbaEventPages,
   normNbaGame,
   normNbaStandings,
   buildNbaMomentum,
