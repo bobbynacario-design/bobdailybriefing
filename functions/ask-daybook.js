@@ -15,7 +15,6 @@
 
 const {urlKey} = require("./briefing-evidence");
 const BriefingCore = require("./briefing-prompt-core");
-const {profileBrief} = BriefingCore;
 
 function text(value) {
   return String(value == null ? "" : value).trim();
@@ -94,7 +93,7 @@ function originOf(source, id) {
   return ORIGIN_BY_ID[id] || ORIGIN[source] || "An item from his app (" + source + ")";
 }
 
-const SYSTEM = "You answer questions about an insurance and business-interruption consultant's own saved material, " +
+const SYSTEM = "You answer questions about the user's own saved material, " +
   "which you look up with the search_daybook tool. You never state what a lookup did not return. Return strict JSON only.";
 
 const SEARCH_TOOL = {
@@ -128,17 +127,24 @@ function requestIntent(question) {
   const personal = /\b(describe|summarise|summarize|sum up)\s+me\b|\bwho am i\b|\bdescribe my (?:work|role|career|job)\b/.test(q);
   const beyondWork = personal && /\b(beyond|outside|apart from|other than|not just)\s+(?:my\s+)?work\b/.test(q);
   const workOnly = personal && !beyondWork && /\b(my (?:work|role|career|job)|professionally|professional (?:bio|description))\b/.test(q);
-  const maxWords = words ? Math.min(170, Math.max(1, Number(words[2]) - (/under|fewer|less/.test(words[1]) ? 1 : 0))) : sentences === 1 ? 45 : brief ? 70 : 170;
+  const maxWords = words ? Math.min(170, Math.max(1, Number(words[2]) - (/under|fewer|less/.test(words[1]) ? 1 : 0))) : sentences === 1 ? 30 : brief ? 70 : 170;
   return {sentences, bullets, maxWords, scope: beyondWork ? "beyond-work" : workOnly ? "work" : personal ? "person" : "records",
     suppressFollowups: !!(sentences || bullets || brief || personal || /\bno follow[- ]?ups?\b/.test(q))};
 }
 
 function intentInstructions(intent) {
   const lines = ["Answer the user's actual request; its scope and explicit format take precedence over general answer templates."];
+  lines.push("Before drafting, choose the central answer and the smallest set of returned facts needed to support it. Lead with that answer; do not narrate the search, repeat the question, or summarise every retrieved record.");
+  lines.push("Make each added detail earn its place: include it only if it changes the answer, resolves an ambiguity, or supplies an essential qualification. Prefer one clear main point with necessary support to a compressed inventory. Stop when the question is answered; the word limit is a ceiling, not a target.");
+  lines.push("For a question about one attribute (such as a date, amount, reason, threshold or invalidator), answer that attribute and any necessary caveat; omit unrelated fields from the same record. Preserve the distinction between a stated aim and something already achieved.");
+  lines.push("Before returning JSON, check each clause against the question. Delete clauses that merely repeat other fields from a retrieved record: a record's reason, status or action does not belong in an answer asking only for its invalidator unless it changes that invalidator. Do not fill spare words with record metadata.");
+  lines.push("Keep the specific names, dates, amounts, changes, invalidators and uncertainty that the question depends on. Do not lose a material caveat to sound punchier, or replace a precise answer with a vague slogan. A comparison should lead with the meaningful difference; explain a cause only when the records support it.");
+  lines.push("For a numerical comparison, lead with the absolute change or percentage change when it can be calculated directly from comparable recorded figures. Label it as a calculation and cite the inputs; retain the before/after figures when helpful. Do not calculate across different units or scopes, and do not invent a reason for the change.");
   if (intent.sentences) lines.push("The answer field must contain exactly " + intent.sentences + " sentence(s); do not append an explanation.");
   if (intent.bullets) lines.push("The answer field must contain exactly " + intent.bullets + " bullet lines, each starting '- ', separated by newline characters; no introduction or conclusion.");
   lines.push("Use at most " + intent.maxWords + " words in the answer field, excluding citation refs; select the essential facts instead of squeezing in every record.");
-  if (intent.scope === "person") lines.push("This is a description of the person, not an inventory of clients or claim types: consider his work, stated interests, values and goals together, but include only defining details supported by his profile. Do not invent traits or equate app activity with personality.");
+  if (intent.scope === "person") lines.push("This is a description of the person, not an inventory of clients or claim types: consider his work, stated interests, values and goals together, but include only defining details supported by his profile. For a short description, choose his core role and at most one defining aim or interest; omit client names, subtypes of files and overlapping geographical detail unless explicitly requested or essential. Do not invent traits or equate app activity with personality.");
+  if (intent.scope === "person" && intent.sentences === 1) lines.push("Aim for a natural role-plus-aim sentence of about 20 to 25 words. Drop routine geography and lists of organisations when they crowd that central point, unless the user asks for them.");
   if (intent.scope === "work") lines.push("Describe his professional role from his profile; leave out unrelated interests and a detailed inventory of files unless requested.");
   if (intent.scope === "beyond-work") lines.push("Focus on his explicitly stated interests, values and goals outside work. Do not substitute his job description; if that personal evidence is missing, say so.");
   if (intent.suppressFollowups) lines.push("Set follow_ups to []; the user asked for a finished, focused answer.");
@@ -193,14 +199,13 @@ async function refineAnswer({raw, revise, ...context}) {
   return review.raw;
 }
 
-// The user message: who he is, his accounts, the rules, and the question.
-// His profile (About you; profileBrief in briefing-prompt-core.js) opens the
-// prompt in place of the line this file used to carry.
-function buildAskPrompt({question, today, accounts, web, profile}) {
-  const lines = profileBrief(profile).concat(["Today is " + today + " (Manila)."]);
+// Profile evidence comes through search_daybook with source refs. Account aliases
+// below help choose lookup terms, but are not evidence for the answer.
+function buildAskPrompt({question, today, accounts, web}) {
+  const lines = ["Today is " + today + " (Manila)."];
   const named = arr(accounts).filter((a) => a && text(a.name)).slice(0, 40);
   if (named.length) {
-    lines.push("", "HIS ACCOUNTS (name | other names), useful as lookup terms:");
+    lines.push("", "HIS ACCOUNTS (name | other names), useful as lookup terms only; cite returned records for any facts:");
     named.forEach((a) => lines.push("- " + clip(a.name, 60) + (arr(a.aliases).length ? " | " + arr(a.aliases).slice(0, 5).map((x) => clip(x, 40)).join(", ") : "")));
   }
   lines.push(
@@ -223,7 +228,7 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
       : "- Do not use the web: answer only from what the lookups return.",
     "- Put the ref after each claim it supports, e.g. \"QBE lifted its cat allowance [S3].\" Never cite a ref a lookup did not return.",
     "- If the lookups find nothing useful, say so plainly in one sentence and leave answer short; never fill the gap from memory.",
-    "- Dates and figures only as the records state them. Say who reported something when it matters.",
+    "- Dates and reported figures only as the records state them. Simple differences or percentages calculated from comparable recorded figures must be labelled as calculations and cite their inputs. Say who reported something when it matters.",
     "- Do not turn a list of interests or values into a ranking, personality trait or claim about priorities unless he explicitly recorded that comparison. Keep descriptions proportional to what his own words support.",
     "- Never give investment advice: no buying, selling, holding or sizing anything. For a question about one of his calls, give what he recorded (reason, invalidator, status, outcome, Called it?) and what the records say since.",
     "- Write to him as \"you\", in plain English with Australian spelling, no emojis or markdown except simple bullet lines when requested. Check the requested scope, sentence/bullet count, word limit and refs before returning JSON.",
@@ -243,13 +248,13 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
 
 // The Responses API input: the system line, the thread as earlier turns, then
 // this question.
-function buildAskInput({question, thread, today, accounts, web, profile}) {
+function buildAskInput({question, thread, today, accounts, web}) {
   const input = [{role: "system", content: SYSTEM}];
   cleanThread(thread).forEach((turn) => {
     input.push({role: "user", content: turn.q});
     input.push({role: "assistant", content: turn.a});
   });
-  input.push({role: "user", content: buildAskPrompt({question, today, accounts, web, profile})});
+  input.push({role: "user", content: buildAskPrompt({question, today, accounts, web})});
   return input;
 }
 

@@ -322,7 +322,8 @@ writes preserve lanes committed concurrently by another module.
 
 ## Model API generation
 
-Weekly Mirror and saved-record Ask Daybook use `claude-haiku-5-5` at low effort.
+Weekly Mirror uses `claude-haiku-5-5` at low effort; saved-record Ask Daybook uses
+the same model at medium effort to improve evidence selection and concise synthesis.
 Ask with **Also check the web** continues to use the configured OpenAI model.
 The daily briefing, dossiers, meeting briefs, Markets panel and Deep Research
 keep their existing models; radar catalysts retain Claude Opus 5.5.
@@ -338,6 +339,15 @@ work. Both providers check format, word count and citation refs before saving an
 answer. A failed check gets one rewrite using the same conversation evidence,
 with tools disabled; a second failure is not saved. Short or personal-description
 requests omit follow-up suggestions. A conforming answer costs no extra call.
+Answers lead with the central point and include only details that answer the
+question, resolve ambiguity or supply a material qualification. One-sentence
+answers default to a 30-word ceiling (an explicit word limit overrides it).
+Short personal descriptions focus on the core role and one defining aim rather
+than listing clients and claim types; explicitly requested names are retained.
+Comparison figures and recorded invalidators remain specific.
+Profile facts come through cited lookups; the prompt carries account aliases
+only to help retrieval. Questions about one attribute omit unrelated record
+fields, and descriptions preserve the difference between an aim and an achievement.
 
 Before deploying these two functions, set `ANTHROPIC_API_KEY` in **Firebase
 Secret Manager** (the GitHub radar secret does not automatically populate it):
@@ -359,7 +369,9 @@ Firestore writes), supply `ANTHROPIC_API_KEY` in the environment and run
 `node functions/haiku-smoke.js`. It checks a weekly read, a cited saved-record
 answer, a missing-record answer, and five scope/format cases including
 "Describe me in 1 sentence", work-only, beyond-work, three bullets and a word
-limit. These synthetic checks do not establish accuracy on all real questions.
+limit, plus a crowded profile, explicitly requested client names, a numerical
+comparison and a recorded invalidator. These synthetic checks do not establish
+accuracy on all real questions.
 
 The browser app does not call OpenAI directly. It calls the Firebase callable
 function `generateBobDailyBriefing`, which keeps the API key server-side.

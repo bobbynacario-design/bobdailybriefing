@@ -11,7 +11,7 @@ function context(question) {
 function raw(answer, extra = {}) { return JSON.stringify({answer, not_found: "", follow_ups: ["Unrelated question?"], web_sources: [], ...extra}); }
 
 test("explicit formatting and personal scope override the generic work template", () => {
-  assert.deepEqual(Ask.requestIntent("Describe me in 1 sentence"), {sentences: 1, bullets: null, maxWords: 45, scope: "person", suppressFollowups: true});
+  assert.deepEqual(Ask.requestIntent("Describe me in 1 sentence"), {sentences: 1, bullets: null, maxWords: 30, scope: "person", suppressFollowups: true});
   assert.equal(Ask.requestIntent("Describe my work in one sentence").scope, "work");
   assert.equal(Ask.requestIntent("Describe me beyond work in one sentence").scope, "beyond-work");
   assert.equal(Ask.requestIntent("Describe me in three bullets").bullets, 3);
@@ -74,4 +74,20 @@ test("word limits and unsupported citation refs trigger correction", () => {
   assert.match(Ask.reviewAnswer(raw("You assess insurance claims for clients [S1]."), ctx).problems.join(" "), /4 words/);
   assert.match(Ask.reviewAnswer(raw("You assess claims [S99]."), ctx).problems.join(" "), /unsupported claims/);
   assert.deepEqual(Ask.reviewAnswer(raw("You assess claims [S1]."), ctx).problems, []);
+});
+
+test("an inventory-length sentence is rewritten, while a precise short answer is accepted", async () => {
+  const ctx = context("Describe me in 1 sentence");
+  const crowded = "You are a forensic claims specialist working for Australian insurers and solicitors, mainly two large insurance groups, plus Philippine consulting firms, mostly on third-party property damage claims, and you want to use AI to improve productivity and income [S1].";
+  assert.match(Ask.reviewAnswer(raw(crowded), ctx).problems.join(" "), /30 words/);
+  const precise = raw("You assess insurance claims and want to use AI to improve your productivity [S1].");
+  const result = await Ask.refineAnswer({...ctx, raw: raw(crowded), revise: async (prompt) => {
+    assert.match(prompt, /omit client names/);
+    assert.match(prompt, /Do not lose a material caveat/);
+    return precise;
+  }});
+  assert.equal(JSON.parse(result).answer, JSON.parse(precise).answer);
+  const prompt = Ask.buildAskPrompt({question: "What changed in the repair estimate?", today: "today", accounts: [], web: false});
+  assert.match(prompt, /comparison should lead with the meaningful difference/);
+  assert.match(prompt, /names, dates, amounts/);
 });

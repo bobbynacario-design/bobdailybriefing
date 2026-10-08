@@ -47,6 +47,7 @@ test("saved Ask forces retrieval, replays signed blocks, and retains citation ch
   ], registry)});
   assert.equal(result.lookups, 1);
   assert.deepEqual(f.requests[0].body.tool_choice, {type: "tool", name: "search_daybook"});
+  assert.equal(f.requests[1].body.output_config.effort, "medium");
   assert.deepEqual(f.requests[1].body.messages[1].content, first.content);
   assert.equal(f.requests[1].body.messages[2].content[0].tool_use_id, "lookup1");
   const clean = Ask.cleanAnswer(JSON.parse(result.raw), registry, [], false);
@@ -114,6 +115,7 @@ test("a format correction reuses the full evidence conversation, disables tools 
   assert.equal(f.requests.length, 3);
   assert.equal(f.billed.length, 3);
   assert.deepEqual(f.requests[2].body.tool_choice, {type: "none"});
+  assert.equal(f.requests[2].body.output_config.effort, "medium");
   assert.deepEqual(f.requests[2].body.messages[1].content, first.content);
   assert.match(f.requests[2].body.messages[2].content[0].content, /insurance claims/);
   assert.deepEqual(f.requests[2].body.messages[3].content, draft.content);

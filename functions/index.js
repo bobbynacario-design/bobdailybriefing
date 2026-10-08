@@ -905,7 +905,7 @@ exports.askDaybook = onCall(
     try {
       if (!web) {
         const result = await Haiku.ask({apiKey: ANTHROPIC_API_KEY.value(),
-          input: Ask.buildAskInput({question, thread, today, accounts, web, profile: await loadProfile(db, uid)}),
+          input: Ask.buildAskInput({question, thread, today, accounts, web}),
           tool: Ask.SEARCH_TOOL, maxLookups: Ask.MAX_LOOKUPS, deadline,
           lookup: (plan) => Ask.lookupOutput(Ask.lookupRecords(index, Ask.cleanPlan(plan), IntelligenceSearchCore, now), registry),
           onUsage: (billingModel, u) => recordUsage(db, "ask-daybook", billingModel, u, phtDateKey())});
@@ -914,7 +914,7 @@ exports.askDaybook = onCall(
         revise = result.revise;
       } else {
         const result = await Ask.runLookups({
-          firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web, profile: await loadProfile(db, uid)}), tool_choice: "auto"},
+          firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web}), tool_choice: "auto"},
           call: async (body) => track(await openaiResponse(Object.assign({model, tools, include}, body), "ask", Math.max(20000, Math.min(120000, deadline - Date.now())))),
           lookup: (plan) => Ask.lookupOutput(Ask.lookupRecords(index, plan, IntelligenceSearchCore, now), registry),
         });

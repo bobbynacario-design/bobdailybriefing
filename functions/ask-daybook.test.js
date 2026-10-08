@@ -90,9 +90,9 @@ test("an answer keeps only refs a lookup returned and links the search returned"
 test("the prompt carries his accounts, the rules for whose words, and the web rule", () => {
   const prompt = Ask.buildAskPrompt({question: "What about Suncorp?", today: "Thursday 1 October 2026 (2026-10-01)", accounts: [{name: "Suncorp", aliases: ["AAMI", "GIO"]}], web: false});
   assert.match(prompt, /- Suncorp \| AAMI, GIO/); assert.match(prompt, /QUESTION: What about Suncorp\?$/);
-  assert.ok(prompt.startsWith("Bob is a forensic business-interruption and claims-quantum specialist"), "his profile (About you) opens it");
-  assert.ok(Ask.buildAskPrompt({question: "q?", today: "t", accounts: [], web: false, profile: {work: "I assess BI claims.", files: "Allianz BI.", matters: "", other: ""}})
-    .startsWith("About Bob: I assess BI claims.\nHis files: Allianz BI.\nToday is t (Manila)."), "his edited profile replaces it");
+  assert.ok(prompt.startsWith("Today is Thursday 1 October 2026"));
+  assert.doesNotMatch(Ask.buildAskPrompt({question: "q?", today: "t", accounts: [], web: false, profile: {work: "I assess BI claims.", files: "Allianz BI.", matters: "", other: ""}}),
+    /I assess BI claims|Allianz BI|Bob is a forensic/, "profile claims are supplied only through cited lookup records");
   assert.match(prompt, /Do not use the web/); assert.match(prompt, /never fill the gap from memory/); assert.match(prompt, /Never give investment advice/);
   assert.match(Ask.buildAskPrompt({question: "q?", today: "t", accounts: [], web: true}), /You may also search the web/);
   const input = Ask.buildAskInput({question: "and IAG?", thread: [{q: "What about Suncorp?", a: "It lifted its allowance [S1]."}], today: "t", accounts: [], web: false});

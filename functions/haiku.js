@@ -63,7 +63,7 @@ async function ask({input, tool, maxLookups, lookup, deadline, ...options}) {
   for (let round = 0; round <= maxLookups; round++) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw failure("unavailable", "The saved-record lookup timed out. Try a narrower question.");
-    const json = await message({...options, timeoutMs: Math.min(120000, remaining), body: {system, messages, tools,
+    const json = await message({...options, timeoutMs: Math.min(120000, remaining), body: {system, messages, tools, output_config: {effort: "medium"},
       tool_choice: round === 0 ? {type: "tool", name: tool.name} : lookups >= maxLookups || round === maxLookups ? {type: "none"} : {type: "auto"}}});
     const calls = (json.content || []).filter((b) => b.type === "tool_use");
     if (!calls.length) {
@@ -71,7 +71,7 @@ async function ask({input, tool, maxLookups, lookup, deadline, ...options}) {
       return {raw: textOf(json), lookups, revise: async (prompt) => {
         const remaining = deadline - Date.now();
         if (remaining <= 0) throw failure("unavailable", "The saved-record answer timed out. Try again.");
-        const revised = await message({...options, timeoutMs: Math.min(120000, remaining), body: {system, tools,
+        const revised = await message({...options, timeoutMs: Math.min(120000, remaining), body: {system, tools, output_config: {effort: "medium"},
           messages: messages.concat([{role: "assistant", content: json.content}, {role: "user", content: prompt}]),
           tool_choice: {type: "none"}}});
         return textOf(revised);
