@@ -33,6 +33,7 @@ const Haiku = require("./haiku");
 const Calendar = require("./calendar");
 const IntelligenceSearchCore = require("./intelligence-search-core");
 const {dispatchFeed} = require("./news-dispatch");
+const {extractUsage, webSearchCount, recordUsage, recordSearches} = require("./llm-usage");
 
 initializeApp();
 
@@ -99,9 +100,7 @@ const JOURNAL_COLL = "journal-bob";
 const COMMAND_URL = "https://bobbynacario-design.github.io/bobdailybriefing/#command";
 const TODAY_URL = "https://bobbynacario-design.github.io/bobdailybriefing/#today";
 
-// ── LLM usage telemetry (CJS twin of lib/llm-usage.js) ──
-// Writes token usage to the shared ledger briefings-bob/llm-usage (no uid).
-// Never throws — telemetry must not break generation.
+// ── LLM usage telemetry: functions/llm-usage.js (CJS twin of lib/llm-usage.js) ──
 // Optional `at` (ms or Date) so a stored document can be placed on the PHT day
 // it was actually written, not the day it is being read. Archived briefings are
 // keyed by a slugified date LABEL ("Thursday--September-11--2026"), which is not
@@ -110,62 +109,6 @@ function phtDateKey(at) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(at == null ? new Date() : new Date(at));
-}
-function _num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-function extractUsage(json) {
-  const u = (json && json.usage) || {};
-  let cached = 0;
-  if (u.input_tokens_details && u.input_tokens_details.cached_tokens != null) {
-    cached = _num(u.input_tokens_details.cached_tokens);
-  } else if (u.cached_tokens != null) {
-    cached = _num(u.cached_tokens);
-  }
-  return {
-    inputTokens: _num(u.input_tokens != null ? u.input_tokens : u.inputTokens),
-    outputTokens: _num(u.output_tokens != null ? u.output_tokens : u.outputTokens),
-    cachedTokens: cached,
-  };
-}
-async function recordUsage(db, feature, model, usage, dateKey) {
-  try {
-    if (!usage) return;
-    const ref = db.collection("briefings-bob").doc("llm-usage");
-    const key = feature + "|" + model;
-    const nowIso = new Date().toISOString();
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const d = snap.exists ? (snap.data() || {}) : {};
-      d.entries = d.entries || {};
-      d.byDay = d.byDay || {};
-      const e = d.entries[key] || {
-        feature, model, calls: 0,
-        inputTokens: 0, outputTokens: 0, cachedTokens: 0,
-        firstSeen: nowIso, lastSeen: nowIso,
-      };
-      e.calls += 1;
-      e.inputTokens += _num(usage.inputTokens);
-      e.outputTokens += _num(usage.outputTokens);
-      e.cachedTokens += _num(usage.cachedTokens);
-      if (usage.cacheWriteTokens) e.cacheWriteTokens = _num(e.cacheWriteTokens) + _num(usage.cacheWriteTokens);
-      e.lastSeen = nowIso;
-      if (!e.firstSeen) e.firstSeen = nowIso;
-      d.entries[key] = e;
-      if (dateKey) {
-        const dd = d.byDay[dateKey] || {calls: 0, inputTokens: 0, outputTokens: 0};
-        dd.calls += 1;
-        dd.inputTokens += _num(usage.inputTokens);
-        dd.outputTokens += _num(usage.outputTokens);
-        d.byDay[dateKey] = dd;
-      }
-      d.updated = nowIso;
-      tx.set(ref, d);
-    });
-  } catch (err) {
-    logger.warn("recordUsage failed", err);
-  }
 }
 
 // The prompt itself now lives in lib/briefing-prompt-core.js, synced here as a
@@ -547,8 +490,10 @@ exports.generateBobDailyBriefing = onCall(
     const recent = context && context.recent;
     briefing.context.recent = recent ? Object.assign({}, recent.stats, countReruns(briefing, recent)) : null;
 
-    // Record token usage to the shared LLM cost ledger (no-throw).
+    // Record token usage, and the web searches billed per use, to the shared
+    // LLM cost ledger (no-throw).
     await recordUsage(db, "briefing", model, extractUsage(json), phtDateKey());
+    await recordSearches(db, "briefing", webSearchCount(json), phtDateKey());
 
     return {
       model,
@@ -688,6 +633,7 @@ exports.generateStoryDossier = onCall(
       throw new HttpsError("internal", msg);
     }
     await recordUsage(db, "story-dossier", model, extractUsage(json), phtDateKey());
+    await recordSearches(db, "story-dossier", webSearchCount(json), phtDateKey());
 
     let dossier;
     try {
@@ -761,6 +707,7 @@ async function makeMeetingBrief(db, uid, {topic, material, dateLabel, usageFeatu
       throw new HttpsError("internal", msg);
     }
     await recordUsage(db, usageFeature || "meeting-brief", model, extractUsage(json), phtDateKey());
+    await recordSearches(db, usageFeature || "meeting-brief", webSearchCount(json), phtDateKey());
 
     let brief;
     try {
@@ -891,9 +838,11 @@ exports.askDaybook = onCall(
     const registry = Ask.newRegistry();
     const usage = {inputTokens: 0, outputTokens: 0, cachedTokens: 0};
     const searched = [];
+    let webSearches = 0;
     const track = (json) => {
       const u = extractUsage(json);
       usage.inputTokens += u.inputTokens; usage.outputTokens += u.outputTokens; usage.cachedTokens += u.cachedTokens;
+      webSearches += webSearchCount(json);
       searchUrls(json).forEach((url) => searched.push(url));
       return json;
     };
@@ -935,7 +884,10 @@ exports.askDaybook = onCall(
       throw new HttpsError(err.code || "internal", err.message);
     } finally {
       // Every call is paid for, answer or not, so the ledger counts them all.
-      if (web) await recordUsage(db, "ask-daybook", model, usage, phtDateKey());
+      if (web) {
+        await recordUsage(db, "ask-daybook", model, usage, phtDateKey());
+        await recordSearches(db, "ask-daybook", webSearches, phtDateKey());
+      }
     }
 
     let answer;
@@ -1137,6 +1089,7 @@ async function finalizeResearchReport(db, reportDoc, responseJson, source) {
     const d = reportDoc.data();
     await recordUsage(db, "deep-research", d.model || DEEP_MODEL_DEFAULT,
       extractUsage(responseJson), phtDateKey());
+    await recordSearches(db, "deep-research", webSearchCount(responseJson), phtDateKey());
   }
   return applied;
 }

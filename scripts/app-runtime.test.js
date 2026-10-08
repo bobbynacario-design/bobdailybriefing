@@ -961,6 +961,22 @@ test('the cost table prices Claude tokens with cache writes, and web searches at
   assert.ok(Math.abs(context.llmPriceUsd('gpt-5.5',{inputTokens:1000,cachedTokens:400,outputTokens:100})-(600*0.005+400*0.0005+100*0.030)/1000)<1e-12,'OpenAI pricing unchanged');
   assert.equal(context.llmPriceUsd('o3-deep-research',{inputTokens:5}),null);
 });
+// The Functions record OpenAI's web searches as "<feature>-search|web-search".
+test('the cost table prices OpenAI search lines per use and keeps them out of the call total', async () => {
+  const ledger={entries:{
+    'briefing|gpt-5.5':{feature:'briefing',model:'gpt-5.5',calls:2,inputTokens:156000,cachedTokens:24000,outputTokens:14000,firstSeen:'2026-10-08T00:00:00Z'},
+    'briefing-search|web-search':{feature:'briefing-search',model:'web-search',calls:30,inputTokens:0,outputTokens:0,cachedTokens:0,firstSeen:'2026-10-08T00:00:00Z'},
+    'ask-daybook-search|web-search':{feature:'ask-daybook-search',model:'web-search',calls:3,inputTokens:0,outputTokens:0,cachedTokens:0,firstSeen:'2026-10-08T00:00:00Z'}}};
+  const {context,element}=environment(['llmPriceUsd','llmUsd','llmInt','renderLlmUsage'],{esc:escRead,fbLoadLlmUsage:async()=>ledger,LLM_RATES_AS_OF:'test'});
+  vm.runInContext(pricingSource(),context);
+  context.renderLlmUsage();
+  await new Promise(r=>setImmediate(r));
+  const out=element('llm-usage-out').innerHTML;
+  assert.match(out,/<td>briefing-search<\/td><td>web-search<\/td><td class="num">30 searches<\/td><td class="num">—<\/td><td class="num">—<\/td><td class="num">\$0\.3000<\/td>/);
+  assert.match(out,/<td>ask-daybook-search<\/td><td>web-search<\/td><td class="num">3 searches<\/td>[\s\S]*?\$0\.0300/);
+  const tokens=(132000*0.005+24000*0.0005+14000*0.030)/1000;
+  assert.match(out,new RegExp('<tr class="llm-tot"><td>Total</td><td></td><td class="num">2</td>[\\s\\S]*?\\$'+(tokens+0.33).toFixed(2)+'</td>'),'searches add to the cost, not to the call count');
+});
 test('an early name carries an early chip with its up-day volume', () => {
   const {context}=environment(['radarContext'],{uiIcon:()=>''});
   assert.match(context.radarContext({early:true,accumulation:1.84}),/early · up-day vol 1\.8×/);
