@@ -273,8 +273,8 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   explicit current, stale, failed, or fallback freshness status. The local
   runner writes `briefings-bob/sports-*` docs and a `sports-public.json` mirror.
 
-- **💰 LLM usage & cost** (Help tab) — every OpenAI call across the app (briefing,
-  deep-research, radar catalyst, Markets panel) records token usage to a shared
+- **💰 LLM usage & cost** (Help tab) — model calls across the app (OpenAI,
+  Claude Haiku and Claude Opus) record token usage to a shared
   ledger (`briefings-bob/llm-usage`); the Help tab ranks the spend by feature in
   USD from a single auditable rate table (raw API cost, no markup; unconfirmed
   model rates shown "unpriced", never guessed).
@@ -320,7 +320,37 @@ PBA installs at 08:20 and 21:30 PHT, NBA at 09:00 and 15:00 PHT, and tennis at
 08:00 and 20:00 PHT. Each module writes a bounded ignored log. Transactional
 writes preserve lanes committed concurrently by another module.
 
-## OpenAI generation
+## Model API generation
+
+Weekly Mirror and saved-record Ask Daybook use `claude-haiku-5-5` at low effort.
+Ask with **Also check the web** continues to use the configured OpenAI model.
+The daily briefing, dossiers, meeting briefs, Markets panel and Deep Research
+keep their existing models; radar catalysts retain Claude Opus 5.5.
+Haiku uses the native Messages API, requires a saved-record lookup before an Ask
+answer, and retains the existing citation checks. Usage is recorded per call,
+including rejected or truncated answers. Requests over 100,000 input tokens
+(including cache reads and writes) are billed in a separate `/over-100k` ledger
+entry so the higher Haiku rate is applied correctly.
+
+Before deploying these two functions, set `ANTHROPIC_API_KEY` in **Firebase
+Secret Manager** (the GitHub radar secret does not automatically populate it):
+
+```powershell
+firebase functions:secrets:set ANTHROPIC_API_KEY --project pokerhq-a67e4
+firebase deploy --only functions:bobdailybriefing:generateWeeklyMirror,functions:bobdailybriefing:askDaybook --project pokerhq-a67e4
+```
+
+The static app changes need the normal Pages publish as well. Verify a weekly
+read and an Ask question with the web checkbox both off and on after deployment.
+Offline adapter tests cover tool replay, lookup limits, citation filtering,
+refusals, truncation, credentials and pricing tiers. These are protocol checks;
+answer quality and real latency still need comparison on representative inputs.
+
+For a small paid smoke test against Haiku using synthetic notes only (no
+Firestore writes), supply `ANTHROPIC_API_KEY` in the environment and run
+`node functions/haiku-smoke.js`. It checks a weekly read, a cited saved-record
+answer, and a missing-record answer. No Anthropic key was available locally
+during this implementation, so this live check still needs to run.
 
 The browser app does not call OpenAI directly. It calls the Firebase callable
 function `generateBobDailyBriefing`, which keeps the API key server-side.

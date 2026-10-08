@@ -29,6 +29,7 @@ const {
 const DailyBoostCore = require("./daily-boost");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 const Ask = require("./ask-daybook");
+const Haiku = require("./haiku");
 const Calendar = require("./calendar");
 const IntelligenceSearchCore = require("./intelligence-search-core");
 const {dispatchFeed} = require("./news-dispatch");
@@ -36,6 +37,7 @@ const {dispatchFeed} = require("./news-dispatch");
 initializeApp();
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 const OPENAI_WEBHOOK_SECRET = defineSecret("OPENAI_WEBHOOK_SECRET");
 // A fine-grained GitHub token for this repo with Actions read and write only.
 const GITHUB_DISPATCH_TOKEN = defineSecret("GITHUB_DISPATCH_TOKEN");
@@ -147,6 +149,7 @@ async function recordUsage(db, feature, model, usage, dateKey) {
       e.inputTokens += _num(usage.inputTokens);
       e.outputTokens += _num(usage.outputTokens);
       e.cachedTokens += _num(usage.cachedTokens);
+      if (usage.cacheWriteTokens) e.cacheWriteTokens = _num(e.cacheWriteTokens) + _num(usage.cacheWriteTokens);
       e.lastSeen = nowIso;
       if (!e.firstSeen) e.firstSeen = nowIso;
       d.entries[key] = e;
@@ -579,7 +582,7 @@ exports.generateWeeklyMirror = onCall(
     region: "asia-southeast1",
     timeoutSeconds: 180,
     memory: "256MiB",
-    secrets: [OPENAI_API_KEY],
+    secrets: [ANTHROPIC_API_KEY],
   },
   protectGeneration("mirror", async (request) => {
     const db = getFirestore();
@@ -590,40 +593,19 @@ exports.generateWeeklyMirror = onCall(
     // Nothing recorded this week: say so without paying for a model call.
     if (!input) return {mirror: null, reason: "empty"};
 
-    const model = DEFAULT_MODEL;
-    let response;
+    const model = Haiku.MODEL;
+    let raw;
     try {
-      response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
-        body: JSON.stringify({
-          model,
-          input: [{role: "system", content: MIRROR_SYSTEM}, {role: "user", content: buildMirrorPrompt(input, await loadProfile(db, uid))}],
-          text: {format: {type: "json_schema", name: "weekly_mirror", schema: MIRROR_SCHEMA, strict: true}},
-        }),
-        signal: AbortSignal.timeout(150000),
-      });
+      raw = await Haiku.mirror({apiKey: ANTHROPIC_API_KEY.value(), system: MIRROR_SYSTEM,
+        prompt: buildMirrorPrompt(input, await loadProfile(db, uid)), schema: MIRROR_SCHEMA, timeoutMs: 150000,
+        onUsage: (billingModel, usage) => recordUsage(db, "weekly-mirror", billingModel, usage, todayKey)});
     } catch (err) {
-      logger.error("OpenAI network error (mirror)", err);
-      throw new HttpsError("unavailable", "OpenAI request failed before receiving a response.");
+      throw new HttpsError(err.code || "internal", err.message);
     }
-    const responseText = await response.text();
-    let json;
-    try {
-      json = JSON.parse(responseText);
-    } catch (err) {
-      json = {error: {message: responseText || "Non-JSON OpenAI response"}};
-    }
-    if (!response.ok) {
-      const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
-      logger.error("OpenAI API error (mirror)", {status: response.status, message: msg});
-      throw new HttpsError("internal", msg);
-    }
-    await recordUsage(db, "weekly-mirror", model, extractUsage(json), todayKey);
 
     let mirror;
     try {
-      mirror = cleanMirror(parseBriefing(extractText(json)));
+      mirror = cleanMirror(parseBriefing(raw));
     } catch (err) {
       mirror = null;
     }
@@ -885,7 +867,7 @@ exports.askDaybook = onCall(
     region: "asia-southeast1",
     timeoutSeconds: 240,
     memory: "512MiB",
-    secrets: [OPENAI_API_KEY],
+    secrets: [OPENAI_API_KEY, ANTHROPIC_API_KEY],
   },
   protectGeneration("ask", async (request) => {
     const db = getFirestore();
@@ -893,7 +875,7 @@ exports.askDaybook = onCall(
     const question = Ask.cleanQuestion(request.data.question);
     const web = request.data.web === true;
     const thread = Ask.cleanThread(request.data.thread);
-    const model = DEFAULT_MODEL;
+    const model = web ? DEFAULT_MODEL : Haiku.MODEL;
     const now = Date.now();
     const [index, accountsSnap] = await Promise.all([
       loadAskIndex(db, uid),
@@ -917,23 +899,38 @@ exports.askDaybook = onCall(
     };
     const deadline = now + 210000;
     let json;
+    let raw;
     let lookups = 0;
     try {
-      const result = await Ask.runLookups({
-        firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web, profile: await loadProfile(db, uid)}), tool_choice: "auto"},
-        call: async (body) => track(await openaiResponse(Object.assign({model, tools, include}, body), "ask", Math.max(20000, Math.min(120000, deadline - Date.now())))),
-        lookup: (plan) => Ask.lookupOutput(Ask.lookupRecords(index, plan, IntelligenceSearchCore, now), registry),
-      });
-      json = result.json;
-      lookups = result.lookups;
+      if (!web) {
+        const result = await Haiku.ask({apiKey: ANTHROPIC_API_KEY.value(),
+          input: Ask.buildAskInput({question, thread, today, accounts, web, profile: await loadProfile(db, uid)}),
+          tool: Ask.SEARCH_TOOL, maxLookups: Ask.MAX_LOOKUPS, deadline,
+          lookup: (plan) => Ask.lookupOutput(Ask.lookupRecords(index, Ask.cleanPlan(plan), IntelligenceSearchCore, now), registry),
+          onUsage: (billingModel, u) => recordUsage(db, "ask-daybook", billingModel, u, phtDateKey())});
+        raw = result.raw;
+        lookups = result.lookups;
+      } else {
+        const result = await Ask.runLookups({
+          firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web, profile: await loadProfile(db, uid)}), tool_choice: "auto"},
+          call: async (body) => track(await openaiResponse(Object.assign({model, tools, include}, body), "ask", Math.max(20000, Math.min(120000, deadline - Date.now())))),
+          lookup: (plan) => Ask.lookupOutput(Ask.lookupRecords(index, plan, IntelligenceSearchCore, now), registry),
+        });
+        json = result.json;
+        lookups = result.lookups;
+        raw = extractText(json);
+      }
+    } catch (err) {
+      if (!web) throw new HttpsError(err.code || "internal", err.message);
+      throw err;
     } finally {
       // Every call is paid for, answer or not, so the ledger counts them all.
-      await recordUsage(db, "ask-daybook", model, usage, phtDateKey());
+      if (web) await recordUsage(db, "ask-daybook", model, usage, phtDateKey());
     }
 
     let answer;
     try {
-      answer = Ask.cleanAnswer(parseBriefing(extractText(json)), registry, searched, web);
+      answer = Ask.cleanAnswer(parseBriefing(raw), registry, searched, web);
     } catch (err) {
       answer = null;
     }

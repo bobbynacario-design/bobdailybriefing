@@ -192,7 +192,7 @@ test('Ask Daybook: an answer shows its refs as buttons and links, escaped, and d
   assert.match(out,/data-ask-follow="What would change it\?"/);
   assert.match(out,/3 of your items looked at · 2 lookups · with the web/);
   assert.equal(context.askAnswerHtml(null),'');
-  assert.equal(context.askCostText(false),'About $0.05–0.10 a question'); assert.equal(context.askCostText(true),'About $0.30–0.35 with the web');
+  assert.equal(context.askCostText(false),'Lower-cost saved-record answer'); assert.equal(context.askCostText(true),'About $0.30–0.35 with the web');
 });
 test('Ask Daybook: a question goes to the server, a follow-up carries the thread, and New question clears it',async()=>{
   const sent=[]; let opened=null, closed=0, n=0;
@@ -948,6 +948,8 @@ test('the cost table prices Claude tokens with cache writes, and web searches at
   const claude=context.llmPriceUsd('claude-opus-5-5',{inputTokens:312251,cachedTokens:268355,cacheWriteTokens:43870,outputTokens:9955});
   assert.ok(Math.abs(claude-(26*4+268355*0.2+43870*5+9955*20)/1e6)<1e-9,'uncached in at $4, cache reads $0.20, writes $5, out $20 per 1M');
   assert.equal(context.llmPriceUsd('web-search',{calls:25}),0.25);
+  assert.ok(Math.abs(context.llmPriceUsd('claude-haiku-5-5',{inputTokens:10000,outputTokens:2000})-0.002)<1e-12);
+  assert.ok(Math.abs(context.llmPriceUsd('claude-haiku-5-5/over-100k',{inputTokens:100001,cachedTokens:90000,cacheWriteTokens:1,outputTokens:100})-(10000*0.5+90000*0.05+0.625+100*2.5)/1e6)<1e-12);
   assert.ok(Math.abs(context.llmPriceUsd('gpt-5.5',{inputTokens:1000,cachedTokens:400,outputTokens:100})-(600*0.005+400*0.0005+100*0.030)/1000)<1e-12,'OpenAI pricing unchanged');
   assert.equal(context.llmPriceUsd('o3-deep-research',{inputTokens:5}),null);
 });

@@ -2719,7 +2719,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 <div class="intel-search-overlay" id="intel-search-overlay" hidden onclick="if(event.target===this)closeIntelligenceSearch()">
   <section class="intel-search-dialog" role="dialog" aria-modal="true" aria-labelledby="intel-search-label" onkeydown="intelligenceSearchTypeAhead(event)">
     <div class="intel-search-head"><span class="intel-search-icon">⌕</span><input class="intel-search-input" id="intel-search-input" aria-label="Search all intelligence" placeholder="Search briefings, evidence, notes, decisions, your numbers, Radar…" autocomplete="off" oninput="runIntelligenceSearch(this.value)" onkeydown="intelligenceSearchKey(event)"><button class="intel-search-close" onclick="closeIntelligenceSearch()">ESC</button></div>
-    <div class="ask-bar owner-only" id="ask-bar"><button type="button" class="tool-chip ask-run" id="ask-run" onclick="runAskDaybook()" title="Answer the question in the box from your Daybook (Enter on a question, or Ctrl+Enter)">Ask Daybook</button><label class="ask-web"><input type="checkbox" id="ask-web" onchange="paintAskCost(); focusSearchInput()"> Also check the web</label><span class="ask-cost" id="ask-cost">About $0.05–0.10 a question</span><select id="ask-history" aria-label="Earlier questions" hidden onchange="showAskAnswer(this.value)"></select></div>
+    <div class="ask-bar owner-only" id="ask-bar"><button type="button" class="tool-chip ask-run" id="ask-run" onclick="runAskDaybook()" title="Answer the question in the box from your Daybook (Enter on a question, or Ctrl+Enter)">Ask Daybook</button><label class="ask-web"><input type="checkbox" id="ask-web" onchange="paintAskCost(); focusSearchInput()"> Also check the web</label><span class="ask-cost" id="ask-cost">Lower-cost saved-record answer</span><select id="ask-history" aria-label="Earlier questions" hidden onchange="showAskAnswer(this.value)"></select></div>
     <div class="ask-out owner-only" id="ask-out" hidden aria-live="polite"></div>
     <div class="intel-search-status" id="intel-search-status"><span id="intel-search-label">Unified intelligence search</span></div>
     <div class="search-coverage"><span id="intel-search-coverage" role="status">Coverage not loaded</span><button class="tool-chip" onclick="loadIntelligenceSearchData()">Refresh sources</button></div>
@@ -3513,7 +3513,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li><b>In the Morning 5 push</b> a line reads “To check: …”; on a quiet morning, a reminder coming due gets a push of its own. Each is announced once.</li>
         <li><b>Experiments</b> — under <b>Try an idea</b>, plan one small thing and when to revisit it; it comes back in <b>Your experiments</b> to record what happened. When one is due, a Morning 5 push that is already going out adds “Experiment to review: …”, and the Morning 5 lists it: tap it there to open its review. It never creates an extra push on its own. A decision whose <b>Review on</b> date has come is listed the same way.</li>
         <li><b>Sundays</b> bring <b>Look back on your week</b>: the week's notes and stories. <b>Carry forward</b> one note and it rides along on the spark until next Sunday.</li>
-        <li><b>Your week, read back</b> — tap <b>Read my week back</b> (it opens by itself on Sundays) and an AI reads your last seven days: notes, quests, the stories you opened and voted on, experiments and decisions. It names what kept coming up, what gave or took energy, where what you said and did part ways, one small thing you have not tried, and a question to sit with. Each read follows up on the last one from at least five days before, so there has been time for something to change. Under its question, <b>Write my answer</b> saves your reply with that question, and the next read responds to what you wrote. A note you bring back with <b>Coming back to…</b> is read as that earlier day's words, and only what you add counts as this week's. Your <b>Called it?</b> verdicts from the week are part of what it reads. It only sees what you recorded here, never gives trading advice, and your notes go to OpenAI only when you tap. Up to three reads a day; the last twelve are kept. On Sundays, until you have read it, the Morning 5 push says so (one push that day, even when nothing else changed) and the collapsed spark strip shows <b>Read my week back</b>.</li>
+        <li><b>Your week, read back</b> — tap <b>Read my week back</b> (it opens by itself on Sundays) and an AI reads your last seven days: notes, quests, the stories you opened and voted on, experiments and decisions. It names what kept coming up, what gave or took energy, where what you said and did part ways, one small thing you have not tried, and a question to sit with. Each read follows up on the last one from at least five days before, so there has been time for something to change. Under its question, <b>Write my answer</b> saves your reply with that question, and the next read responds to what you wrote. A note you bring back with <b>Coming back to…</b> is read as that earlier day's words, and only what you add counts as this week's. Your <b>Called it?</b> verdicts from the week are part of what it reads. It only sees what you recorded here, never gives trading advice, and your notes go to Claude only when you tap. Up to three reads a day; the last twelve are kept. On Sundays, until you have read it, the Morning 5 push says so (one push that day, even when nothing else changed) and the collapsed spark strip shows <b>Read my week back</b>.</li>
       </ul>
     </div>
 
@@ -3535,7 +3535,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li>From the <b>Radar</b> it reads today’s scan: each name’s score and status, the reason for the score, its catalyst and read (AI-written, and said so), its levels and tripwire, how names in its score band have done before, and which names are today’s Taker and Wildcard picks. For example: “Why is SOXX on the radar?”, “What are today’s Wildcard picks?”. It has no earlier days, so it can’t say how a name has changed.</li>
         <li>Every claim carries a ref: <b>S1</b> opens that record where it lives; <b>W1</b> opens a web page. A claim with no ref it found is dropped, and when your Daybook has nothing on it, it says so rather than guessing.</li>
         <li>It keeps straight whose words are whose, as the meeting brief does: <b>you noted</b> only for your notes, decisions and the note on a saved page. A dossier, meeting brief or weekly read is AI-written; a briefing story is something you were shown.</li>
-        <li><b>Also check the web</b> is off unless you tick it. About $0.05–0.10 a question from your Daybook, about $0.30–0.35 with the web; up to twenty a day. Nothing is sent until you tap, and it never gives trading advice.</li>
+        <li><b>Also check the web</b> is off unless you tick it. Saved-record questions use Claude Haiku; web questions use OpenAI (about $0.30–0.35). Saved-record cost depends on the material read; see the usage report for actual spend. Up to twenty questions a day. Nothing is sent until you tap, and it never gives trading advice.</li>
         <li>A follow-up carries the last three exchanges, so “and Suncorp?” works: one of its suggested questions, a short question, or one that opens like a follow-up (“and…”, “what about…”, “is that…”). Any other question starts afresh, as does <b>New question</b>. When your Daybook has nothing on it, the answer says so. The latest twenty answers are kept under <b>Earlier questions</b>.</li>
         <li><b>Send to…</b> takes an answer elsewhere: <b>Evidence</b> keeps it with its sources; <b>Decision draft</b> starts a journal entry about the one Radar name or call it covers (otherwise the question), with a review in a week, and nothing is saved until you tap Save decision; <b>To check…</b> adds a dated “Ask again” to To check, so it comes back that day and in your Morning 5; <b>My take</b> starts your reflection on Today; <b>Copy as text</b> puts it on the clipboard with its sources.</li>
       </ul>
@@ -3585,7 +3585,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <div class="llm-grid">
         <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
         <div class="llm-notes">
-          <p>Every AI call across the app (the daily <b>briefing</b>, <b>Ask Daybook</b> questions, <b>Go deeper</b> dossiers, the <b>weekly read</b>, <b>meeting briefs</b>, on-demand <b>deep-research</b> reports and the <b>Markets</b> persona panel on OpenAI; the <b>radar</b> catalysts and reads on Claude) records its token usage to a shared ledger. Claude's web searches are billed per search, so they get their own line. The table ranks the spend by feature, in USD, using each provider's published rates — raw API cost, no markup.</p>
+          <p>Every AI call across the app records its token usage to a shared ledger. The <b>weekly read</b> and saved-record <b>Ask Daybook</b> questions use Claude Haiku; <b>radar</b> catalysts and reads use Claude Opus. The daily <b>briefing</b>, web-enabled questions, <b>Go deeper</b> dossiers, <b>meeting briefs</b>, <b>deep-research</b> reports and the <b>Markets</b> panel use OpenAI. Claude's web searches are billed per search, so they get their own line. The table ranks the spend by feature, in USD, using each provider's published rates — raw API cost, no markup.</p>
           <p class="help-key">The ledger stores tokens only; cost is computed from a single rate table, so the figure is auditable (see the "rates as of" line). Deep-research models are shown <i>unpriced</i> until their rates are confirmed — the tracker never guesses.</p>
         </div>
       </div>
@@ -4645,7 +4645,7 @@ function openWeeklyReadResult() {
 // ref to what it found. Nothing is sent until he taps Ask Daybook, and the web
 // only when he ticks it. Follow-ups carry the last three exchanges.
 var _askThread = [], _askAnswers = {}, _askFor = null, _askShown = '', _askRunning = false;
-function askCostText(web) { return web ? 'About $0.30–0.35 with the web' : 'About $0.05–0.10 a question'; }
+function askCostText(web) { return web ? 'About $0.30–0.35 with the web' : 'Lower-cost saved-record answer'; }
 function paintAskCost() { setText('ask-cost', askCostText(!!(document.getElementById('ask-web') || {}).checked)); }
 function askError(error) {
   var code = String(error && error.code || '').replace(/^functions\//, '');
@@ -10658,12 +10658,14 @@ function renderSports() {
 var LLM_PRICING_USD_PER_1K = {
   'gpt-5.5': { input: 0.005, output: 0.030, cacheRead: 0.0005 },
   'claude-opus-5-5': { input: 0.004, output: 0.020, cacheRead: 0.0002, cacheWrite: 0.005 },
+  'claude-haiku-5-5': { input: 0.0001, output: 0.0005, cacheRead: 0.00001, cacheWrite: 0.000125 },
+  'claude-haiku-5-5/over-100k': { input: 0.0005, output: 0.0025, cacheRead: 0.00005, cacheWrite: 0.000625 },
   'web-search': { perCall: 0.01 },
   // Deep-research rates not confirmed for this lane -> unpriced on purpose.
   'o4-mini-deep-research': null,
   'o3-deep-research': null
 };
-var LLM_RATES_AS_OF = 'gpt-5.5 2026-06-23, Claude 2026-10-03';
+var LLM_RATES_AS_OF = 'gpt-5.5 2026-06-23, Opus 2026-10-03, Haiku 2026-10-08';
 // Cached tokens (and Claude's cache writes) are subsets of input tokens, so
 // charge the rest of the input at the input rate, cached at the cache-read
 // rate, and cache writes at their own (higher) rate.
@@ -10747,7 +10749,7 @@ function renderLlmUsage() {
     html += '<div class="src" style="margin-top:.35rem">' +
       (since ? 'Since ' + esc(String(since).slice(0, 10)) + ' · ' : '') +
       'rates as of ' + LLM_RATES_AS_OF + ' (gpt-5.5 $5/$30 per 1M in/out, $0.50 cached; ' +
-      'Claude Opus 5.5 $4/$20, $0.20 cached, $5 cache writes; web search 1¢ each)' +
+      'Claude Opus 5.5 $4/$20, $0.20 cached, $5 cache writes; Haiku 5.5 $0.10/$0.50 up to 100k input tokens, $0.50/$2.50 above; web search 1¢ each)' +
       (anyUnpriced ? ' · deep-research shown unpriced (rates unconfirmed — never guessed)' : '') +
       (rows.some(function (r) { return String(r.model || '').indexOf(LLM_LOCAL_PREFIX) === 0; })
         ? ' · local/* models run on your own machine and cost $0 in API terms (electricity is not modelled here)' : '') +
