@@ -3,11 +3,9 @@ name: Refresh sports and publish Pages
 on:
   schedule:
     - cron: "0 0 * * *"      # Tennis 08:00 PHT
-    - cron: "20 0 * * *"     # PBA 08:20 PHT
     - cron: "0 1 * * *"      # NBA 09:00 PHT
     - cron: "0 7 * * *"      # NBA 15:00 PHT
     - cron: "0 12 * * *"     # Tennis 20:00 PHT
-    - cron: "30 13 * * *"    # PBA 21:30 PHT
   workflow_dispatch:
     inputs:
       module:
@@ -15,7 +13,7 @@ on:
         required: true
         default: nba
         type: choice
-        options: [nba, pba, tennis, all]
+        options: [nba, tennis, all]
 
 permissions:
   contents: read
@@ -55,7 +53,6 @@ jobs:
           if [[ -z "$module" ]]; then
             case "$EVENT_SCHEDULE" in
               "0 0 * * *"|"0 12 * * *") module="tennis" ;;
-              "20 0 * * *"|"30 13 * * *") module="pba" ;;
               *) module="nba" ;;
             esac
           fi
@@ -67,7 +64,6 @@ jobs:
           SPORTS_FOLLOW_TEAMS: ${{ vars.SPORTS_FOLLOW_TEAMS }}
           NBA_FOLLOW_TEAMS: ${{ vars.NBA_FOLLOW_TEAMS }}
           NBA_FOLLOW_PLAYERS: ${{ vars.NBA_FOLLOW_PLAYERS }}
-          PBA_FOLLOW_TEAMS: ${{ vars.PBA_FOLLOW_TEAMS }}
       - name: Build and verify release artifact
         run: npm run check:site
       - uses: actions/configure-pages@v5

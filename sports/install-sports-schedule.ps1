@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('nba', 'pba', 'tennis')]
+  [ValidateSet('nba', 'tennis')]
   [string]$Module,
   [switch]$Force
 )
@@ -29,19 +29,8 @@ $refreshScript = Join-Path $here 'refresh-sports.ps1'
 $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Module {1}' -f $refreshScript, $Module
 $action = New-ScheduledTaskAction -Execute $powershell -Argument $arguments -WorkingDirectory $here
 
-# Stagger the trigger times. Every module writes the SAME sports-<date> doc as a
-# read-modify-write (each run carries the other lanes forward from the previous
-# doc), so two tasks firing in the same minute means the loser's refresh is
-# silently reverted to yesterday's snapshot. PVL therefore runs at 08:20, clear
-# of the 08:00 tennis job.
-if ($Module -eq 'pba') {
-  $taskName = 'BobDailyBriefing-PbaRefresh'
-  $triggers = @(
-    (New-ScheduledTaskTrigger -Daily -At '08:20'),
-    (New-ScheduledTaskTrigger -Daily -At '21:30')
-  )
-  $description = 'Official PBA schedule, result, standings and conference-leader refresh at 08:20 and 21:30 PHT. 08:20 (not 08:00) keeps it clear of the tennis job writing the same doc; 21:30 lands after a PBA doubleheader ends.'
-} elseif ($Module -eq 'tennis') {
+# Separate cadences for NBA and tennis. Writes preserve concurrent lanes.
+if ($Module -eq 'tennis') {
   $taskName = 'BobDailyBriefing-TennisRefresh'
   $triggers = @(
     (New-ScheduledTaskTrigger -Daily -At '08:00'),

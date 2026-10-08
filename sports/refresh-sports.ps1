@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('all', 'nba', 'pba', 'tennis')]
+  [ValidateSet('all', 'nba', 'tennis')]
   [string]$Module = 'all',
   [switch]$PublishLegacy
 )

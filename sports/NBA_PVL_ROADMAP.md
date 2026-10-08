@@ -1,3 +1,16 @@
+# Current sports status — 2026-10-09
+
+NBA and Tennis are the active lanes; FIFA is retained as an archive. PBA was
+removed from ingestion, selection, freshness alerts and refresh schedules.
+NBA now has conservative form projections with a separate forward journal.
+Three recent games for each team are required; no preseason or stale-form
+prediction is created. See README.md for the current contract and cadence.
+
+The original roadmap below is historical; its PVL/PBA and manual scheduling
+recommendations have been superseded by the managed GitHub Actions refreshes.
+
+---
+
 # Sports Tab Roadmap: NBA + PH Local Pulse
 
 Created: 2026-07-18

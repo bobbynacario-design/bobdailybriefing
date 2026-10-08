@@ -520,7 +520,7 @@ test('feed health: each sports lane has its own pill, and a lane that kept old d
     'sports-pba':{status:'ok',lastOkAt:now},'sports-tennis':{status:'ok',lastOkAt:now}}});
   const out=element('feed-health').innerHTML;
   assert.match(out,/feed-pill bad[^>]*><span class="feed-dot"><\/span>NBA <span class="feed-age">21d/);
-  assert.match(out,/feed-pill [^"]*"[^>]*><span class="feed-dot"><\/span>PBA/); assert.match(out,/>Tennis </);
+  assert.doesNotMatch(out,/>PBA </,'retired PBA health records are ignored'); assert.match(out,/>Tennis </);
   assert.doesNotMatch(out,/>Sports </,'the umbrella record has no pill');
   assert.match(out,/NBA last run failed at fetch \(kept last good data\) \(ESPN NBA 400: Failed to get events endpoint\.\); last good data 21d old\./);
 });
@@ -1473,4 +1473,24 @@ test('a Daybook window told to open a page goes there, and only within Daybook',
   assert.equal(context.openFromServiceWorker({type:'other',url:SCOPE}),false); assert.equal(context.openFromServiceWorker(null),false);
   assert.equal(loc.assigned,null); assert.equal(loc.hash,'#command');
   assert.ok(html.includes("navigator.serviceWorker.addEventListener('message', function(event) { openFromServiceWorker(event.data); });"));
+});
+
+
+test('sports hides retired PBA even in legacy data and renders NBA probability splits without a draw', () => {
+  const {context}=environment(['sportsAvailableModules','sportsWinProbHtml','sportsProb'],{esc:escHtml});
+  const keys=context.sportsAvailableModules({modules:{nba:{},pba:{},tennis:{}},worldCup:{}}).map(m=>m.key);
+  assert.deepEqual(Array.from(keys),['nba','tennis','worldcup']);
+  const game={home:'Home',away:'Away',projection:{favorite:'Home',tag:'Moderate edge',probs:{home:.65,draw:0,away:.35}}};
+  const output=context.sportsWinProbHtml(game);
+  assert.match(output,/Home 65%/);assert.match(output,/Away 35%/);assert.doesNotMatch(output,/draw/i);
+  const publicHtml=readFileSync(new URL('../sports.html',import.meta.url),'utf8');
+  const script=publicHtml.split('<script>')[1].split('</script>')[0];
+  const elements=new Map();const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:''});return elements.get(id);};
+  const publicContext={Date,URLSearchParams,location:{search:'?module=pba'},localStorage:{getItem:()=>null},document:{getElementById:element},console};
+  vm.createContext(publicContext);
+  vm.runInContext(script.slice(0,script.lastIndexOf("fetch('./sports-public.json")),publicContext);
+  publicContext.renderSports({title:'Sports',modules:{nba:{title:'NBA',upcoming:[game]},pba:{title:'PBA',upcoming:[game]}}});
+  assert.equal(element('page-title').textContent,'NBA');
+  assert.match(element('sports-out').innerHTML,/Home 65%/);
+  assert.doesNotMatch(element('sports-out').innerHTML,/PBA|draw 0%/);
 });

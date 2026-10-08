@@ -267,9 +267,9 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 - **⚽ Sports** — a provider-backed sports briefing tab. NBA is the default lane,
   with rolling results, conference standings, a last-five momentum model, rest/
   back-to-back flags, recent game leaders, availability, and a configurable team
-  watchlist from ESPN's public basketball feed. PH Local/PBA adds official
-  fixtures, recaps, standings, momentum, and player leaderboards from
-  pba.ph, while FIFA World Cup remains available as an archive. Each module shows
+  watchlist from ESPN's public basketball feed. NBA now adds estimated form
+  probabilities and a forward accuracy journal; Tennis covers ATP/WTA draws
+  and projections. FIFA World Cup remains available as an archive. Each module shows
   explicit current, stale, failed, or fallback freshness status. The local
   runner writes `briefings-bob/sports-*` docs and a `sports-public.json` mirror.
 
@@ -295,12 +295,9 @@ set FOOTBALL_DATA_TOKEN=your_token_here
 set SPORTS_FOLLOW_TEAMS=Australia,England
 set NBA_FOLLOW_TEAMS=Lakers,Warriors,Knicks,Spurs,Mavericks
 set NBA_FOLLOW_PLAYERS=Jalen Brunson,Victor Wembanyama,Stephen Curry
-set PBA_FOLLOW_TEAMS=Ginebra,San Miguel,TNT,Magnolia
 npm run dry-run:nba
-npm run dry-run:pba
 npm run refresh
 npm run refresh:nba
-npm run refresh:pba
 ```
 
 Use `npm run dry-run:nba` to inspect NBA only, or `npm run dry-run` to inspect the
@@ -312,13 +309,28 @@ scheduler remains a recovery option. After three successful PHT days for a
 module, install its guarded local task:
 
 ```powershell
-.\install-sports-schedule.ps1 -Module pba
 .\install-sports-schedule.ps1 -Module nba
 ```
 
-PBA installs at 08:20 and 21:30 PHT, NBA at 09:00 and 15:00 PHT, and tennis at
+NBA installs at 09:00 and 15:00 PHT, and tennis at
 08:00 and 20:00 PHT. Each module writes a bounded ignored log. Transactional
 writes preserve lanes committed concurrently by another module.
+
+### NBA projections
+
+PBA has been retired from the app, public page, and managed refresh schedule.
+NBA projections use recent wins/margins, standing percentage, a small home
+advantage, and back-to-back adjustment. Both teams need at least three completed
+non-preseason games, with form no older than 45 days. Preseason, live, postponed,
+and already-started games receive no new projection. Missing or stale form
+means no estimate, rather than an invented 50/50 opponent.
+
+These are heuristic estimates, not calibrated forecasts. Injuries and confirmed
+lineups are displayed separately and do not change the model. No LLM API is used.
+The `sports-nba-journal` locks non-toss-up predictions before tip-off and scores
+only those locks against completed games, recording accuracy, Brier score and
+log loss. Historical results are never graded with today's form. At a season
+restart the projection panel waits until enough recent form exists.
 
 ## Model API generation
 

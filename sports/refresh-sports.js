@@ -1,7 +1,7 @@
 // sports/refresh-sports.js
 //
 // Local runner for the Daily Briefer Sports tab. First lane: FIFA World Cup.
-// Current forward lanes: NBA Momentum Radar and PH Local Pulse (PBA).
+// Current forward lanes: NBA Momentum Radar and Tennis (the PBA lane was removed on 2026-10-09).
 // It fetches provider data, normalises it into a small UI document, and writes:
 //   briefings-bob/sports-YYYY-MM-DD
 //   briefings-bob/sports-latest
@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import * as cheerio from 'cheerio';
+import { buildNbaProjections } from './nba-projections.js';
 import { fetchRetry } from '../lib/http.js';
 import { recordRunHealth } from '../lib/feed-health.js';
 
@@ -50,7 +50,6 @@ var COLL = 'briefings-bob';
 var FOOTBALL_DATA = 'https://api.football-data.org/v4';
 var ESPN_NBA = 'https://site.api.espn.com/apis';
 var ESPN_TENNIS = 'https://site.api.espn.com/apis/site/v2/sports/tennis';
-var PBA_SITE = 'https://www.pba.ph';
 var SPORTS_RUN_STARTED = Date.now();
 var _sportsDb = null;
 var FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN || '';
@@ -63,10 +62,6 @@ var NBA_FOLLOW_TEAMS = (process.env.NBA_FOLLOW_TEAMS || 'Lakers,Warriors,Knicks,
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
 var NBA_FOLLOW_PLAYERS = (process.env.NBA_FOLLOW_PLAYERS || '')
-  .split(',')
-  .map(function (s) { return s.trim(); })
-  .filter(Boolean);
-var PBA_FOLLOW_TEAMS = (process.env.PBA_FOLLOW_TEAMS || 'Ginebra,San Miguel,TNT,Magnolia')
   .split(',')
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
@@ -381,6 +376,11 @@ function addNbaRestSignals(matches) {
   });
 }
 
+// Collapse whitespace and trim, for provider free text.
+function cleanText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
 function normNbaInjuries(json) {
   var out = [];
   ((json && json.injuries) || []).forEach(function (teamRow) {
@@ -392,7 +392,7 @@ function normNbaInjuries(json) {
         player: athlete.displayName || athlete.fullName || '',
         status: row.status || 'Unknown',
         date: row.date || '',
-        note: cleanPbaText(row.shortComment || row.longComment || '').slice(0, 240)
+        note: cleanText(row.shortComment || row.longComment || '').slice(0, 240)
       });
     });
   });
@@ -477,454 +477,6 @@ function buildNbaBracket(matches) {
   });
   var rounds = Object.keys(byRound).map(function (key) { return byRound[key]; }).sort(function (a, b) { return a.order - b.order; });
   return { active: rounds.length > 0, rounds: rounds };
-}
-
-// PBA has no public API (ESPN carries no PBA league — every candidate slug 400s),
-// so this reads the official pba.ph pages the same way the PVL lane used to read
-// pvl.ph. Both sites serve the identical Cloudflare-managed robots policy:
-// `User-agent: * / Allow: /` with `Content-Signal: use=reference`.
-//
-// Team identity is the one awkward part. /schedule carries team names as text,
-// but /recap identifies each side ONLY by its logo URL (.../teams/<id>/logo_L1.png)
-// — there is no team name in the results markup. /standings carries BOTH the logo
-// id and the full name, so it is used to build an id -> name index that resolves
-// the recap rows. Guest teams (EASL visitors) are absent from standings, so the
-// index also absorbs the schedule's id/name pairs, and anything still unresolved
-// degrades to the game-leaders abbreviation rather than dropping the game.
-var PBA_LEADER_URL = '/leaders';
-
-function cleanPbaText(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-// Titles on pba.ph are shouted ("NLEX ROAD WARRIORS"); render them in title case
-// so the tab matches the NBA lane instead of yelling.
-function pbaTitleCase(value) {
-  var raw = cleanPbaText(value);
-  if (!raw || raw !== raw.toUpperCase()) return raw;
-  var small = { of: 1, the: 1, and: 1, or: 1 };
-  // Team names that are acronyms, not words — these must stay shouted.
-  var acronyms = { tnt: 1, nlex: 1, pba: 1, smb: 1, ros: 1, gin: 1, easl: 1, np: 1 };
-  // Internal capitals the source destroys by shouting everything.
-  var camel = { fiberxers: 'FiberXers', northport: 'NorthPort' };
-  return raw.toLowerCase().split(' ').map(function (word, idx) {
-    if (idx && small[word]) return word;
-    if (acronyms[word]) return word.toUpperCase();
-    if (camel[word]) return camel[word];
-    // Ordinals stay lowercase ("49th Season"); other digit-led tokens are
-    // branding that must shout ("5G" in TNT Tropang 5G).
-    if (/^\d+(st|nd|rd|th)$/.test(word)) return word;
-    if (/^\d/.test(word)) return word.toUpperCase();
-    return word.replace(/^./, function (c) { return c.toUpperCase(); });
-  }).join(' ');
-}
-
-function pbaTeamId(src) {
-  var m = String(src || '').match(/\/teams\/(\d+)\//);
-  return m ? m[1] : '';
-}
-
-function pbaMatchId(utcDate, home, away) {
-  return 'pba-' + utcDate.slice(0, 10) + '-' +
-    teamKey(home).replace(/ /g, '-').slice(0, 12).replace(/-+$/, '') + '-' +
-    teamKey(away).replace(/ /g, '-').slice(0, 12).replace(/-+$/, '');
-}
-
-async function pbaFetch(path) {
-  var res = await fetchRetry(PBA_SITE + path, {
-    headers: {
-      'accept': 'text/html,application/xhtml+xml',
-      'user-agent': 'BobDailyBriefing/1.0 (+https://bobbynacario-design.github.io/bobdailybriefing/)'
-    }
-  }, 'PBA ' + path);
-  if (!res.ok) throw new Error('PBA ' + path + ' HTTP ' + res.status);
-  return res.text();
-}
-
-// /recap publishes a date and venue per game but NO tip-off time, so anything
-// built from it would otherwise inherit pbaDateTime's noon default and display a
-// 12:00 PHT tip that never happened. Matches carry timeKnown so the front end
-// can render date-only instead of inventing a clock time.
-function pbaHasTime(timeText) {
-  return /(\d{1,2}):(\d{2})\s*(AM|PM)/i.test(cleanPbaText(timeText));
-}
-
-// Handles both orderings pba.ph uses: "Tue, Aug 04" (schedule) and
-// "Aug 02, Sun" (recap). Anchoring on the month name avoids matching the weekday.
-function pbaDateTime(dateText, timeText, now, preferFuture) {
-  var months = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
-  var dm = cleanPbaText(dateText).match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})\b/);
-  if (!dm) return '';
-  var tm = cleanPbaText(timeText).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-  var hour = tm ? Number(tm[1]) % 12 + (String(tm[3]).toUpperCase() === 'PM' ? 12 : 0) : 12;
-  var minute = tm ? Number(tm[2]) : 0;
-  now = now || new Date();
-  var year = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric' }).format(now));
-  var ms = Date.UTC(year, months[dm[1]], Number(dm[2]), hour - 8, minute);
-  var tolerance = 45 * 86400000;
-  if (preferFuture && ms < now.getTime() - tolerance) year++;
-  if (!preferFuture && ms > now.getTime() + tolerance) year--;
-  return new Date(Date.UTC(year, months[dm[1]], Number(dm[2]), hour - 8, minute)).toISOString();
-}
-
-// pba.ph renders ONE game per .schedule-day, and the date <h2> only appears on
-// the first game of a calendar day — the second game of a doubleheader has an
-// EMPTY h2 and inherits the date above it. Requiring a date per block silently
-// dropped every second game (18 of 36) and made every fixture look like a 5:15pm
-// tip, so the heading is carried forward instead.
-function parsePbaSchedule(html, now) {
-  var $ = cheerio.load(html || '');
-  var out = [];
-  var dateText = '';
-  $('.schedule-day').each(function () {
-    var day = $(this);
-    var heading = cleanPbaText(day.find('h2').first().text());
-    if (heading) dateText = heading;
-    if (!dateText) return;
-    day.find('.schedule-teams').each(function () {
-      var teamsBlock = $(this);
-      // The time/venue column is a sibling of the teams column inside one game row.
-      var row = teamsBlock.parent();
-      var timeVenue = row.find('.schedule-time-venue').first().find('p').map(function () {
-        return cleanPbaText($(this).text());
-      }).get();
-      var sides = teamsBlock.find('.schedule-team').map(function () {
-        var side = $(this);
-        return {
-          name: pbaTitleCase(side.find('p').first().text()),
-          teamId: pbaTeamId(side.find('img').first().attr('src'))
-        };
-      }).get();
-      if (sides.length < 2 || !sides[0].name || !sides[1].name) return;
-      var utcDate = pbaDateTime(dateText, timeVenue[0], now, true);
-      if (!utcDate) return;
-      out.push({
-        id: pbaMatchId(utcDate, sides[0].name, sides[1].name),
-        utcDate: utcDate,
-        status: 'SCHEDULED',
-        stage: 'PBA',
-        group: '',
-        home: sides[0].name,
-        away: sides[1].name,
-        homeId: sides[0].teamId,
-        awayId: sides[1].teamId,
-        venue: timeVenue[1] || '',
-        timeKnown: pbaHasTime(timeVenue[0]),
-        score: { home: null, away: null }
-      });
-    });
-  });
-  return out.sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); });
-}
-
-// teamIndex maps logo id -> team name (built from standings + schedule). Results
-// markup carries no team text at all, so without the index a game can only be
-// labelled by its game-leaders abbreviation.
-function parsePbaRecaps(html, teamIndex, now) {
-  var $ = cheerio.load(html || '');
-  var index = teamIndex || {};
-  var out = [];
-  $('.recap').each(function () {
-    var block = $(this);
-    var dateText = cleanPbaText(block.find('h2').first().text());
-    var venue = cleanPbaText(block.find('h4').first().text());
-    block.find('.recap-game').each(function () {
-      var game = $(this);
-      var sides = game.find('.recap-team').map(function () {
-        var side = $(this);
-        return {
-          teamId: pbaTeamId(side.find('img').first().attr('src')),
-          score: num(cleanPbaText(side.find('span').first().text()))
-        };
-      }).get();
-      if (sides.length < 2) return;
-      if (sides[0].score == null || sides[1].score == null) return;
-      var abbrs = game.parent().parent().find('.recap-stats-lbl .fw-bold').map(function () {
-        return cleanPbaText($(this).text());
-      }).get();
-      var name = function (side, idx) {
-        return index[side.teamId] || pbaTitleCase(abbrs[idx] || '') || ('Team ' + (side.teamId || '?'));
-      };
-      var home = name(sides[0], 0);
-      var away = name(sides[1], 1);
-      var utcDate = pbaDateTime(dateText, '', now, false);
-      if (!utcDate) return;
-      out.push({
-        id: pbaMatchId(utcDate, home, away),
-        utcDate: utcDate,
-        status: 'FINISHED',
-        stage: 'PBA',
-        group: '',
-        home: home,
-        away: away,
-        homeId: sides[0].teamId,
-        awayId: sides[1].teamId,
-        venue: venue,
-        // /recap never carries a tip-off time — the date is all it publishes.
-        timeKnown: false,
-        score: { home: sides[0].score, away: sides[1].score }
-      });
-    });
-  });
-  return out.sort(function (a, b) { return String(b.utcDate).localeCompare(String(a.utcDate)); });
-}
-
-// Columns are Teams | W | L | STK | PCT %, split across one table per group.
-// NB the live markup wraps each <tr> in an <a>, which is invalid HTML — the
-// parser hoists the anchor out of the table, so read rows off the table and take
-// the name from the first cell's <p>. The fixture reproduces that same nesting.
-function parsePbaStandings(html) {
-  var $ = cheerio.load(html || '');
-  var out = [];
-  $('table.stats-table').each(function () {
-    var table = $(this);
-    var group = cleanPbaText(table.closest('.group-col').find('.group-heading').first().text());
-    var position = 0;
-    table.find('tr').each(function () {
-      var row = $(this);
-      var cells = row.find('td');
-      if (cells.length < 5) return;
-      var first = cells.eq(0);
-      var team = pbaTitleCase(first.find('p').first().text() || first.text());
-      if (!team) return;
-      position++;
-      var pct = cleanPbaText(cells.eq(4).text()).replace('%', '');
-      out.push({
-        position: position,
-        conference: group,
-        team: team,
-        teamId: pbaTeamId(first.find('img').first().attr('src')),
-        wins: num(cleanPbaText(cells.eq(1).text())) || 0,
-        losses: num(cleanPbaText(cells.eq(2).text())) || 0,
-        streak: cleanPbaText(cells.eq(3).text()),
-        pct: num(pct) == null ? null : round2(num(pct) / 100)
-      });
-    });
-  });
-  return out;
-}
-
-// id -> display name, so the recap rows (logo id only) can be resolved. Standings
-// covers the league; the schedule adds guest teams that never appear in a table.
-function pbaTeamIndex() {
-  var index = {};
-  Array.prototype.slice.call(arguments).forEach(function (rows) {
-    (rows || []).forEach(function (row) {
-      if (row.teamId && row.team) index[row.teamId] = row.team;
-      if (row.homeId && row.home) index[row.homeId] = row.home;
-      if (row.awayId && row.away) index[row.awayId] = row.away;
-    });
-  });
-  return index;
-}
-
-// /leaders has NO tables — it is a card grid. Each category is one column with a
-// `.top-player` hero card (the stat name sits in a plain span, not a heading) and
-// a row of `.bottom-player` cards whose data-* attributes carry the whole top
-// three. Reading the data attributes is sturdier than the nested display markup.
-// "#94 / SG / SAN MIGUEL BEERMEN" -> jersey, position, team.
-function pbaPlayerMeta(raw) {
-  var parts = cleanPbaText(raw).split('/').map(function (s) { return s.trim(); }).filter(Boolean);
-  var meta = {};
-  parts.forEach(function (part) {
-    if (/^#/.test(part)) meta.jersey = part;
-    else if (part.length <= 3 && part === part.toUpperCase() && /^[A-Z]+$/.test(part)) meta.position = part;
-    else meta.team = pbaTitleCase(part);
-  });
-  return meta;
-}
-
-// NB the conference/cup name is NOT available. pba.ph has it commented out on
-// /standings (`<!-- <h3>49th SEASON PBA PHILIPPINE CUP</h3> -->`) and publishes
-// it nowhere else in live markup — the season dropdown is filled by script. So
-// categories carry an empty conference until the site restores the heading.
-function parsePbaLeaders(html) {
-  var $ = cheerio.load(html || '');
-  var categories = [];
-  $('.top-player').each(function () {
-    var card = $(this);
-    // The stat name is the span right after the value, e.g. "POINTS PER GAME".
-    var label = pbaTitleCase(card.find('span.fw-bold').first().text());
-    if (!label) return;
-    var column = card.parent();
-    var rows = [];
-    column.find('.bottom-player').each(function () {
-      var el = $(this);
-      var name = cleanPbaText(el.attr('data-name'));
-      var value = cleanPbaText(el.attr('data-ppg'));
-      if (!name || !value) return;
-      var meta = pbaPlayerMeta(el.attr('data-team'));
-      rows.push({
-        rank: rows.length + 1,
-        name: name,
-        team: meta.team || '',
-        position: meta.position || '',
-        value: value,
-        valueLabel: '',
-        metrics: meta
-      });
-    });
-    // Fall back to the hero card alone if the data attributes ever disappear.
-    if (!rows.length) {
-      var heroName = cleanPbaText(card.find('.top-player-name').text());
-      var heroValue = cleanPbaText(card.find('.top-player-ppg').text());
-      if (!heroName || !heroValue) return;
-      var heroMeta = pbaPlayerMeta(card.find('.top-player-team').text());
-      rows.push({
-        rank: 1, name: heroName, team: heroMeta.team || '', position: heroMeta.position || '',
-        value: heroValue, valueLabel: '', metrics: heroMeta
-      });
-    }
-    categories.push({
-      key: teamKey(label).replace(/ /g, '-'),
-      label: label,
-      conference: '',
-      leaders: rows.slice(0, 10)
-    });
-  });
-  return categories;
-}
-
-// Basketball margins, so this blends on POINT differential (the PVL version used
-// set differential). Same 0-100 shape and labels as the NBA lane so the two read
-// consistently on the tab.
-function buildPbaMomentum(matches, standings) {
-  var byTeam = {};
-  (standings || []).forEach(function (s) { byTeam[s.team] = []; });
-  (matches || []).forEach(function (m) {
-    if (m.status !== 'FINISHED' || !m.score || m.score.home == null || m.score.away == null) return;
-    [m.home, m.away].forEach(function (team) {
-      if (!byTeam[team]) byTeam[team] = [];
-      byTeam[team].push(m);
-    });
-  });
-  var standingByTeam = {};
-  (standings || []).forEach(function (s) { standingByTeam[s.team] = s; });
-  return Object.keys(byTeam).map(function (team) {
-    var games = byTeam[team].slice().sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); }).slice(-5);
-    var form = games.map(function (m) {
-      var own = m.home === team ? m.score.home : m.score.away;
-      var opp = m.home === team ? m.score.away : m.score.home;
-      return own > opp ? 'W' : 'L';
-    });
-    var recentWins = form.filter(function (r) { return r === 'W'; }).length;
-    var pointDiff = games.reduce(function (sum, m) {
-      return sum + (m.home === team ? m.score.home - m.score.away : m.score.away - m.score.home);
-    }, 0);
-    var averagePointDiff = games.length ? pointDiff / games.length : 0;
-    var standing = standingByTeam[team] || {};
-    var standingGames = (standing.wins || 0) + (standing.losses || 0);
-    var standingPct = standingGames ? standing.wins / standingGames : 0.5;
-    var recentPct = games.length ? recentWins / games.length : standingPct;
-    // /2.5 keeps a typical NBA-scale margin (~10 pts) inside the same band the
-    // NBA lane uses, so a blowout does not peg the score at 100.
-    var score = Math.round(clamp(recentPct * 55 + standingPct * 20 + clamp(50 + averagePointDiff / 2.5 * 18, 0, 100) * 0.25, 0, 100));
-    var label = score >= 72 ? 'RISING' : (score >= 58 ? 'WATCH' : (score <= 38 ? 'FADING' : 'STEADY'));
-    return {
-      team: team,
-      score: score,
-      label: label,
-      recentForm: form.join(''),
-      recentGames: games.length,
-      recentWins: recentWins,
-      averagePointDiff: round2(averagePointDiff),
-      standingPct: round2(standingPct),
-      note: games.length
-        ? 'Momentum blends recent wins, point differential and the current PBA table.'
-        : 'No completed game is present in the current recap window; score is table-based.'
-    };
-  }).sort(function (a, b) { return b.score - a.score || b.averagePointDiff - a.averagePointDiff; });
-}
-
-// ── PBA win-probability projections — the FIFA fixture-projection analog ─────
-// Two-outcome version of projectionFromMomentum/projectionProbabilities: no
-// draw, and no separate Elo blend, because buildPbaMomentum's 0-100 score
-// already IS the team-strength signal (recent form + standing pct + point-
-// margin band). Reuses FIFA's exact tag vocabulary/thresholds (Toss-up / Watch
-// only / Moderate edge / Strong edge) so the front end's existing FIFA
-// projection renderer/CSS/confident-calls logic works on PBA matches unchanged
-// — same shape probs object, just without a draw segment.
-function pbaWinProb(hp, ap) {
-  var diff = hp - ap;
-  // k tuned so the biggest gap the 0-100 momentum scale can produce approaches
-  // (but stays under) an 85% ceiling, matching the single-game-variance cap
-  // tennis/FIFA both use — a lopsided momentum score this early in a conference
-  // (n~5 recent games) is not a guaranteed blowout. The min/max clamp below is
-  // a defensive ceiling for any future out-of-domain gap, not something a
-  // same-scale 0-100 matchup can actually reach.
-  var p = 1 / (1 + Math.exp(-0.017 * diff));
-  return Math.max(0.15, Math.min(0.85, p));
-}
-function pbaProjTag(absGap) {
-  if (absGap < 4) return 'Toss-up';
-  if (absGap < 12) return 'Watch only';
-  if (absGap < 22) return 'Moderate edge';
-  return 'Strong edge';
-}
-// Attaches m.projection to every NOT-YET-PLAYED match only — projecting a known
-// result would be lookahead, same rule tennis/FIFA both enforce.
-function buildPbaProjections(matches, momentum) {
-  var byTeam = {};
-  (momentum || []).forEach(function (m) { byTeam[m.team] = m.score; });
-  (matches || []).forEach(function (m) {
-    if (!m || m.status === 'FINISHED') return;
-    var hp = byTeam[m.home], ap = byTeam[m.away];
-    if (hp == null && ap == null) return;
-    if (hp == null) hp = 50;
-    if (ap == null) ap = 50;
-    var gap = hp - ap;
-    var abs = Math.abs(gap);
-    var pHome = pbaWinProb(hp, ap);
-    var favorite = abs < 4 ? null : (gap > 0 ? m.home : m.away);
-    m.projection = {
-      favorite: favorite,
-      tag: pbaProjTag(abs),
-      gap: Math.round(gap * 10) / 10,
-      homePower: hp,
-      awayPower: ap,
-      probs: {
-        home: Math.round(pHome * 1000) / 1000,
-        draw: 0,
-        away: Math.round((1 - pHome) * 1000) / 1000
-      }
-    };
-  });
-}
-
-function pbaPostseasonRound(stage) {
-  var value = cleanPbaText(stage);
-  if (/quarter/i.test(value)) return { key: 'quarterfinals', label: 'Quarterfinals', order: 10 };
-  if (/semi/i.test(value)) return { key: 'semifinals', label: 'Semifinals', order: 20 };
-  if (/third|bronze/i.test(value)) return { key: 'third-place', label: 'Third Place', order: 30 };
-  if (/final|championship/i.test(value)) return { key: 'finals', label: 'Finals', order: 40 };
-  return null;
-}
-
-function buildPbaBracket(matches) {
-  var rounds = {};
-  (matches || []).forEach(function (match) {
-    var round = pbaPostseasonRound(match.stage);
-    if (!round) return;
-    if (!rounds[round.key]) rounds[round.key] = { key:round.key, label:round.label, order:round.order, series:[] };
-    rounds[round.key].series.push({
-      home: match.home,
-      away: match.away,
-      homeWins: match.score && match.score.home,
-      awayWins: match.score && match.score.away,
-      summary: match.status === 'FINISHED' && match.score ? match.score.home + '-' + match.score.away : sportsDateLabel(match.utcDate),
-      completed: match.status === 'FINISHED',
-      lastGame: match.utcDate
-    });
-  });
-  var out = Object.keys(rounds).map(function (key) { return rounds[key]; }).sort(function (a, b) { return a.order - b.order; });
-  return { active: out.length > 0, rounds: out };
-}
-
-function sportsDateLabel(value) {
-  if (!value) return 'Scheduled';
-  return new Intl.DateTimeFormat('en-PH', {
-    timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-  }).format(new Date(value)) + ' PHT';
 }
 
 function buildTeamProfiles(kind, standings, momentum, matches, injuries) {
@@ -1780,10 +1332,9 @@ function setupDoc(reason) {
 function activeSportsList() {
   var out = [];
   if (wantsModule('nba')) out.push('nba');
-  if (wantsModule('pba')) out.push('pba');
   if (wantsModule('tennis')) out.push('tennis');
   if (wantsModule('worldcup')) out.push('worldcup');
-  if (!out.length || wantsModule('all')) out = ['nba', 'pba', 'tennis', 'worldcup'];
+  if (!out.length || wantsModule('all')) out = ['nba', 'tennis', 'worldcup'];
   return out;
 }
 
@@ -1807,9 +1358,104 @@ function emptyModule(kind, title, phase, provider, note) {
     lastSuccessfulAt: '',
     refreshStatus: 'error',
     fallback: false,
-    staleAfterHours: kind === 'pba' ? 36 : 168
+    staleAfterHours: 168
   };
 }
+
+function nbaMatchWinner(match) {
+  var s = match && match.score;
+  if (!match || match.status !== 'FINISHED' || !s || s.home == null || s.away == null) return null;
+  if (s.home === s.away) return null; // basketball has no draws; a tie means bad data
+  return s.home > s.away ? match.home : match.away;
+}
+function collectNbaMatches(mod) {
+  return ((mod && mod.matches) || []).filter(function (m) { return m && m.id; });
+}
+function buildNbaJournal(prior, matches, nowIso) {
+  var preds = {};
+  var priorPreds = (prior && prior.preds) || {};
+  Object.keys(priorPreds).forEach(function (k) { preds[k] = Object.assign({}, priorPreds[k]); });
+  (matches || []).forEach(function (m) {
+    var finished = m.status === 'FINISHED';
+    // Toss-ups (favorite:null) are never locked — grading "no pick" as a miss
+    // would silently deflate accuracy for exactly the games the model is
+    // honestly unsure about.
+    if (!preds[m.id] && m.status === 'SCHEDULED' && Date.parse(m.utcDate) > Date.parse(nowIso) && m.projection && m.projection.favorite) {
+      preds[m.id] = {
+        id: m.id, home: m.home, away: m.away,
+        pHome: m.projection.probs.home, favorite: m.projection.favorite,
+        favPct: Math.round(Math.max(m.projection.probs.home, m.projection.probs.away) * 100),
+        tag: m.projection.tag, firstSeen: nowIso, utcDate: m.utcDate, modelVersion: m.projection.modelVersion, resolved: false
+      };
+    }
+    if (finished && preds[m.id] && !preds[m.id].resolved) {
+      var winner = nbaMatchWinner(m);
+      if (winner) {
+        var pr = preds[m.id];
+        var outcomeHome = (winner === pr.home) ? 1 : 0;
+        var pHome = Math.max(0.01, Math.min(0.99, pr.pHome));
+        pr.resolved = true;
+        pr.winner = winner;
+        pr.correct = (pr.favorite === winner);
+        pr.brier = Math.round(Math.pow(pHome - outcomeHome, 2) * 1e4) / 1e4;
+        pr.logLoss = Math.round((-(outcomeHome * Math.log(pHome) + (1 - outcomeHome) * Math.log(1 - pHome))) * 1e4) / 1e4;
+        pr.resolvedAt = nowIso;
+      }
+    }
+  });
+  var all = Object.keys(preds).map(function (k) { return preds[k]; });
+  var resolved = all.filter(function (p) { return p.resolved; });
+  var decisive = resolved.filter(function (p) { return p.tag === 'Moderate edge' || p.tag === 'Strong edge'; });
+  function acc(list) { return list.length ? Math.round(list.filter(function (p) { return p.correct; }).length / list.length * 100) : null; }
+  function mean(list, f) { return list.length ? list.reduce(function (a, p) { return a + f(p); }, 0) / list.length : null; }
+  var brier = mean(resolved, function (p) { return p.brier; });
+  var logLoss = mean(resolved, function (p) { return p.logLoss; });
+  var byTag = ['Toss-up', 'Watch only', 'Moderate edge', 'Strong edge'].map(function (tag) {
+    var l = resolved.filter(function (p) { return p.tag === tag; });
+    return { tag: tag, n: l.length, accuracy: acc(l) };
+  }).filter(function (r) { return r.n > 0; });
+  var recent = resolved.slice().sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 8)
+    .map(function (p) { return { home: p.home, away: p.away, favorite: p.favorite, favPct: p.favPct, tag: p.tag, winner: p.winner, correct: p.correct }; });
+  var stats = {
+    resolved: resolved.length,
+    pending: all.length - resolved.length,
+    accuracy: acc(resolved),
+    decisive: decisive.length,
+    decisiveAccuracy: acc(decisive),
+    brier: brier == null ? null : Math.round(brier * 1e4) / 1e4,
+    baselineBrier: 0.25,
+    brierSkill: brier == null ? null : Math.round((0.25 - brier) * 1e4) / 1e4,
+    logLoss: logLoss == null ? null : Math.round(logLoss * 1e4) / 1e4,
+    byTag: byTag,
+    recent: recent
+  };
+  // Bound the persisted doc: keep every unresolved lock + the 500 newest resolved.
+  var keep = {};
+  all.forEach(function (p) { if (!p.resolved) keep[p.id] = p; });
+  resolved.sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 500).forEach(function (p) { keep[p.id] = p; });
+  return { preds: keep, stats: stats, updatedAt: nowIso };
+}
+async function updateNbaJournal(db, module, dryRun) {
+  var nowIso = new Date().toISOString();
+  var matches = collectNbaMatches(module);
+  var prior = null;
+  if (db) {
+    try {
+      var snap = await db.collection(COLL).doc('sports-nba-journal').get();
+      if (snap.exists) prior = snap.data() || null;
+    } catch (e) { throw new Error('NBA journal unavailable; retaining prior snapshot: ' + (e.message || e)); }
+  }
+  var journal = buildNbaJournal(prior, matches, nowIso);
+  if (db && !dryRun) {
+    try { await db.collection(COLL).doc('sports-nba-journal').set(journal); }
+    catch (e) { throw new Error('NBA journal write failed; retaining prior snapshot: ' + (e.message || e)); }
+  }
+  module.projectionJournal = journal.stats; // compact stats only in the daily doc
+  console.log('NBA journal: ' + journal.stats.resolved + ' scored, ' + journal.stats.pending + ' pending' +
+    (journal.stats.accuracy != null ? ', ' + journal.stats.accuracy + '% overall / ' + (journal.stats.decisiveAccuracy == null ? '—' : journal.stats.decisiveAccuracy + '%') + ' decisive' : '') + '.');
+  return journal.stats;
+}
+
 
 function buildNbaModule() {
   var m = emptyModule(
@@ -1870,7 +1516,8 @@ async function fetchNbaModule() {
   var matches = addNbaRestSignals(events.map(normNbaGame).filter(function (m) { return m.id && m.utcDate; }));
   var upcoming = matches.filter(function (m) { return m.status !== 'FINISHED'; }).slice(0, 20);
   var recent = matches.filter(function (m) { return m.status === 'FINISHED'; }).slice(-20).reverse();
-  var momentum = buildNbaMomentum(matches, standings);
+  var momentum = buildNbaMomentum(matches.filter(function (m) { return m.stage !== 'pre-season'; }), standings);
+  var projectionModel = buildNbaProjections(matches, momentum, now);
   var injuries = normNbaInjuries(payloads[2]).slice(0, 60);
   var playerWatch = normNbaPlayerWatch(events, NBA_FOLLOW_PLAYERS);
   var bracket = buildNbaBracket(matches);
@@ -1922,215 +1569,10 @@ async function fetchNbaModule() {
     availabilityStatus: payloads[2] ? 'ok' : 'unavailable',
     playerWatch: playerWatch,
     followedPlayers: NBA_FOLLOW_PLAYERS,
+    projectionModel: projectionModel,
     bracket: bracket,
     teamProfiles: teamProfiles,
     watchlist: nbaWatchlist(standings, momentum),
-    keyDates: keyDates
-  };
-}
-
-function buildPbaModule() {
-  var m = emptyModule(
-    'pba',
-    'PH Local Pulse: PBA',
-    'feed unavailable',
-    'official pba.ph pages',
-    'PBA data is temporarily unavailable. The refresh job will keep the last good snapshot when one exists.'
-  );
-  m.watchlist = PBA_FOLLOW_TEAMS.map(function (team) {
-    return { team: team, note: 'Pinned for PH Local Pulse.' };
-  });
-  return m;
-}
-
-function pbaWatchlist(standings, momentum) {
-  return PBA_FOLLOW_TEAMS.map(function (needle) {
-    var key = teamKey(needle);
-    var standing = (standings || []).find(function (s) { return teamKey(s.team).indexOf(key) !== -1; });
-    var team = standing ? standing.team : needle;
-    var form = (momentum || []).find(function (m) { return m.team === team; });
-    var details = [];
-    if (standing) details.push(standing.wins + '-' + standing.losses);
-    if (form && form.recentForm) details.push('recent: ' + form.recentForm);
-    return { team: team, note: details.join(' / ') || 'Pinned for PH Local Pulse.' };
-  });
-}
-
-// ── PBA projection journal — forward-accumulating Brier/accuracy, the tennis
-// journal's exact design. Tennis can't backtest point-in-time because its model
-// needs TODAY's rankings; PBA's model IS entirely re-derivable from prior
-// results (no external rating), so a point-in-time historical rebuild is
-// possible in principle, but it would need per-day standings snapshots this
-// scraper has never stored. Lock-on-first-sight / score-at-resolution is the
-// same tradeoff already shipped and approved for tennis, applied here instead
-// of building a heavier backtest for a marginal accuracy gain.
-function pbaMatchWinner(match) {
-  var s = match && match.score;
-  if (!match || match.status !== 'FINISHED' || !s || s.home == null || s.away == null) return null;
-  if (s.home === s.away) return null; // basketball has no draws; a tie means bad data
-  return s.home > s.away ? match.home : match.away;
-}
-function collectPbaMatches(mod) {
-  return ((mod && mod.matches) || []).filter(function (m) { return m && m.id; });
-}
-function buildPbaJournal(prior, matches, nowIso) {
-  var preds = {};
-  var priorPreds = (prior && prior.preds) || {};
-  Object.keys(priorPreds).forEach(function (k) { preds[k] = priorPreds[k]; });
-  (matches || []).forEach(function (m) {
-    var finished = m.status === 'FINISHED';
-    // Toss-ups (favorite:null) are never locked — grading "no pick" as a miss
-    // would silently deflate accuracy for exactly the games the model is
-    // honestly unsure about.
-    if (!preds[m.id] && !finished && m.projection && m.projection.favorite) {
-      preds[m.id] = {
-        id: m.id, home: m.home, away: m.away,
-        pHome: m.projection.probs.home, favorite: m.projection.favorite,
-        favPct: Math.round(Math.max(m.projection.probs.home, m.projection.probs.away) * 100),
-        tag: m.projection.tag, firstSeen: nowIso, resolved: false
-      };
-    }
-    if (finished && preds[m.id] && !preds[m.id].resolved) {
-      var winner = pbaMatchWinner(m);
-      if (winner) {
-        var pr = preds[m.id];
-        var outcomeHome = (winner === pr.home) ? 1 : 0;
-        var pHome = Math.max(0.01, Math.min(0.99, pr.pHome));
-        pr.resolved = true;
-        pr.winner = winner;
-        pr.correct = (pr.favorite === winner);
-        pr.brier = Math.round(Math.pow(pHome - outcomeHome, 2) * 1e4) / 1e4;
-        pr.logLoss = Math.round((-(outcomeHome * Math.log(pHome) + (1 - outcomeHome) * Math.log(1 - pHome))) * 1e4) / 1e4;
-        pr.resolvedAt = nowIso;
-      }
-    }
-  });
-  var all = Object.keys(preds).map(function (k) { return preds[k]; });
-  var resolved = all.filter(function (p) { return p.resolved; });
-  var decisive = resolved.filter(function (p) { return p.tag === 'Moderate edge' || p.tag === 'Strong edge'; });
-  function acc(list) { return list.length ? Math.round(list.filter(function (p) { return p.correct; }).length / list.length * 100) : null; }
-  function mean(list, f) { return list.length ? list.reduce(function (a, p) { return a + f(p); }, 0) / list.length : null; }
-  var brier = mean(resolved, function (p) { return p.brier; });
-  var logLoss = mean(resolved, function (p) { return p.logLoss; });
-  var byTag = ['Toss-up', 'Watch only', 'Moderate edge', 'Strong edge'].map(function (tag) {
-    var l = resolved.filter(function (p) { return p.tag === tag; });
-    return { tag: tag, n: l.length, accuracy: acc(l) };
-  }).filter(function (r) { return r.n > 0; });
-  var recent = resolved.slice().sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 8)
-    .map(function (p) { return { home: p.home, away: p.away, favorite: p.favorite, favPct: p.favPct, tag: p.tag, winner: p.winner, correct: p.correct }; });
-  var stats = {
-    resolved: resolved.length,
-    pending: all.length - resolved.length,
-    accuracy: acc(resolved),
-    decisive: decisive.length,
-    decisiveAccuracy: acc(decisive),
-    brier: brier == null ? null : Math.round(brier * 1e4) / 1e4,
-    baselineBrier: 0.25,
-    brierSkill: brier == null ? null : Math.round((0.25 - brier) * 1e4) / 1e4,
-    logLoss: logLoss == null ? null : Math.round(logLoss * 1e4) / 1e4,
-    byTag: byTag,
-    recent: recent
-  };
-  // Bound the persisted doc: keep every unresolved lock + the 500 newest resolved.
-  var keep = {};
-  all.forEach(function (p) { if (!p.resolved) keep[p.id] = p; });
-  resolved.sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 500).forEach(function (p) { keep[p.id] = p; });
-  return { preds: keep, stats: stats, updatedAt: nowIso };
-}
-async function updatePbaJournal(db, module, dryRun) {
-  var nowIso = new Date().toISOString();
-  var matches = collectPbaMatches(module);
-  var prior = null;
-  if (db) {
-    try {
-      var snap = await db.collection(COLL).doc('sports-pba-journal').get();
-      if (snap.exists) prior = snap.data() || null;
-    } catch (e) { console.warn('pba journal read failed:', e.message || e); }
-  }
-  var journal = buildPbaJournal(prior, matches, nowIso);
-  if (db && !dryRun) {
-    try { await db.collection(COLL).doc('sports-pba-journal').set(journal); }
-    catch (e) { console.warn('pba journal write failed:', e.message || e); }
-  }
-  module.projectionJournal = journal.stats; // compact stats only in the daily doc
-  console.log('PBA journal: ' + journal.stats.resolved + ' scored, ' + journal.stats.pending + ' pending' +
-    (journal.stats.accuracy != null ? ', ' + journal.stats.accuracy + '% overall / ' + (journal.stats.decisiveAccuracy == null ? '—' : journal.stats.decisiveAccuracy + '%') + ' decisive' : '') + '.');
-  return journal.stats;
-}
-
-async function fetchPbaModule() {
-  var now = new Date();
-  var pages = await Promise.all([
-    pbaFetch('/schedule'),
-    pbaFetch('/recap'),
-    pbaFetch('/standings'),
-    pbaFetch(PBA_LEADER_URL).catch(function (e) {
-      console.warn('PBA leaders unavailable:', e.message || e);
-      return '';
-    })
-  ]);
-  var standings = parsePbaStandings(pages[2]);
-  var scheduled = parsePbaSchedule(pages[0], now);
-  // Resolve the recap's logo-only sides against everything that carries a name.
-  var teamIndex = pbaTeamIndex(standings, scheduled);
-  var upcoming = scheduled.filter(function (m) {
-    return new Date(m.utcDate).getTime() >= now.getTime() - 21600000;
-  }).slice(0, 20);
-  var parsedRecent = parsePbaRecaps(pages[1], teamIndex, now);
-  var latestRecentMs = parsedRecent.length ? new Date(parsedRecent[0].utcDate).getTime() : 0;
-  var recent = parsedRecent.filter(function (m) {
-    return !latestRecentMs || latestRecentMs - new Date(m.utcDate).getTime() <= 45 * 86400000;
-  }).slice(0, 20);
-  if (!upcoming.length && !recent.length) throw new Error('PBA schedule and recap pages returned no games.');
-  if (!standings.length) throw new Error('PBA standings page returned no table rows.');
-  var momentum = buildPbaMomentum(recent, standings);
-  // Mutates upcoming's items in place, so moduleMatches (built below from the
-  // SAME objects) carries the projections through automatically.
-  buildPbaProjections(upcoming, momentum);
-  var leaderCategories = parsePbaLeaders(pages[3]);
-  var playerLeaders = { conference: '', categories: leaderCategories };
-  var moduleMatches = recent.slice().reverse().concat(upcoming);
-  var bracket = buildPbaBracket(moduleMatches);
-  var teamProfiles = buildTeamProfiles('pba', standings, momentum, moduleMatches, []);
-  var keyDates = [];
-  if (upcoming[0]) {
-    keyDates.push({
-      date: upcoming[0].utcDate.slice(0, 10),
-      label: 'Next PBA game',
-      note: upcoming[0].home + ' vs ' + upcoming[0].away + (upcoming[0].venue ? ' / ' + upcoming[0].venue : '')
-    });
-  }
-  if (recent[0]) {
-    keyDates.push({
-      date: recent[0].utcDate.slice(0, 10),
-      label: 'Latest PBA result',
-      note: recent[0].home + ' ' + recent[0].score.home + ', ' + recent[0].away + ' ' + recent[0].score.away
-    });
-  }
-  var generatedAt = new Date().toISOString();
-  return {
-    enabled: true,
-    kind: 'pba',
-    title: 'PH Local Pulse: PBA',
-    phase: upcoming.length ? 'active schedule' : 'between fixtures',
-    provider: 'official pba.ph pages',
-    providerNote: 'PBA fixtures, results, standings and conference leaders are refreshed from official pba.ph pages. Momentum blends recent wins, point differential and the active standings table.',
-    asOf: phtDateKey(),
-    generatedAt: generatedAt,
-    refreshAttemptedAt: generatedAt,
-    lastSuccessfulAt: generatedAt,
-    refreshStatus: 'ok',
-    fallback: false,
-    staleAfterHours: 36,
-    matches: moduleMatches,
-    upcoming: upcoming,
-    recent: recent,
-    standings: standings,
-    momentum: momentum,
-    playerLeaders: playerLeaders,
-    bracket: bracket,
-    teamProfiles: teamProfiles,
-    watchlist: pbaWatchlist(standings, momentum),
     keyDates: keyDates
   };
 }
@@ -2663,8 +2105,8 @@ async function updateTennisJournal(db, module, dryRun) {
 // previous doc. On 2026-08-01 the scheduled 08:00 tennis run fired before the
 // machine's network was up: the prev-doc read threw (DNS), nothing was carried
 // forward, and the write went ahead with a tennis-only doc. That silently erased
-// NBA, PBA and the FIFA archive, and every later run inherited the loss.
-var LANE_KEYS = ['nba', 'pba', 'tennis', 'worldcup'];
+// NBA, the then PBA lane and the FIFA archive, and every later run inherited the loss.
+var LANE_KEYS = ['nba', 'tennis', 'worldcup'];
 var LANE_LOOKBACK_DAYS = 21;
 
 // ── Per-lane feed health ─────────────────────────────────────────────────────
@@ -2672,10 +2114,10 @@ var LANE_LOOKBACK_DAYS = 21;
 // but kept its last good snapshot still counted as ok. ESPN refused the NBA
 // date range from 16 Sep to 6 Oct 2026 and the app's Feeds strip said Sports was
 // fine for all three weeks. So each scheduled lane a run asked for gets its own
-// record (feeds sports-nba, sports-pba, sports-tennis): ok only when that lane
+// record (feeds sports-nba, sports-tennis): ok only when that lane
 // refreshed, failed with its error when it fell back. The paused World Cup lane
 // has no schedule, so it has no record.
-var HEALTH_LANES = ['nba', 'pba', 'tennis'];
+var HEALTH_LANES = ['nba', 'tennis'];
 function laneHealth(doc, wants) {
   return HEALTH_LANES.filter(function (key) { return wants(key); }).map(function (key) {
     var mod = (doc && doc.modules && doc.modules[key]) || {};
@@ -2753,11 +2195,9 @@ async function recoverLanes(db, doc, dateKey, lanes, maxDays) {
 function buildForwardModules(reason) {
   var modules = {};
   if (wantsModule('nba')) modules.nba = buildNbaModule();
-  if (wantsModule('pba')) modules.pba = buildPbaModule();
   if (wantsModule('tennis')) modules.tennis = buildTennisModule();
   if (wantsModule('all')) {
     if (!modules.nba) modules.nba = buildNbaModule();
-    if (!modules.pba) modules.pba = buildPbaModule();
     if (!modules.tennis) modules.tennis = buildTennisModule();
   }
   Object.keys(modules).forEach(function (k) {
@@ -2786,7 +2226,7 @@ function initAdmin() {
 
 function mergeConcurrentSportsDoc(incoming, existing, requestedLanes) {
   var merged = Object.assign({}, incoming, {
-    modules: Object.assign({}, (incoming && incoming.modules) || {})
+    modules: Object.fromEntries(Object.entries((incoming && incoming.modules) || {}).filter(function (pair) { return pair[0] === 'nba' || pair[0] === 'tennis'; }))
   });
   var requested = requestedLanes || [];
   LANE_KEYS.forEach(function (lane) {
@@ -2900,6 +2340,7 @@ async function loadPublicMiroSports(db) {
 }
 
 async function main() {
+  if (SELECTED_MODULES.some(function (key) { return !['all', 'nba', 'tennis', 'worldcup'].includes(key); })) throw new Error('Supported sports modules: nba, tennis, worldcup, all');
   var dateKey = phtDateKey();
 
   // Init Firestore up front (unless dry-run) so we can read the last-good doc
@@ -2936,8 +2377,8 @@ async function main() {
     modules: buildForwardModules('')
   };
   // Module-specific refreshes share one Firestore/public document. Preserve the
-  // other forward lane so a scheduled PBA run cannot erase NBA (and vice versa).
-  ['nba', 'pba', 'tennis'].forEach(function (key) {
+  // other forward lanes so a scheduled tennis run cannot erase NBA (and vice versa).
+  ['nba', 'tennis'].forEach(function (key) {
     if (!wantsModule(key) && prevDocData && prevDocData.modules && prevDocData.modules[key]) {
       doc.modules[key] = prevDocData.modules[key];
     }
@@ -2948,6 +2389,7 @@ async function main() {
   if (wantsModule('nba')) {
     try {
       doc.modules.nba = await fetchNbaModule();
+      await updateNbaJournal(db, doc.modules.nba, DRY_RUN);
       console.log('NBA: loaded ' + doc.modules.nba.matches.length + ' games, ' +
         doc.modules.nba.standings.length + ' standings rows and ' + doc.modules.nba.momentum.length + ' momentum rows.');
     } catch (e) {
@@ -2967,32 +2409,6 @@ async function main() {
         doc.modules.nba.setupNote = 'NBA fetch failed: ' + (e.message || e);
       }
       doc.modules.nba.refreshError = String(e.message || e);
-    }
-  }
-  if (wantsModule('pba')) {
-    try {
-      doc.modules.pba = await fetchPbaModule();
-      console.log('PBA: loaded ' + doc.modules.pba.upcoming.length + ' upcoming, ' +
-        doc.modules.pba.recent.length + ' recent, ' + doc.modules.pba.standings.length +
-        ' standings rows and ' + doc.modules.pba.momentum.length + ' momentum rows.');
-      await updatePbaJournal(db, doc.modules.pba, DRY_RUN);
-    } catch (e) {
-      console.warn('PBA fetch failed:', e.message || e);
-      var priorPba = prevDocData && prevDocData.modules && prevDocData.modules.pba;
-      if (priorPba && ((priorPba.matches || []).length || (priorPba.standings || []).length)) {
-        doc.modules.pba = priorPba;
-        doc.modules.pba.lastSuccessfulAt = priorPba.lastSuccessfulAt || priorPba.generatedAt || '';
-        doc.modules.pba.refreshAttemptedAt = new Date().toISOString();
-        doc.modules.pba.refreshStatus = 'fallback';
-        doc.modules.pba.fallback = true;
-        doc.modules.pba.staleAfterHours = priorPba.staleAfterHours || 36;
-        doc.modules.pba.providerNote = 'Showing the last good PBA snapshot because the current refresh failed: ' + (e.message || e);
-        console.warn('PBA: retained the last good module snapshot.');
-      } else {
-        doc.modules.pba = buildPbaModule();
-        doc.modules.pba.setupNote = 'PBA fetch failed: ' + (e.message || e);
-      }
-      doc.modules.pba.refreshError = String(e.message || e);
     }
   }
   if (wantsModule('tennis')) {
@@ -3024,7 +2440,7 @@ async function main() {
       doc.modules.tennis.refreshError = String(e.message || e);
     }
   }
-  ['nba', 'pba'].forEach(function (key) {
+  ['nba'].forEach(function (key) {
     if (!wantsModule(key) || !doc.modules[key]) return;
     var previousModule = prevDocData && prevDocData.modules && prevDocData.modules[key];
     if (doc.modules[key].refreshStatus === 'fallback' && previousModule && previousModule.changes) {
@@ -3109,7 +2525,7 @@ async function main() {
   // Public mirror for the friction-free shared page (sports.html on GitHub Pages
   // reads this static file — no Firebase, no sign-in). Only on real data, never
   // the empty fallback. The refresh-sports.ps1 wrapper commits/pushes it.
-  var hasForwardData = doc.modules && ['nba', 'pba'].some(function (key) {
+  var hasForwardData = doc.modules && ['nba'].some(function (key) {
     var mod = doc.modules[key];
     return mod && (((mod.matches || []).length > 0) || ((mod.standings || []).length > 0));
   });
@@ -3173,25 +2589,10 @@ export {
   nbaPlayoffRound,
   buildNbaBracket,
   nbaSeasonYear,
-  parsePbaSchedule,
-  parsePbaRecaps,
-  parsePbaStandings,
-  parsePbaLeaders,
-  pbaPlayerMeta,
-  pbaTeamIndex,
-  pbaTitleCase,
-  pbaDateTime,
-  buildPbaBracket,
+  buildNbaJournal,
   buildTeamProfiles,
   buildModuleChanges,
   scheduleReadiness,
-  buildPbaMomentum,
-  pbaWinProb,
-  pbaProjTag,
-  buildPbaProjections,
-  pbaMatchWinner,
-  collectPbaMatches,
-  buildPbaJournal,
   classifyTennis,
   buildTennisDraw,
   normTennisEvent,

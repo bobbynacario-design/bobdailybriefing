@@ -3658,19 +3658,20 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     </div>
 
     <div class="help-card">
-      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-sports"/></svg> Sports — NBA momentum and PH local volleyball</div>
-      <p>The Sports tab defaults to <b>NBA</b>, with <b>PH Local / PBA</b> beside it and FIFA retained as an archive. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-sports"/></svg> Sports — NBA and Tennis</div>
+      <p>The Sports tab defaults to <b>NBA</b>, with <b>Tennis</b> beside it and FIFA retained as an archive. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
       <ul>
         <li><b>Freshness banner</b> — says DATA CURRENT, STALE DATA, FALLBACK SNAPSHOT, or REFRESH FAILED and shows the last successful provider update.</li>
-        <li><b>Feeds strip</b> — NBA, PBA and Tennis each have their own pill. A lane whose refresh failed turns amber (red once its data is over a day and a half old) with the error, even when it is still showing its last good snapshot, and Command raises it too.</li>
-        <li><b>NBA</b> — schedule/results, conference standings, last-five form and margin, rest/back-to-back flags, recent game leaders, and ESPN availability entries.</li>
-        <li><b>PBA</b> — official fixtures, venues, results, standings, recent point differential, and conference leaders.</li>
-        <li><b>Competition Bracket</b> — uses provider-published NBA round/series data and activates for PBA when official match stages become quarterfinals, semifinals, or finals.</li>
+        <li><b>Feeds strip</b> — NBA and Tennis each have their own pill. A lane whose refresh failed turns amber (red once its data is over a day and a half old) with the error, even when it is still showing its last good snapshot, and Command raises it too.</li>
+        <li><b>NBA</b> — schedule/results, standings, last-five form, rest, game leaders, availability, and estimated match probabilities when recent form is sufficient.</li>
+        <li><b>Projection accuracy</b> — estimates are recorded before tip-off and scored once games finish; preseason games and stale form get no estimate.</li>
+        <li><b>Tennis</b> — ATP/WTA tournament draws, results, estimated match probabilities, and a forward accuracy journal.</li>
+        <li><b>Competition Bracket</b> — uses provider-published NBA round/series data for the postseason.</li>
         <li><b>Team Detail</b> — select a team to see record, momentum, average margin or set differential, next/latest match, and current availability count.</li>
         <li><b>Team Momentum</b> — <span class="help-pill">Score</span> combines recent wins, form margin or set differential, and current standings. <span class="help-pill" style="color:var(--green)">RISING</span> is strongest, <span class="help-pill" style="color:var(--amber)">WATCH</span> needs confirmation, and <span class="help-pill" style="color:var(--red)">FADING</span> is weakening.</li>
-        <li><b>Watchlist</b> — configurable NBA and PBA teams with their current record and recent form.</li>
+        <li><b>Watchlist</b> — configurable NBA teams with their current record and recent form.</li>
       </ul>
-      <p class="help-key">Best use: start with the freshness banner, scan RISING and WATCH teams, then check the actual fixtures, rest, availability, and recent results. Momentum is context, not a prediction or betting recommendation.</p>
+      <p class="help-key">Best use: start with the freshness banner, scan RISING and WATCH teams, then check the actual fixtures, rest, availability, and recent results. Momentum and estimated probabilities are context; check the accuracy journal before relying on the model.</p>
     </div>
 
     <div class="help-card help-takeaway">
@@ -3679,7 +3680,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li><b>Radar</b> = today's framing: what's strong, why, and where it breaks. Use the status + stop + catalyst.</li>
         <li><b>Journal</b> = the reality check: look at <b>excess</b>, not raw, and at whether the Live row of the recipe check is holding up.</li>
         <li><b>Markets</b> = what changed in event probabilities that matter to your Philippine, macro, regional-risk, energy, trade, or AI context. Use moves as research prompts, not recommendations.</li>
-        <li><b>Sports</b> = who is moving up or down in NBA and PBA. Check freshness first, then use Momentum alongside fixtures, rest, availability, and official results.</li>
+        <li><b>Sports</b> = who is moving up or down in NBA. Check freshness first, then use Momentum alongside fixtures, rest, availability, and official results.</li>
       </ul>
     </div>
 
@@ -7355,7 +7356,6 @@ var FEED_SPEC = [
   // One pill per sports lane (sports/refresh-sports.js laneHealth): a single
   // Sports pill stayed green for three weeks while every NBA refresh failed.
   { key: 'sports-nba',    label: 'NBA',    maxAgeH: 18, cadence: '09:00 + 15:00' },
-  { key: 'sports-pba',    label: 'PBA',    maxAgeH: 18, cadence: '08:20 + 21:30' },
   { key: 'sports-tennis', label: 'Tennis', maxAgeH: 18, cadence: '08:00 + 20:00' },
   { key: 'grounding', label: 'Numbers', maxAgeH: 30, cadence: 'daily; sources checked when due' }
 ];
@@ -9599,7 +9599,7 @@ function sportsDate(v) {
     hour: '2-digit', minute: '2-digit', hour12: false
   }) + ' PHT';
 }
-// Some providers publish a date but no tip-off time (pba.ph /recap). Those
+// Some providers publish a date but no tip-off time (date-only feeds). Those
 // matches are stored with timeKnown:false so we show the date alone rather than
 // the noon placeholder the timestamp had to fall back to. Matches without the
 // field are treated as timed, so every other lane is unaffected.
@@ -9645,7 +9645,7 @@ function sportsBracketHtml(mod, key) {
   var bracket = mod && mod.bracket || {};
   var rounds = bracket.rounds || [];
   if (!rounds.length) {
-    return '<div class="sports-empty">No ' + esc(key === 'pba' ? 'PBA elimination bracket' : 'active NBA playoff bracket') + ' is published in the current provider window.</div>';
+    return '<div class="sports-empty">No ' + esc('active NBA playoff bracket') + ' is published in the current provider window.</div>';
   }
   return '<div class="sports-series">' + rounds.map(function (round) {
     return '<div class="sports-series-round"><h4>' + esc(round.label || round.key || 'Round') + '</h4>' +
@@ -9724,7 +9724,7 @@ function sportsProjectionHtml(m) {
     '</div>' + bar +
   '</div>';
 }
-// Two-outcome sibling of sportsProjectionHtml, for sports with no draw (PBA).
+// Two-outcome sibling of sportsProjectionHtml, for sports with no draw (NBA).
 // Same CSS classes, same "computed by refresh-sports.js, FE only renders"
 // contract — just a home/away split instead of home/draw/away, so there's no
 // meaningless "draw 0%" phrase or bar segment for a sport that can't draw.
@@ -10264,8 +10264,8 @@ function tennisJournalHtml(j) {
 }
 // Same design/wording as tennisJournalHtml above — mirrors what Bob approved
 // for tennis — with "tournament · round" swapped for the matchup itself, since
-// PBA games have no tournament/round concept.
-function pbaJournalHtml(j) {
+// NBA journal shows each matchup.
+function nbaJournalHtml(j) {
   if (!j) return '';
   var head = '<div class="journal-section">Projection accuracy — grading the model</div>';
   if (!j.resolved) {
@@ -10395,7 +10395,6 @@ function sportsWorldCupHtml(d, miro) {
 }
 function sportsModuleTitle(key, mod) {
   if (key === 'nba') return 'NBA';
-  if (key === 'pba') return 'PH Local';
   if (key === 'tennis') return 'Tennis';
   if (key === 'worldcup') return 'FIFA Archive';
   return (mod && (mod.title || mod.name)) || key;
@@ -10404,7 +10403,6 @@ function sportsAvailableModules(d) {
   var out = [];
   var mods = d && d.modules || {};
   if (mods.nba && mods.nba.enabled !== false) out.push({ key:'nba', label:'NBA', module:mods.nba });
-  if (mods.pba && mods.pba.enabled !== false) out.push({ key:'pba', label:'PH Local', module:mods.pba });
   if (mods.tennis && mods.tennis.enabled !== false) out.push({ key:'tennis', label:'Tennis', module:mods.tennis });
   if (d && d.worldCup) out.push({ key:'worldcup', label:'FIFA Archive', module:d.worldCup });
   return out;
@@ -10544,12 +10542,6 @@ function sportsLeagueDetailsHtml(mod, key) {
   if (key === 'nba') html += '<div class="sports-panel"><div class="sports-panel-title">Availability</div>' + sportsTable((mod.injuries || []).slice(0, 30), 'No current availability entries.', [
     { h:'Team', v:function (r) { return r.team || ''; } }, { h:'Player', v:function (r) { return r.player || ''; } }, { h:'Status', v:function (r) { return r.status || '-'; } }, { h:'Update', v:function (r) { return r.note || '-'; } }
   ]) + '</div>';
-  if (key === 'pba') {
-    var rows = sportsPlayerRows(mod, key);
-    html += '<div class="sports-panel"><div class="sports-panel-title">Player Leaders</div>' + sportsTable(rows, 'Player leaders unavailable.', [
-      { h:'Player', v:function (r) { return r.name || ''; } }, { h:'Leading categories', v:function (r) { return r.line || '-'; } }
-    ]) + '</div>';
-  }
   if (mod.providerNote) html += '<div class="sports-empty">' + esc(mod.providerNote) + '</div>';
   return html + '</div></details>';
 }
@@ -10557,8 +10549,7 @@ function sportsModuleTabs(d) {
   var mods = sportsAvailableModules(d);
   if (!mods.length) return '';
   if (!sportsActiveModule || !mods.some(function (m) { return m.key === sportsActiveModule; })) {
-    var active = mods.find(function (m) { return m.key === 'pba' && (m.module.upcoming || []).length; }) ||
-      mods.find(function (m) { return (m.module.upcoming || []).length && String(m.module.phase || '').toLowerCase() !== 'offseason'; });
+    var active = mods.find(function (m) { return (m.module.upcoming || []).length && String(m.module.phase || '').toLowerCase() !== 'offseason'; });
     sportsActiveModule = active ? active.key : (mods.some(function (m) { return m.key === 'nba'; }) ? 'nba' : mods[0].key);
   }
   return '<div class="sports-module-tabs">' + mods.map(function (m) {
@@ -10574,7 +10565,7 @@ function sportsModuleTabs(d) {
 function sportsPhaseNote(mod, key) {
   var phase = String(mod.phase || '').toLowerCase();
   if (phase !== 'offseason' && phase !== 'preseason') return '';
-  var league = key === 'pba' ? 'PBA' : 'NBA';
+  var league = 'NBA';
   var next = (mod.upcoming || []).slice().sort(function (a, b) {
     return String(a.utcDate).localeCompare(String(b.utcDate));
   })[0];
@@ -10593,9 +10584,10 @@ function sportsGenericModuleHtml(mod, key) {
   html += '<div class="sports-brief-grid"><div><section class="sports-brief-section"><div class="sports-brief-title"><h3>Next Up</h3><span class="sports-brief-count">' + (mod.upcoming || []).length + ' scheduled</span></div>' + sportsConfidentCalls(mod.upcoming) + sportsNextUpHtml(mod, key) + '</section><section class="sports-brief-section"><div class="sports-brief-title"><h3>Since Last Update</h3><span class="sports-brief-count">' + esc((mod.changes && mod.changes.since) ? sportsDate(mod.changes.since) : 'baseline') + '</span></div>' + sportsChangesHtml(mod, key) + '</section></div>';
   html += '<div><section class="sports-brief-section"><div class="sports-brief-title"><h3>My Teams</h3><span class="sports-brief-count">followed</span></div>' + sportsMyTeamsHtml(mod, key) + '</section><section class="sports-brief-section"><div class="sports-brief-title"><h3>My Players</h3><span class="sports-brief-count">followed</span></div>' + sportsMyPlayersHtml(mod, key) + '</section></div></div>';
   html += '<section class="sports-context"><div class="sports-brief-title"><h3>Competition Context</h3><span class="sports-brief-count">current table</span></div>' + sportsContextHtml(mod, key) + '</section>';
+  if (mod.projectionModel) html += '<div class="sports-empty">' + esc(mod.projectionModel.note) + '</div>';
   html += sportsLeagueDetailsHtml(mod, key);
   if (mod.projectionJournal) {
-    html += '<div class="sports-panel"><div class="sports-panel-title">Projection Accuracy</div>' + pbaJournalHtml(mod.projectionJournal) + '</div>';
+    html += '<div class="sports-panel"><div class="sports-panel-title">Projection Accuracy</div>' + nbaJournalHtml(mod.projectionJournal) + '</div>';
   }
   return html;
 }

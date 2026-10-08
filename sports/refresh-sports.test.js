@@ -1,8 +1,6 @@
+import { buildNbaProjections } from './nba-projections.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   laneHealth,
   monthKeysBetween,
@@ -16,24 +14,10 @@ import {
   nbaPlayoffRound,
   buildNbaBracket,
   nbaSeasonYear,
-  parsePbaSchedule,
-  parsePbaRecaps,
-  parsePbaStandings,
-  parsePbaLeaders,
-  pbaPlayerMeta,
-  pbaTeamIndex,
-  pbaTitleCase,
-  buildPbaBracket,
+  buildNbaJournal,
   buildTeamProfiles,
   buildModuleChanges,
   scheduleReadiness,
-  buildPbaMomentum,
-  pbaWinProb,
-  pbaProjTag,
-  buildPbaProjections,
-  pbaMatchWinner,
-  collectPbaMatches,
-  buildPbaJournal,
   classifyTennis,
   buildTennisDraw,
   normTennisEvent,
@@ -70,9 +54,6 @@ function tEvent(name, comps) {
   return { id: name, name: name, date: '2026-07-01T00:00:00Z', groupings: [{ grouping: { displayName: "Men's Singles" }, competitions: comps }] };
 }
 
-var fixtureDir = join(dirname(fileURLToPath(import.meta.url)), 'test-fixtures');
-function fixture(name) { return readFileSync(join(fixtureDir, name), 'utf8'); }
-
 function event(id, date, state, home, away, homeScore, awayScore) {
   return {
     id: id,
@@ -96,18 +77,18 @@ function event(id, date, state, home, away, homeScore, awayScore) {
 test('each scheduled lane a run asked for gets its own health record; a kept snapshot is a failure', function () {
   var doc = { modules: {
     nba: { refreshStatus: 'fallback', refreshError: 'ESPN NBA 400: {"code":400,"message":"Failed to get events endpoint."}', providerNote: 'Showing the last good NBA snapshot' },
-    pba: { refreshStatus: 'ok' },
     tennis: { refreshStatus: 'error', setupNote: 'Tennis fetch failed: fetch failed' }
   } };
   var all = laneHealth(doc, function () { return true; });
-  assert.deepEqual(all.map(function (r) { return r.feed + '=' + r.status; }), ['sports-nba=failed', 'sports-pba=ok', 'sports-tennis=failed'], 'the paused World Cup lane has no record');
+  assert.deepEqual(all.map(function (r) { return r.feed + '=' + r.status; }), ['sports-nba=failed', 'sports-tennis=failed'], 'the paused World Cup lane has no record');
   assert.equal(all[0].message, 'ESPN NBA 400: {"code":400,"message":"Failed to get events endpoint."}');
   assert.equal(all[0].stage, 'fetch (kept last good data)');
-  assert.equal(all[1].stage, null); assert.equal(all[1].message, '');
-  assert.equal(all[2].message, 'Tennis fetch failed: fetch failed'); assert.equal(all[2].stage, 'fetch');
+  assert.equal(all[1].message, 'Tennis fetch failed: fetch failed'); assert.equal(all[1].stage, 'fetch');
+  var ok = laneHealth({ modules: { tennis: { refreshStatus: 'ok' } } }, function (key) { return key === 'tennis'; })[0];
+  assert.equal(ok.status, 'ok'); assert.equal(ok.stage, null); assert.equal(ok.message, '');
   var nbaOnly = laneHealth(doc, function (key) { return key === 'nba'; });
   assert.deepEqual(nbaOnly.map(function (r) { return r.feed; }), ['sports-nba'], 'a lane the run did not ask for keeps its own record');
-  assert.equal(laneHealth({ modules: {} }, function (key) { return key === 'pba'; })[0].status, 'failed', 'a missing lane is not ok');
+  assert.equal(laneHealth({ modules: {} }, function (key) { return key === 'tennis'; })[0].status, 'failed', 'a missing lane is not ok');
 });
 
 test('reads the NBA window as calendar months and keeps each game inside it once', function () {
@@ -220,267 +201,6 @@ test('normalizes ESPN playoff rounds and builds current series bracket rows', fu
   assert.equal(bracket.rounds[0].series[0].completed, true);
 });
 
-test('parses official PBA schedule days, sharing the date heading across games', function () {
-  var games = parsePbaSchedule(fixture('pba-schedule.html'), new Date('2026-08-03T00:00:00Z'));
-  assert.equal(games.length, 3);
-  // Shouted source names are title-cased for the tab.
-  assert.equal(games[0].home, 'Titan Ultra Giant Risers');
-  assert.equal(games[0].away, 'Macau Giant Pandas');
-  assert.equal(games[0].venue, 'Ninoy Aquino Stadium');
-  // 05:15 PM PHT on Aug 04 == 09:15Z, i.e. the PHT offset is applied.
-  assert.equal(games[0].utcDate, '2026-08-04T09:15:00.000Z');
-  assert.deepEqual(games[0].score, { home: null, away: null });
-  // The doubleheader's second game has an EMPTY h2 and must inherit the date
-  // above it — dropping it silently loses half the schedule.
-  assert.equal(games[1].home, 'NLEX Road Warriors');
-  assert.equal(games[1].away, 'TNT Tropang 5G');
-  assert.equal(games[1].utcDate, '2026-08-04T11:30:00.000Z');
-  assert.equal(games[1].venue, 'Ninoy Aquino Stadium');
-  // The next dated heading takes over again.
-  assert.equal(games[2].utcDate, '2026-08-05T09:15:00.000Z');
-  assert.equal(games[2].away, 'Phoenix');
-});
-
-test('parses PBA standings across group tables despite the invalid anchor-wrapped rows', function () {
-  var standings = parsePbaStandings(fixture('pba-standings.html'));
-  assert.equal(standings.length, 3);
-  assert.equal(standings[0].team, 'NLEX Road Warriors');
-  assert.equal(standings[0].conference, 'GROUP A');
-  assert.equal(standings[0].wins, 5);
-  assert.equal(standings[0].losses, 0);
-  assert.equal(standings[0].pct, 1);
-  assert.equal(standings[0].teamId, '6');
-  // Position restarts per group, and the second group is picked up too.
-  assert.equal(standings[2].conference, 'GROUP B');
-  assert.equal(standings[2].position, 1);
-  assert.equal(standings[2].team, 'Barangay Ginebra San Miguel');
-});
-
-test('resolves PBA recap teams from logo ids, since results markup carries no team text', function () {
-  var standings = parsePbaStandings(fixture('pba-standings.html'));
-  var schedule = parsePbaSchedule(fixture('pba-schedule.html'), new Date('2026-08-03T00:00:00Z'));
-  var index = pbaTeamIndex(standings, schedule);
-  var games = parsePbaRecaps(fixture('pba-recap.html'), index, new Date('2026-08-03T00:00:00Z'));
-  assert.equal(games.length, 2);
-  // teams/4 is in standings (Ginebra); teams/2 is in neither, so it degrades to
-  // the game-leaders abbreviation rather than dropping the game.
-  assert.equal(games[0].home, 'Barangay Ginebra San Miguel');
-  assert.deepEqual(games[0].score, { home: 73, away: 88 });
-  assert.equal(games[0].status, 'FINISHED');
-  assert.equal(games[0].venue, 'Smart Araneta Coliseum');
-  assert.equal(games[1].home, 'NLEX Road Warriors');
-  assert.equal(games[1].away, 'San Miguel Beermen');
-  // Sorted newest first.
-  assert.ok(games[0].utcDate > games[1].utcDate);
-});
-
-test('finished PBA games are flagged time-unknown so no noon tip-off is invented', function () {
-  var now = new Date('2026-08-03T00:00:00Z');
-  var schedule = parsePbaSchedule(fixture('pba-schedule.html'), now);
-  // /schedule publishes a real tip-off time.
-  assert.equal(schedule[0].timeKnown, true);
-  assert.equal(schedule[0].utcDate, '2026-08-04T09:15:00.000Z');
-
-  var standings = parsePbaStandings(fixture('pba-standings.html'));
-  var games = parsePbaRecaps(fixture('pba-recap.html'), pbaTeamIndex(standings, schedule), now);
-  // /recap publishes only a date, so the stored timestamp falls back to noon PHT
-  // (04:00Z) — the flag is what stops the front end from showing it as a tip-off.
-  assert.equal(games[0].timeKnown, false);
-  assert.equal(games[0].utcDate.slice(11, 16), '04:00');
-});
-
-test('PBA momentum ranks on recent wins and POINT differential, not sets', function () {
-  var standings = parsePbaStandings(fixture('pba-standings.html'));
-  var schedule = parsePbaSchedule(fixture('pba-schedule.html'), new Date('2026-08-03T00:00:00Z'));
-  var games = parsePbaRecaps(fixture('pba-recap.html'), pbaTeamIndex(standings, schedule), new Date('2026-08-03T00:00:00Z'));
-  var momentum = buildPbaMomentum(games, standings);
-  var nlex = momentum.find(function (r) { return r.team === 'NLEX Road Warriors'; });
-  assert.equal(nlex.recentForm, 'W');
-  assert.equal(nlex.averagePointDiff, 6);
-  assert.equal(nlex.averageSetDiff, undefined);
-  var smb = momentum.find(function (r) { return r.team === 'San Miguel Beermen'; });
-  assert.equal(smb.recentForm, 'L');
-  assert.equal(smb.averagePointDiff, -6);
-  assert.ok(nlex.score > smb.score);
-});
-
-test('pbaWinProb is symmetric around a 0 gap and capped like tennis/FIFA single-game variance', function () {
-  assert.equal(pbaWinProb(50, 50), 0.5);
-  var favored = pbaWinProb(70, 30);
-  var underdog = pbaWinProb(30, 70);
-  assert.ok(Math.abs(favored - (1 - underdog)) < 1e-9);
-  assert.ok(favored > 0.5 && favored <= 0.85);
-  // an extreme gap still doesn't approach certainty — the logistic only
-  // asymptotically nears the 15/85 cap, it never needs to hit it exactly at the
-  // domain's actual max (a 100-point momentum-score gap)
-  assert.ok(pbaWinProb(100, 0) < 0.85 && pbaWinProb(100, 0) > 0.8);
-  assert.ok(pbaWinProb(0, 100) > 0.15 && pbaWinProb(0, 100) < 0.2);
-  // the cap is still a real ceiling for any gap beyond the domain's natural max
-  assert.equal(pbaWinProb(1000, 0), 0.85);
-});
-
-test('pbaProjTag thresholds match FIFA\'s exact vocabulary', function () {
-  assert.equal(pbaProjTag(2), 'Toss-up');
-  assert.equal(pbaProjTag(8), 'Watch only');
-  assert.equal(pbaProjTag(18), 'Moderate edge');
-  assert.equal(pbaProjTag(40), 'Strong edge');
-});
-
-test('buildPbaProjections only projects NOT-YET-PLAYED matches, and degrades gracefully with missing momentum', function () {
-  var momentum = [
-    { team: 'Barangay Ginebra San Miguel', score: 80 },
-    { team: 'TNT Tropang 5G', score: 40 }
-  ];
-  var upcoming = { id: 'g1', status: 'SCHEDULED', home: 'Barangay Ginebra San Miguel', away: 'TNT Tropang 5G' };
-  var finished = { id: 'g2', status: 'FINISHED', home: 'Barangay Ginebra San Miguel', away: 'TNT Tropang 5G', score: { home: 88, away: 73 } };
-  var noData = { id: 'g3', status: 'SCHEDULED', home: 'Meralco Bolts', away: 'Phoenix' };
-  var matches = [upcoming, finished, noData];
-  buildPbaProjections(matches, momentum);
-
-  assert.ok(upcoming.projection);
-  assert.equal(upcoming.projection.favorite, 'Barangay Ginebra San Miguel');
-  assert.equal(upcoming.projection.tag, 'Strong edge');
-  assert.ok(Math.abs(upcoming.projection.probs.home + upcoming.projection.probs.away - 1) < 1e-6);
-  assert.equal(upcoming.projection.probs.draw, 0);
-
-  // never projects a known result — lookahead guard
-  assert.equal(finished.projection, undefined);
-
-  // neither team has a momentum row: no projection at all rather than a fake 50/50
-  assert.equal(noData.projection, undefined);
-});
-
-test('a near-even momentum gap is called Toss-up with no favorite named', function () {
-  var momentum = [
-    { team: 'Meralco Bolts', score: 51 },
-    { team: 'Phoenix', score: 49 }
-  ];
-  var m = { id: 'g4', status: 'SCHEDULED', home: 'Meralco Bolts', away: 'Phoenix' };
-  buildPbaProjections([m], momentum);
-  assert.equal(m.projection.tag, 'Toss-up');
-  assert.equal(m.projection.favorite, null);
-});
-
-test('pbaMatchWinner reads the score, refusing an unplayed or unfinished game', function () {
-  assert.equal(pbaMatchWinner({ status: 'FINISHED', home: 'A', away: 'B', score: { home: 90, away: 88 } }), 'A');
-  assert.equal(pbaMatchWinner({ status: 'FINISHED', home: 'A', away: 'B', score: { home: 80, away: 90 } }), 'B');
-  assert.equal(pbaMatchWinner({ status: 'SCHEDULED', home: 'A', away: 'B', score: { home: null, away: null } }), null);
-  assert.equal(pbaMatchWinner({ status: 'FINISHED', home: 'A', away: 'B', score: { home: 90, away: 90 } }), null);
-});
-
-test('PBA projection journal locks a scheduled pick and scores it when finished, with no hindsight', function () {
-  var scheduled = [{
-    id: 'pba-2026-08-10-a-b', status: 'SCHEDULED', home: 'Barangay Ginebra San Miguel', away: 'TNT Tropang 5G',
-    projection: { favorite: 'Barangay Ginebra San Miguel', tag: 'Strong edge', probs: { home: 0.8, draw: 0, away: 0.2 } }
-  }];
-  var j1 = buildPbaJournal(null, scheduled, '2026-08-09T00:00:00Z');
-  assert.equal(j1.stats.resolved, 0);
-  assert.equal(j1.stats.pending, 1);
-  assert.equal(j1.preds['pba-2026-08-10-a-b'].resolved, false);
-
-  var finished = [{
-    id: 'pba-2026-08-10-a-b', status: 'FINISHED', home: 'Barangay Ginebra San Miguel', away: 'TNT Tropang 5G',
-    score: { home: 95, away: 80 }
-  }];
-  var j2 = buildPbaJournal(j1, finished, '2026-08-11T00:00:00Z');
-  assert.equal(j2.stats.resolved, 1);
-  assert.equal(j2.stats.accuracy, 100);
-  assert.equal(j2.stats.decisive, 1);
-  assert.equal(j2.stats.decisiveAccuracy, 100);
-  assert.ok(Math.abs(j2.preds['pba-2026-08-10-a-b'].brier - 0.04) < 1e-9); // (0.8 − 1)^2
-
-  // a finished game that was never locked while scheduled is ignored — no hindsight
-  var j3 = buildPbaJournal(null, finished, '2026-08-11T00:00:00Z');
-  assert.equal(j3.stats.resolved, 0);
-
-  // a Toss-up (no favorite) is never locked at all — it can't be silently graded a miss
-  var tossup = [{
-    id: 'pba-2026-08-12-c-d', status: 'SCHEDULED', home: 'C', away: 'D',
-    projection: { favorite: null, tag: 'Toss-up', probs: { home: 0.51, draw: 0, away: 0.49 } }
-  }];
-  var j4 = buildPbaJournal(null, tossup, '2026-08-09T00:00:00Z');
-  assert.equal(j4.stats.pending, 0);
-  assert.equal(Object.keys(j4.preds).length, 0);
-});
-
-test('collectPbaMatches pulls straight from the merged matches list', function () {
-  var mod = { matches: [{ id: 'm1', home: 'A', away: 'B' }, { id: null }, { home: 'no-id' }] };
-  var out = collectPbaMatches(mod);
-  assert.equal(out.length, 1);
-  assert.equal(out[0].id, 'm1');
-});
-
-test('parses the tableless PBA leaders card grid from its data attributes', function () {
-  var cats = parsePbaLeaders(fixture('pba-leaders.html'));
-  assert.equal(cats.length, 3);
-
-  // Stat name comes from a plain span in the hero card, not a heading.
-  assert.equal(cats[0].label, 'Points Per Game');
-  assert.equal(cats[0].key, 'points-per-game');
-  // pba.ph has the cup name commented out, so there is nothing to attribute to.
-  assert.equal(cats[0].conference, '');
-  assert.equal(cats[0].leaders.length, 3);
-  // data-name carries a trailing space in the live markup.
-  assert.equal(cats[0].leaders[0].name, 'George King');
-  assert.equal(cats[0].leaders[0].value, '34.8');
-  assert.equal(cats[0].leaders[0].team, 'San Miguel Beermen');
-  assert.equal(cats[0].leaders[0].position, 'SG');
-  assert.equal(cats[0].leaders[2].rank, 3);
-
-  // Each column's bottom-player cards must not bleed into the next category.
-  assert.equal(cats[1].label, 'Rebounds Per Game');
-  assert.equal(cats[1].leaders.length, 2);
-  assert.equal(cats[1].leaders[0].name, "De'Vondre Perry");
-
-  // A hero card with no bottom-player row still yields its leader.
-  assert.equal(cats[2].label, 'Blocks Per Game');
-  assert.equal(cats[2].leaders.length, 1);
-  assert.equal(cats[2].leaders[0].name, 'Shaun Geoffrey Chiu');
-  assert.equal(cats[2].leaders[0].value, '2.5');
-  assert.equal(cats[2].leaders[0].team, 'Terrafirma Dyip');
-
-  // valueLabel stays empty so the front end's "label value" line reads cleanly.
-  assert.equal(cats[0].leaders[0].valueLabel, '');
-  assert.deepEqual(parsePbaLeaders('<html><body></body></html>'), []);
-});
-
-test('pbaPlayerMeta splits the jersey / position / team string', function () {
-  assert.deepEqual(pbaPlayerMeta('#94 / SG / SAN MIGUEL BEERMEN'),
-    { jersey: '#94', position: 'SG', team: 'San Miguel Beermen' });
-  assert.deepEqual(pbaPlayerMeta('#18 / C / TERRAFIRMA DYIP'),
-    { jersey: '#18', position: 'C', team: 'Terrafirma Dyip' });
-  assert.deepEqual(pbaPlayerMeta(''), {});
-});
-
-test('pbaTitleCase tames the shouted source names but leaves real casing alone', function () {
-  assert.equal(pbaTitleCase('NLEX ROAD WARRIORS'), 'NLEX Road Warriors');
-  assert.equal(pbaTitleCase('TNT TROPANG 5G'), 'TNT Tropang 5G');
-  assert.equal(pbaTitleCase('Barangay Ginebra'), 'Barangay Ginebra');
-  // Internal capitals the shouted source destroys.
-  assert.equal(pbaTitleCase('CONVERGE FIBERXERS'), 'Converge FiberXers');
-  // Ordinals stay lowercase; other digit-led tokens are branding and shout.
-  assert.equal(pbaTitleCase('49TH SEASON PBA PHILIPPINE CUP'), '49th Season PBA Philippine Cup');
-  assert.equal(pbaTitleCase(''), '');
-});
-
-test('builds PBA postseason rounds and team detail profiles only from official match fields', function () {
-  var matches = [{
-    id:'pba-final', utcDate:'2026-08-30T10:00:00Z', status:'SCHEDULED', stage:'Semifinals',
-    home:'Barangay Ginebra San Miguel', away:'TNT Tropang 5G', score:{home:null,away:null}
-  }];
-  var bracket = buildPbaBracket(matches);
-  assert.equal(bracket.active, true);
-  assert.equal(bracket.rounds[0].label, 'Semifinals');
-  var profiles = buildTeamProfiles('pba', [
-    { team:'Barangay Ginebra San Miguel', position:1, wins:3, losses:0, pct:1, streak:'+3' }
-  ], [
-    { team:'Barangay Ginebra San Miguel', score:88, label:'RISING', recentForm:'WWW', averagePointDiff:7.5 }
-  ], matches, []);
-  assert.equal(profiles[0].momentumScore, 88);
-  assert.equal(profiles[0].margin, 7.5);
-  assert.equal(profiles[0].next.away, 'TNT Tropang 5G');
-});
-
 // buildNbaMomentum keys off FINISHED games, so out of season a standings team
 // can have no momentum row at all. Every profile field is null-guarded for that
 // except margin, which shipped `undefined` straight into the Firestore write and
@@ -518,12 +238,12 @@ test('builds a concise refresh delta from results, fixtures and standings moveme
     standings:[{ team:'Creamline', position:1, wins:2, losses:0, points:6 }],
     momentum:[{ team:'Creamline', score:74, label:'RISING', recentForm:'WW' }]
   };
-  var changes = buildModuleChanges('pba', current, previous);
+  var changes = buildModuleChanges('nba', current, previous);
   assert.equal(changes.since, '2026-07-20T00:00:00Z');
   assert.deepEqual(changes.items.map(function (item) { return item.type; }), ['result', 'fixture', 'standing', 'momentum']);
   assert.match(changes.items[2].detail, /#2 to #1/);
 
-  var repeated = buildModuleChanges('pba', {
+  var repeated = buildModuleChanges('nba', {
     lastSuccessfulAt:'2026-07-22T04:00:00Z', recent:[], upcoming:[], standings:[], momentum:[]
   }, {
     lastSuccessfulAt:'2026-07-22T00:00:00Z', matches:[], standings:[], momentum:[],
@@ -633,17 +353,17 @@ test('tennis projection journal locks a scheduled pick and scores it when finish
 
 test('scheduler readiness requires successful refreshes on three distinct PHT days', function () {
   var history = [
-    { completedAt:'2026-07-18T00:00:00Z', modules:{ pba:{ refreshStatus:'ok' } } },
-    { completedAt:'2026-07-18T05:00:00Z', modules:{ pba:{ refreshStatus:'ok' } } },
-    { completedAt:'2026-07-19T00:00:00Z', modules:{ pba:{ refreshStatus:'fallback' } } },
-    { completedAt:'2026-07-20T00:00:00Z', modules:{ pba:{ refreshStatus:'ok' } } }
+    { completedAt:'2026-07-18T00:00:00Z', modules:{ nba:{ refreshStatus:'ok' } } },
+    { completedAt:'2026-07-18T05:00:00Z', modules:{ nba:{ refreshStatus:'ok' } } },
+    { completedAt:'2026-07-19T00:00:00Z', modules:{ nba:{ refreshStatus:'fallback' } } },
+    { completedAt:'2026-07-20T00:00:00Z', modules:{ nba:{ refreshStatus:'ok' } } }
   ];
-  var blocked = scheduleReadiness(history, 'pba', 3);
+  var blocked = scheduleReadiness(history, 'nba', 3);
   assert.equal(blocked.ready, false);
   assert.equal(blocked.successfulDays.length, 2);
   var ready = scheduleReadiness(history.concat([
-    { completedAt:'2026-07-21T00:00:00Z', modules:{ pba:{ refreshStatus:'ok' } } }
-  ]), 'pba', 3);
+    { completedAt:'2026-07-21T00:00:00Z', modules:{ nba:{ refreshStatus:'ok' } } }
+  ]), 'nba', 3);
   assert.equal(ready.ready, true);
 });
 
@@ -653,7 +373,6 @@ function laneDoc() {
     worldCup: { matches: [{ id: 1, status: 'FINISHED' }] },
     modules: {
       nba: { matches: [{ id: 'a' }], standings: [{ team: 'BOS' }] },
-      pba: { standings: [{ team: 'Barangay Ginebra San Miguel' }], upcoming: [] },
       tennis: { tiers: { slam: { current: { name: 'US Open' } }, masters: {}, tour500: {} } }
     }
   };
@@ -661,7 +380,7 @@ function laneDoc() {
 
 test('moduleHasData recognises real lane data and rejects empty scaffolding', function () {
   var d = laneDoc();
-  ['nba', 'pba', 'tennis', 'worldcup'].forEach(function (k) {
+  ['nba', 'tennis', 'worldcup'].forEach(function (k) {
     assert.equal(moduleHasData(k, laneValue(d, k)), true, k + ' should count as populated');
   });
   assert.equal(moduleHasData('nba', { matches: [], standings: [], upcoming: [] }), false);
@@ -673,7 +392,7 @@ test('moduleHasData recognises real lane data and rejects empty scaffolding', fu
 test('lanesMissing flags every lane a module-scoped run would erase', function () {
   var onlyTennis = { modules: { tennis: laneDoc().modules.tennis } };
   var wantsTennis = function (k) { return k === 'tennis'; };
-  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'pba', 'worldcup']);
+  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'worldcup']);
   // Lanes carried forward from the previous doc are not missing.
   assert.deepEqual(lanesMissing(laneDoc(), wantsTennis), []);
   // A lane this run is responsible for is never reported (its own fallback owns it).
@@ -687,26 +406,74 @@ test('setLane restores into the right slot for modules and the legacy worldCup k
   setLane(target, 'worldcup', laneValue(source, 'worldcup'));
   assert.equal(target.modules.nba.matches.length, 1);
   assert.equal(target.worldCup.matches.length, 1);
-  assert.deepEqual(lanesMissing(target, function (k) { return k === 'pba' || k === 'tennis'; }), []);
+  assert.deepEqual(lanesMissing(target, function (k) { return k === 'tennis'; }), []);
 });
 
 test('concurrent module writes preserve lanes committed by another runner', function () {
   var current = laneDoc();
-  current.modules.pba = { standings: [{ team: 'New PBA snapshot' }], upcoming: [] };
+  current.modules.tennis = { tiers: { slam: { current: { name: 'New tennis snapshot' } }, masters: {}, tour500: {} } };
+  current.modules.pba = { standings: [{ team: 'Barangay Ginebra San Miguel' }], upcoming: [] };
   var incoming = laneDoc();
   incoming.generatedAt = '2026-08-11T01:00:00Z';
   incoming.modules.nba = { matches: [{ id: 'new-nba' }], standings: [] };
-  incoming.modules.pba = { standings: [{ team: 'stale carried PBA' }], upcoming: [] };
+  incoming.modules.tennis = { tiers: { slam: { current: { name: 'stale carried tennis' } }, masters: {}, tour500: {} } };
 
   var merged = mergeConcurrentSportsDoc(incoming, current, ['nba']);
   assert.equal(merged.modules.nba.matches[0].id, 'new-nba');
-  assert.equal(merged.modules.pba.standings[0].team, 'New PBA snapshot');
+  assert.equal(merged.modules.tennis.tiers.slam.current.name, 'New tennis snapshot');
+  assert.equal(merged.modules.pba, undefined, 'the removed PBA lane is not carried forward from an older doc');
   assert.equal(merged.worldCup.matches.length, 1);
-  assert.deepEqual(merged.sports.sort(), ['nba', 'pba', 'tennis', 'worldcup']);
+  assert.deepEqual(merged.sports.sort(), ['nba', 'tennis', 'worldcup']);
 });
 
 test('shiftDateKey walks back across month boundaries', function () {
   assert.equal(shiftDateKey('2026-08-01', -1), '2026-07-31');
   assert.equal(shiftDateKey('2026-08-03', -21), '2026-07-13');
   assert.equal(shiftDateKey('2026-03-01', -1), '2026-02-28');
+});
+
+function nbaProjectionFixture() {
+  const matches = Array.from({length:5}, (_,i) => ({id:'r'+i, home:'Home', away:'Away', status:'FINISHED', stage:'regular-season', utcDate:'2026-10-0'+(i+1)+'T12:00:00Z', score:{home:110,away:90}}));
+  matches.push({id:'next',home:'Home',away:'Away',status:'SCHEDULED',stage:'regular-season',utcDate:'2026-10-10T12:00:00Z'});
+  const momentum = [{team:'Home',score:85,recentGames:5},{team:'Away',score:25,recentGames:5}];
+  return {matches,momentum,now:new Date('2026-10-09T00:00:00Z')};
+}
+test('NBA estimates require recent form on both sides and skip preseason, live and started games', () => {
+  const {matches,momentum,now} = nbaProjectionFixture();
+  const next=matches.at(-1);
+  const model=buildNbaProjections(matches,momentum,now);
+  assert.equal(model.projected,1);
+  assert.equal(next.projection.favorite,'Home');
+  assert.equal(next.projection.probs.home + next.projection.probs.away,1);
+  assert.ok(next.projection.probs.home <= .85);
+  assert.ok(matches.slice(0,-1).every(m=>!m.projection));
+  for(const [field,value] of [['stage','pre-season'],['status','IN_PLAY'],['status','POSTPONED'],['utcDate','2026-10-08T12:00:00Z']]) {
+    const changed={...next,[field]:value};buildNbaProjections([...matches.slice(0,-1),changed],momentum,now);assert.equal(changed.projection,undefined);
+  }
+  buildNbaProjections(matches,momentum.slice(0,1),now);assert.equal(next.projection,undefined);
+  buildNbaProjections(matches,momentum.map(r=>({...r,recentGames:2})),now);assert.equal(next.projection,undefined);
+  buildNbaProjections(matches,momentum,new Date('2026-12-01'));assert.equal(next.projection,undefined);
+});
+test('NBA home/rest adjustment is modest and favors the rested side', () => {
+  const {matches,momentum,now}=nbaProjectionFixture();const next=matches.at(-1);
+  momentum.forEach(r=>r.score=50);
+  buildNbaProjections(matches,momentum,now);const rested=next.projection.probs.home;
+  assert.equal(next.projection.tag,'Toss-up');
+  next.rest={home:{backToBack:true}};
+  buildNbaProjections(matches,momentum,now);assert.ok(next.projection.probs.home < rested);
+});
+test('NBA journal freezes pre-tip estimates and scores only previously locked games without mutating prior state', () => {
+  const {matches,momentum,now}=nbaProjectionFixture();buildNbaProjections(matches,momentum,now);
+  const first=buildNbaJournal(null,matches,now.toISOString());
+  assert.equal(first.stats.pending,1);assert.equal(first.stats.resolved,0);
+  const original=JSON.stringify(first);
+  const next={...matches.at(-1),projection:{...matches.at(-1).projection,probs:{home:.51,away:.49}}};
+  const again=buildNbaJournal(first,[next],'2026-10-09T12:00:00Z');
+  assert.equal(again.preds.next.pHome,first.preds.next.pHome);
+  const done={...next,status:'FINISHED',score:{home:120,away:95}};
+  const result=buildNbaJournal(first,[done],'2026-10-11T00:00:00Z');
+  assert.equal(result.stats.resolved,1);assert.equal(result.stats.accuracy,100);
+  assert.equal(JSON.stringify(first),original);
+  assert.equal(buildNbaJournal(null,[done],'2026-10-11T00:00:00Z').stats.resolved,0);
+  assert.equal(buildNbaJournal(null,[next],'2026-10-10T13:00:00Z').stats.pending,0);
 });
