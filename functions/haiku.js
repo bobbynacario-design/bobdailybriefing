@@ -68,7 +68,14 @@ async function ask({input, tool, maxLookups, lookup, deadline, ...options}) {
     const calls = (json.content || []).filter((b) => b.type === "tool_use");
     if (!calls.length) {
       if (!lookups) throw failure("internal", "Claude did not look up the saved records. Try again.");
-      return {raw: textOf(json), lookups};
+      return {raw: textOf(json), lookups, revise: async (prompt) => {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) throw failure("unavailable", "The saved-record answer timed out. Try again.");
+        const revised = await message({...options, timeoutMs: Math.min(120000, remaining), body: {system, tools,
+          messages: messages.concat([{role: "assistant", content: json.content}, {role: "user", content: prompt}]),
+          tool_choice: {type: "none"}}});
+        return textOf(revised);
+      }};
     }
     // Replay all blocks, including signed thinking, unmodified in this account.
     messages.push({role: "assistant", content: json.content});

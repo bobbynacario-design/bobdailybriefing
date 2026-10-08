@@ -116,6 +116,83 @@ const SEARCH_TOOL = {
   },
 };
 
+// Interpret only explicit format requests; never infer a personality from text.
+function requestIntent(question) {
+  const q = text(question).toLowerCase();
+  const numbers = {one: 1, single: 1, two: 2, three: 3, four: 4, five: 5};
+  const count = (match) => match ? numbers[match[1]] || Number(match[1]) : null;
+  const sentences = count(q.match(/\b(1|2|3|4|5|one|single|two|three|four|five)\s+sentences?\b/));
+  const bullets = count(q.match(/\b(1|2|3|4|5|one|single|two|three|four|five)\s+bullet(?:s|\s+points?)?\b/));
+  const words = q.match(/\b(under|fewer than|less than|at most|no more than|up to|within|in)\s+(\d{1,3})\s+words?\b/);
+  const brief = /\b(briefly|concise|concisely|short answer|keep it short|just the answer)\b/.test(q);
+  const personal = /\b(describe|summarise|summarize|sum up)\s+me\b|\bwho am i\b|\bdescribe my (?:work|role|career|job)\b/.test(q);
+  const beyondWork = personal && /\b(beyond|outside|apart from|other than|not just)\s+(?:my\s+)?work\b/.test(q);
+  const workOnly = personal && !beyondWork && /\b(my (?:work|role|career|job)|professionally|professional (?:bio|description))\b/.test(q);
+  const maxWords = words ? Math.min(170, Math.max(1, Number(words[2]) - (/under|fewer|less/.test(words[1]) ? 1 : 0))) : sentences === 1 ? 45 : brief ? 70 : 170;
+  return {sentences, bullets, maxWords, scope: beyondWork ? "beyond-work" : workOnly ? "work" : personal ? "person" : "records",
+    suppressFollowups: !!(sentences || bullets || brief || personal || /\bno follow[- ]?ups?\b/.test(q))};
+}
+
+function intentInstructions(intent) {
+  const lines = ["Answer the user's actual request; its scope and explicit format take precedence over general answer templates."];
+  if (intent.sentences) lines.push("The answer field must contain exactly " + intent.sentences + " sentence(s); do not append an explanation.");
+  if (intent.bullets) lines.push("The answer field must contain exactly " + intent.bullets + " bullet lines, each starting '- ', separated by newline characters; no introduction or conclusion.");
+  lines.push("Use at most " + intent.maxWords + " words in the answer field, excluding citation refs; select the essential facts instead of squeezing in every record.");
+  if (intent.scope === "person") lines.push("This is a description of the person, not an inventory of clients or claim types: consider his work, stated interests, values and goals together, but include only defining details supported by his profile. Do not invent traits or equate app activity with personality.");
+  if (intent.scope === "work") lines.push("Describe his professional role from his profile; leave out unrelated interests and a detailed inventory of files unless requested.");
+  if (intent.scope === "beyond-work") lines.push("Focus on his explicitly stated interests, values and goals outside work. Do not substitute his job description; if that personal evidence is missing, say so.");
+  if (intent.suppressFollowups) lines.push("Set follow_ups to []; the user asked for a finished, focused answer.");
+  else lines.push("Suggest a follow-up only when it directly advances this question using the evidence returned; otherwise set follow_ups to [].");
+  return lines.join("\n");
+}
+
+function answerText(value) {
+  // Keep requested bullet lines intact. All HTML is still escaped by the app.
+  return text(value).replace(/\r\n?/g, "\n").replace(/[^\S\n]+/g, " ").replace(/\n{3,}/g, "\n\n").slice(0, 1600).trim();
+}
+
+function sentenceCount(value) {
+  const plain = text(value).replace(/\[[SW]\d+\]/g, "").trim();
+  return Array.from(new Intl.Segmenter("en-AU", {granularity: "sentence"}).segment(plain)).filter((part) => /[\p{L}\p{N}]/u.test(part.segment)).length;
+}
+
+function reviewAnswer(raw, {question, registry, searched, web}) {
+  const intent = requestIntent(question);
+  let parsed;
+  try { parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); } catch (error) { parsed = null; }
+  const clean = cleanAnswer(parsed, registry, searched, web, question);
+  const problems = [];
+  if (!clean || typeof parsed.answer !== "string") problems.push("Return a usable answer in the requested JSON object.");
+  else {
+    const answer = clean.answer;
+    if (parsed.answer.length > 1600) problems.push("Keep answer within 1600 characters without truncating its meaning.");
+    if (intent.sentences && sentenceCount(answer) !== intent.sentences) problems.push("Use exactly " + intent.sentences + " sentence(s) in answer.");
+    if (intent.bullets) {
+      const lines = answer.split("\n").filter((line) => line.trim());
+      if (lines.length !== intent.bullets || !lines.every((line) => /^[-•]\s+\S/.test(line))) problems.push("Use exactly " + intent.bullets + " bullet lines and no surrounding prose.");
+    }
+    const words = answer.replace(/\[[SW]\d+\]/g, "").trim().split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+    if (words > intent.maxWords) problems.push("Keep answer within " + intent.maxWords + " words.");
+    const known = new Set(clean.sources.concat(clean.web_sources).map((source) => source.ref));
+    if (Array.from(parsed.answer.matchAll(/\[([SW]\d+)\]/g)).some((match) => !known.has(match[1]))) problems.push("Cite only refs returned by the lookups or verified web search; remove unsupported claims, not just their refs.");
+    if (registry.list.length && !clean.sources.length && !clean.web_sources.length && !text(parsed.not_found)) problems.push("Support the answer with the relevant returned refs, or explain that the records do not answer it.");
+  }
+  return {raw: clean ? JSON.stringify({answer: clean.answer, not_found: clean.not_found, follow_ups: clean.follow_ups,
+    web_sources: arr(parsed.web_sources)}) : raw, problems,
+    correction: "Revise your previous answer once, using only evidence already returned in this conversation. Do not call tools or add facts from memory.\n" +
+      "User request: " + question + "\n" + intentInstructions(intent) + "\nFix these issues:\n- " + problems.join("\n- ") +
+      "\nReturn only JSON with answer, not_found, follow_ups and web_sources. Preserve the correct source refs and relevant meaning; do not simply cut off the answer."};
+}
+
+async function refineAnswer({raw, revise, ...context}) {
+  let review = reviewAnswer(raw, context);
+  if (!review.problems.length) return review.raw;
+  // One correction at most, with the same evidence and no extra retrieval.
+  review = reviewAnswer(await revise(review.correction), context);
+  if (review.problems.length) throw Object.assign(new Error("The answer did not meet your requested format. Try again."), {code: "internal"});
+  return review.raw;
+}
+
 // The user message: who he is, his accounts, the rules, and the question.
 // His profile (About you; profileBrief in briefing-prompt-core.js) opens the
 // prompt in place of the line this file used to carry.
@@ -129,6 +206,7 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
   lines.push(
     "",
     "HOW TO ANSWER:",
+    intentInstructions(requestIntent(question)),
     "- Look up his Daybook with search_daybook before answering, at least once and at most " + MAX_LOOKUPS + " times. Choose terms that would appear in the records: names, tickers, other names, synonyms. Narrow by sources or dates when the question implies it (\"since August\" is since the 1st of August this year).",
     "- A question about Bob himself (who he is, what he cares about, his habits, his work, his goals): look up sources Profile and Activity first, with terms empty to read them all, and answer from them. Never cite a briefing story, news item or report as evidence of who he is.",
     "- A question about the Radar (the app's daily market scan: a name's score, status, reason, catalyst, levels or tripwire, or today's Taker and Wildcard picks): look up sources Radar; the term \"radar\" reads today's names, highest score first, and \"Taker\" or \"Wildcard\" finds those picks. Its \"Radar overview\" record is computed across the whole scan: the picks with their scores, grouped by score band with each band's record, volume, early flags, themes and status counts. A name is early only when its meta says early. The Radar holds today's scan only, so it cannot say how a name has changed; say so if asked. Its levels are the scan's own, never a recommendation.",
@@ -146,8 +224,9 @@ function buildAskPrompt({question, today, accounts, web, profile}) {
     "- Put the ref after each claim it supports, e.g. \"QBE lifted its cat allowance [S3].\" Never cite a ref a lookup did not return.",
     "- If the lookups find nothing useful, say so plainly in one sentence and leave answer short; never fill the gap from memory.",
     "- Dates and figures only as the records state them. Say who reported something when it matters.",
+    "- Do not turn a list of interests or values into a ranking, personality trait or claim about priorities unless he explicitly recorded that comparison. Keep descriptions proportional to what his own words support.",
     "- Never give investment advice: no buying, selling, holding or sizing anything. For a question about one of his calls, give what he recorded (reason, invalidator, status, outcome, Called it?) and what the records say since.",
-    "- Write to him as \"you\", in plain English with Australian spelling, no markdown, no emojis. At most 170 words.",
+    "- Write to him as \"you\", in plain English with Australian spelling, no emojis or markdown except simple bullet lines when requested. Check the requested scope, sentence/bullet count, word limit and refs before returning JSON.",
     "",
     "Return a single JSON object with exactly these keys:",
     "{",
@@ -220,9 +299,9 @@ function lookupOutput(hits, registry) {
 
 // What is stored and shown: known fields, bounded; refs kept only when a
 // lookup returned them, web links only when the search returned the page.
-function cleanAnswer(raw, registry, searched, web) {
+function cleanAnswer(raw, registry, searched, web, question) {
   if (!raw || typeof raw !== "object") return null;
-  let answer = clip(raw.answer, 1600);
+  let answer = answerText(raw.answer);
   if (!answer) return null;
   const allowed = {};
   arr(searched).forEach((url) => { const key = urlKey(url); if (key) allowed[key] = true; });
@@ -247,7 +326,7 @@ function cleanAnswer(raw, registry, searched, web) {
     answer,
     // When no lookup found anything, say so even if the model did not.
     not_found: clip(raw.not_found, 240) || (registry.list.length ? "" : web ? "Nothing in your Daybook matched; this answer is from the web." : "Nothing in your Daybook matched this."),
-    follow_ups: arr(raw.follow_ups).map((q) => clip(q, 160)).filter(Boolean).slice(0, 2),
+    follow_ups: requestIntent(question).suppressFollowups ? [] : arr(raw.follow_ups).map((q) => clip(q, 160)).filter(Boolean).slice(0, 2),
     sources,
     web_sources: webSources.map((item, i) => (item ? Object.assign({ref: "W" + (i + 1)}, item) : null)).filter(Boolean),
     looked_up: registry.list.length,
@@ -422,6 +501,7 @@ function keepAnswers(items, id, answer) {
 }
 
 module.exports = {
+  requestIntent, intentInstructions, sentenceCount, reviewAnswer, refineAnswer,
   cleanQuestion, cleanThread, originOf, buildAskPrompt, buildAskInput, cleanPlan, newRegistry, lookupOutput, cleanAnswer,
   askIndexInput, aboutRecords, lookupRecords, runLookups, providerError, keepAnswers, SYSTEM, ABOUT_SOURCES, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
 };

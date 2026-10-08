@@ -332,6 +332,13 @@ including rejected or truncated answers. Requests over 100,000 input tokens
 (including cache reads and writes) are billed in a separate `/over-100k` ledger
 entry so the higher Haiku rate is applied correctly.
 
+Ask interprets explicit sentence, bullet and word limits before answering, and
+distinguishes describing the person from describing their work or life beyond
+work. Both providers check format, word count and citation refs before saving an
+answer. A failed check gets one rewrite using the same conversation evidence,
+with tools disabled; a second failure is not saved. Short or personal-description
+requests omit follow-up suggestions. A conforming answer costs no extra call.
+
 Before deploying these two functions, set `ANTHROPIC_API_KEY` in **Firebase
 Secret Manager** (the GitHub radar secret does not automatically populate it):
 
@@ -348,9 +355,11 @@ answer quality and real latency still need comparison on representative inputs.
 
 For a small paid smoke test against Haiku using synthetic notes only (no
 Firestore writes), supply `ANTHROPIC_API_KEY` in the environment and run
+`npm --prefix functions run sync:shared-core` followed by
 `node functions/haiku-smoke.js`. It checks a weekly read, a cited saved-record
-answer, and a missing-record answer. No Anthropic key was available locally
-during this implementation, so this live check still needs to run.
+answer, a missing-record answer, and five scope/format cases including
+"Describe me in 1 sentence", work-only, beyond-work, three bullets and a word
+limit. These synthetic checks do not establish accuracy on all real questions.
 
 The browser app does not call OpenAI directly. It calls the Firebase callable
 function `generateBobDailyBriefing`, which keeps the API key server-side.

@@ -4665,7 +4665,7 @@ function askAnswerHtml(a, following) {
   var refs = {};
   (a.sources || []).forEach(function(s) { refs[s.ref] = s; });
   (a.web_sources || []).forEach(function(w) { refs[w.ref] = w; });
-  var body = esc(a.answer).replace(/(\s*)\[([SW])(\d+)\]/g, function(match, space, kind, n) {
+  var body = esc(a.answer).replace(/\r?\n/g, '<br>').replace(/(\s*)\[([SW])(\d+)\]/g, function(match, space, kind, n) {
     var ref = kind + n, s = refs[ref];
     if (!s) return '';
     return space + (kind === 'S' ? '<button type="button" class="ask-ref" data-ask-ref="' + ref + '" title="' + esc(s.source + ': ' + s.title) + '">' + ref + '</button>'

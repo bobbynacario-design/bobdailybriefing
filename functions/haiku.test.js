@@ -101,3 +101,20 @@ test("an answer without retrieval is rejected, and a later failure retains earli
   await assert.rejects(Haiku.ask(askOptions(failed)), error => error.code === "unavailable");
   assert.equal(failed.billed.length, 1);
 });
+
+test("a format correction reuses the full evidence conversation, disables tools and is billed", async () => {
+  const first = callReply(call("lookup"));
+  const draft = {...textReply(), content: [{type: "text", text: JSON.stringify({...answer, answer: "You assess claims [S1]. You advise insurers [S1]."})}]};
+  const fixed = {...textReply(), content: [{type: "text", text: JSON.stringify({...answer, answer: "You assess insurance claims for clients [S1]."})}]};
+  const f = fixture([first, draft, fixed]);
+  const registry = Ask.newRegistry();
+  const result = await Haiku.ask({...askOptions(f), lookup: () => Ask.lookupOutput([{id: "work", source: "Profile", title: "Work", body: "I assess insurance claims for clients."}], registry)});
+  const checked = await Ask.refineAnswer({raw: result.raw, revise: result.revise, question: "Describe my work in one sentence", registry, searched: [], web: false});
+  assert.equal(Ask.sentenceCount(JSON.parse(checked).answer), 1);
+  assert.equal(f.requests.length, 3);
+  assert.equal(f.billed.length, 3);
+  assert.deepEqual(f.requests[2].body.tool_choice, {type: "none"});
+  assert.deepEqual(f.requests[2].body.messages[1].content, first.content);
+  assert.match(f.requests[2].body.messages[2].content[0].content, /insurance claims/);
+  assert.deepEqual(f.requests[2].body.messages[3].content, draft.content);
+});

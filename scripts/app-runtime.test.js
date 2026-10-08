@@ -194,6 +194,14 @@ test('Ask Daybook: an answer shows its refs as buttons and links, escaped, and d
   assert.equal(context.askAnswerHtml(null),'');
   assert.equal(context.askCostText(false),'Lower-cost saved-record answer'); assert.equal(context.askCostText(true),'About $0.30–0.35 with the web');
 });
+test('Ask Daybook: requested bullet lines render separately and keep HTML escaped',()=>{
+  const {context}=askEnvironment();
+  const out=context.askAnswerHtml({question:'Three bullets',answer:'- Claims [S1].\n- <script> [S1].\n- Evidence [S1].',sources:[{ref:'S1',source:'Profile',title:'Work'}],follow_ups:[]});
+  assert.equal((out.match(/<br>/g)||[]).length,2);
+  assert.match(out,/&lt;script>/);
+  assert.doesNotMatch(out,/<script>/);
+});
+
 test('Ask Daybook: a question goes to the server, a follow-up carries the thread, and New question clears it',async()=>{
   const sent=[]; let opened=null, closed=0, n=0;
   const answer=q=>({question:q,answer:'Answer '+(n)+' [S1]',sources:[{ref:'S1',source:'Evidence',title:'Saved',id:'evidence:set1:k1',page:'evidence',appRef:'set1'}],generatedAt:'2026-10-01T0'+n+':00:00Z'});

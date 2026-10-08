@@ -901,6 +901,7 @@ exports.askDaybook = onCall(
     let json;
     let raw;
     let lookups = 0;
+    let revise;
     try {
       if (!web) {
         const result = await Haiku.ask({apiKey: ANTHROPIC_API_KEY.value(),
@@ -910,6 +911,7 @@ exports.askDaybook = onCall(
           onUsage: (billingModel, u) => recordUsage(db, "ask-daybook", billingModel, u, phtDateKey())});
         raw = result.raw;
         lookups = result.lookups;
+        revise = result.revise;
       } else {
         const result = await Ask.runLookups({
           firstBody: {input: Ask.buildAskInput({question, thread, today, accounts, web, profile: await loadProfile(db, uid)}), tool_choice: "auto"},
@@ -919,10 +921,18 @@ exports.askDaybook = onCall(
         json = result.json;
         lookups = result.lookups;
         raw = extractText(json);
+        revise = async (prompt) => {
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) throw new HttpsError("unavailable", "The answer timed out. Try again.");
+          const fixed = track(await openaiResponse({model, tools, include, previous_response_id: json.id,
+            input: [{role: "user", content: prompt}], tool_choice: "none"}, "ask-correction", Math.min(120000, remaining)));
+          return extractText(fixed);
+        };
       }
+      raw = await Ask.refineAnswer({raw, revise, question, registry, searched, web});
     } catch (err) {
-      if (!web) throw new HttpsError(err.code || "internal", err.message);
-      throw err;
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError(err.code || "internal", err.message);
     } finally {
       // Every call is paid for, answer or not, so the ledger counts them all.
       if (web) await recordUsage(db, "ask-daybook", model, usage, phtDateKey());
@@ -930,7 +940,7 @@ exports.askDaybook = onCall(
 
     let answer;
     try {
-      answer = Ask.cleanAnswer(parseBriefing(raw), registry, searched, web);
+      answer = Ask.cleanAnswer(parseBriefing(raw), registry, searched, web, question);
     } catch (err) {
       answer = null;
     }
