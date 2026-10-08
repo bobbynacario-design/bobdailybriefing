@@ -21,10 +21,10 @@ export function buildNbaProjections(matches, momentum, now = new Date()) {
     const rest = game.rest || {};
     const restAdjustment = (rest.home?.backToBack ? -4 : 0) + (rest.away?.backToBack ? 4 : 0);
     const gap = homePower - awayPower + 3 + restAdjustment;
-    const abs = Math.abs(gap);
     const pHome = Math.max(0.15, Math.min(0.85, 1 / (1 + Math.exp(-0.017 * gap))));
-    game.projection = { modelVersion: MODEL_VERSION, favorite: abs < 4 ? null : gap > 0 ? game.home : game.away,
-      tag: abs < 4 ? 'Toss-up' : abs < 12 ? 'Watch only' : abs < 22 ? 'Moderate edge' : 'Strong edge',
+    const favoriteProbability = Math.max(pHome, 1 - pHome);
+    game.projection = { modelVersion: MODEL_VERSION, favorite: favoriteProbability < 0.55 ? null : gap > 0 ? game.home : game.away,
+      tag: favoriteProbability < 0.55 ? 'Toss-up' : favoriteProbability < 0.65 ? 'Watch only' : favoriteProbability < 0.75 ? 'Moderate edge' : 'Strong edge',
       gap: Math.round(gap * 10) / 10, homePower, awayPower,
       probs: { home: Math.round(pHome * 1000) / 1000, draw: 0, away: Math.round((1 - pHome) * 1000) / 1000 } };
     projected++;

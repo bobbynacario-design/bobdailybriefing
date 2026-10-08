@@ -446,6 +446,7 @@ test('NBA estimates require recent form on both sides and skip preseason, live a
   assert.equal(next.projection.favorite,'Home');
   assert.equal(next.projection.probs.home + next.projection.probs.away,1);
   assert.ok(next.projection.probs.home <= .85);
+  assert.equal(next.projection.tag,'Moderate edge','a sub-75% estimate is not labelled a strong edge');
   assert.ok(matches.slice(0,-1).every(m=>!m.projection));
   for(const [field,value] of [['stage','pre-season'],['status','IN_PLAY'],['status','POSTPONED'],['utcDate','2026-10-08T12:00:00Z']]) {
     const changed={...next,[field]:value};buildNbaProjections([...matches.slice(0,-1),changed],momentum,now);assert.equal(changed.projection,undefined);
