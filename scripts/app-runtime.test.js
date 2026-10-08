@@ -3,6 +3,44 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8').replace(/\r\n/g,'\n');
+test('Markets controls display independent states and disable edits when settings cannot be read',()=>{
+  const {context,element}=environment(['setMiroLlmControlUi'],{esc:String});
+  for(const id of ['miro-llm-toggle','miro-news-toggle']) element(id).classList={remove(){},add(){}};
+  context.setMiroLlmControlUi({llmPaused:true,explanationsPaused:false});
+  assert.equal(element('miro-llm-toggle').textContent,'Resume forecasting panel');
+  assert.equal(element('miro-news-toggle').textContent,'Pause news research');
+  assert.match(element('miro-llm-status').textContent,/panel paused; sourced news explanations enabled/);
+  context.setMiroLlmControlUi({llmPaused:true});
+  assert.equal(element('miro-news-toggle').textContent,'Resume news research');
+  context.setMiroLlmControlUi({unavailable:true});
+  assert.equal(element('miro-llm-toggle').disabled,true);assert.equal(element('miro-news-toggle').disabled,true);
+});
+test('Markets setting writes merge only their own switch and return both current settings',async()=>{
+  let stored={llmPaused:true,explanationsPaused:false},writes=[];
+  const context={Date,db:{},COLL:'briefings-bob',getUid:()=> 'owner',doc:()=>({}),setDoc:async(ref,body,options)=>{writes.push({body,options});stored={...stored,...body};}};
+  context.window=context;context.fbLoadMiroControl=async()=>({...stored});vm.createContext(context);
+  for(const name of ['fbSetMiroLlmPaused','fbSetMiroExplanationsPaused']) {
+    const start=html.indexOf('window.'+name+' = async function(');
+    vm.runInContext(html.slice(start,html.indexOf('\n};',start)+3),context);
+  }
+  const panel=await context.fbSetMiroLlmPaused(false);
+  assert.equal(panel.explanationsPaused,false);assert.equal(writes[0].body.explanationsPaused,undefined);
+  const news=await context.fbSetMiroExplanationsPaused(true);
+  assert.equal(news.llmPaused,false);assert.equal(writes[1].body.llmPaused,undefined);
+  assert.equal(writes.every(w=>w.options.merge),true);
+});
+test('Markets shows sourced drivers, direction, reversal and explicit uncertainty with escaped content',()=>{
+  const {context}=environment(['miroMoveExplanationHtml','miroChangesHtml','miroDeltaHtml','miroPct','miroMoveRunHtml'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),URL});
+  const explanation={status:'plausible',driver:'Inflation <cooled>',mechanism:'This reduces the chance of a hike.',wouldReverse:'A rebound could reverse the move.',eventDate:'2026-10-08',sources:[{url:'https://central-bank.example/release',title:'Official release'}]};
+  const out=context.miroChangesHtml({changes:{items:[{slug:'rates',label:'No rate hikes',theme:'Macro',from:.6,to:.7,change:.1,moveExplanation:explanation}]}},['Macro']);
+  assert.match(out,/60\.0% → 70\.0%/);assert.match(out,/Possible driver · inference/);assert.match(out,/Inflation &lt;cooled>/);
+  assert.match(out,/What could reverse it/);assert.match(out,/central-bank\.example/);
+  assert.doesNotMatch(out,/<cooled>/);
+  assert.match(context.miroMoveExplanationHtml({moveExplanation:{status:'unknown'}}),/No supported driver/);
+  assert.match(context.miroMoveExplanationHtml({moveExplanation:{status:'unknown',reason:'search-failed'}}),/research unavailable/);
+  assert.equal(context.miroMoveExplanationHtml({moveExplanation:{...explanation,sources:[{url:'javascript:alert(1)'}]}}),'');
+  assert.match(context.miroMoveRunHtml({moveRun:{reason:'paused'}}),/research is paused/);
+});
 test('Daily Boost account writes merge against the transaction snapshot', async()=>{
   let written;
   const day='2026-09-25';

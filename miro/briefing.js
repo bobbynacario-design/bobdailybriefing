@@ -66,4 +66,8 @@ function enrichMarketChanges(markets, previousDoc) {
   };
 }
 
-export { enrichMarketChanges, probabilityInterpretation };
+function marketResearchPaused(control) {
+  return typeof control.explanationsPaused === 'boolean' ? control.explanationsPaused : control.llmPaused === true;
+}
+
+export { enrichMarketChanges, probabilityInterpretation, marketResearchPaused };

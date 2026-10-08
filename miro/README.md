@@ -17,6 +17,24 @@ beats the crowd's price. The feature is built to surface that truth, not hide it
 
 ## Architecture
 
+Markets also explains the six largest probability moves of at least 0.5 percentage
+points since the previous refresh. Claude researches dated news, returns linked
+sources, explains how the event affects the exact YES outcome, and names a
+conditional development that could reverse the move. The UI distinguishes a
+reported driver from a plausible inference and explicitly shows an unknown when
+evidence is missing. Explanations never feed the price-blind panel or its journal.
+
+The forecasting panel and news research have separate switches in Markets settings.
+`briefings-bob/miro-control.llmPaused` controls forecasting;
+`explanationsPaused` controls news research. Missing news settings inherit the
+legacy panel pause until explicitly changed. A failed settings read pauses paid
+calls. News research defaults to `claude-opus-5-5` (override `MIRO_CATALYST_MODEL`),
+uses `ANTHROPIC_API_KEY`, and is bounded to 12 searches, four model turns and a
+four-minute deadline per refresh. Model tokens and search fees enter the shared
+usage ledger. No material moves means no news call. `--no-panel` permits news
+without forecasting; `--no-openai` skips all paid calls; `--dry-run` skips writes
+but can still make paid calls unless disabled. Search failures do not block prices.
+
 Mirrors the [Market Radar](../radar/README.md): a **local Node script** does all
 the work; the **front end is a pure reader**. No Cloud Function, no build tools,
 no new front-end deps.
@@ -25,9 +43,10 @@ no new front-end deps.
 miro/
   scenario.js       # PURE, no I/O — aggregatePanel(markets, config)
   journal-miro.js   # PURE, no I/O — buildMiroJournal(prior, today, resolutions, config)
-  refresh-miro.js   # the only I/O: fetch → panel → aggregate → journal → write Firestore
+  catalysts.js     # bounded sourced news explanations of measured moves
+  refresh-miro.js   # fetch → panel → aggregate → explain → journal → write Firestore
   config.js         # curated markets, personas, haircut/fee/gate knobs
-  package.json      # firebase-admin only (Node fetch is global)
+  package.json      # firebase-admin + Anthropic SDK (Node fetch is global)
   .env              # optional; falls back to ../radar/.env (gitignored)
   serviceAccountKey.json  # optional; falls back to ../radar/serviceAccountKey.json (gitignored)
 ```

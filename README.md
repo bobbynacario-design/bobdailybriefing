@@ -261,6 +261,9 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 - **📡 Market Radar** — daily ranking of ~30 assets across 11 themes, with a
   performance journal. Docs: [`radar/README.md`](radar/README.md).
 - **🎲 Markets** — daily "scenario read" over curated Polymarket event markets:
+  sourced explanations of the largest probability changes, with reported drivers
+  separated from plausible inferences and concrete developments to watch for a
+  reversal. News research and the forecasting panel can be paused independently.
   market price vs an independent AI panel, executable edge, GO/NO-GO, and a
   Brier-score journal. The honest version of "MiroFish" — research framing, never
   a bet or execution. Docs: [`miro/README.md`](miro/README.md).

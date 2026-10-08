@@ -6,12 +6,13 @@
   "main": "refresh-miro.js",
   "scripts": {
     "refresh": "node refresh-miro.js",
-    "test": "node --test briefing.test.js"
+    "test": "node --test *.test.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "firebase-admin": "^14.2.0"
   }
 }

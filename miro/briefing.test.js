@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { enrichMarketChanges, probabilityInterpretation } from './briefing.js';
+import { enrichMarketChanges, probabilityInterpretation, marketResearchPaused } from './briefing.js';
+
+test('news research is independent after opt-in and preserves legacy paused controls', () => {
+  assert.equal(marketResearchPaused({llmPaused:true}),true);
+  assert.equal(marketResearchPaused({llmPaused:true,explanationsPaused:false}),false);
+  assert.equal(marketResearchPaused({llmPaused:false,explanationsPaused:true}),true);
+  assert.equal(marketResearchPaused({}),false);
+});
 
 test('interprets implied probabilities without assuming a positive event', function () {
   assert.equal(probabilityInterpretation(0.82), 'Market strongly expects this');

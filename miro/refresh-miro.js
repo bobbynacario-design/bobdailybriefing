@@ -31,7 +31,8 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { aggregatePanel } from './scenario.js';
 import { buildMiroJournal } from './journal-miro.js';
-import { enrichMarketChanges } from './briefing.js';
+import { enrichMarketChanges, marketResearchPaused } from './briefing.js';
+import { explainMarketMoves, ledgerUsage } from './catalysts.js';
 import { extractUsage, addUsage, recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -115,10 +116,11 @@ var SCENARIO_VERSION = '1.1.0';
 var JOURNAL_VERSION = '1.1.0';
 
 // CLI flags: --dry-run (compute + log, skip Firestore writes), --no-openai (skip
-// the panel and write implied-only — fast, free smoke test).
+// all paid calls — free price-only smoke test), --no-panel (skip forecasting only).
 var ARGV = process.argv.slice(2);
 var DRY_RUN = ARGV.indexOf('--dry-run') !== -1;
 var NO_OPENAI = ARGV.indexOf('--no-openai') !== -1;
+var NO_PANEL = ARGV.indexOf('--no-panel') !== -1;
 
 // ── helpers ──
 
@@ -458,8 +460,8 @@ async function loadMiroControl(db) {
     var snap = await db.collection(COLL).doc('miro-control').get();
     return snap.exists ? (snap.data() || {}) : {};
   } catch (e) {
-    console.warn('miro-control read failed (continuing with OpenAI enabled):', e.message || e);
-    return {};
+    console.warn('miro-control read failed (paid calls paused):', e.message || e);
+    return {llmPaused:true,explanationsPaused:true,unavailable:true};
   }
 }
 
@@ -494,12 +496,13 @@ async function main() {
   var previousDoc = await loadPreviousMiro(db);
   var control = await loadMiroControl(db);
   var controlPaused = control.llmPaused === true;
+  var researchPaused = marketResearchPaused(control);
 
   // Lane 2: run the persona panel (independent of price), attach the reads, and
   // let the PURE engine compute haircut prob, executable edge, and the gate.
   var panel;
-  if (NO_OPENAI || controlPaused) {
-    console.log((NO_OPENAI ? '--no-openai' : 'miro-control llmPaused=true') + ': skipping panel (implied-only).');
+  if (NO_OPENAI || NO_PANEL || controlPaused) {
+    console.log((NO_OPENAI ? '--no-openai' : NO_PANEL ? '--no-panel' : 'miro-control llmPaused=true') + ': skipping panel (implied-only).');
     var emptyReads = {};
     marketsData.forEach(function (m) { emptyReads[m.slug] = []; });
     panel = { reads: emptyReads, usage: null, calls: 0 };
@@ -515,10 +518,25 @@ async function main() {
   marketsData = briefing.markets;
 
   var dateKey = phtDateKey();
+  STAGE.set('explain-moves');
+  var moveRun = await explainMarketMoves({markets:marketsData,since:briefing.changes.since,
+    apiKey:process.env.ANTHROPIC_API_KEY || '',model:process.env.MIRO_CATALYST_MODEL || undefined,
+    paused:NO_OPENAI || researchPaused});
+  var moveBySlug = new Map(marketsData.map(function (m) { return [m.slug,m]; }));
+  briefing.changes.items.forEach(function (item) {
+    var explanation = moveBySlug.get(item.slug).moveExplanation;
+    if (explanation) item.moveExplanation = explanation;
+  });
+  console.log('Markets explanations: ' + moveRun.status + ' / ' + (moveRun.stats ? moveRun.stats.explained + '/' + moveRun.stats.selected + ' sourced' : moveRun.reason) + (moveRun.error ? ' / ' + moveRun.error : ''));
+  // Bill completed search/model turns even if a later write fails. Dry runs never alter the ledger.
+  if (!DRY_RUN && moveRun.usage && moveRun.usage.calls) {
+    await recordUsage(db,'miro-explanations',moveRun.model,ledgerUsage(moveRun.usage),dateKey,moveRun.usage.calls);
+    if (moveRun.usage.searches) await recordUsage(db,'miro-search','web-search',null,dateKey,moveRun.usage.searches,{perDay:false});
+  }
   var meta = {
     scenarioVersion: SCENARIO_VERSION,
     journalVersion: JOURNAL_VERSION,
-    model: ((!PANEL_KEY_REQUIRED || PANEL_KEY) && !NO_OPENAI && !controlPaused) ? PANEL_MODEL_LABEL : 'none',
+    model: ((!PANEL_KEY_REQUIRED || PANEL_KEY) && !NO_OPENAI && !NO_PANEL && !controlPaused) ? PANEL_MODEL_LABEL : 'none',
     panelProvider: PANEL_PROVIDER,
     llmPaused: controlPaused,
     llmPausedSource: controlPaused ? 'briefings-bob/miro-control' : '',
@@ -543,7 +561,8 @@ async function main() {
     meta: meta,
     disclaimer: 'Research framing only. Implied probabilities are Polymarket prices; the panel read is an independent, uncertainty-haircut estimate compared to that price. The verdict is a research flag — not advice, not a recommendation, no execution.',
     markets: marketsData,
-    changes: briefing.changes
+    changes: briefing.changes,
+    moveRun: moveRun
   };
 
   console.log('\n===== briefings-bob/miro-' + dateKey + ' =====');

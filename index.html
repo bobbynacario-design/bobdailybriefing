@@ -1071,7 +1071,7 @@ window.fbLoadMiroControl = async function() {
     return snap.exists() ? snap.data() : { llmPaused: false };
   } catch(e) {
     console.error('Markets control load failed:', e);
-    return { llmPaused: false, unavailable: true, error: e.message || String(e) };
+    return { llmPaused: true, explanationsPaused: true, unavailable: true, error: e.message || String(e) };
   }
 };
 
@@ -1085,7 +1085,17 @@ window.fbSetMiroLlmPaused = async function(paused) {
     updatedBy: (window._firebaseUser && window._firebaseUser.email) || uid
   };
   await setDoc(doc(db, COLL, 'miro-control'), body, { merge: true });
-  return body;
+  return window.fbLoadMiroControl();
+};
+
+window.fbSetMiroExplanationsPaused = async function(paused) {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  await setDoc(doc(db, COLL, 'miro-control'), {
+    uid: uid, explanationsPaused: !!paused, updatedAt: new Date().toISOString(),
+    updatedBy: (window._firebaseUser && window._firebaseUser.email) || uid
+  }, { merge: true });
+  return window.fbLoadMiroControl();
 };
 
 // Load the event-markets resolution journal (Lane 3). Single rolling doc, no uid.
@@ -1847,6 +1857,10 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .miro-change{display:grid;grid-template-columns:68px minmax(0,1fr) auto;gap:.65rem;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--rim)}
 .miro-change-theme{font-family:var(--mono);font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
 .miro-change-name{font-size:11px;font-weight:700;line-height:1.4}
+.miro-move-read{grid-column:1/-1;padding:.55rem .65rem;margin-top:.2rem;border-left:2px solid var(--blue);background:var(--bg3);font-size:12px;line-height:1.6;color:var(--txt2)}
+.miro-move-read b{color:var(--txt);font-size:11px}
+.miro-move-read .miro-move-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;color:var(--gold);margin-bottom:.3rem}
+.miro-move-read .miro-move-sources{font-size:10px;margin-top:.35rem;display:flex;gap:.55rem;flex-wrap:wrap}
 .miro-health{border-left:3px solid var(--gold);background:var(--gold-dim);padding:.75rem .85rem;font-size:11px;color:var(--txt2);line-height:1.6}
 .miro-health strong{color:var(--txt)}
 .miro-empty{font-size:11px;color:var(--txt3);line-height:1.6;padding:.55rem 0}
@@ -3362,7 +3376,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="miro-settings-body">
       <div class="miro-theme-options" id="miro-theme-options"></div>
       <div class="miro-controls">
-        <button class="miro-llm-btn" id="miro-llm-toggle" onclick="toggleMiroLlmCalls()">LLM calls: loading</button>
+        <button class="miro-llm-btn" id="miro-llm-toggle" onclick="toggleMiroLlmCalls()">Forecasting panel: loading</button>
+        <button class="miro-llm-btn" id="miro-news-toggle" onclick="toggleMiroNewsCalls()">News research: loading</button>
         <div class="miro-llm-status" id="miro-llm-status">Controls the next scheduled Markets refresh.</div>
       </div>
     </div>
@@ -9320,6 +9335,7 @@ function miroCard(m) {
     'mkt ' + miroPct(imp) + ' YES</div>';
   html += '</div>';
   html += '<div class="miro-signal-read">' + esc(m.probabilityRead || miroProbabilityRead(imp)) + '</div>';
+  html += miroMoveExplanationHtml(m);
   // panel read (Lane 2): only shown when present. Framed as a research estimate.
   if (hasPanel) {
     var edge = m.edge;
@@ -9360,25 +9376,42 @@ function miroCard(m) {
 }
 var _miroLlmPaused = null;
 var _miroLlmBusy = false;
+var _miroNewsPaused = null;
+var _miroNewsBusy = false;
 function setMiroLlmControlUi(control) {
   var btn = document.getElementById('miro-llm-toggle');
   var status = document.getElementById('miro-llm-status');
   if (!btn || !status) return;
+  var newsBtn = document.getElementById('miro-news-toggle');
+  if (!control || control.unavailable) {
+    _miroLlmPaused = _miroNewsPaused = null;
+    btn.disabled = true;
+    if (newsBtn) newsBtn.disabled = true;
+    status.textContent = 'Could not read Markets settings. Reload before changing controls.';
+    return;
+  }
   var paused = control && control.llmPaused === true;
   _miroLlmPaused = paused;
+  _miroNewsPaused = typeof control.explanationsPaused === 'boolean' ? control.explanationsPaused : paused;
   btn.disabled = false;
   btn.classList.remove('paused', 'running');
   btn.classList.add(paused ? 'paused' : 'running');
-  btn.textContent = paused ? 'Resume LLM calls' : 'Pause LLM calls';
+  btn.textContent = paused ? 'Resume forecasting panel' : 'Pause forecasting panel';
+  if (newsBtn) {
+    newsBtn.disabled = false;
+    newsBtn.classList.remove('paused', 'running');
+    newsBtn.classList.add(_miroNewsPaused ? 'paused' : 'running');
+    newsBtn.textContent = _miroNewsPaused ? 'Resume news research' : 'Pause news research';
+  }
   var updated = control && control.updatedAt ? ' · updated ' + esc(control.updatedAt).slice(0, 16).replace('T', ' ') : '';
-  status.textContent = paused
-    ? 'LLM persona panel is paused. Next Markets refresh writes implied-price only.' + updated
-    : 'LLM persona panel is running on the next scheduled Markets refresh.' + updated;
+  status.textContent = 'Forecasting panel ' + (paused ? 'paused' : 'enabled') + '; sourced news explanations ' + (_miroNewsPaused ? 'paused' : 'enabled') + '. Applies to the next refresh.' + updated;
 }
 function loadMiroLlmControl() {
   var btn = document.getElementById('miro-llm-toggle');
   var status = document.getElementById('miro-llm-status');
-  if (btn) { btn.disabled = true; btn.textContent = 'LLM calls: loading'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Forecasting panel: loading'; }
+  var newsBtn = document.getElementById('miro-news-toggle');
+  if (newsBtn) { newsBtn.disabled = true; newsBtn.textContent = 'News research: loading'; }
   if (status) status.textContent = 'Checking Markets LLM control...';
   if (!window.fbLoadMiroControl) {
     if (status) status.textContent = 'LLM control unavailable in this build.';
@@ -9388,13 +9421,13 @@ function loadMiroLlmControl() {
     setMiroLlmControlUi(control || { llmPaused: false });
     return control;
   }).catch(function (e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'LLM control unavailable'; }
+    setMiroLlmControlUi({ unavailable: true });
     if (status) status.textContent = 'Could not read LLM control: ' + (e && e.message ? e.message : 'check console');
     return null;
   });
 }
 function toggleMiroLlmCalls() {
-  if (_miroLlmBusy) return;
+  if (_miroLlmBusy || _miroNewsBusy || _miroLlmPaused === null) return;
   if (!window.fbSetMiroLlmPaused) { showToast('Markets LLM control is not ready', 'warn'); return; }
   var next = !_miroLlmPaused;
   var btn = document.getElementById('miro-llm-toggle');
@@ -9404,13 +9437,28 @@ function toggleMiroLlmCalls() {
   if (status) status.textContent = 'Saving Markets LLM control...';
   window.fbSetMiroLlmPaused(next).then(function (control) {
     setMiroLlmControlUi(control || { llmPaused: next });
-    showToast(next ? 'Markets LLM calls paused' : 'Markets LLM calls resumed', 'ok');
+    showToast(next ? 'Forecasting panel paused' : 'Forecasting panel resumed', 'ok');
   }).catch(function (e) {
     showToast('Could not update Markets LLM control: ' + (e && e.message ? e.message : 'check auth/rules'), 'error');
     loadMiroLlmControl();
   }).finally(function () {
     _miroLlmBusy = false;
   });
+}
+function toggleMiroNewsCalls() {
+  if (_miroNewsBusy || _miroLlmBusy || _miroNewsPaused === null) return;
+  if (!window.fbSetMiroExplanationsPaused) { showToast('Markets news control is not ready', 'warn'); return; }
+  var next = !_miroNewsPaused;
+  var btn = document.getElementById('miro-news-toggle');
+  _miroNewsBusy = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  window.fbSetMiroExplanationsPaused(next).then(function (control) {
+    setMiroLlmControlUi(control);
+    showToast(next ? 'News research paused' : 'News research resumed', 'ok');
+  }).catch(function (e) {
+    showToast('Could not update news research: ' + (e && e.message ? e.message : 'check auth/rules'), 'error');
+    loadMiroLlmControl();
+  }).finally(function () { _miroNewsBusy = false; });
 }
 // Personal event-signal brief: theme follows, ranked probabilities, changes and
 // an explicit evidence check before the raw market/model details.
@@ -9466,12 +9514,39 @@ function miroProbabilityRead(probability) {
   if (probability >= 0.25) return 'Market leans this does not happen';
   return 'Market sees this as a tail risk';
 }
+function miroMoveExplanationHtml(market) {
+  var e = market && market.moveExplanation;
+  if (!e) return '';
+  if (e.status === 'unknown') return '<div class="miro-move-read"><b>Why it moved</b><br>' +
+    (e.reason === 'search-failed' ? 'News research unavailable for this refresh.' : 'No supported driver found for this move; the cause is uncertain.') + '</div>';
+  if (e.status !== 'reported' && e.status !== 'plausible') return '';
+  var sources = (e.sources || []).filter(function (s) { return /^https?:\/\//i.test(String(s.url || '')); }).slice(0,3);
+  if (!sources.length || !e.driver || !e.mechanism) return '';
+  var links = sources.map(function (s) {
+    var host; try { host = new URL(s.url).hostname.replace(/^www\./,''); } catch (err) { return ''; }
+    return '<a href="' + esc(s.url) + '" title="' + esc(s.title || '') + '" target="_blank" rel="noopener noreferrer">' + esc(host) + ' ↗</a>';
+  }).join('');
+  return '<div class="miro-move-read"><div class="miro-move-label">' +
+    (e.status === 'reported' ? 'Reported driver' : 'Possible driver · inference') + ' · ' + esc(e.eventDate || '') + '</div>' +
+    '<b>Why it moved</b><br>' + esc(e.driver) + ' ' + esc(e.mechanism) +
+    (e.wouldReverse ? '<div style="margin-top:.35rem"><b>What could reverse it</b><br>' + esc(e.wouldReverse) + '</div>' : '') +
+    '<div class="miro-move-sources">' + links + '</div></div>';
+}
+function miroMoveRunHtml(d) {
+  var r = d && d.moveRun;
+  if (!r) return '';
+  var note = r.reason === 'paused' ? 'Move research is paused in Markets settings.' :
+    r.status === 'failed' ? 'Move research could not complete this refresh. Price changes are still shown.' :
+    r.reason === 'no-material-moves' ? 'No material move needs news research this refresh.' :
+    'News checked for up to six of the largest material moves. Possible drivers are inferences; sources do not prove causation.';
+  return '<div class="miro-empty">' + esc(note) + '</div>';
+}
 function miroSignalHtml(market) {
   return '<div class="miro-signal"><div><div class="miro-signal-theme">' + esc(market.theme || 'Signal') + '</div>' +
     '<div class="miro-signal-name">' + esc(market.label || market.slug) + '</div>' +
     '<div class="miro-signal-why">' + esc(market.why || market.question || '') + '</div>' +
     '<div class="miro-signal-read">' + esc(market.probabilityRead || miroProbabilityRead(market.impliedYes)) + '</div></div>' +
-    '<div class="miro-prob">' + miroPct(market.impliedYes) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + '</div>';
+    '<div class="miro-prob">' + miroPct(market.impliedYes) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + miroMoveExplanationHtml(market) + '</div>';
 }
 function miroChangesHtml(d, followed) {
   var items = ((d.changes && d.changes.items) || []).filter(function (item) {
@@ -9480,7 +9555,8 @@ function miroChangesHtml(d, followed) {
   if (!items.length) return '<div class="miro-empty">No material probability move since the previous refresh. New signals need one more scheduled run to establish a baseline.</div>';
   return '<div class="miro-change-list">' + items.map(function (item) {
     return '<div class="miro-change"><div class="miro-change-theme">' + esc(item.theme || 'Signal') + '</div>' +
-      '<div class="miro-change-name">' + esc(item.label || item.slug) + '</div>' + miroDeltaHtml(item.change, false) + '</div>';
+      '<div class="miro-change-name">' + esc(item.label || item.slug) + '</div>' + miroDeltaHtml(item.change, false) +
+      '<div class="miro-signal-read" style="grid-column:1/-1">YES ' + miroPct(item.from) + ' → ' + miroPct(item.to) + '</div>' + miroMoveExplanationHtml(item) + '</div>';
   }).join('') + '</div>';
 }
 function miroHealthHtml(j, d) {
@@ -9528,7 +9604,7 @@ function miroRenderData(d, j) {
   var html = miroGroundingHtml(d) +
     '<div class="miro-brief-grid"><div><section class="miro-section"><div class="miro-section-head"><h3>Priority Signals</h3><span class="miro-section-meta">probability / last refresh</span></div>' +
     (signals.length ? '<div class="miro-signal-list">' + signals.slice(0, 6).map(miroSignalHtml).join('') + '</div>' : '<div class="miro-empty">No themes followed. Open Manage followed themes above to choose what belongs in your brief.</div>') +
-    '</section></div><div><section class="miro-section"><div class="miro-section-head"><h3>What Changed</h3><span class="miro-section-meta">moves of 0.5+ pts</span></div>' + miroChangesHtml(d, followed) +
+    '</section></div><div><section class="miro-section"><div class="miro-section-head"><h3>What Changed — and Why</h3><span class="miro-section-meta">moves of 0.5+ pts</span></div>' + miroMoveRunHtml(d) + miroChangesHtml(d, followed) +
     '</section><section class="miro-section"><div class="miro-section-head"><h3>Evidence Check</h3><span class="miro-section-meta">forecast journal</span></div>' + miroHealthHtml(j, d) + '</section></div></div>';
   html += '<details class="miro-all"><summary>All market data / ' + d.markets.length + ' signals</summary><div class="miro-all-body"><div class="radar-grid">' + d.markets.map(miroCard).join('') + '</div></div></details>';
   out.innerHTML = html;
