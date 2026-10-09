@@ -3,6 +3,13 @@ import Anthropic from '@anthropic-ai/sdk';
 import {HORIZON,completedThrough,pairedBars,forecastKey,historicalBaseRate} from './forecast-journal.js';
 const DRAFT_MODEL='claude-haiku-5-5', REVIEW_MODEL='claude-sonnet-5-5';
 const clean=(value,max)=>String(value || '').trim().slice(0,max);
+function cleanProse(value, max=1200) {
+  const text=String(value || '').trim();
+  if(text.length<=max) return text;
+  const head=text.slice(0,max),sentences=[...head.matchAll(/[.!?](?=\s|$)/g)];
+  if(sentences.length) return head.slice(0,sentences.at(-1).index+1)+' …';
+  return head.slice(0,head.lastIndexOf(' ')>0?head.lastIndexOf(' '):max)+'…';
+}
 const probability=p=>Number.isFinite(p) && p>=0 && p<=1;
 function selectForecastInputs(signals,bars,prior,now) {
   const today=now.slice(0,10);
@@ -49,8 +56,8 @@ function validatedRows(saved,inputs,review) {
     const urls=[...new Set(r.sourceUrls || [])];
     // Any invented citation rejects the row; technical-only inference may use no URLs.
     if(urls.some(u=>!allowed.has(u)) || (review && (!clean(r.outlook,360) || !clean(r.wouldChange,240)))) continue;
-    rows.set(r.symbol,{probability:r.probability,case:clean(r.case,320),risk:clean(r.risk,240),sources:urls.slice(0,3).map(u=>allowed.get(u)),
-      ...(review?{outlook:clean(r.outlook,360),wouldChange:clean(r.wouldChange,240)}:{})});
+    rows.set(r.symbol,{probability:r.probability,case:cleanProse(r.case),risk:cleanProse(r.risk,600),sources:urls.slice(0,3).map(u=>allowed.get(u)),
+      ...(review?{outlook:cleanProse(r.outlook,600),wouldChange:cleanProse(r.wouldChange,600)}:{})});
   }
   return rows;
 }
@@ -83,7 +90,10 @@ async function runForecastPanel(opts) {
       'Bull/bear perspectives are correlated arguments, not independent forecasters. Do not inflate certainty because they agree. '+
       'Abstain with status insufficient if evidence cannot support a defensible estimate; probability .5 and empty text/URLs for abstentions. '+
       'Separate factual observations from conditional scenarios. Use sourceUrls only from the supplied evidence. '+
-      'Return a concise case and risk; reviewer also supplies outlook and a concrete conditional wouldChange. Call save_forecasts once.';
+      'Write complete sentences. Case: one or two short sentences, at most 60 words, explaining the directional mechanism rather than repeating the metric list. '+
+      'Bull and bear must give distinct competing mechanisms, not duplicate factual introductions. Risk and wouldChange: one sentence each, at most 30 words. '+
+      'Reviewer outlook: at most 40 words; explicitly compare the estimate with the historical base rate. A percentage near 50 is uncertain, not a demonstrated edge. '+
+      'Do not claim reliability or that a 1–2 percentage-point difference is meaningful without calibration. Call save_forecasts once.';
     async function call(model,role,extra,review) {
       const msg=await client.messages.stream({model,max_tokens:4000,output_config:{effort:'medium'},system,
         tools:[saveTool(review)],messages:[{role:'user',content:'As of '+now+'. '+role+'\nEvidence pack:\n'+pack+(extra || '')}]},{signal:deadline.signal}).finalMessage();
@@ -106,7 +116,7 @@ async function runForecastPanel(opts) {
       const sources=[...new Map([...b.sources,...a.sources,...r.sources].map(s=>[s.url,s])).values()];
       entries.push({key:i.key,symbol:i.symbol,benchmark:i.benchmark,dataAsOf:i.dataAsOf,generatedAt:now,status:'pending',horizon:HORIZON,
         probability:r.probability,bullProbability:b.probability,bearProbability:a.probability,baseRate:i.baseRate.probability,baseRateN:i.baseRate.n,
-        radarScore:i.score,bullCase:b.case,bearCase:a.case,risk:r.risk,outlook:r.outlook,wouldChange:r.wouldChange,sources,
+        radarScore:i.score,proseVersion:2,bullCase:b.case,bearCase:a.case,risk:r.risk,outlook:r.outlook,wouldChange:r.wouldChange,sources,
         evidenceBasis:i.evidence.length?'technical + sourced news summaries':'technical only',draftModel:DRAFT_MODEL,reviewModel:REVIEW_MODEL});
     }
     run.status='ok';
@@ -114,4 +124,4 @@ async function runForecastPanel(opts) {
   finally {clearTimeout(timer);}
   return attach();
 }
-export {runForecastPanel,selectForecastInputs,validatedRows,DRAFT_MODEL,REVIEW_MODEL};
+export {runForecastPanel,selectForecastInputs,validatedRows,cleanProse,DRAFT_MODEL,REVIEW_MODEL};

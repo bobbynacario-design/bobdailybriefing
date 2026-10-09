@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8').replace(/\r\n/g,'\n');
 test('Radar forecasts show horizon, uncertainty, cases and sources without treating estimates as confidence',()=>{
-  const {context}=environment(['radarForecastHtml','radarForecastNote'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),radarSourceLink:(url,title)=>'<a>'+title+'</a>'});
+  const {context}=environment(['radarForecastHtml','radarForecastNote','radarForecastText','radarForecastBaselineHtml'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),radarSourceLink:(url,title)=>'<a>'+title+'</a>'});
   const out=context.radarForecastHtml({forecast:{key:'AAA|date',probability:.6,benchmark:'SPY',generatedAt:'2026-10-09',dataAsOf:'2026-10-08',evidenceBasis:'technical only',outlook:'<conditional>',bullCase:'Demand improves',bearCase:'Demand weakens',wouldChange:'Guidance cut',sources:[{url:'https://issuer.example',title:'Issuer'}]}});
   assert.match(out,/60% to beat SPY/);assert.match(out,/10 matched sessions · uncalibrated/);assert.match(out,/technical only/);
   assert.match(out,/Bull case/);assert.match(out,/Bear case/);assert.match(out,/What changes the view/);assert.match(out,/&lt;conditional>/);
@@ -12,6 +12,17 @@ test('Radar forecasts show horizon, uncertainty, cases and sources without treat
   assert.equal(context.radarForecastHtml({}),'');
   const note=context.radarForecastNote({forecastRun:{status:'ok'},forecastJournal:{stats:{resolved:0,pending:5,unavailable:0,panelBrier:null}}});
   assert.match(note,/0 resolved · 5 pending/);assert.match(note,/rankings remain unchanged/);assert.doesNotMatch(note,/Brier/);
+  assert.match(note,/accuracy has not been measured/);
+  const baseline=context.radarForecastBaselineHtml({probability:.52,baseRate:.56,baseRateN:75});
+  assert.match(baseline,/Panel 52%/);assert.match(baseline,/historical outperformance 56%/);
+  assert.match(baseline,/4.0 percentage points below history/);assert.match(baseline,/75 non-overlapping historical windows/);
+  assert.match(context.radarForecastBaselineHtml({probability:.52,baseRate:.5,baseRateN:3}),/baseline: unavailable/);
+  const overlap=context.radarForecastNote({forecastRun:{status:'ok'},signals:[{symbol:'AMD',forecast:{key:'a'}},{symbol:'SOXX',forecast:{key:'b'}},{symbol:'SMH',forecast:{key:'c'}}]});
+  assert.match(overlap,/Shared semiconductor exposure: AMD, SOXX, SMH/);assert.match(overlap,/not independent confirmation/);
+  const clipped=('Known close was 620.83. '+ 'A long conditional clause '.repeat(20)).slice(0,320);
+  assert.equal(context.radarForecastText(clipped,320),'Known close was 620.83.');
+  assert.equal(context.radarForecastText('Guidance cut',240),'Guidance cut','valid short fragments are preserved');
+  assert.equal(context.radarForecastText(clipped,320,2),clipped,'new stored prose is not edited by the legacy display repair');
 });
 test('Markets controls display independent states and disable edits when settings cannot be read',()=>{
   const {context,element}=environment(['setMiroLlmControlUi'],{esc:String});
@@ -938,7 +949,7 @@ test('a card saved to Evidence points at the saved briefing, or the key autoSave
   assert.equal(context.currentBriefingKey(),'stored-key');
 });
 // Wildcard Upside (October 2026): early forming names only, ranked by score.
-const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarReadHtml','radarForecastHtml','radarSourceLink','radarSourceHost'];
+const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarReadHtml','radarForecastHtml','radarForecastText','radarForecastBaselineHtml','radarSourceLink','radarSourceHost'];
 const wildEnv=(signals,taker={})=>environment(WILD,{esc:v=>String(v ?? ''),uiIcon:()=>'',URL,radarSignals:signals,radarTakerSymbols:taker,radarFilter:'All',radarStatusFilter:'All'});
 const sig=(symbol,o)=>Object.assign({symbol,theme:'T',status:'forming',early:false,score:60,entry:100,stop:96,target:108,accumulation:1.2,relStrength20d:2},o);
 test('Wildcard picks only early forming names, by score, never a Taker name', () => {

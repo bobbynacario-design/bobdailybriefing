@@ -24,6 +24,21 @@ must come from that evidence pack; stale news is excluded. The panel abstains
 when evidence or a completed response is missing. Technical-only estimates are
 labelled explicitly. Probabilities are uncalibrated; agreement is not confidence.
 
+Each card compares the panel probability with the asset's historical
+outperformance frequency and the number of non-overlapping historical windows.
+The frequency is a descriptive baseline, not a calibrated current probability;
+small differences do not establish an edge. Fewer than ten historical windows
+means the baseline is unavailable and the neutral 50% reference is identified.
+The forward banner explicitly says when accuracy has not been measured and
+flags shared semiconductor exposure among displayed forecasts.
+
+New explanations use short, complete bull/bear mechanisms instead of repeated
+metric lists. Prose is preserved beyond the old fixed character limits, with
+sentence-boundary shortening only for unusually long output. Legacy clipped
+fields render their last complete sentence without altering the stored
+forecast. New entries carry `proseVersion: 2`; probabilities, original timestamps
+and source provenance remain immutable.
+
 Eligibility requires 60 paired completed daily observations, a recent common
 close and a distinct benchmark. Forecasts measure whether an asset outperforms
 its benchmark over ten matched sessions, from the first completed common close

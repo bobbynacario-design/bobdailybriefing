@@ -1,11 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runForecastPanel,selectForecastInputs,validatedRows} from './forecast.js';
+import {runForecastPanel,selectForecastInputs,validatedRows,cleanProse} from './forecast.js';
 import {measureForecastJournal,pairedBars,historicalBaseRate,completedThrough} from './forecast-journal.js';
 const now='2026-10-09T01:00:00Z';
 const series=(n,mult=1)=>Array.from({length:n},(_,i)=>({date:new Date(Date.UTC(2026,5,1+i)).toISOString().slice(0,10),close:100+i*mult}));
 const bars={AAA:series(130,2),SPY:series(130),BTC:series(130)};
 const signal=()=>({symbol:'AAA',benchmark:'SPY',score:80,status:'confirmed',why:'Relative strength leads',catalyst:'New earnings release',catalystAsOf:'2026-10-08',catalystUrl:'https://issuer.example/release',catalystSource:'Release'});
+test('forecast prose preserves full sentences beyond the old fixed character limits',()=>{
+  const text='Supported facts remain conditional. '+ 'A longer explanation remains useful and complete. '.repeat(9);
+  const inputs=selectForecastInputs([signal()],bars,null,now);
+  const saved=response(true,{case:text,risk:text,outlook:text,wouldChange:text}).content[0].input;
+  const row=validatedRows(saved,inputs,true).get('AAA');
+  assert.equal(row.case,text.trim());assert.equal(row.risk,text.trim());
+  assert.equal(row.outlook,text.trim());assert.equal(row.wouldChange,text.trim());
+  assert.equal(cleanProse('First complete sentence. Another sentence exceeds the limit.',35),'First complete sentence. …');
+});
 function clientFor(responses) {
   const requests=[];
   return {requests,messages:{stream:args=>{requests.push(args);return {finalMessage:async()=>{const r=responses.shift();if(r instanceof Error) throw r;return r;}};}}};
