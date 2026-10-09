@@ -1,6 +1,7 @@
 import {load} from 'cheerio';
 import {createHash} from 'node:crypto';
 import {ORIGINS} from './config.js';
+import {parseCebuCampaigns} from './campaigns.js';
 
 // Airport codes used to reject domestic itineraries. Origin selection is explicit.
 const PH = new Set('MNL CEB CRK DVO ILO KLO MPH PPS TAG TAC BCD CGY ZAM GES DGT BXU DRP LGP LAO TUG RXS CYZ CBO DPL PAG SJI IAO SUG USU WNP WNP BSO RZP ENI MBT TBH JOL TWT CYP DTI VRC WNP SFE BQA BPH CRM OMH SGS LWA MXI LBX'.split(' '));
@@ -99,8 +100,9 @@ export function parseAirAsiaPromos(html, source, checkedAt) {
   return records;
 }
 export function parseSource(html, source, checkedAt) {
-  const items=source.type==='fares' ? parseFares(html,source,checkedAt) : source.id==='airasia-ph' ? parseAirAsiaPromos(html,source,checkedAt) : [];
+  const items=source.type==='fares' ? parseFares(html,source,checkedAt) : source.id==='airasia-ph' ? parseAirAsiaPromos(html,source,checkedAt) : source.airline==='Cebu Pacific' ? parseCebuCampaigns(html,source,checkedAt) : [];
   const blocked=/sec-if-cpt|captcha|access denied|verify you are human/i.test(html);
-  return {items,status:items.length ? 'ok' : 'unavailable',message:items.length ? items.length+' international offers read' : blocked ?
+  if(source.type==='campaign-feed' && !items.length && !blocked && /<rss\b/i.test(html) && /<channel>/i.test(html))return {items,status:'ok',message:'No current eligible sale announcements in the readable feed.'};
+  return {items,status:items.length ? 'ok' : 'unavailable',message:items.length ? items.length+(source.type==='campaign-feed'?' sale announcements read; route availability not verified':' international offers read') : blocked ?
     'Airline page requires an interactive browser; no fares extracted.' : 'No readable international offers with verified route and fare fields. Check the airline directly.'};
 }

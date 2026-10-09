@@ -1158,7 +1158,7 @@ window.fbSetSavedFlight = async function(offer, keep) {
     var saved = Object.assign({},snap.exists() ? snap.data().savedOffers || {} : {});
     if (keep) {
       if (!saved[offer.id] && Object.keys(saved).length >= 100) throw new Error('Your shortlist has 100 offers. Remove one before saving another.');
-      var fields = ['id','kind','airline','origin','destination','originName','destinationName','departureDate','returnDate','tripType','cabin','currency','amount','priceLabel','priceBasis','fees','baggage','connections','bookingEnd','travelPeriod','sourceUrl','bookingUrl','checkedAt','airlineSeen','terms','title','discount'];
+      var fields = ['id','kind','airline','origin','destination','originName','destinationName','departureDate','returnDate','tripType','cabin','currency','amount','priceLabel','priceBasis','fees','baggage','connections','bookingEnd','travelPeriod','sourceUrl','bookingUrl','checkedAt','airlineSeen','terms','title','discount','campaign','origins','baseFareAmount','bookingStart','travelStart','travelEnd','destinationKeywords','evidenceUrl','publisher','discoveryUrl','publishedAt'];
       var copy = {};
       fields.forEach(function(key) { if (offer[key] !== undefined) copy[key] = offer[key]; });
       copy.savedAt = new Date().toISOString(); saved[offer.id] = copy;
@@ -3497,7 +3497,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <div class="flights-controls">
     <label>Departure<select id="flights-origin" onchange="renderFlightOffers()"><option value="All">Manila, Cebu &amp; Clark</option><option value="MNL">Manila (MNL)</option><option value="CEB">Cebu (CEB)</option><option value="CRK">Clark (CRK)</option></select></label>
     <label>Destination or airline<input id="flights-destination" placeholder="Anywhere worldwide" oninput="renderFlightOffers()"></label>
-    <label>Trip<select id="flights-trip" onchange="renderFlightOffers()"><option value="All">All offers</option><option value="round-trip">Round trip</option><option value="one-way">One way</option><option value="not-stated">Discount campaigns</option></select></label>
+    <label>Trip<select id="flights-trip" onchange="renderFlightOffers()"><option value="All">All offers</option><option value="round-trip">Round trip</option><option value="one-way">One way</option><option value="campaigns">Seat sales &amp; campaigns</option></select></label>
     <label>Currency<select id="flights-currency" onchange="renderFlightOffers()"><option value="All">All currencies</option></select></label>
     <label>Depart from<input id="flights-from" type="date" onchange="renderFlightOffers()"></label>
     <label>Depart through<input id="flights-to" type="date" onchange="renderFlightOffers()"></label>
@@ -3506,7 +3506,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <p class="flights-note" id="flights-status" role="status"></p>
   <div id="flights-out"><div class="empty-state">LOADING FLIGHT SCOUT…</div></div>
   <div id="flights-sources"></div>
-  <div class="radar-disclaimer">Official airline offers, checked twice daily on the scheduled scout. Prices are advertised “from” fares, not live inventory or guaranteed totals. Prices stay in their original currency; one-way and round-trip fares are ranked separately. Confirm dates, passenger count, tax, baggage and connections on the airline before booking.</div>
+  <div class="radar-disclaimer">Airline fares and labelled sale announcements, checked twice daily. Seat sales show starting base fares and campaign travel windows; fees and route availability need checking. Priced flight samples stay in their original currency, with PHP estimates where a stored rate is available. Confirm the final total, dates, passenger count, tax, baggage and connections on the airline before booking.</div>
 </div>
 
 <!-- ═══════════════ HELP PAGE ═══════════════ -->

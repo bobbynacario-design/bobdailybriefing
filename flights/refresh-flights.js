@@ -39,10 +39,14 @@ async function main() {
   const results=[];
   // Two at a time, bounded timeout per public page. No anti-bot bypass or retries.
   for(let i=0;i<SOURCES.length;i+=2) results.push(...await Promise.all(SOURCES.slice(i,i+2).map(fetchSource)));
-  const fresh=results.flatMap(r=>r.items), byId=new Map(fresh.map(d=>[d.id,d]));
+  const fresh=results.flatMap(r=>r.items), byId=new Map();
+  for(const offer of fresh) {
+    const existing=byId.get(offer.id);
+    if(!existing || offer.publisher===offer.airline)byId.set(offer.id,offer);
+  }
   const failed=new Set(results.filter(r=>r.status!=='ok').map(r=>r.url));
   for(const offer of prior?.offers || []) {
-    if(failed.has(offer.sourceUrl) && !byId.has(offer.id) && Date.now()-Date.parse(offer.checkedAt)<48*3600000 &&
+    if(failed.has(offer.discoveryUrl || offer.sourceUrl) && !byId.has(offer.id) && Date.now()-Date.parse(offer.checkedAt)<48*3600000 &&
       (!offer.departureDate || offer.departureDate>=checkedAt.slice(0,10))) byId.set(offer.id,offer);
   }
   const offers=[...byId.values()].slice(0,150);
@@ -50,7 +54,7 @@ async function main() {
   const successful=results.filter(r=>r.status==='ok').length;
   const doc={asOf,generatedAt:checkedAt,origins:ORIGINS,offers,sources,
     summary:{successfulSources:successful,totalSources:SOURCES.length,fareCount:offers.filter(d=>d.kind==='advertised-fare').length,promoCount:offers.filter(d=>d.kind==='promo').length},
-    coverage:'Official advertised offers only; not an exhaustive worldwide fare search or live seat inventory.',modelCalls:0};
+    coverage:'Airline fares and labelled sale announcements; not an exhaustive worldwide fare search or live seat inventory.',modelCalls:0};
   sources.forEach(s=>console.log(s.id+': '+s.status+' · '+s.message));
   console.log(JSON.stringify({summary:doc.summary,origins:ORIGINS,airlines:[...new Set(offers.map(d=>d.airline))],destinations:[...new Set(offers.map(d=>d.destination))]}));
   if(dryRun) return;

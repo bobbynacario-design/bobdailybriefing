@@ -1,11 +1,23 @@
 # Flights scout
 
-The Flights section scouts airline-owned pages for international travel from
+The Flights section scouts airline pages and labelled sale announcements for international travel from
 Manila (MNL), Cebu (CEB) and Clark (CRK), with flexible dates and worldwide
 destinations. It uses no model calls, fare API subscription, affiliate feed or
 automated booking. Current sources: PAL Manila/Cebu, Cathay Philippine/US/UK
 offers, AirAsia Philippine campaigns, Cebu Pacific seat sales and Scoot
 Manila/Cebu/Clark.
+
+Cebu Pacific's JavaScript seat-sale page is also checked, with a public Hello
+Mnl press-release RSS feed as a labelled fallback. The reader requires an
+international campaign, an explicit one-way base fare, fee exclusions, booking
+dates and a travel window. Missing booking years come from the dated article;
+old, expired or incomplete announcements are rejected. Campaigns appear first,
+are filtered by overlapping travel windows, and disappear after the booking
+deadline in Philippine time. Saved expired campaigns remain historical only.
+They never imply the base fare is a final ticket total or available on a
+particular route. The article link and publisher are shown separately from the
+official airline booking link. This is a continuing feed reader, not a
+hard-coded listing of the October sale.
 
 `npm run dry-run` reads without writing. `npm run refresh` writes
 `briefings-bob/flights-latest` and the dated `flights-YYYY-MM-DD` snapshot, using
