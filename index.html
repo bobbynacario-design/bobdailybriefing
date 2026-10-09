@@ -1496,9 +1496,11 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
    beside the decision buttons, the buttons drop to their own row (right-aligned,
    see .radar-decision-actions) instead of squeezing it to a word per line. */
 .radar-invalidation{color:var(--txt3);font-style:italic;flex:1 1 12rem}
-.radar-taker{background:var(--bg2);border:1px solid rgba(201,168,76,.18);border-left:3px solid var(--gold);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem}
+.radar-taker{font-size:12px;line-height:1.6;color:var(--txt2);background:var(--bg2);border:1px solid rgba(201,168,76,.18);border-left:3px solid var(--gold);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem}
 .radar-change-row{padding:.55rem 0;border-top:1px solid var(--line)}
-.radar-change-row p{margin:.25rem 0;line-height:1.6}
+.radar-change-row p{margin:.25rem 0;font-size:12px;line-height:1.6}
+.radar-change-more{margin-top:.4rem}
+.radar-change-more summary{font-size:12px;font-weight:700;color:var(--txt);cursor:pointer}
 .radar-taker-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.8rem}
 .radar-taker-title{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.1em;text-transform:uppercase}
 .radar-taker-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em}
@@ -6586,7 +6588,7 @@ function renderRadarChanges() {
       r.reasons.map(esc).join(' ') + '</p>' + (r.sourceUrl ? radarSourceLink(r.sourceUrl,'Source · ' + r.sourceDate,'radar-read-link') : '') + '</div>';
   };
   el.innerHTML = '<div class="radar-taker"><div class="radar-taker-title">What changed since the previous update?</div><p class="radar-forecast-note">' + esc(copy) + '</p>' +
-    (rows.length ? rows.slice(0,3).map(row).join('') + (rows.length > 3 ? '<details><summary>' + (rows.length-3) + ' more changes</summary>' + rows.slice(3).map(row).join('') + '</details>' : '') :
+    (rows.length ? rows.slice(0,3).map(row).join('') + (rows.length > 3 ? '<details class="radar-change-more"><summary>' + (rows.length-3) + ' more changes</summary>' + rows.slice(3).map(row).join('') + '</details>' : '') :
     c && c.status === 'ok' ? '<p>No material price, status, score, benchmark-lead, prior-level or sourced-news changes.</p>' : '') + '</div>';
 }
 function radarCard(s) {
