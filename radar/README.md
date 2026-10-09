@@ -14,6 +14,40 @@ language anywhere.**
 
 ## Architecture
 
+### Forward forecast panel
+
+After Opus gathers catalysts, the five highest-scoring eligible signals receive
+two evidence-bound Haiku 5.5 assessments (bull and bear) and one Sonnet 5.5 review.
+The three calls share technical metrics, a descriptive historical base rate and
+the already-validated dated news summaries. They use no search tools. Sources
+must come from that evidence pack; stale news is excluded. The panel abstains
+when evidence or a completed response is missing. Technical-only estimates are
+labelled explicitly. Probabilities are uncalibrated; agreement is not confidence.
+
+Eligibility requires 60 paired completed daily observations, a recent common
+close and a distinct benchmark. Forecasts measure whether an asset outperforms
+its benchmark over ten matched sessions, from the first completed common close
+whose date is after the forecast UTC date. This conservative starting point
+avoids using an already-known close or an intraday partial bar as the entry.
+The comparison excludes trading costs and is not a stop/target trading forecast.
+
+`radar-forecast-journal` stores immutable forecasts keyed by symbol and data date.
+Forced reruns reuse existing forecasts; the first stored forecast wins during
+overlapping refreshes. The journal and Radar snapshot commit together. Brier
+scores compare the reviewer, bull, bear, historical base-rate and neutral 50%
+forecasts on the same resolved entries. The UI reports the retained forward
+record, not a backtest; overlapping windows are correlated. Up to 120 completed
+records are retained, along with pending forecasts; missing observations after
+60 days are labelled unavailable, never treated as losses or wins.
+
+The panel is bounded to three calls, 4,000 output tokens per call, medium effort,
+and a three-minute overall deadline, without automatic retries. Input is bounded
+to five compact evidence packs, below Haiku's higher-price long-context threshold.
+Actual tokens for both models enter the shared usage ledger even if publishing
+later fails. Use `--no-forecast` or `RADAR_FORECAST_PAUSED=1` to pause new estimates.
+The panel and journal never change technical scores, rankings or the existing
+historical Radar journal. A panel failure still permits the Radar refresh.
+
 A **local Node script** does all the work once a day; the **front end is a pure
 reader**. No Cloud Function, no build tools, no new front-end deps.
 

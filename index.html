@@ -1493,6 +1493,10 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .radar-nugget-body{font-size:12px;color:var(--txt2);line-height:1.6;margin-bottom:.55rem}
 .radar-nugget-risk{font-family:var(--mono);font-size:10px;color:var(--txt3);line-height:1.5}
 .radar-read{border-top:1px solid var(--rim);padding-top:.5rem;margin:0 0 .55rem;font-size:12px;line-height:1.6;color:var(--txt2)}
+.radar-forecast{border:1px solid var(--rim);border-radius:8px;background:var(--bg3);padding:.65rem;margin:.55rem 0;font-size:12px;line-height:1.6;color:var(--txt2)}
+.radar-forecast summary{cursor:pointer;color:var(--txt);font-weight:700}
+.radar-forecast p{margin:.35rem 0}
+.radar-forecast-note{font-family:var(--mono);font-size:10px;color:var(--txt3);margin:.4rem 0 .7rem}
 .radar-read-row{margin-bottom:.3rem}
 .radar-read-lab{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}
 .radar-read-src{display:flex;flex-wrap:wrap;gap:.2rem .6rem}
@@ -3600,6 +3604,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <div class="llm-grid">
         <div id="llm-usage-out"><div class="rel-none-txt">Loading usage…</div></div>
         <div class="llm-notes">
+          <p>Radar&rsquo;s forecast panel uses Haiku 5.5 for two draft perspectives and Sonnet 5.5 for the review. It reuses existing news without extra searches; both models&rsquo; token usage is recorded separately.</p>
           <p>Every AI call across the app records its token usage to a shared ledger. The <b>weekly read</b> and saved-record <b>Ask Daybook</b> questions use Claude Haiku; <b>radar</b> catalysts and reads use Claude Opus. The daily <b>briefing</b>, web-enabled questions, <b>Go deeper</b> dossiers, <b>meeting briefs</b>, <b>deep-research</b> reports and the <b>Markets</b> panel use OpenAI. Claude's web searches are billed per search, so they get their own line. The table ranks the spend by feature, in USD, using each provider's published rates — raw API cost, no markup.</p>
           <p class="help-key">The ledger stores tokens only; cost is computed from a single rate table, so the figure is auditable (see the "rates as of" line). Deep-research models are shown <i>unpriced</i> until their rates are confirmed — the tracker never guesses.</p>
         </div>
@@ -3637,7 +3642,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li><b>Top upside</b> — one slot is reserved for the biggest-upside early name, so a standout is never crowded out. The other two fill by score.</li>
       </ul>
       <p>Earlier than Taker Nuggets and less proven: Taker&rsquo;s picks have earned more on the same history. Treat these as early watchlist ideas, not clean confirmations. The Journal keeps checking whether early names still beat other forming names.</p>
-      <p><b>Why it&rsquo;s moving / What would break it</b> — on the six names these two boxes show by default, each morning&rsquo;s run has Claude search the news and write two short lines: what is driving the move, and the development (or the stop level) that would undercut it. Each comes with 1–3 links, and only links that turned up in that run&rsquo;s own searches are kept; a read without one is dropped. If a filter brings in other names, they show their one-line catalyst instead. This is the news behind the move, not a forecast, and the score never reads it.</p>
+      <p><b>Why it&rsquo;s moving / What would break it</b> — on the six names these two boxes show by default, each morning&rsquo;s run has Claude search the news and write two short lines: what is driving the move, and the development (or the stop level) that would undercut it. Each comes with 1–3 links, and only links that turned up in that run&rsquo;s own searches are kept; a read without one is dropped. If a filter brings in other names, they show their one-line catalyst instead. This is the news behind the move, and the score never reads it.</p>
+      <p><b>Forecast panel</b> — the top five eligible signals receive Haiku bull and bear assessments, then a Sonnet review using the existing evidence. Expand a forecast to see the outlook and what would change it. Its percentage estimates outperformance against the named benchmark over ten matched sessions, starting from a later completed close. These estimates are uncalibrated and do not alter scores or rankings. The forward record compares their Brier error with a historical base rate and a neutral 50% estimate; lower is better. Overlapping windows are correlated.</p>
       <p><b>Quick filters</b> (the pill rows under the regime line) narrow the list — they don't change any scores:</p>
       <ul>
         <li><b>Asset type</b> — <span class="help-pill">All</span> / <span class="help-pill">Stocks</span> / <span class="help-pill">Crypto</span> / <span class="help-pill">Commodities</span>. Each pill shows how many names sit in it. <i>Commodities</i> = metal/energy/broad-commodity ETFs (GLD, USO, GDX…); energy <i>stocks</i> like XOM stay under Stocks.</li>
@@ -6479,6 +6485,39 @@ function radarContext(s) {
   if (!bits.length) return '';
   return '<div class="ph-chips radar-chips">' + bits.join('') + '</div>';
 }
+function radarForecastHtml(s) {
+  var f = s && s.forecast;
+  if (!f) return '';
+  if (!f.key || !Number.isFinite(f.probability) || f.probability < 0 || f.probability > 1) {
+    if (f.reason === 'paused') return '<div class="radar-forecast-note">Forecast panel paused.</div>';
+    return '<div class="radar-forecast-note">Forecast unavailable: insufficient evidence or panel could not complete.</div>';
+  }
+  var label = f.probability >= .55 ? 'Leans outperform' : f.probability <= .45 ? 'Leans underperform' : 'Mixed outlook';
+  return '<details class="radar-forecast"><summary>' + esc(label) + ' · ' + Math.round(f.probability * 100) + '% to beat ' + esc(f.benchmark) + '</summary>' +
+    '<div class="radar-forecast-note">10 matched sessions · uncalibrated estimate · ' + esc(f.evidenceBasis || '') + '<br>Forecast saved ' + esc((f.generatedAt || '').slice(0,10)) + '; data through ' + esc(f.dataAsOf || '') + '</div>' +
+    '<p>' + esc(f.outlook || '') + '</p>' +
+    '<p><b>Bull case:</b> ' + esc(f.bullCase || '') + '</p>' +
+    '<p><b>Bear case:</b> ' + esc(f.bearCase || '') + '</p>' +
+    '<p><b>Main uncertainty:</b> ' + esc(f.risk || '') + '</p>' +
+    '<p><b>What changes the view:</b> ' + esc(f.wouldChange || '') + '</p>' +
+    '<div class="radar-read-src">' + (f.sources || []).map(function (src) { return radarSourceLink(src.url,src.title,'radar-read-link'); }).join(' ') + '</div></details>';
+}
+function radarForecastNote(data) {
+  var r = data && data.forecastRun;
+  if (!r) return '';
+  var stats = data.forecastJournal && data.forecastJournal.stats;
+  var note = r.status === 'failed' ? 'Forecast panel could not complete this refresh.' :
+    r.reason === 'paused' ? 'Forecast panel paused.' :
+    r.reason === 'no-eligible-signals' ? 'No eligible signal has enough recent paired history for a forecast.' :
+    'Forecast panel covers up to five leading signals. Estimates are uncalibrated; Radar scores and rankings remain unchanged.';
+  if (stats) {
+    note += ' Forward record: ' + stats.resolved + ' resolved · ' + stats.pending + ' pending';
+    if (stats.unavailable) note += ' · ' + stats.unavailable + ' unavailable';
+    if (Number.isFinite(stats.panelBrier)) note += '. Brier (lower is better): panel ' + stats.panelBrier.toFixed(3) +
+      ' vs historical base rate ' + stats.baseRateBrier.toFixed(3) + ' and neutral 0.250. Overlapping windows are correlated.';
+  }
+  return '<div class="radar-forecast-note">' + esc(note) + '</div>';
+}
 function radarCard(s) {
   var upside = radarUpsideLabel(s);
   var plan = upside + '  ·  Entry ' + radarLevel(s.entry) + '  ·  Stop ' + radarLevel(s.stop) +
@@ -6495,6 +6534,7 @@ function radarCard(s) {
     '</div>' +
     '<div class="card-body">' + esc(s.why) + '</div>' +
     radarCatalyst(s) +
+    radarForecastHtml(s) +
     '<div class="src radar-plan">' + esc(plan) + '</div>' +
     radar52(s) +
     radarContext(s) +
@@ -6708,7 +6748,7 @@ function radarTakerCard(s) {
       '<div class="radar-nugget-upside">' + esc(radarUpsideLabel(s)) + '</div></div>' +
     '</div>' +
     '<div class="radar-nugget-body">' + esc(radarTakerWhy(s)) + '</div>' +
-    radarReadHtml(s) +
+    radarReadHtml(s) + radarForecastHtml(s) +
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
 }
@@ -6745,7 +6785,7 @@ function radarWildcardCard(s, isStandout) {
       '<div class="radar-wildcard-score">score ' + esc(s.score) + '</div></div>' +
     '</div>' +
     '<div class="radar-nugget-body">' + esc(radarWildcardWhy(s)) + '</div>' +
-    radarReadHtml(s) +
+    radarReadHtml(s) + radarForecastHtml(s) +
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
 }
@@ -6885,7 +6925,7 @@ function renderRadar() {
       regimeEl.innerHTML = '<div class="radar-regime-line">Regime: ' +
         '<span class="rel-badge ' + rg.cls + '">' + rg.txt + '</span>' +
         '<span class="radar-asof">as of ' + esc(data.asOf || '—') + '</span></div>' +
-        radarCalibrationWarning() + radarCatalystNote(data.catalystRun);
+        radarCalibrationWarning() + radarCatalystNote(data.catalystRun) + radarForecastNote(data);
     }
     if (sub) sub.textContent = data.signals.length + ' opportunities ranked by score';
     radarSignals = data.signals;
@@ -10726,6 +10766,7 @@ function renderSports() {
 var LLM_PRICING_USD_PER_1K = {
   'gpt-5.5': { input: 0.005, output: 0.030, cacheRead: 0.0005 },
   'claude-opus-5-5': { input: 0.004, output: 0.020, cacheRead: 0.0002, cacheWrite: 0.005 },
+  'claude-sonnet-5-5': { input: 0.002, output: 0.010, cacheRead: 0.0001, cacheWrite: 0.0025 },
   'claude-haiku-5-5': { input: 0.0001, output: 0.0005, cacheRead: 0.00001, cacheWrite: 0.000125 },
   'claude-haiku-5-5/over-100k': { input: 0.0005, output: 0.0025, cacheRead: 0.00005, cacheWrite: 0.000625 },
   'web-search': { perCall: 0.01 },
@@ -10733,7 +10774,7 @@ var LLM_PRICING_USD_PER_1K = {
   'o4-mini-deep-research': null,
   'o3-deep-research': null
 };
-var LLM_RATES_AS_OF = 'gpt-5.5 2026-06-23, Opus 2026-10-03, Haiku 2026-10-08';
+var LLM_RATES_AS_OF = 'gpt-5.5 2026-06-23, Opus 2026-10-03, Haiku 2026-10-08, Sonnet 2026-10-09';
 // Cached tokens (and Claude's cache writes) are subsets of input tokens, so
 // charge the rest of the input at the input rate, cached at the cache-read
 // rate, and cache writes at their own (higher) rate.

@@ -259,7 +259,9 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
   same stored records around a selected asset, company, event, team, or topic
   while keeping archive gaps explicit.
 - **📡 Market Radar** — daily ranking of ~30 assets across 11 themes, with a
-  performance journal. Docs: [`radar/README.md`](radar/README.md).
+  performance journal. The top five eligible signals also receive Haiku bull/bear
+  scenarios and a Sonnet review using existing sourced news, with a separate
+  forward forecast record. Docs: [`radar/README.md`](radar/README.md).
 - **🎲 Markets** — daily "scenario read" over curated Polymarket event markets:
   sourced explanations of the largest probability changes, with reported drivers
   separated from plausible inferences and concrete developments to watch for a

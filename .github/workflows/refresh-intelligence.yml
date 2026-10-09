@@ -20,7 +20,7 @@ on:
         options: [radar, markets, news, grounding]
       force:
         # Radar only. A manual run normally no-ops once today's radar doc exists;
-        # this re-scores and overwrites it (one OpenAI catalyst call), e.g. to put
+        # this re-scores and overwrites it (Claude research + forecast panel), e.g. to put
         # a scoring change live the same day.
         description: Radar only - re-run even if today's radar is already written
         required: false

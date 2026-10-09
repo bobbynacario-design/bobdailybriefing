@@ -35,6 +35,8 @@ import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
 import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 import { tagCatalysts, focusPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
+import { runForecastPanel } from './forecast.js';
+import { measureForecastJournal } from './forecast-journal.js';
 import { recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -290,13 +292,31 @@ function initAdmin() {
   return _db;
 }
 
-async function writeDoc(db, dateKey, doc) {
+async function writeDoc(db, dateKey, doc, bars, forecasts) {
   // No `uid` field: the front end reads these under the rule that allows reads
   // of briefings-bob docs that carry no uid. Admin SDK writes bypass rules.
-  var batch = db.batch();
-  batch.set(db.collection(COLL).doc('radar-' + dateKey), doc);
-  batch.set(db.collection(COLL).doc('radar-latest'), { value: dateKey });
-  await batch.commit();
+  var journalRef = db.collection(COLL).doc('radar-forecast-journal');
+  try { await db.runTransaction(async function (tx) {
+    var snapshot = await tx.get(journalRef);
+    var journal = measureForecastJournal(snapshot.exists ? snapshot.data() : null, forecasts, bars, new Date().toISOString());
+    // The first stored forecast wins even if a local/forced refresh overlaps.
+    doc.signals.forEach(function (s) {
+      if (s.forecast && s.forecast.key && journal.entries[s.forecast.key]) s.forecast = journal.entries[s.forecast.key];
+    });
+    doc.forecastJournal = {stats:journal.stats,method:journal.method,horizon:journal.horizon};
+    tx.set(journalRef, journal);
+    tx.set(db.collection(COLL).doc('radar-' + dateKey), doc);
+    tx.set(db.collection(COLL).doc('radar-latest'), { value: dateKey });
+  }); } catch (e) {
+    console.warn('Forecast journal write failed; publishing Radar without untracked estimates:', e.message || e);
+    doc.signals.forEach(function (s) { delete s.forecast; });
+    doc.forecastRun.status = 'failed';doc.forecastRun.error = 'Forecast journal unavailable';
+    delete doc.forecastJournal;
+    var batch = db.batch();
+    batch.set(db.collection(COLL).doc('radar-' + dateKey), doc);
+    batch.set(db.collection(COLL).doc('radar-latest'), { value: dateKey });
+    await batch.commit();
+  }
 }
 
 // ── decision drift digest ──
@@ -415,6 +435,24 @@ async function main() {
       ? ' · served by ' + catResult.served.join(',') : ''));
 
   var picks = focusPicks(result.signals);
+  STAGE.set('forecast-panel');
+  var priorForecasts = null, forecastReadFailed = false;
+  try {
+    var forecastSnapshot = await db.collection(COLL).doc('radar-forecast-journal').get();
+    priorForecasts = forecastSnapshot.exists ? forecastSnapshot.data() : null;
+  } catch (e) {
+    forecastReadFailed = true;
+    console.warn('Forecast journal unavailable; panel paused to avoid duplicate calls.');
+  }
+  var forecastResult = await runForecastPanel({signals:result.signals,bars:barsByAsset,prior:priorForecasts,
+    apiKey:ANTHROPIC_KEY,paused:forecastReadFailed || process.env.RADAR_FORECAST_PAUSED === '1' || process.argv.includes('--no-forecast')});
+  console.log('Radar forecasts: ' + forecastResult.run.status + ' / ' + forecastResult.run.estimated + '/' + forecastResult.run.selected.length +
+    ' estimates' + (forecastResult.run.error ? ' / ' + forecastResult.run.error : ''));
+  // Completed calls are billed even if a later write fails; no searches in this lane.
+  for (var forecastUsage of forecastResult.run.usage) {
+    await recordUsage(db,forecastUsage.model === forecastResult.run.draftModel ? 'radar-forecast-drafts' : 'radar-forecast-review',
+      forecastUsage.model,usageForLedger(forecastUsage),dateKey,forecastUsage.calls);
+  }
   var symbolsOf = function (list) { return list.map(function (s) { return s.symbol; }); };
   var doc = {
     generatedAt: new Date().toISOString(),
@@ -424,6 +462,7 @@ async function main() {
     // without this the app can only express a decision's result as a raw
     // return, never as excess over the benchmark that signal was judged against.
     benchmarks: result.benchmarks,
+    forecastRun: forecastResult.run,
     // How the catalyst step went, so the app can say why a day has none
     // (no key, a failed call) instead of showing a radar that looks quiet.
     catalystRun: {
@@ -564,7 +603,7 @@ async function main() {
   }
 
   STAGE.set('write');
-  await writeDoc(db, dateKey, doc);
+  await writeDoc(db, dateKey, doc, barsByAsset, forecastResult.entries);
   await db.collection(COLL).doc('radar-journal').set(journalDoc);
   console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', and radar-journal.');
 

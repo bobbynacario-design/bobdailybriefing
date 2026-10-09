@@ -6,7 +6,7 @@
   "main": "refresh-radar.js",
   "scripts": {
     "refresh": "node refresh-radar.js",
-    "test": "node --test journal.test.js catalysts.test.js"
+    "test": "node --test *.test.js"
   },
   "engines": {
     "node": ">=20"
