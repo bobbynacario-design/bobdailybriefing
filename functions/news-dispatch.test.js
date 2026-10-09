@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const {dispatchRequest, dispatchFeed} = require("./news-dispatch");
+const {dispatchRequest, dispatchFeed, FEEDS} = require("./news-dispatch");
 
 test("the request asks GitHub to run the workflow's news job on main", () => {
   const {url, init} = dispatchRequest("ghp_test_token", "news");
@@ -32,7 +32,8 @@ test("a 204 is accepted; anything else throws with the status, never the token",
 
 test("the feeds it may start are the workflow's own choices", () => {
   const workflow = fs.readFileSync(path.resolve(__dirname, "..", ".github", "workflows", "refresh-intelligence.yml"), "utf8");
-  assert.match(workflow, /options: \[radar, markets, news, grounding\]/);
+  const choices = workflow.match(/options: \[([^\]]+)\]/)[1].split(",").map(value => value.trim());
+  for (const feed of FEEDS) assert.ok(choices.includes(feed), `${feed} is supported by the workflow`);
 });
 
 test("index.js schedules the news dispatch at 05:30 Manila with its own secret", () => {
