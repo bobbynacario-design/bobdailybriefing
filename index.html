@@ -32,6 +32,8 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/evidence-sets-core.js"></script>
 <script src="./lib/entity-timeline-core.js"></script>
 <script src="./lib/radar-assistant-core.js"></script>
+<script src="./lib/flights-core.js"></script>
+<script src="./lib/flights-ui.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -1125,6 +1127,49 @@ window.fbLoadMiroJournal = async function() {
   }
 };
 
+window.fbLoadFlights = async function() {
+  var snap = await getDoc(doc(db,COLL,'flights-latest'));
+  return snap.exists() ? snap.data() : null;
+};
+window.fbLoadFlightPrefs = async function() {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  var ref = doc(db,COLL,'flights-saved-' + uid);
+  var snap;
+  try { snap = await getDoc(ref); }
+  catch (e) {
+    // Shared collection rules cannot read a missing personal document. Prime
+    // only its owner field: merge preserves an existing shortlist on retry.
+    if (e.code !== 'permission-denied') throw e;
+    if (uid !== getUid()) throw new Error('Account changed');
+    await setDoc(ref,{uid:uid},{merge:true});
+    snap = await getDoc(ref);
+  }
+  if (uid !== getUid()) throw new Error('Account changed');
+  return snap.exists() ? snap.data().savedOffers || {} : {};
+};
+window.fbSetSavedFlight = async function(offer, keep) {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  if (!offer || !/^[a-f0-9]{20}$/.test(offer.id || '') || !FlightsCore.officialUrl(offer.sourceUrl) || !FlightsCore.officialUrl(offer.bookingUrl)) throw new Error('Invalid flight offer');
+  var ref = doc(db,COLL,'flights-saved-' + uid);
+  var result = await runTransaction(db,async function(tx) {
+    var snap = await tx.get(ref);
+    var saved = Object.assign({},snap.exists() ? snap.data().savedOffers || {} : {});
+    if (keep) {
+      if (!saved[offer.id] && Object.keys(saved).length >= 100) throw new Error('Your shortlist has 100 offers. Remove one before saving another.');
+      var fields = ['id','kind','airline','origin','destination','originName','destinationName','departureDate','returnDate','tripType','cabin','currency','amount','priceLabel','priceBasis','fees','baggage','connections','bookingEnd','travelPeriod','sourceUrl','bookingUrl','checkedAt','airlineSeen','terms','title','discount'];
+      var copy = {};
+      fields.forEach(function(key) { if (offer[key] !== undefined) copy[key] = offer[key]; });
+      copy.savedAt = new Date().toISOString(); saved[offer.id] = copy;
+    } else delete saved[offer.id];
+    tx.set(ref,{uid:uid,savedOffers:saved,updatedAt:new Date().toISOString()});
+    return saved;
+  });
+  if (uid !== getUid()) throw new Error('Account changed');
+  return result;
+};
+
 // Load the latest Sports briefing doc. Written by sports/refresh-sports.js with
 // no uid so it follows the same shared-read pattern as Radar and Markets.
 async function loadPublicSports() {
@@ -1536,6 +1581,22 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 /* ── SPORTS ── */
 /* Full-bleed like every other tab's content (was capped at 1420px + centred,
    which made the Sports module feel narrower than the hero and other tabs). */
+.flights-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem;margin-bottom:.75rem}
+.flights-controls label{display:flex;flex-direction:column;gap:.3rem;font-family:var(--mono);font-size:10px;color:var(--txt3)}
+.flights-controls input,.flights-controls select{min-width:0;width:100%;padding:.5rem .65rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg2);color:var(--txt);font-family:var(--sans);font-size:12px}
+.flights-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;font-size:12px;color:var(--txt2)}
+.flights-note{font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--txt3);margin:.6rem 0}
+.flights-group{font-family:var(--mono);font-size:11px;color:var(--gold);margin:1rem 0 .55rem}
+.flight-card{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.9rem;font-size:12px;line-height:1.6;min-width:0}
+.flight-route{font-family:var(--serif);font-size:18px;font-weight:700;color:var(--txt);overflow-wrap:anywhere}
+.flight-price{font-size:16px;font-weight:700;color:var(--gold);margin:.35rem 0}
+.flight-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.65rem}
+.flight-actions a{font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:underline}
+.flight-flag{font-family:var(--mono);font-size:10px;color:var(--amber)}
+.flight-source-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+.flight-source{font-size:12px;line-height:1.6;padding:.65rem .8rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg2);min-width:0}
+.flight-source a{font-size:12px;color:var(--txt)}
+@media(max-width:600px){.flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.flight-source-list{grid-template-columns:1fr}}
 .sports-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}
 .sports-module-tabs{display:flex;gap:.45rem;flex-wrap:wrap;margin:0 0 1rem}
 .sports-module-tab{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:.45rem .8rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}
@@ -2739,6 +2800,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <button class="ntab" data-page="pse" onclick="switchPage('pse',this)">PSE</button>
     <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">Markets</button>
     <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">Sports</button>
+    <button class="ntab" data-page="flights" onclick="switchPage('flights',this)">Flights</button>
     <button class="ntab owner-only" data-page="about" onclick="switchPage('about',this)">About you</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">Help</button>
     <button class="ntab" data-page="decisions" onclick="switchPage('decisions',this)">Decisions</button>
@@ -3424,6 +3486,29 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <div class="radar-disclaimer">Sports framing only. Scores, fixtures, standings and market context depend on the configured data provider in sports/refresh-sports.js. No betting execution.</div>
 </div>
 
+<!-- ═══════════════ FLIGHTS PAGE ═══════════════ -->
+<div class="page" id="page-flights">
+  <div class="hero" style="margin-bottom:1.25rem">
+    <div class="hero-eyebrow">Your travel scout</div>
+    <div class="hero-date" style="font-size:22px">Flights</div>
+    <div class="hero-sub" id="flights-sub">Manila · Cebu · Clark / worldwide / flexible dates</div>
+    <div class="hero-divider"></div>
+  </div>
+  <div class="flights-controls">
+    <label>Departure<select id="flights-origin" onchange="renderFlightOffers()"><option value="All">Manila, Cebu &amp; Clark</option><option value="MNL">Manila (MNL)</option><option value="CEB">Cebu (CEB)</option><option value="CRK">Clark (CRK)</option></select></label>
+    <label>Destination or airline<input id="flights-destination" placeholder="Anywhere worldwide" oninput="renderFlightOffers()"></label>
+    <label>Trip<select id="flights-trip" onchange="renderFlightOffers()"><option value="All">All offers</option><option value="round-trip">Round trip</option><option value="one-way">One way</option><option value="not-stated">Discount campaigns</option></select></label>
+    <label>Currency<select id="flights-currency" onchange="renderFlightOffers()"><option value="All">All currencies</option></select></label>
+    <label>Depart from<input id="flights-from" type="date" onchange="renderFlightOffers()"></label>
+    <label>Depart through<input id="flights-to" type="date" onchange="renderFlightOffers()"></label>
+  </div>
+  <div class="flights-toolbar"><label><input type="checkbox" id="flights-saved-only" onchange="renderFlightOffers()"> My saved shortlist</label><button class="tool-chip" onclick="renderFlights()">Reload latest scout</button></div>
+  <p class="flights-note" id="flights-status" role="status"></p>
+  <div id="flights-out"><div class="empty-state">LOADING FLIGHT SCOUT…</div></div>
+  <div id="flights-sources"></div>
+  <div class="radar-disclaimer">Official airline offers, checked twice daily on the scheduled scout. Prices are advertised “from” fares, not live inventory or guaranteed totals. Prices stay in their original currency; one-way and round-trip fares are ranked separately. Confirm dates, passenger count, tax, baggage and connections on the airline before booking.</div>
+</div>
+
 <!-- ═══════════════ HELP PAGE ═══════════════ -->
 <div class="page" id="page-about">
   <div class="hero" style="margin-bottom:1.25rem">
@@ -4086,6 +4171,7 @@ function clearPrivateSession() {
   window._briefingHistory = []; window._reportFeed = []; window._feedHealthData = null;
   groundingLoadToken++;
   setText('grounding-numbers','Sign in to load published numbers.');
+  if (window.resetFlights) window.resetFlights();
   decisionEntries = []; decisionEditingId = null; decisionLinkedSignal = null; decisionDatedCache = {};
   decisionRadarJournal = null; decisionRadarLive = null; decisionRefPrice = {};
   _currentData = null; commandLoadToken++; commandCenterData = null; commandCenterInputs = null;
@@ -4367,6 +4453,7 @@ function switchPage(id, el) {
   if (id==='pse') pending = renderPh();
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
+  if (id==='flights') pending = renderFlights();
   if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
   if (id==='about') pending = renderAbout();
   setPageHash(id);
@@ -4396,6 +4483,7 @@ function switchPageMobile(id, el) {
   if (id==='pse') pending = renderPh();
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
+  if (id==='flights') pending = renderFlights();
   if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
   if (id==='about') pending = renderAbout();
   setPageHash(id);
@@ -5284,7 +5372,7 @@ document.addEventListener('visibilitychange', function() { if (document.visibili
 var USAGE_LABELS = {
   fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence', ask_send_decision:'Ask: decision draft', ask_send_check:'Ask: to check', ask_send_take:'Ask: my take', ask_send_copy:'Ask: copy as text', 'ask_send_confirm-check':'Ask: check added',
   page_today:'Today', page_command:'Morning 5', page_evidence:'Evidence', page_decisions:'Decisions', page_research:'Research', page_timeline:'Timeline',
-  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_pse:'PSE', page_trends:'Trends',
+  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_flights:'Flights', page_pse:'PSE', page_trends:'Trends',
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
   card_more:'More like this', card_less:'Less like this', card_remind:'Remind me',
   aha_save:'Aha: save insight', aha_decision:'Aha: open as decision', aha_note:'Aha: write my take', aha_check:'Aha: check later', aha_link:'Aha: jump to a story',
@@ -7552,6 +7640,7 @@ var FEED_SPEC = [
   { key: 'briefing', label: 'Briefing', maxAgeH: 30,   cadence: 'daily, generated server-side' },
   { key: 'radar',    label: 'Radar',    maxAgeH: 30,   cadence: '06:00 + 08:30 catch-up' },
   { key: 'miro',     label: 'Markets',  maxAgeH: 30,   cadence: '06:15' },
+  { key: 'flights',  label: 'Flights',  maxAgeH: 26,   cadence: '08:00 + 20:00 PHT' },
   { key: 'ph',       label: 'PSE',      maxAgeH: 30,   cadence: '06:00 + 16:30 after close' },
   // One pill per sports lane (sports/refresh-sports.js laneHealth): a single
   // Sports pill stayed green for three weeks while every NBA refresh failed.

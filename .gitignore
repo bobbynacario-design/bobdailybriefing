@@ -47,3 +47,7 @@ radar/retag-backup.json
 
 # Generated release and local test preview
 _site/
+
+# flights — local dependencies and feed run logs
+flights/node_modules/
+flights/refresh.log

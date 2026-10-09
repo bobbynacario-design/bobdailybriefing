@@ -7,6 +7,7 @@ on:
     - cron: "15 20 * * *"    # Grounding releases 04:15 PHT daily (after news)
     - cron: "45 21 * * *"    # News catch-up 05:45 PHT daily
     - cron: "0 22 * * 0-4"   # Radar 06:00 PHT Monday-Friday
+    - cron: "0 0,12 * * *"  # Flight scout 08:00 and 20:00 PHT daily
     - cron: "15 22 * * *"    # Markets 06:15 PHT daily
     - cron: "45 0 * * *"     # News catch-up 08:45 PHT daily
     - cron: "30 0 * * 1-5"   # Radar catch-up 08:30 PHT Monday-Friday
@@ -17,7 +18,7 @@ on:
         required: true
         default: radar
         type: choice
-        options: [radar, markets, news, grounding]
+        options: [radar, markets, news, grounding, flights]
       force:
         # Radar only. A manual run normally no-ops once today's radar doc exists;
         # this re-scores and overwrites it (Claude research + forecast panel), e.g. to put
@@ -171,3 +172,23 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  flights:
+    if: github.event.schedule == '0 0,12 * * *' || github.event.inputs.feed == 'flights'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: refresh-flights
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: flights/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix flights ci
+      - run: npm --prefix flights run refresh
