@@ -31,7 +31,13 @@ may already be unavailable even when the source check is recent.
 
 The UI filters airports, destination/airline, currency, journey and departure
 window. Quotes are sorted within native currency, journey and cabin groups;
-discount percentages are never ranked against priced fares. Date filters omit
+discount percentages are never ranked against priced fares.
+USD and AUD fares also show approximate PHP equivalents using the existing
+PH market snapshot rates, with their date and an older-rate label at four days.
+Unsupported currencies or failed FX reads show no inferred conversion. Bank or
+card rates and fees may differ. Converted amounts are display-only and are not
+stored in the shortlist.
+Date filters omit
 undated campaigns. Coverage is not an exhaustive worldwide search or live
 inventory. Tax, baggage and connection uncertainty are explicit. The airline
 link opens the offer/search page for the user to confirm the final itinerary.
