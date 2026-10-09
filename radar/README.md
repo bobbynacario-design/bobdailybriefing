@@ -79,12 +79,32 @@ The comparison excludes trading costs and is not a stop/target trading forecast.
 
 `radar-forecast-journal` stores immutable forecasts keyed by symbol and data date.
 Forced reruns reuse existing forecasts; the first stored forecast wins during
-overlapping refreshes. The journal and Radar snapshot commit together. Brier
-scores compare the reviewer, bull, bear, historical base-rate and neutral 50%
-forecasts on the same resolved entries. The UI reports the retained forward
-record, not a backtest; overlapping windows are correlated. Up to 120 completed
-records are retained, along with pending forecasts; missing observations after
-60 days are labelled unavailable, never treated as losses or wins.
+overlapping refreshes. Missing observations after 60 days are labelled
+unavailable, never treated as losses or wins.
+
+Every resolved or unavailable forecast is also kept permanently as a compact
+record (no prose: key, symbol, benchmark, theme, dates, the panel, bull, bear and
+base-rate probabilities, outcome and excess return) in monthly docs
+`radar-forecast-history-YYYY-MM`, by forecast data month. A month holds at most
+one record per Radar symbol per day (a few hundred KB even then), so no document
+nears Firestore's 1 MB limit. The journal keeps full prose only for pending
+forecasts and the 60 newest completed ones, and lists the history months. Each
+refresh reads the journal and every listed month inside one transaction, then
+writes the journal, any changed months and the Radar snapshot together. Archived
+records are never rewritten; a listed month that cannot be read fails the
+forecast write (the Radar still publishes, without forecasts) rather than
+scoring a shrunken record.
+
+Brier scores compare the reviewer, bull, bear, historical base-rate and neutral
+50% forecasts on the same resolved entries across the full history, not a
+backtest. Daily forecasts overlap: a forecast made each day re-measures most of
+the previous day's ten sessions. The **effective sample** counts, per symbol, the
+most ten-session windows that share no daily return, summed across symbols and
+broken down by theme. It is still generous, because symbols in one theme move
+together. At five forecasts a day it grows by only about 5-10 a month, so
+months of results are needed before the Brier comparison says much.
+The Radar banner shows the full-history counts, and the effective sample with
+its theme breakdown beside the Brier scores.
 
 The panel is bounded to three calls, 16,000 output tokens per call (thinking counts toward it), medium effort,
 and a three-minute overall deadline, without automatic retries. Input is bounded

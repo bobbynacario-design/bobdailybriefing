@@ -6558,10 +6558,23 @@ function radarForecastNote(data) {
     'Forecast panel covers up to five leading signals. Estimates are uncalibrated; Radar scores and rankings remain unchanged.';
   if (stats) {
     if (!stats.resolved) note += ' Forecast accuracy has not been measured yet.';
-    note += ' Forward record: ' + stats.resolved + ' resolved · ' + stats.pending + ' pending';
+    // Snapshots written before the permanent history carry no effective sample;
+    // their counts covered only the retained window.
+    var full = Number.isFinite(stats.effectiveSample);
+    note += (full ? ' Full forward record' + (stats.since ? ' since ' + stats.since : '') : ' Forward record') +
+      ': ' + stats.resolved + ' resolved · ' + stats.pending + ' pending';
     if (stats.unavailable) note += ' · ' + stats.unavailable + ' unavailable';
-    if (Number.isFinite(stats.panelBrier)) note += '. Brier (lower is better): panel ' + stats.panelBrier.toFixed(3) +
-      ' vs historical base rate ' + stats.baseRateBrier.toFixed(3) + ' and neutral 0.250. Overlapping windows are correlated.';
+    if (Number.isFinite(stats.panelBrier)) {
+      note += '. Brier (lower is better): panel ' + stats.panelBrier.toFixed(3) +
+        ' vs historical base rate ' + stats.baseRateBrier.toFixed(3) + ' and neutral 0.250.';
+      if (full) {
+        var themes = (stats.byTheme || []).filter(function (t) { return t.effectiveSample; })
+          .map(function (t) { return t.theme + ' ' + t.effectiveSample; });
+        note += ' Effective sample: ' + stats.effectiveSample + ' non-overlapping 10-session window' + (stats.effectiveSample === 1 ? '' : 's') +
+          ' summed across symbols' + (themes.length ? ' (' + themes.join(', ') + ')' : '') + '.';
+      }
+      note += ' Overlapping windows are correlated.';
+    }
   }
   var forecasts = (data.signals || []).filter(function (s) { return s.forecast && s.forecast.key; });
   var chipNames = {AMD:1,NVDA:1,AVGO:1,MU:1,SOXX:1,SMH:1};

@@ -75,6 +75,14 @@ test('Radar forecasts show horizon, uncertainty, cases and sources without treat
   const note=context.radarForecastNote({forecastRun:{status:'ok'},forecastJournal:{stats:{resolved:0,pending:5,unavailable:0,panelBrier:null}}});
   assert.match(note,/0 resolved · 5 pending/);assert.match(note,/rankings remain unchanged/);assert.doesNotMatch(note,/Brier/);
   assert.match(note,/accuracy has not been measured/);
+  const record=context.radarForecastNote({forecastRun:{status:'ok'},forecastJournal:{stats:{resolved:160,pending:5,unavailable:2,panelBrier:.26,baseRateBrier:.25,
+    effectiveSample:16,since:'2026-06-01',byTheme:[{theme:'AI semis',resolved:80,effectiveSample:9},{theme:'Crypto',resolved:70,effectiveSample:7},{theme:'Energy/geo',resolved:10,effectiveSample:0}]}}});
+  assert.match(record,/Full forward record since 2026-06-01: 160 resolved · 5 pending · 2 unavailable/);
+  assert.match(record,/panel 0.260 vs historical base rate 0.250 and neutral 0.250/);
+  assert.match(record,/Effective sample: 16 non-overlapping 10-session windows summed across symbols \(AI semis 9, Crypto 7\)\. Overlapping windows are correlated/);
+  assert.doesNotMatch(record,/Energy\/geo|reliab|proven|edge/i);
+  const legacy=context.radarForecastNote({forecastRun:{status:'ok'},forecastJournal:{stats:{resolved:3,pending:5,unavailable:0,panelBrier:.2,baseRateBrier:.25}}});
+  assert.match(legacy,/ Forward record: 3 resolved/);assert.doesNotMatch(legacy,/Full forward record|Effective sample/);
   const baseline=context.radarForecastBaselineHtml({probability:.52,baseRate:.56,baseRateN:75});
   assert.match(baseline,/Panel 52%/);assert.match(baseline,/historical outperformance 56%/);
   assert.match(baseline,/4.0 percentage points below history/);assert.match(baseline,/75 non-overlapping historical windows/);

@@ -36,7 +36,7 @@ import { buildJournal } from './journal.js';
 import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 import { tagCatalysts, focusPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
 import { runForecastPanel } from './forecast.js';
-import { measureForecastJournal } from './forecast-journal.js';
+import { stageForecastJournal, JOURNAL_DOC } from './forecast-journal.js';
 import { recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -295,16 +295,17 @@ function initAdmin() {
 async function writeDoc(db, dateKey, doc, bars, forecasts) {
   // No `uid` field: the front end reads these under the rule that allows reads
   // of briefings-bob docs that carry no uid. Admin SDK writes bypass rules.
-  var journalRef = db.collection(COLL).doc('radar-forecast-journal');
+  // Theme per symbol for the compact forecast history; forecast entries carry
+  // no theme of their own.
+  var themes = Object.fromEntries(CONFIG.watchlist.map(function (a) { return [a.symbol, a.theme]; }));
   try { await db.runTransaction(async function (tx) {
-    var snapshot = await tx.get(journalRef);
-    var journal = measureForecastJournal(snapshot.exists ? snapshot.data() : null, forecasts, bars, new Date().toISOString());
+    // Reads the journal and all forecast history, then stages their writes.
+    var journal = await stageForecastJournal(tx, db.collection(COLL), forecasts, bars, new Date().toISOString(), themes);
     // The first stored forecast wins even if a local/forced refresh overlaps.
     doc.signals.forEach(function (s) {
       if (s.forecast && s.forecast.key && journal.entries[s.forecast.key]) s.forecast = journal.entries[s.forecast.key];
     });
     doc.forecastJournal = {stats:journal.stats,method:journal.method,horizon:journal.horizon};
-    tx.set(journalRef, journal);
     tx.set(db.collection(COLL).doc('radar-' + dateKey), doc);
     tx.set(db.collection(COLL).doc('radar-latest'), { value: dateKey });
   }); } catch (e) {
@@ -438,7 +439,7 @@ async function main() {
   STAGE.set('forecast-panel');
   var priorForecasts = null, forecastReadFailed = false;
   try {
-    var forecastSnapshot = await db.collection(COLL).doc('radar-forecast-journal').get();
+    var forecastSnapshot = await db.collection(COLL).doc(JOURNAL_DOC).get();
     priorForecasts = forecastSnapshot.exists ? forecastSnapshot.data() : null;
   } catch (e) {
     forecastReadFailed = true;
