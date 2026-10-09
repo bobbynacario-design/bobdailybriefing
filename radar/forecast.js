@@ -95,7 +95,8 @@ async function runForecastPanel(opts) {
       'Reviewer outlook: at most 40 words; explicitly compare the estimate with the historical base rate. A percentage near 50 is uncertain, not a demonstrated edge. '+
       'Do not claim reliability or that a 1–2 percentage-point difference is meaningful without calibration. Call save_forecasts once.';
     async function call(model,role,extra,review) {
-      const msg=await client.messages.stream({model,max_tokens:4000,output_config:{effort:'medium'},system,
+      // Thinking counts toward max_tokens; Haiku used ~3,100 of the old 4,000 cap.
+      const msg=await client.messages.stream({model,max_tokens:16000,output_config:{effort:'medium'},system,
         tools:[saveTool(review)],messages:[{role:'user',content:'As of '+now+'. '+role+'\nEvidence pack:\n'+pack+(extra || '')}]},{signal:deadline.signal}).finalMessage();
       const u=msg.usage || {};
       run.usage.push({model,input:u.input_tokens || 0,output:u.output_tokens || 0,cacheRead:u.cache_read_input_tokens || 0,cacheWrite:u.cache_creation_input_tokens || 0,calls:1});

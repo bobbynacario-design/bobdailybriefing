@@ -3648,8 +3648,17 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li><b><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event), with a link to the article. Claude searches the web each morning; a catalyst whose link didn't come from those searches is dropped, never shown.</li>
         <li><b>Plan line</b> — <span class="src">Upside · Entry · Stop · Target · R:R</span>. <b>Upside</b> is target distance from entry, useful for comparing reward size. The <b>stop is the useful risk number</b>: the level where the idea is wrong.</li>
       </ul>
-      <p><b>Daily research priorities</b> show up to three eligible setups, with one per exposure group, explicit exclusions and conditional watch plans. The change report compares the previous distinct price-date snapshot and separates technical changes from new sourced news. Plans expire 36 hours after publication and show snapshot freshness. These screening rules are not a measured trading edge.</p>
-      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box. It never repeats a name already in the research priorities, and it picks only from <b>early</b> names: still <b>forming</b>, but with volume on up days already at least 1.6× volume on down days over the last 20 sessions. Those names carry an <span class="help-pill" style="color:var(--green)">early</span> chip on their card.</p>
+      <p><b>Taker Nuggets</b> is the more opportunistic read — the names to press <i>now</i>. It pulls the best actionable signals from the current filter and names the stance. Confirmed structure earns priority, but a forming name already <b>leading its benchmark</b> can outrank a merely-decent confirmed one — that's edge showing up early.</p>
+      <ul>
+        <li><b>Press strength</b> — highest-conviction confirmed setups; scan these first if you want active opportunity.</li>
+        <li><b>Stalk breakout</b> — forming setups with enough pressure to watch closely, but not fully confirmed yet.</li>
+        <li><b>Upside %</b> — the estimated move from entry to target. Use it to compare reward size across nuggets, not as a probability that the target will hit.</li>
+        <li><b>Regime rationale</b> — in risk-off tape, the box leans harder on visible relative strength and confirmed structure; forming names become stalks rather than chases.</li>
+        <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
+      </ul>
+      <p><b>What changed since the previous update?</b> compares today&rsquo;s radar with the previous trading day&rsquo;s. Status changes and names crossing their earlier stop or target come first. Smaller moves sit in a collapsed list: price moves of 3% or more, score moves of 8 points or more, benchmark-lead moves of 3 points or more, and news dated after the previous close. A new article does not prove what moved the price.</p>
+      <p><b>Conditional watch plan</b> (collapsed on each card) — what the next daily snapshot must show to confirm the setup, which checks are still missing, and the close that breaks it. A plan lapses 36 hours after the morning run, so at weekends the plans are hidden until the next run.</p>
+      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box. It never repeats a name already in Taker Nuggets, and it picks only from <b>early</b> names: still <b>forming</b>, but with volume on up days already at least 1.6× volume on down days over the last 20 sessions. Those names carry an <span class="help-pill" style="color:var(--green)">early</span> chip on their card.</p>
       <ul>
         <li><b>Why that zone</b> — tested on about three years of history, early names earned most of what confirmed names did, and nearly half became confirmed within a week. Every other forming name earned about nothing.</li>
         <li><b>Ranked by score</b> within the zone. The old ranking rewarded distance to target (mostly a measure of how jumpy a name is), names scoring under 75, and names <i>not</i> stretched above their average. All three pointed the wrong way when tested.</li>
@@ -6560,22 +6569,26 @@ function radarForecastNote(data) {
   if (chips.length>1) note += ' Shared semiconductor exposure: ' + chips.map(function (s) { return s.symbol; }).join(', ') + '. These outlooks are not independent confirmation.';
   return '<div class="radar-forecast-note">' + esc(note) + '</div>';
 }
-function radarWatchPlanHtml(s, expanded) {
+// The conditional watch plan, collapsed on every card. readShown: the card
+// already shows the Claude read, so its "what would break it" line is not
+// repeated. Stale plans (expired, or old price data) are hidden here and
+// renderRadarChanges says so once.
+function radarWatchPlanHtml(s, readShown) {
   var p = typeof radarAssistantData !== 'undefined' && radarAssistantData && radarAssistantData.plans[s.symbol];
-  if (!p) return '';
+  if (!p || p.stale) return '';
+  var repeatsRead = readShown && s.read && s.read.why && p.evidence === s.read.wouldBreak;
   var html = '<div class="radar-read"><div class="radar-read-row"><span class="radar-read-lab">If / then</span>' + esc(p.condition) + '</div>' +
-    '<div class="radar-forecast-note">' + esc(p.stale || !p.valid || p.broken || p.reached ? 'Reassess the plan before checking follow-through.' : p.pendingChecks.length ? 'Snapshot checks still missing: ' + p.pendingChecks.join(', ') + '.' : 'Watch conditions met in this snapshot; the next update must confirm follow-through.') + '</div>' +
+    '<div class="radar-forecast-note">' + esc(!p.valid || p.broken || p.reached ? 'Reassess the plan before checking follow-through.' : p.pendingChecks.length ? 'Snapshot checks still missing: ' + p.pendingChecks.join(', ') + '.' : 'Watch conditions met in this snapshot; the next update must confirm follow-through.') + '</div>' +
     '<div class="radar-read-row"><span class="radar-read-lab">Invalidation</span>' + esc(p.breaks) + '</div>' +
-    (p.evidence ? '<div class="radar-read-row"><span class="radar-read-lab">Evidence to reassess</span>' + esc(radarForecastText(p.evidence,s.read && s.read.wouldBreak ? 300 : 240,s.read && s.read.wouldBreak ? undefined : s.forecast && s.forecast.proseVersion)) + '</div>' : '') +
-    '<div class="radar-read-row"><span class="radar-read-lab">Next event</span>' + esc(p.event) + '</div>' +
+    (p.evidence && !repeatsRead ? '<div class="radar-read-row"><span class="radar-read-lab">Evidence to reassess</span>' + esc(radarForecastText(p.evidence,s.read && s.read.wouldBreak ? 300 : 240,s.read && s.read.wouldBreak ? undefined : s.forecast && s.forecast.proseVersion)) + '</div>' : '') +
     '<div class="radar-forecast-note">' + esc(p.assetDateKnown ? 'Asset data through ' : 'Snapshot date ') + esc(p.dataDate || 'unknown') +
     ' · snapshot price ' + esc(p.close == null ? 'unknown' : p.close) + ' · daily data, not a live quote.' +
     (!p.assetDateKnown ? ' Individual asset date unavailable in this older snapshot.' : '') +
-    '<br>' + (p.stale ? '<b>Evidence expired or unavailable. Refresh before reassessing.</b> ' : '') +
-    esc(p.expiresAt ? 'Review by ' + p.expiresAt.replace('T',' ').slice(0,16) + ' UTC, or sooner if a new update changes the evidence.' : 'Review time unavailable.') +
+    '<br>' + esc(p.expiresAt ? 'Review by ' + commandAuditTime(p.expiresAt) + ' Manila time, or sooner if a new update changes the evidence.' : 'Review time unavailable.') +
     '</div></div>';
-  return expanded ? html : '<details class="radar-forecast"><summary>Conditional watch plan</summary>' + html + '</details>';
+  return '<details class="radar-forecast"><summary>Conditional watch plan</summary>' + html + '</details>';
 }
+// Status changes and crossed levels lead; smaller moves stay collapsed.
 function renderRadarChanges() {
   var el = document.getElementById('radar-changes');
   if (!el) return;
@@ -6583,13 +6596,28 @@ function renderRadarChanges() {
   var copy = !c || c.status !== 'ok' ? 'No comparable earlier price-date snapshot is available. Changes are not inferred.' :
     'Compared with ' + c.from + ' → ' + c.to + '. Daily snapshots; a new news source does not prove what caused a price move.';
   var rows = c && c.items || [];
+  var major = rows.filter(function (r) { return r.material; });
+  var minor = rows.filter(function (r) { return !r.material; });
   var row = function (r) {
     return '<div class="radar-change-row"><b>' + esc(r.symbol) + '</b> <span class="radar-forecast-note">' + esc(r.basis) + '</span><p>' +
       r.reasons.map(esc).join(' ') + '</p>' + (r.sourceUrl ? radarSourceLink(r.sourceUrl,'Source · ' + r.sourceDate,'radar-read-link') : '') + '</div>';
   };
+  var body = '';
+  if (c && c.status === 'ok') {
+    body = major.length ? major.slice(0,3).map(row).join('') +
+      (major.length > 3 ? '<details class="radar-change-more"><summary>' + (major.length-3) + ' more status or level change' + (major.length === 4 ? '' : 's') + '</summary>' + major.slice(3).map(row).join('') + '</details>' : '') :
+      '<p>No status changes, and no name crossed its earlier stop or target.</p>';
+    if (minor.length) body += '<details class="radar-change-more"><summary>' + minor.length + ' smaller move' + (minor.length === 1 ? '' : 's') +
+      ' (price, score, benchmark lead or news)</summary>' + minor.map(row).join('') + '</details>';
+  }
+  var plans = radarAssistantData ? Object.keys(radarAssistantData.plans).map(function (k) { return radarAssistantData.plans[k]; }) : [];
+  var stale = plans.filter(function (p) { return p.stale; });
+  var staleNote = !stale.length ? '' : stale.length < plans.length ?
+    stale.length + ' watch plan' + (stale.length === 1 ? ' is' : 's are') + ' hidden because the price data is out of date.' :
+    'Watch plans are hidden until the next radar run: ' + (stale[0].expiresAt && Date.now() >= Date.parse(stale[0].expiresAt) ?
+      'their review time passed at ' + commandAuditTime(stale[0].expiresAt) + ' Manila time.' : 'this snapshot is out of date.');
   el.innerHTML = '<div class="radar-taker"><div class="radar-taker-title">What changed since the previous update?</div><p class="radar-forecast-note">' + esc(copy) + '</p>' +
-    (rows.length ? rows.slice(0,3).map(row).join('') + (rows.length > 3 ? '<details class="radar-change-more"><summary>' + (rows.length-3) + ' more changes</summary>' + rows.slice(3).map(row).join('') + '</details>' : '') :
-    c && c.status === 'ok' ? '<p>No material price, status, score, benchmark-lead, prior-level or sourced-news changes.</p>' : '') + '</div>';
+    body + (staleNote ? '<p class="radar-forecast-note">' + esc(staleNote) + '</p>' : '') + '</div>';
 }
 function radarCard(s) {
   var upside = radarUpsideLabel(s);
@@ -6820,11 +6848,11 @@ function radarTakerCard(s) {
     '<div class="radar-nugget-top">' +
       '<div><div class="radar-nugget-symbol">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme || '') + '</span></div>' +
       '<span class="rel-badge ' + radarStatusClass(s.status) + '">' + esc(s.status) + '</span></div>' +
-      '<div><div class="radar-nugget-action">' + esc(s.status === 'confirmed' ? 'Check follow-through' : 'Wait for confirmation') + '</div>' +
+      '<div><div class="radar-nugget-action">' + esc(radarTakerAction(s)) + '</div>' +
       '<div class="radar-nugget-upside">' + esc(radarUpsideLabel(s)) + '</div></div>' +
     '</div>' +
-    '<div class="radar-nugget-body">' + esc(s.status + ' structure; score ' + s.score + '; benchmark lead ' + s.relStrength20d + ' pts over 20 days.') + '</div>' +
-    radarReadHtml(s) + radarWatchPlanHtml(s,true) + radarForecastHtml(s) +
+    '<div class="radar-nugget-body">' + esc(radarTakerWhy(s)) + '</div>' +
+    radarReadHtml(s) + radarWatchPlanHtml(s, true) + radarForecastHtml(s) +
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
 }
@@ -6861,25 +6889,45 @@ function radarWildcardCard(s, isStandout) {
       '<div class="radar-wildcard-score">score ' + esc(s.score) + '</div></div>' +
     '</div>' +
     '<div class="radar-nugget-body">' + esc(radarWildcardWhy(s)) + '</div>' +
-    radarReadHtml(s) + radarWatchPlanHtml(s) + radarForecastHtml(s) +
+    radarReadHtml(s) + radarWatchPlanHtml(s, true) + radarForecastHtml(s) +
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
+}
+// Taker picks: the three best non-invalidated names scoring 58+, by
+// radarTakerRank. radar/catalysts.js focusPicks ports this rule (with
+// radarWildcardPicks) to choose the morning news reads and the picks Ask
+// Daybook reports; radar/picks-parity.test.js fails if the two drift apart.
+function radarTakerPicks(list) {
+  return (list || []).filter(function (s) {
+    return s.status !== 'invalidated' && s.score >= 58;
+  }).sort(function (a, b) {
+    return radarTakerRank(b) - radarTakerRank(a);
+  }).slice(0, 3);
 }
 function renderRadarTakerNuggets(list) {
   var el = document.getElementById('radar-taker');
   if (!el) return;
-  var filtered = RadarAssistantCore.build(Object.assign({},radarData,{signals:list || []}),radarPreviousData);
-  var bySymbol = {};
-  (list || []).forEach(function (s) { bySymbol[s.symbol] = s; });
+  var regime = radarRegimeState ? radarRegimeState.txt : 'Unknown';
+  var regimeCopy = regime === 'Risk-off'
+    ? 'Risk-off stance: be a taker only where relative strength is already visible; otherwise wait for the tape to prove it.'
+    : (regime === 'Mixed'
+      ? 'Mixed stance: take the cleanest pressure, keep size selective, and let weak setups pass.'
+      : 'Supportive stance: press confirmed strength while the stop/tripwire remains intact.');
+  var base = radarTakerPicks(list);
   radarTakerSymbols = {};
-  filtered.priorities.forEach(function (p) { radarTakerSymbols[p.symbol] = true; });
-  var omitted = filtered.excluded.map(function (p) { return '<div><b>' + esc(p.symbol) + '</b> · ' + esc(p.reason) + '</div>'; }).join('');
-  el.innerHTML = '<div class="radar-taker"><div class="radar-taker-head"><div class="radar-taker-title">Today’s research priorities</div>' +
-    '<div class="radar-taker-sub">Up to three · respects your current filters</div></div>' +
-    '<p class="radar-forecast-note">Score ≥70, positive benchmark lead, usable price levels and supportive theme backdrop. One per exposure group; groups can still overlap. These are screening rules, not a measured trading edge.</p>' +
-    (filtered.priorities.length ? '<div class="radar-nuggets">' + filtered.priorities.map(function (p) { return radarTakerCard(bySymbol[p.symbol]); }).join('') + '</div>' :
-      '<p>Nothing compelling in this filter under the current screening rules.</p>') +
-    (omitted ? '<details class="radar-forecast"><summary>Why other setups were excluded (' + filtered.excluded.length + ')</summary>' + omitted + '</details>' : '') + '</div>';
+  base.forEach(function (s) { radarTakerSymbols[s.symbol] = true; });
+  if (!base.length) {
+    el.innerHTML = '<div class="radar-taker"><div class="radar-taker-head"><div><div class="radar-taker-title">Taker Nuggets</div><div class="radar-taker-sub">' + esc(regimeCopy) + '</div></div><div class="radar-taker-sub">No clean taker setup in this filter.</div></div></div>';
+    return;
+  }
+  var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
+    .filter(Boolean).join(' / ');
+  el.innerHTML = '<div class="radar-taker">' +
+    '<div class="radar-taker-head"><div><div class="radar-taker-title">Taker Nuggets</div>' +
+    '<div class="radar-taker-sub">' + esc(regimeCopy) + '</div></div>' +
+    '<div class="radar-taker-sub">' + esc(activeFilter || 'Top actionable pressure points') + '</div></div>' +
+    '<div class="radar-nuggets">' + base.map(radarTakerCard).join('') + '</div>' +
+  '</div>';
 }
 function radarMedian(nums) {
   var a = (nums || []).slice().sort(function (x, y) { return x - y; });
@@ -6899,21 +6947,16 @@ function radarWildcardFloor(list) {
   }).map(radarUpsidePct);
   return Math.max(2.5, radarMedian(fieldUpside) * 0.6);
 }
-function renderRadarWildcards(list) {
-  var el = document.getElementById('radar-wildcards');
-  if (!el) return;
+// Wildcard picks: early forming names outside Taker, ranked by score, with one
+// slot reserved for the single highest-upside name. Ported with
+// radarTakerPicks into radar/catalysts.js focusPicks; keep them in step.
+function radarWildcardPicks(list, taken) {
   var upsideFloor = radarWildcardFloor(list);
-  // A radar doc written before the early flag existed has no `early` key at all;
-  // say so rather than report an empty early zone.
-  if (!(radarSignals || list || []).some(function (s) { return 'early' in s; })) {
-    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">Early names appear from the next radar run.</div></div></div></div>';
-    return;
-  }
   var eligible = (list || []).filter(function (s) {
     var upside = radarUpsidePct(s);
     // The early zone, minus anything the Taker box has already claimed.
     return s.status === 'forming' && s.early === true &&
-      !radarTakerSymbols[s.symbol] &&
+      !(taken || {})[s.symbol] &&
       upside !== null &&
       upside >= upsideFloor &&
       (s.score || 0) >= 42 &&
@@ -6934,11 +6977,25 @@ function renderRadarWildcards(list) {
     if (picks.length >= 3 || s.symbol === standoutSym) return;
     picks.push(s);
   });
-  var base = picks.sort(function (a, b) {
-    return radarWildcardRank(b) - radarWildcardRank(a);
-  });
+  return {
+    picks: picks.sort(function (a, b) { return radarWildcardRank(b) - radarWildcardRank(a); }),
+    standout: standoutSym,
+    floor: upsideFloor
+  };
+}
+function renderRadarWildcards(list) {
+  var el = document.getElementById('radar-wildcards');
+  if (!el) return;
+  // A radar doc written before the early flag existed has no `early` key at all;
+  // say so rather than report an empty early zone.
+  if (!(radarSignals || list || []).some(function (s) { return 'early' in s; })) {
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">Early names appear from the next radar run.</div></div></div></div>';
+    return;
+  }
+  var wild = radarWildcardPicks(list, radarTakerSymbols);
+  var base = wild.picks, standoutSym = wild.standout, upsideFloor = wild.floor;
   if (!base.length) {
-    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No forming names with heavy up-day volume outside the priority list clear today&rsquo;s upside bar (&ge;' + upsideFloor.toFixed(1) + '%). Nothing is setting up early in this filter.</div></div></div></div>';
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No forming names with heavy up-day volume outside the Taker list clear today&rsquo;s upside bar (&ge;' + upsideFloor.toFixed(1) + '%). Nothing is setting up early in this filter.</div></div></div></div>';
     return;
   }
   var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
@@ -10841,7 +10898,7 @@ function renderSports() {
 var LLM_PRICING_USD_PER_1K = {
   'gpt-5.5': { input: 0.005, output: 0.030, cacheRead: 0.0005 },
   'claude-opus-5-5': { input: 0.004, output: 0.020, cacheRead: 0.0002, cacheWrite: 0.005 },
-  'claude-sonnet-5-5': { input: 0.002, output: 0.010, cacheRead: 0.0001, cacheWrite: 0.0025 },
+  'claude-sonnet-5-5': { input: 0.002, output: 0.010, cacheRead: 0.0002, cacheWrite: 0.0025 },
   'claude-haiku-5-5': { input: 0.0001, output: 0.0005, cacheRead: 0.00001, cacheWrite: 0.000125 },
   'claude-haiku-5-5/over-100k': { input: 0.0005, output: 0.0025, cacheRead: 0.00005, cacheWrite: 0.000625 },
   'web-search': { perCall: 0.01 },

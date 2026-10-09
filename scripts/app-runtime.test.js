@@ -4,28 +4,51 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8').replace(/\r\n/g,'\n');
 const radarCore=readFileSync(new URL('../lib/radar-assistant-core.js',import.meta.url),'utf8');
-test('Radar assistant renders priorities, exclusions, source-linked changes and dated conditional plans',()=>{
+test('Radar keeps Taker Nuggets and adds a tiered change report and collapsed, dated watch plans',()=>{
   const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const {context,element}=environment(['radarWatchPlanHtml','radarForecastText','renderRadarChanges','renderRadarTakerNuggets'],
-    {esc,URL,radarSourceLink:(url,title)=>'<a href="'+esc(url)+'">'+esc(title)+'</a>',radarTakerCard:s=>'<article>'+esc(s.symbol)+'</article>'});
+  const {context,element}=environment(['radarWatchPlanHtml','radarForecastText','renderRadarChanges','renderRadarTakerNuggets','radarTakerPicks','radarTakerRank','commandAuditTime'],
+    {esc,URL,radarSourceLink:(url,title)=>'<a href="'+esc(url)+'">'+esc(title)+'</a>',radarTakerCard:s=>'<article>'+esc(s.symbol)+'</article>',
+      radarRegimeState:{txt:'Supportive'},radarFilter:'All',radarStatusFilter:'All',radarTakerSymbols:{}});
   vm.runInContext(radarCore,context);
-  const s={symbol:'AMD',theme:'AI Semis',benchmark:'QQQ',score:85,status:'forming',regimeScore:80,close:100,stop:95,target:110,relStrength20d:4,sma20:98,sma50:96};
-  const current={asOf:new Date().toISOString().slice(0,10),generatedAt:new Date().toISOString(),signals:[s,{...s,symbol:'SMH',score:80}]};
-  context.radarData=current;context.radarPreviousData=null;
+  const s={symbol:'AMD',theme:'AI Semis',benchmark:'QQQ',score:85,status:'forming',regimeScore:80,close:100,stop:95,target:110,relStrength20d:4,sma20:98,sma50:96,
+    read:{why:'Demand',wouldBreak:'Guidance cut'}};
+  const signals=[s,{...s,symbol:'SMH',score:80},{...s,symbol:'SOXX',score:82},{...s,symbol:'PWR',score:60},{...s,symbol:'LOW',score:50}];
+  const current={asOf:new Date().toISOString().slice(0,10),generatedAt:new Date().toISOString(),signals};
   context.radarAssistantData=context.RadarAssistantCore.build(current,null);
-  context.renderRadarTakerNuggets(current.signals);
-  assert.match(element('radar-taker').innerHTML,/Today’s research priorities/);
-  assert.match(element('radar-taker').innerHTML,/Same exposure group as AMD/);
-  assert.match(element('radar-taker').innerHTML,/<article>AMD/);assert.doesNotMatch(element('radar-taker').innerHTML,/<article>SMH/);
+  // Taker: the original rule, three chip names allowed, stance copy back.
+  context.renderRadarTakerNuggets(signals);
+  const taker=element('radar-taker').innerHTML;
+  assert.match(taker,/Taker Nuggets/);assert.match(taker,/Supportive stance/);
+  assert.match(taker,/<article>AMD<\/article><article>SOXX<\/article><article>SMH<\/article>/);assert.doesNotMatch(taker,/PWR|LOW/);
+  assert.deepEqual(Object.keys(context.radarTakerSymbols),['AMD','SOXX','SMH']);
+  context.renderRadarTakerNuggets([{...s,status:'invalidated'}]);assert.match(element('radar-taker').innerHTML,/No clean taker setup/);
+  // Watch plan: collapsed, Manila time, no fixed event line, no repeat of the read on cards that show it.
   const plan=context.radarWatchPlanHtml(s);
-  assert.match(plan,/Conditional watch plan/);assert.match(plan,/If the next daily snapshot/);
-  assert.match(plan,/Individual asset date unavailable/);assert.match(plan,/not a live quote/);assert.match(plan,/Review by/);
-  assert.match(plan,/No verified upcoming event/);
+  assert.match(plan,/^<details class="radar-forecast"><summary>Conditional watch plan/);assert.match(plan,/If the next daily snapshot/);
+  assert.match(plan,/Individual asset date unavailable/);assert.match(plan,/not a live quote/);assert.match(plan,/Review by .+ Manila time/);
+  assert.doesNotMatch(plan,/Next event|upcoming event/);
+  assert.match(plan,/Evidence to reassess[\s\S]*Guidance cut/,'a card without the read keeps the evidence line');
+  assert.doesNotMatch(context.radarWatchPlanHtml(s,true),/Evidence to reassess/,'a card showing the read does not repeat it');
+  // Change report: status/level changes lead, smaller moves collapse.
   context.renderRadarChanges();assert.match(element('radar-changes').innerHTML,/No comparable earlier/);
-  context.radarAssistantData.changes={status:'ok',from:'2026-10-07',to:'2026-10-08',items:[{symbol:'AMD',basis:'news',reasons:['New update: <test>'],sourceUrl:'https://issuer.example/news',sourceDate:'2026-10-08'}]};
-  context.renderRadarChanges();assert.match(element('radar-changes').innerHTML,/&lt;test>/);
-  assert.match(element('radar-changes').innerHTML,/href="https:\/\/issuer.example\/news"/);
-  context.renderRadarTakerNuggets([{...s,status:'invalidated'}]);assert.match(element('radar-taker').innerHTML,/Nothing compelling/);
+  assert.doesNotMatch(element('radar-changes').innerHTML,/Watch plans are hidden/);
+  const item=(symbol,material,extra={})=>({symbol,material,severity:material?3:1,basis:'price / technical',reasons:['Moved '+symbol+'.'],sourceUrl:'',sourceDate:'',...extra});
+  context.radarAssistantData.changes={status:'ok',from:'2026-10-07',to:'2026-10-08',items:[
+    item('AVGO',true,{basis:'news',reasons:['New update: <test>'],sourceUrl:'https://issuer.example/news',sourceDate:'2026-10-08'}),
+    item('XLE',false),item('XOM',false),item('GLD',false),item('SLV',false)]};
+  context.renderRadarChanges();let out=element('radar-changes').innerHTML;
+  assert.match(out,/&lt;test>/);assert.match(out,/href="https:\/\/issuer.example\/news"/);
+  assert.match(out,/<summary>4 smaller moves \(price, score, benchmark lead or news\)<\/summary>/);
+  assert.ok(out.indexOf('AVGO')<out.indexOf('<summary>4 smaller'),'material changes come before the collapsed list');
+  context.radarAssistantData.changes.items=['A','B','C','D','E'].map(x=>item(x,true));
+  context.renderRadarChanges();assert.match(element('radar-changes').innerHTML,/<summary>2 more status or level changes<\/summary>/);
+  context.radarAssistantData.changes.items=[item('XLE',false)];
+  context.renderRadarChanges();out=element('radar-changes').innerHTML;
+  assert.match(out,/No status changes, and no name crossed its earlier stop or target/);assert.match(out,/1 smaller move \(/);
+  // An expired snapshot (every weekend) hides the plans and says so once.
+  context.radarAssistantData=context.RadarAssistantCore.build({...current,generatedAt:new Date(Date.now()-40*3600000).toISOString()},null);
+  assert.equal(context.radarWatchPlanHtml(s),'');
+  context.renderRadarChanges();assert.match(element('radar-changes').innerHTML,/Watch plans are hidden until the next radar run: their review time passed at .+ Manila time/);
 });
 test('Radar history loader skips same-date snapshots, bounds reads and lets the UI handle missing history',async()=>{
   const dates=[];
@@ -988,7 +1011,7 @@ test('a card saved to Evidence points at the saved briefing, or the key autoSave
   assert.equal(context.currentBriefingKey(),'stored-key');
 });
 // Wildcard Upside (October 2026): early forming names only, ranked by score.
-const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarReadHtml','radarForecastHtml','radarForecastText','radarForecastBaselineHtml','radarWatchPlanHtml','radarSourceLink','radarSourceHost'];
+const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarWildcardPicks','radarReadHtml','radarForecastHtml','radarForecastText','radarForecastBaselineHtml','radarWatchPlanHtml','radarSourceLink','radarSourceHost'];
 const wildEnv=(signals,taker={})=>environment(WILD,{esc:v=>String(v ?? ''),uiIcon:()=>'',URL,radarSignals:signals,radarTakerSymbols:taker,radarFilter:'All',radarStatusFilter:'All'});
 const sig=(symbol,o)=>Object.assign({symbol,theme:'T',status:'forming',early:false,score:60,entry:100,stop:96,target:108,accumulation:1.2,relStrength20d:2},o);
 test('Wildcard picks only early forming names, by score, never a Taker name', () => {

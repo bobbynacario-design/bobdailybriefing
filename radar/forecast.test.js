@@ -43,7 +43,7 @@ test('three bounded calls use Haiku drafts and Sonnet review without searches or
   const {run,entries}=await runForecastPanel({signals:[s],bars,now,client});
   assert.equal(run.status,'ok');assert.equal(run.estimated,1);
   assert.deepEqual(client.requests.map(r=>r.model),['claude-haiku-5-5','claude-haiku-5-5','claude-sonnet-5-5']);
-  assert.ok(client.requests.every(r=>r.max_tokens===4000 && r.tools.length===1 && r.tools[0].name==='save_forecasts'));
+  assert.ok(client.requests.every(r=>r.max_tokens===16000 && r.tools.length===1 && r.tools[0].name==='save_forecasts'));
   assert.match(client.requests[2].messages[0].content,/Bull arguments/);
   const {forecast,...without}=s;assert.deepEqual(without,before);
   assert.equal(entries[0].probability,.6);assert.equal(entries[0].bullProbability,.7);assert.equal(entries[0].bearProbability,.4);

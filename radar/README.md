@@ -17,31 +17,33 @@ language anywhere.**
 ### Daily research assistant
 
 The browser compares the latest Radar with the newest saved snapshot having an
-older price date (up to eight direct dated reads). It reports price moves of at
-least two percent, status changes,
-score moves of at least five points, benchmark-lead changes of at least two
-percentage points, crossings of the **previous** stop/target, and newly sourced
-news from the past week. Technical comparisons require advancing asset dates;
-missing history is labelled, and same-date reruns are not a new baseline.
-New source URLs are news updates, not proof of what caused a price move.
+older price date (up to eight direct dated reads). It reports status changes and
+crossings of the **previous** stop/target first ("material"), then collapses the
+smaller moves: price moves of at least 3%, score moves of at least 8 points,
+benchmark-lead changes of at least 3 percentage points, and sourced news dated
+after the previous snapshot's price date. (The morning search finds a new link
+for almost every name, so a new link alone is not news; the old 2%/5/2 bars
+flagged 30 of 30 names on 8 Oct 2026.) Technical comparisons require advancing
+asset dates; missing history is labelled, and same-date reruns are not a new
+baseline. New source URLs are news updates, not proof of what caused a price move.
 
-Research priorities replace the old Taker shortlist: up to three names, score
-at least 70, positive relative strength, theme regime at least 60, and a usable
-stop/close/target bracket. One name per theme/exposure group (known chip names
-share a group); this reduces repetition without claiming full diversification.
-Every omission has a reason. These fixed screening rules are not validated
-trading edges and do not change the underlying scores or forecast probabilities.
-Filters apply to the shortlist; the changes report covers the entire Radar.
+Taker Nuggets and Wildcard Upside pick the names, unchanged. Their rules live in
+`radarTakerPicks` / `radarWildcardPicks` in `index.html` and are ported into
+`catalysts.js` `focusPicks`, which chooses the morning news reads and the
+`picks` field Ask Daybook reports. `picks-parity.test.js` runs both on the same
+signals and fails if they disagree.
 
-Conditional plans describe next-snapshot trend, volume and benchmark-lead checks,
-invalidation, existing evidence to reassess and a review deadline 36 hours after
-publication. Asset bars older than four calendar days (two for crypto), future
-dates or expired snapshots cannot qualify. Prices are explicitly daily snapshot
-values, not live quotes. Scoring now includes each asset's `dataAsOf`; legacy docs
-label the document date as a snapshot date rather than an asset timestamp.
-Historical catalysts are never presented as upcoming events: absent a verified
-future event date, the plan states that none is available. The assistant is pure
-code over existing evidence with **no additional model calls** or stored mutations.
+Conditional plans (collapsed on each card) describe next-snapshot trend, volume
+and benchmark-lead checks, invalidation, existing evidence to reassess (left out
+when the card already shows the same "what would break it" line) and a review
+time 36 hours after publication, shown in Manila time. Asset bars older than
+four calendar days (two for crypto), future dates or expired snapshots make a
+plan stale; stale plans are hidden and the change report says so once, which
+is what happens every weekend. Prices are explicitly daily snapshot values, not
+live quotes. Scoring includes each asset's `dataAsOf`; legacy docs label the
+document date as a snapshot date rather than an asset timestamp. The assistant
+is pure code over existing evidence with **no additional model calls** or
+stored mutations.
 
 ### Forward forecast panel
 
@@ -84,7 +86,7 @@ record, not a backtest; overlapping windows are correlated. Up to 120 completed
 records are retained, along with pending forecasts; missing observations after
 60 days are labelled unavailable, never treated as losses or wins.
 
-The panel is bounded to three calls, 4,000 output tokens per call, medium effort,
+The panel is bounded to three calls, 16,000 output tokens per call (thinking counts toward it), medium effort,
 and a three-minute overall deadline, without automatic retries. Input is bounded
 to five compact evidence packs, below Haiku's higher-price long-context threshold.
 Actual tokens for both models enter the shared usage ledger even if publishing
