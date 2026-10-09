@@ -1,6 +1,6 @@
 // Evidence-bound scenario panel. No search tools, no scoring inputs, three calls maximum.
 import Anthropic from '@anthropic-ai/sdk';
-import {HORIZON,pairedBars,forecastKey,historicalBaseRate} from './forecast-journal.js';
+import {HORIZON,completedThrough,pairedBars,forecastKey,historicalBaseRate} from './forecast-journal.js';
 const DRAFT_MODEL='claude-haiku-5-5', REVIEW_MODEL='claude-sonnet-5-5';
 const clean=(value,max)=>String(value || '').trim().slice(0,max);
 const probability=p=>Number.isFinite(p) && p>=0 && p<=1;
@@ -8,7 +8,7 @@ function selectForecastInputs(signals,bars,prior,now) {
   const today=now.slice(0,10);
   return signals.filter(s=>s.status!=='invalidated' && s.symbol!==s.benchmark)
     .slice().sort((a,b)=>b.score-a.score).map(s=>{
-      const pairs=pairedBars(bars,s.symbol,s.benchmark).filter(b=>b.date<today);
+      const pairs=pairedBars(bars,s.symbol,s.benchmark).filter(b=>b.date<=completedThrough(now,s.benchmark));
       const latest=pairs.at(-1);
       const age=latest?(Date.parse(today)-Date.parse(latest.date))/86400000:Infinity;
       if(pairs.length<60 || age>7) return null;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runForecastPanel,selectForecastInputs,validatedRows} from './forecast.js';
-import {measureForecastJournal,pairedBars,historicalBaseRate} from './forecast-journal.js';
+import {measureForecastJournal,pairedBars,historicalBaseRate,completedThrough} from './forecast-journal.js';
 const now='2026-10-09T01:00:00Z';
 const series=(n,mult=1)=>Array.from({length:n},(_,i)=>({date:new Date(Date.UTC(2026,5,1+i)).toISOString().slice(0,10),close:100+i*mult}));
 const bars={AAA:series(130,2),SPY:series(130),BTC:series(130)};
@@ -90,4 +90,9 @@ test('missing data expires as unavailable and is excluded from accuracy statisti
 });
 test('historical base rate needs ten non-overlapping windows and pairing requires both prices',()=>{
   assert.deepEqual(historicalBaseRate(pairedBars({AAA:series(30,2),SPY:series(29)},'AAA','SPY')),{probability:.5,n:2});
+});
+test('the morning refresh includes a completed US close while excluding partial crypto days',()=>{
+  assert.equal(completedThrough('2026-10-08T22:00:00Z','QQQ'),'2026-10-08');
+  assert.equal(completedThrough('2026-10-08T19:00:00Z','QQQ'),'2026-10-07');
+  assert.equal(completedThrough('2026-10-08T22:00:00Z','BTC'),'2026-10-07');
 });

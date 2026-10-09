@@ -1,5 +1,11 @@
 // Forward-only measurement. Never feeds Radar scores or rewrites a forecast.
 const HORIZON = 10;
+function completedThrough(now, benchmark) {
+  // US regular sessions have ended by 21:00 UTC in either DST regime. Crypto
+  // daily proxies stay on prior UTC dates; their current-day point is partial.
+  const time=new Date(now);
+  return benchmark!=='BTC' && time.getUTCHours()>=21 ? now.slice(0,10) : new Date(time.getTime()-86400000).toISOString().slice(0,10);
+}
 function pairedBars(bars, symbol, benchmark) {
   const other = new Map((bars[benchmark] || []).filter(b=>Number.isFinite(b.close) && b.close>0).map(b=>[b.date,b.close]));
   return (bars[symbol] || []).filter(b=>Number.isFinite(b.close) && b.close>0 && other.has(b.date))
@@ -22,7 +28,7 @@ function measureForecastJournal(prior, additions, bars, now) {
   for(const entry of Object.values(entries)) {
     if(entry.status!=='pending') continue;
     // Entry is a later completed close, never the close already known when forecasting.
-    const pairs=pairedBars(bars,entry.symbol,entry.benchmark).filter(b=>b.date>entry.generatedAt.slice(0,10) && b.date<now.slice(0,10));
+    const pairs=pairedBars(bars,entry.symbol,entry.benchmark).filter(b=>b.date>entry.generatedAt.slice(0,10) && b.date<=completedThrough(now,entry.benchmark));
     if(pairs.length>=HORIZON+1) {
       const start=pairs[0],end=pairs[HORIZON];
       const excess=(end.asset/start.asset-end.benchmark/start.benchmark)*100;
@@ -48,4 +54,4 @@ function measureForecastJournal(prior, additions, bars, now) {
   return {version:1,horizon:HORIZON,generatedAt:now,entries:retained,stats,
     method:'Forward forecasts only; first completed common close after the forecast UTC date to ten matched sessions later. No trading costs. Statistics cover retained outcomes; overlapping windows are correlated.'};
 }
-export {HORIZON,pairedBars,forecastKey,historicalBaseRate,measureForecastJournal};
+export {HORIZON,completedThrough,pairedBars,forecastKey,historicalBaseRate,measureForecastJournal};
