@@ -3,6 +3,45 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8').replace(/\r\n/g,'\n');
+const radarCore=readFileSync(new URL('../lib/radar-assistant-core.js',import.meta.url),'utf8');
+test('Radar assistant renders priorities, exclusions, source-linked changes and dated conditional plans',()=>{
+  const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const {context,element}=environment(['radarWatchPlanHtml','radarForecastText','renderRadarChanges','renderRadarTakerNuggets'],
+    {esc,URL,radarSourceLink:(url,title)=>'<a href="'+esc(url)+'">'+esc(title)+'</a>',radarTakerCard:s=>'<article>'+esc(s.symbol)+'</article>'});
+  vm.runInContext(radarCore,context);
+  const s={symbol:'AMD',theme:'AI Semis',benchmark:'QQQ',score:85,status:'forming',regimeScore:80,close:100,stop:95,target:110,relStrength20d:4,sma20:98,sma50:96};
+  const current={asOf:new Date().toISOString().slice(0,10),generatedAt:new Date().toISOString(),signals:[s,{...s,symbol:'SMH',score:80}]};
+  context.radarData=current;context.radarPreviousData=null;
+  context.radarAssistantData=context.RadarAssistantCore.build(current,null);
+  context.renderRadarTakerNuggets(current.signals);
+  assert.match(element('radar-taker').innerHTML,/Today’s research priorities/);
+  assert.match(element('radar-taker').innerHTML,/Same exposure group as AMD/);
+  assert.match(element('radar-taker').innerHTML,/<article>AMD/);assert.doesNotMatch(element('radar-taker').innerHTML,/<article>SMH/);
+  const plan=context.radarWatchPlanHtml(s);
+  assert.match(plan,/Conditional watch plan/);assert.match(plan,/If the next daily snapshot/);
+  assert.match(plan,/Individual asset date unavailable/);assert.match(plan,/not a live quote/);assert.match(plan,/Review by/);
+  assert.match(plan,/No verified upcoming event/);
+  context.renderRadarChanges();assert.match(element('radar-changes').innerHTML,/No comparable earlier/);
+  context.radarAssistantData.changes={status:'ok',from:'2026-10-07',to:'2026-10-08',items:[{symbol:'AMD',basis:'news',reasons:['New update: <test>'],sourceUrl:'https://issuer.example/news',sourceDate:'2026-10-08'}]};
+  context.renderRadarChanges();assert.match(element('radar-changes').innerHTML,/&lt;test>/);
+  assert.match(element('radar-changes').innerHTML,/href="https:\/\/issuer.example\/news"/);
+  context.renderRadarTakerNuggets([{...s,status:'invalidated'}]);assert.match(element('radar-taker').innerHTML,/Nothing compelling/);
+});
+test('Radar history loader skips same-date snapshots, bounds reads and lets the UI handle missing history',async()=>{
+  const dates=[];
+  const context={Date,db:{},COLL:'briefings-bob',doc:(db,coll,key)=>key,getDoc:async(key)=>{
+    dates.push(key);
+    return {exists:()=>true,data:()=>({asOf:key==='radar-2026-10-08'?'2026-10-08':'2026-10-07',signals:[]})};
+  }};
+  context.window=context;vm.createContext(context);
+  const start=html.indexOf('window.fbLoadRadarPrevious = async function(');
+  vm.runInContext(html.slice(start,html.indexOf('\n};',start)+3),context);
+  const prior=await context.fbLoadRadarPrevious({asOf:'2026-10-08'});
+  assert.equal(prior.asOf,'2026-10-07');assert.equal(dates.length,2);
+  dates.length=0;context.getDoc=async(key)=>{dates.push(key);return {exists:()=>false};};
+  assert.equal(await context.fbLoadRadarPrevious({asOf:'2026-10-08'}),null);assert.equal(dates.length,8);
+  assert.equal(await context.fbLoadRadarPrevious({asOf:'recent'}),null);assert.equal(dates.length,8);
+});
 test('Radar forecasts show horizon, uncertainty, cases and sources without treating estimates as confidence',()=>{
   const {context}=environment(['radarForecastHtml','radarForecastNote','radarForecastText','radarForecastBaselineHtml'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),radarSourceLink:(url,title)=>'<a>'+title+'</a>'});
   const out=context.radarForecastHtml({forecast:{key:'AAA|date',probability:.6,benchmark:'SPY',generatedAt:'2026-10-09',dataAsOf:'2026-10-08',evidenceBasis:'technical only',outlook:'<conditional>',bullCase:'Demand improves',bearCase:'Demand weakens',wouldChange:'Guidance cut',sources:[{url:'https://issuer.example',title:'Issuer'}]}});
@@ -949,7 +988,7 @@ test('a card saved to Evidence points at the saved briefing, or the key autoSave
   assert.equal(context.currentBriefingKey(),'stored-key');
 });
 // Wildcard Upside (October 2026): early forming names only, ranked by score.
-const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarReadHtml','radarForecastHtml','radarForecastText','radarForecastBaselineHtml','radarSourceLink','radarSourceHost'];
+const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarReadHtml','radarForecastHtml','radarForecastText','radarForecastBaselineHtml','radarWatchPlanHtml','radarSourceLink','radarSourceHost'];
 const wildEnv=(signals,taker={})=>environment(WILD,{esc:v=>String(v ?? ''),uiIcon:()=>'',URL,radarSignals:signals,radarTakerSymbols:taker,radarFilter:'All',radarStatusFilter:'All'});
 const sig=(symbol,o)=>Object.assign({symbol,theme:'T',status:'forming',early:false,score:60,entry:100,stop:96,target:108,accumulation:1.2,relStrength20d:2},o);
 test('Wildcard picks only early forming names, by score, never a Taker name', () => {

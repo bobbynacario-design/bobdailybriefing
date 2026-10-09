@@ -31,6 +31,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/intelligence-search-core.js"></script>
 <script src="./lib/evidence-sets-core.js"></script>
 <script src="./lib/entity-timeline-core.js"></script>
+<script src="./lib/radar-assistant-core.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -729,6 +730,21 @@ window.fbLoadRadar = async function(strict) {
     if (strict) throw e;
     return null;
   }
+};
+
+// At most eight direct dated reads; no collection scan or extra model call.
+// Same-price-date reruns/weekends do not become a new comparison baseline.
+window.fbLoadRadarPrevious = async function(current) {
+  if (!current || !/^\d{4}-\d{2}-\d{2}$/.test(current.asOf || '')) return null;
+  var day = Date.parse(current.asOf + 'T12:00:00Z');
+  for (var i = 0; i < 8; i++) {
+    var key = new Date(day-i*86400000).toISOString().slice(0,10);
+    var snap = await getDoc(doc(db, COLL, 'radar-' + key));
+    if (!snap.exists()) continue;
+    var prior = snap.data();
+    if (prior.asOf && prior.asOf < current.asOf && Array.isArray(prior.signals)) return prior;
+  }
+  return null;
 };
 
 // Load this user's decision-drift digest, written by the 06:00 radar refresh
@@ -1481,6 +1497,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
    see .radar-decision-actions) instead of squeezing it to a word per line. */
 .radar-invalidation{color:var(--txt3);font-style:italic;flex:1 1 12rem}
 .radar-taker{background:var(--bg2);border:1px solid rgba(201,168,76,.18);border-left:3px solid var(--gold);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem}
+.radar-change-row{padding:.55rem 0;border-top:1px solid var(--line)}
+.radar-change-row p{margin:.25rem 0;line-height:1.6}
 .radar-taker-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.8rem}
 .radar-taker-title{font-family:var(--mono);font-size:12px;color:var(--gold);letter-spacing:.1em;text-transform:uppercase}
 .radar-taker-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em}
@@ -3193,10 +3211,11 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="hero-divider"></div>
   </div>
   <div id="radar-regime"></div>
-  <div id="radar-taker"></div>
-  <div id="radar-wildcards"></div>
   <div id="radar-filter" class="radar-filter"></div>
   <div id="radar-status-filter"></div>
+  <div id="radar-changes"></div>
+  <div id="radar-taker"></div>
+  <div id="radar-wildcards"></div>
   <div id="radar-out"><div class="empty-state">LOADING RADAR…</div></div>
   <div class="radar-disclaimer">Framing, not advice. Each card describes whether a move is strong, confirmed, and worth its defined risk — never a recommendation to buy or sell. Scored once daily on daily bars.</div>
 </div>
@@ -3627,15 +3646,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li><b><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> catalyst chip</b> — the recent news driving it (earnings, an upgrade, a macro event), with a link to the article. Claude searches the web each morning; a catalyst whose link didn't come from those searches is dropped, never shown.</li>
         <li><b>Plan line</b> — <span class="src">Upside · Entry · Stop · Target · R:R</span>. <b>Upside</b> is target distance from entry, useful for comparing reward size. The <b>stop is the useful risk number</b>: the level where the idea is wrong.</li>
       </ul>
-      <p><b>Taker Nuggets</b> is the more opportunistic read — the names to press <i>now</i>. It pulls the best actionable signals from the current filter and names the stance. Confirmed structure earns priority, but a forming name already <b>leading its benchmark</b> can outrank a merely-decent confirmed one — that's edge showing up early.</p>
-      <ul>
-        <li><b>Press strength</b> — highest-conviction confirmed setups; scan these first if you want active opportunity.</li>
-        <li><b>Stalk breakout</b> — forming setups with enough pressure to watch closely, but not fully confirmed yet.</li>
-        <li><b>Upside %</b> — the estimated move from entry to target. Use it to compare reward size across nuggets, not as a probability that the target will hit.</li>
-        <li><b>Regime rationale</b> — in risk-off tape, the box leans harder on visible relative strength and confirmed structure; forming names become stalks rather than chases.</li>
-        <li><b>Tripwire</b> — the invalidation line. If that breaks, the aggressive read is wrong and the setup goes back to pass/reassess.</li>
-      </ul>
-      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box. It never repeats a name already in Taker Nuggets, and it picks only from <b>early</b> names: still <b>forming</b>, but with volume on up days already at least 1.6× volume on down days over the last 20 sessions. Those names carry an <span class="help-pill" style="color:var(--green)">early</span> chip on their card.</p>
+      <p><b>Daily research priorities</b> show up to three eligible setups, with one per exposure group, explicit exclusions and conditional watch plans. The change report compares the previous distinct price-date snapshot and separates technical changes from new sourced news. Plans expire 36 hours after publication and show snapshot freshness. These screening rules are not a measured trading edge.</p>
+      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box. It never repeats a name already in the research priorities, and it picks only from <b>early</b> names: still <b>forming</b>, but with volume on up days already at least 1.6× volume on down days over the last 20 sessions. Those names carry an <span class="help-pill" style="color:var(--green)">early</span> chip on their card.</p>
       <ul>
         <li><b>Why that zone</b> — tested on about three years of history, early names earned most of what confirmed names did, and nearly half became confirmed within a week. Every other forming name earned about nothing.</li>
         <li><b>Ranked by score</b> within the zone. The old ranking rewarded distance to target (mostly a measure of how jumpy a name is), names scoring under 75, and names <i>not</i> stretched above their average. All three pointed the wrong way when tested.</li>
@@ -6546,6 +6558,37 @@ function radarForecastNote(data) {
   if (chips.length>1) note += ' Shared semiconductor exposure: ' + chips.map(function (s) { return s.symbol; }).join(', ') + '. These outlooks are not independent confirmation.';
   return '<div class="radar-forecast-note">' + esc(note) + '</div>';
 }
+function radarWatchPlanHtml(s, expanded) {
+  var p = typeof radarAssistantData !== 'undefined' && radarAssistantData && radarAssistantData.plans[s.symbol];
+  if (!p) return '';
+  var html = '<div class="radar-read"><div class="radar-read-row"><span class="radar-read-lab">If / then</span>' + esc(p.condition) + '</div>' +
+    '<div class="radar-forecast-note">' + esc(p.stale || !p.valid || p.broken || p.reached ? 'Reassess the plan before checking follow-through.' : p.pendingChecks.length ? 'Snapshot checks still missing: ' + p.pendingChecks.join(', ') + '.' : 'Watch conditions met in this snapshot; the next update must confirm follow-through.') + '</div>' +
+    '<div class="radar-read-row"><span class="radar-read-lab">Invalidation</span>' + esc(p.breaks) + '</div>' +
+    (p.evidence ? '<div class="radar-read-row"><span class="radar-read-lab">Evidence to reassess</span>' + esc(radarForecastText(p.evidence,s.read && s.read.wouldBreak ? 300 : 240,s.read && s.read.wouldBreak ? undefined : s.forecast && s.forecast.proseVersion)) + '</div>' : '') +
+    '<div class="radar-read-row"><span class="radar-read-lab">Next event</span>' + esc(p.event) + '</div>' +
+    '<div class="radar-forecast-note">' + esc(p.assetDateKnown ? 'Asset data through ' : 'Snapshot date ') + esc(p.dataDate || 'unknown') +
+    ' · snapshot price ' + esc(p.close == null ? 'unknown' : p.close) + ' · daily data, not a live quote.' +
+    (!p.assetDateKnown ? ' Individual asset date unavailable in this older snapshot.' : '') +
+    '<br>' + (p.stale ? '<b>Evidence expired or unavailable. Refresh before reassessing.</b> ' : '') +
+    esc(p.expiresAt ? 'Review by ' + p.expiresAt.replace('T',' ').slice(0,16) + ' UTC, or sooner if a new update changes the evidence.' : 'Review time unavailable.') +
+    '</div></div>';
+  return expanded ? html : '<details class="radar-forecast"><summary>Conditional watch plan</summary>' + html + '</details>';
+}
+function renderRadarChanges() {
+  var el = document.getElementById('radar-changes');
+  if (!el) return;
+  var c = radarAssistantData && radarAssistantData.changes;
+  var copy = !c || c.status !== 'ok' ? 'No comparable earlier price-date snapshot is available. Changes are not inferred.' :
+    'Compared with ' + c.from + ' → ' + c.to + '. Daily snapshots; a new news source does not prove what caused a price move.';
+  var rows = c && c.items || [];
+  var row = function (r) {
+    return '<div class="radar-change-row"><b>' + esc(r.symbol) + '</b> <span class="radar-forecast-note">' + esc(r.basis) + '</span><p>' +
+      r.reasons.map(esc).join(' ') + '</p>' + (r.sourceUrl ? radarSourceLink(r.sourceUrl,'Source · ' + r.sourceDate,'radar-read-link') : '') + '</div>';
+  };
+  el.innerHTML = '<div class="radar-taker"><div class="radar-taker-title">What changed since the previous update?</div><p class="radar-forecast-note">' + esc(copy) + '</p>' +
+    (rows.length ? rows.slice(0,3).map(row).join('') + (rows.length > 3 ? '<details><summary>' + (rows.length-3) + ' more changes</summary>' + rows.slice(3).map(row).join('') + '</details>' : '') :
+    c && c.status === 'ok' ? '<p>No material price, status, score, benchmark-lead, prior-level or sourced-news changes.</p>' : '') + '</div>';
+}
 function radarCard(s) {
   var upside = radarUpsideLabel(s);
   var plan = upside + '  ·  Entry ' + radarLevel(s.entry) + '  ·  Stop ' + radarLevel(s.stop) +
@@ -6562,7 +6605,7 @@ function radarCard(s) {
     '</div>' +
     '<div class="card-body">' + esc(s.why) + '</div>' +
     radarCatalyst(s) +
-    radarForecastHtml(s) +
+    radarForecastHtml(s) + radarWatchPlanHtml(s) +
     '<div class="src radar-plan">' + esc(plan) + '</div>' +
     radar52(s) +
     radarContext(s) +
@@ -6647,6 +6690,7 @@ function radarCalibrationWarning() {
     'not an ordering to trust.</div>';
 }
 
+var radarData = null, radarPreviousData = null, radarAssistantData = null;
 var radarSignals = null;          // cached signals from the last load
 var radarFilter = 'All';          // active asset-type filter
 var radarStatusFilter = 'All';    // active status sub-filter
@@ -6721,6 +6765,8 @@ function renderRadarCards() {
   var list = radarAssetFiltered().filter(function (s) {
     return radarStatusFilter === 'All' || s.status === radarStatusFilter;
   });
+  radarAssistantData = RadarAssistantCore.build(radarData,radarPreviousData);
+  renderRadarChanges();
   renderRadarTakerNuggets(list);
   renderRadarWildcards(list);
   if (list.length) {
@@ -6772,11 +6818,11 @@ function radarTakerCard(s) {
     '<div class="radar-nugget-top">' +
       '<div><div class="radar-nugget-symbol">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme || '') + '</span></div>' +
       '<span class="rel-badge ' + radarStatusClass(s.status) + '">' + esc(s.status) + '</span></div>' +
-      '<div><div class="radar-nugget-action">' + esc(radarTakerAction(s)) + '</div>' +
+      '<div><div class="radar-nugget-action">' + esc(s.status === 'confirmed' ? 'Check follow-through' : 'Wait for confirmation') + '</div>' +
       '<div class="radar-nugget-upside">' + esc(radarUpsideLabel(s)) + '</div></div>' +
     '</div>' +
-    '<div class="radar-nugget-body">' + esc(radarTakerWhy(s)) + '</div>' +
-    radarReadHtml(s) + radarForecastHtml(s) +
+    '<div class="radar-nugget-body">' + esc(s.status + ' structure; score ' + s.score + '; benchmark lead ' + s.relStrength20d + ' pts over 20 days.') + '</div>' +
+    radarReadHtml(s) + radarWatchPlanHtml(s,true) + radarForecastHtml(s) +
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
 }
@@ -6813,38 +6859,25 @@ function radarWildcardCard(s, isStandout) {
       '<div class="radar-wildcard-score">score ' + esc(s.score) + '</div></div>' +
     '</div>' +
     '<div class="radar-nugget-body">' + esc(radarWildcardWhy(s)) + '</div>' +
-    radarReadHtml(s) + radarForecastHtml(s) +
+    radarReadHtml(s) + radarWatchPlanHtml(s) + radarForecastHtml(s) +
     '<div class="radar-nugget-risk">Tripwire: ' + esc(invalid) + '</div>' +
   '</div>';
 }
 function renderRadarTakerNuggets(list) {
   var el = document.getElementById('radar-taker');
   if (!el) return;
-  var regime = radarRegimeState ? radarRegimeState.txt : 'Unknown';
-  var regimeCopy = regime === 'Risk-off'
-    ? 'Risk-off stance: be a taker only where relative strength is already visible; otherwise wait for the tape to prove it.'
-    : (regime === 'Mixed'
-      ? 'Mixed stance: take the cleanest pressure, keep size selective, and let weak setups pass.'
-      : 'Supportive stance: press confirmed strength while the stop/tripwire remains intact.');
-  var base = (list || []).filter(function (s) {
-    return s.status !== 'invalidated' && s.score >= 58;
-  }).sort(function (a, b) {
-    return radarTakerRank(b) - radarTakerRank(a);
-  }).slice(0, 3);
+  var filtered = RadarAssistantCore.build(Object.assign({},radarData,{signals:list || []}),radarPreviousData);
+  var bySymbol = {};
+  (list || []).forEach(function (s) { bySymbol[s.symbol] = s; });
   radarTakerSymbols = {};
-  base.forEach(function (s) { radarTakerSymbols[s.symbol] = true; });
-  if (!base.length) {
-    el.innerHTML = '<div class="radar-taker"><div class="radar-taker-head"><div><div class="radar-taker-title">Taker Nuggets</div><div class="radar-taker-sub">' + esc(regimeCopy) + '</div></div><div class="radar-taker-sub">No clean taker setup in this filter.</div></div></div>';
-    return;
-  }
-  var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
-    .filter(Boolean).join(' / ');
-  el.innerHTML = '<div class="radar-taker">' +
-    '<div class="radar-taker-head"><div><div class="radar-taker-title">Taker Nuggets</div>' +
-    '<div class="radar-taker-sub">' + esc(regimeCopy) + '</div></div>' +
-    '<div class="radar-taker-sub">' + esc(activeFilter || 'Top actionable pressure points') + '</div></div>' +
-    '<div class="radar-nuggets">' + base.map(radarTakerCard).join('') + '</div>' +
-  '</div>';
+  filtered.priorities.forEach(function (p) { radarTakerSymbols[p.symbol] = true; });
+  var omitted = filtered.excluded.map(function (p) { return '<div><b>' + esc(p.symbol) + '</b> · ' + esc(p.reason) + '</div>'; }).join('');
+  el.innerHTML = '<div class="radar-taker"><div class="radar-taker-head"><div class="radar-taker-title">Today’s research priorities</div>' +
+    '<div class="radar-taker-sub">Up to three · respects your current filters</div></div>' +
+    '<p class="radar-forecast-note">Score ≥70, positive benchmark lead, usable price levels and supportive theme backdrop. One per exposure group; groups can still overlap. These are screening rules, not a measured trading edge.</p>' +
+    (filtered.priorities.length ? '<div class="radar-nuggets">' + filtered.priorities.map(function (p) { return radarTakerCard(bySymbol[p.symbol]); }).join('') + '</div>' :
+      '<p>Nothing compelling in this filter under the current screening rules.</p>') +
+    (omitted ? '<details class="radar-forecast"><summary>Why other setups were excluded (' + filtered.excluded.length + ')</summary>' + omitted + '</details>' : '') + '</div>';
 }
 function radarMedian(nums) {
   var a = (nums || []).slice().sort(function (x, y) { return x - y; });
@@ -6903,7 +6936,7 @@ function renderRadarWildcards(list) {
     return radarWildcardRank(b) - radarWildcardRank(a);
   });
   if (!base.length) {
-    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No forming names with heavy up-day volume outside the Taker list clear today&rsquo;s upside bar (&ge;' + upsideFloor.toFixed(1) + '%). Nothing is setting up early in this filter.</div></div></div></div>';
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No forming names with heavy up-day volume outside the priority list clear today&rsquo;s upside bar (&ge;' + upsideFloor.toFixed(1) + '%). Nothing is setting up early in this filter.</div></div></div></div>';
     return;
   }
   var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]
@@ -6919,6 +6952,7 @@ function renderRadar() {
   var out = document.getElementById('radar-out');
   var sub = document.getElementById('radar-sub');
   var regimeEl = document.getElementById('radar-regime');
+  var changesEl = document.getElementById('radar-changes');
   var takerEl = document.getElementById('radar-taker');
   var wildcardEl = document.getElementById('radar-wildcards');
   var filterEl = document.getElementById('radar-filter');
@@ -6932,8 +6966,19 @@ function renderRadar() {
   var jp = window.fbLoadJournal
     ? window.fbLoadJournal().catch(function () { return null; })
     : Promise.resolve(null);
-  return Promise.all([window.fbLoadRadar(), jp]).then(function (both) {
-    var data = both[0];
+  if (changesEl) changesEl.innerHTML = '';
+  radarData = null; radarPreviousData = null; radarAssistantData = null;
+  var load = window.fbLoadRadar().then(async function (data) {
+    var previous = null;
+    if (data && window.fbLoadRadarPrevious) {
+      try { previous = await window.fbLoadRadarPrevious(data); }
+      catch (e) { console.warn('Radar comparison unavailable:', e); }
+    }
+    return {data:data, previous:previous};
+  });
+  return Promise.all([load, jp]).then(function (both) {
+    var data = both[0].data;
+    radarData = data; radarPreviousData = both[0].previous;
     radarJournal = both[1];
     if (!data || !data.signals || !data.signals.length) {
       radarSignals = null;

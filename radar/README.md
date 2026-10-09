@@ -14,6 +14,35 @@ language anywhere.**
 
 ## Architecture
 
+### Daily research assistant
+
+The browser compares the latest Radar with the newest saved snapshot having an
+older price date (up to eight direct dated reads). It reports price moves of at
+least two percent, status changes,
+score moves of at least five points, benchmark-lead changes of at least two
+percentage points, crossings of the **previous** stop/target, and newly sourced
+news from the past week. Technical comparisons require advancing asset dates;
+missing history is labelled, and same-date reruns are not a new baseline.
+New source URLs are news updates, not proof of what caused a price move.
+
+Research priorities replace the old Taker shortlist: up to three names, score
+at least 70, positive relative strength, theme regime at least 60, and a usable
+stop/close/target bracket. One name per theme/exposure group (known chip names
+share a group); this reduces repetition without claiming full diversification.
+Every omission has a reason. These fixed screening rules are not validated
+trading edges and do not change the underlying scores or forecast probabilities.
+Filters apply to the shortlist; the changes report covers the entire Radar.
+
+Conditional plans describe next-snapshot trend, volume and benchmark-lead checks,
+invalidation, existing evidence to reassess and a review deadline 36 hours after
+publication. Asset bars older than four calendar days (two for crypto), future
+dates or expired snapshots cannot qualify. Prices are explicitly daily snapshot
+values, not live quotes. Scoring now includes each asset's `dataAsOf`; legacy docs
+label the document date as a snapshot date rather than an asset timestamp.
+Historical catalysts are never presented as upcoming events: absent a verified
+future event date, the plan states that none is available. The assistant is pure
+code over existing evidence with **no additional model calls** or stored mutations.
+
 ### Forward forecast panel
 
 After Opus gathers catalysts, the five highest-scoring eligible signals receive

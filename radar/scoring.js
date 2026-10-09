@@ -407,6 +407,7 @@ function scoreUniverse(barsByAsset, config) {
       score: Math.round(score),
       status: status,
       early: early,
+      dataAsOf: bars[bars.length - 1].date,
       close: round(close, 2),
       sma20: round(s20, 2),
       sma50: round(s50, 2),
