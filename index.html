@@ -1269,6 +1269,7 @@ window._fbReady = true;
   --blue:#3498DB;--blue-dim:rgba(52,152,219,0.12);
   --purple:#9B6FE8;--purple-dim:rgba(155,111,232,0.12);
   --teal:#1EC8C8;
+  --rose:#EC6FB0;
   --amber:#F0A832;
   --serif:'Playfair Display',Georgia,serif;
   --mono:'DM Mono','Courier New',monospace;
@@ -1290,6 +1291,7 @@ body.light{
   --blue:#225C91;--blue-dim:rgba(34,92,145,0.1);
   --purple:#6845AD;--purple-dim:rgba(104,69,173,0.1);
   --teal:#0C6464;
+  --rose:#A3236B;
   --amber:#7F4F00;
   --txt:#1A1A1A;--txt2:#3F4754;--txt3:#556070;
 }
@@ -1653,9 +1655,12 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .daycal-day.is-selected{border-color:var(--gold);background:var(--gold-dim)}
 .daycal-number{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:.25rem}
 .daycal-bar{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--gold);background:var(--bg3);border-radius:3px;padding:.15rem .2rem;font-size:10px;line-height:1.4;margin:.15rem 0}
-.daycal-meeting{border-left-color:var(--blue)}.daycal-task{border-left-color:var(--purple)}.daycal-travel{border-left-color:var(--green)}.daycal-sale{border-left-color:var(--amber)}.daycal-review{border-left-color:var(--red)}.daycal-allday{border-left-color:var(--teal)}
+.daycal-meeting{border-left-color:var(--blue)}.daycal-task{border-left-color:var(--purple)}.daycal-travel{border-left-color:var(--green)}.daycal-sale{border-left-color:var(--amber)}.daycal-review{border-left-color:var(--red)}.daycal-allday{border-left-color:var(--teal)}.daycal-poker{border-left-color:var(--rose)}
 .daycal-event{border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:8px;background:var(--bg2);padding:.7rem;margin:.5rem 0;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
-.daycal-event.daycal-meeting{border-left-color:var(--blue)}.daycal-event.daycal-task{border-left-color:var(--purple)}.daycal-event.daycal-travel{border-left-color:var(--green)}.daycal-event.daycal-sale{border-left-color:var(--amber)}.daycal-event.daycal-review{border-left-color:var(--red)}.daycal-event.daycal-allday{border-left-color:var(--teal)}
+.daycal-event.daycal-meeting{border-left-color:var(--blue)}.daycal-event.daycal-task{border-left-color:var(--purple)}.daycal-event.daycal-travel{border-left-color:var(--green)}.daycal-event.daycal-sale{border-left-color:var(--amber)}.daycal-event.daycal-review{border-left-color:var(--red)}.daycal-event.daycal-allday{border-left-color:var(--teal)}.daycal-event.daycal-poker{border-left-color:var(--rose)}
+.daycal-tip{position:fixed;z-index:60;max-width:320px;padding:.5rem .65rem;border:1px solid var(--rim2);border-radius:8px;background:var(--bg2);color:var(--txt);box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:12px;line-height:1.5;white-space:pre-line;overflow-wrap:anywhere;pointer-events:none}
+.daycal-tip[hidden]{display:none}
+.daycal-bar[data-tip],.daycal-more[data-tip]{cursor:help}
 .daycal-agenda h3{font-family:var(--serif);font-size:16px;margin:1rem 0 .5rem}.daycal-agenda h3:first-child{margin-top:0}
 .daycal-editor{border:1px solid var(--rim);border-radius:10px;background:var(--bg2);padding:1rem;margin:1rem 0}.daycal-editor h3{font-size:15px;margin-bottom:.75rem}
 .daycal-editor .flights-controls{grid-template-columns:repeat(3,minmax(0,1fr))}.daycal-editor textarea{min-height:65px;width:100%;background:var(--bg3);color:var(--txt);border:1px solid var(--rim);border-radius:8px;padding:.5rem .65rem;font-family:var(--sans);font-size:12px}
@@ -1667,7 +1672,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 /* Phone cells are ~46px wide: titles cannot be read there, so items become
    colour strips and the agenda below carries the detail. */
 @media(max-width:600px){.daycal-day{min-height:58px;padding:.25rem}.daycal-bar{font-size:0;height:5px;padding:0;border-left:0;border-radius:3px;margin:.2rem 0 0;background:var(--gold)}
-  .daycal-bar.daycal-meeting{background:var(--blue)}.daycal-bar.daycal-task{background:var(--purple)}.daycal-bar.daycal-travel{background:var(--green)}.daycal-bar.daycal-sale{background:var(--amber)}.daycal-bar.daycal-review{background:var(--red)}.daycal-bar.daycal-allday{background:var(--teal)}
+  .daycal-bar.daycal-meeting{background:var(--blue)}.daycal-bar.daycal-task{background:var(--purple)}.daycal-bar.daycal-travel{background:var(--green)}.daycal-bar.daycal-sale{background:var(--amber)}.daycal-bar.daycal-review{background:var(--red)}.daycal-bar.daycal-allday{background:var(--teal)}.daycal-bar.daycal-poker{background:var(--rose)}
   .daycal-day .flights-note{font-size:9px;margin:.15rem 0 0}.daycal-week span{font-size:9px}.daycal-editor .flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.daycal-toolbar h2{font-size:16px;min-width:8.5rem}}
 .flight-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;align-items:start}
 .flight-city{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;min-width:0}
@@ -3585,14 +3590,14 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 <div class="page" id="page-calendar">
   <div class="hero"><div class="hero-inner"><div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg> Calendar</div><div class="hero-sub">Your Daybook plans, meetings and deadlines · Philippine time</div></div></div>
   <div class="daycal-toolbar"><span class="daycal-nav"><button class="tool-chip" onclick="daycalMonth(-1)" aria-label="Previous month">←</button><h2 id="daycal-month"></h2><button class="tool-chip" onclick="daycalMonth(1)" aria-label="Next month">→</button></span><span class="daycal-nav"><button class="tool-chip" onclick="daycalToday()">Today</button><button id="daycal-view-month" class="tool-chip" onclick="daycalView('month')" aria-pressed="true">Month</button><button id="daycal-view-list" class="tool-chip" onclick="daycalView('list')" aria-pressed="false">List</button></span></div>
-  <div class="daycal-toolbar"><label>Show <select id="daycal-filter" onchange="paintDaybookCalendar()"><option value="all">All items</option><option value="meeting">Meetings</option><option value="task">Tasks &amp; research deadlines</option><option value="travel">Travel plans</option><option value="sale">Flight sale deadlines</option><option value="review">Decision reviews</option><option value="personal">Personal</option><option value="allday">Leave, holidays &amp; all-day</option></select></label><label><input id="daycal-done" type="checkbox" onchange="paintDaybookCalendar()"> Include completed tasks</label><button class="tool-chip" id="daycal-add" onclick="daycalNew()" disabled>Add event</button><button class="tool-chip" onclick="renderDaybookCalendar()">Reload</button><button class="tool-chip" onclick="daycalExport()">Export month .ICS</button><span class="flights-note" id="daycal-count"></span></div>
+  <div class="daycal-toolbar"><label>Show <select id="daycal-filter" onchange="paintDaybookCalendar()"><option value="all">All items</option><option value="meeting">Meetings</option><option value="task">Tasks &amp; research deadlines</option><option value="travel">Travel plans</option><option value="sale">Flight sale deadlines</option><option value="review">Decision reviews</option><option value="personal">Personal</option><option value="allday">Leave, holidays &amp; all-day</option><option value="poker">Poker</option></select></label><label><input id="daycal-done" type="checkbox" onchange="paintDaybookCalendar()"> Include completed tasks</label><button class="tool-chip" id="daycal-add" onclick="daycalNew()" disabled>Add event</button><button class="tool-chip" onclick="renderDaybookCalendar()">Reload</button><button class="tool-chip" onclick="daycalExport()">Export month .ICS</button><span class="flights-note" id="daycal-count"></span></div>
   <p id="daycal-status" class="flights-note" role="status"></p>
   <div id="daycal-overlaps"></div>
   <form id="daycal-editor" class="daycal-editor" hidden onsubmit="event.preventDefault();daycalSave()">
     <h3 id="daycal-editor-title">Add event</h3>
     <div class="flights-controls">
       <label>Title<input id="daycal-title" required maxlength="160" placeholder="Meeting, task or personal plan"></label>
-      <label>Type<select id="daycal-kind"><option value="personal">Personal</option><option value="task">Task</option><option value="meeting">Meeting</option><option value="travel">Travel plan</option></select></label>
+      <label>Type<select id="daycal-kind"><option value="personal">Personal</option><option value="task">Task</option><option value="meeting">Meeting</option><option value="travel">Travel plan</option><option value="poker">Poker</option></select></label>
       <label>Start date<input id="daycal-start" type="date" required></label>
       <label>End date (optional)<input id="daycal-end" type="date"></label>
       <label>Time (optional, PHT)<input id="daycal-time" type="time"></label>
@@ -3921,9 +3926,9 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg> Calendar</div>
-      <p>Open <b>Home → Calendar</b> for a month grid like PokerHQ, or switch to List. Click a day for its agenda; use Today and the month arrows to navigate. Filter meetings, tasks, travel, sales, decision reviews or personal events. Add, edit or delete your own events (delete asks first) and mark dated tasks done. These events are private to your signed-in account and sync through Firebase. On a phone, days show coloured strips by type; tap a day and its agenda appears below. List shows a multi-day plan once, on its first day.</p>
+      <p>Open <b>Home → Calendar</b> for a month grid like PokerHQ, or switch to List. Click a day for its agenda; use Today and the month arrows to navigate. Filter meetings, tasks, travel, sales, decision reviews, personal events, leave and holidays, or poker. Hover an entry in the grid to see it in full (title, time or span, and source); hover "+N more" for the rest of that day. Add, edit or delete your own events (delete asks first) and mark dated tasks done. These events are private to your signed-in account and sync through Firebase. On a phone, days show coloured strips by type; tap a day and its agenda appears below. List shows a multi-day plan once, on its first day.</p>
       <p>Calendar combines your added events, decision review dates, active research deadlines, saved flight plans and flight-sale booking deadlines. A saved fare is a <b>tentative plan, not a booking</b>; broad promotional travel windows are not scheduled trips. Meeting/travel overlaps are prompts to check. Source buttons open the existing app sections without starting model calls.</p>
-      <p>Connected calendar imports show account-related meetings in the next 36 hours and <b>Leave, holidays &amp; all-day</b> entries for the next 90 days, checked at 06:00 and 18:00 PHT; other timed events are not imported, so this is not a full Google or Outlook sync. For Zoho People leave and company holidays, turn on Zoho's sync to Google Calendar or Microsoft 365 (Leave → Leave Summary → Calendar view → ⋯) for a calendar linked under About you. Connect calendars under About you. Reload reads saved data. Export month .ICS downloads this month's filtered items for you to import elsewhere; it does not write to another calendar, book flights or send notifications. All displayed times and manually entered times use Philippine time. This section makes no OpenAI or Claude calls.</p>
+      <p>Connected calendar imports show account-related meetings in the next 36 hours and <b>Leave, holidays &amp; all-day</b> entries for the next 90 days, checked at 06:00 and 18:00 PHT; other timed events are not imported, so this is not a full Google or Outlook sync. All-day entries whose title is poker-related (♠, poker, tournament, main event, deepstack, APPT, WSOP, WPT, [METRO], RVS Cup, or a Manila card room such as Okada or Solaire) show as <b>Poker</b> in rose; the rest stay as leave, holidays and all-day. You can also give your own events the Poker type. For Zoho People leave and company holidays, turn on Zoho's sync to Google Calendar or Microsoft 365 (Leave → Leave Summary → Calendar view → ⋯) for a calendar linked under About you. Connect calendars under About you. Reload reads saved data. Export month .ICS downloads this month's filtered items for you to import elsewhere; it does not write to another calendar, book flights or send notifications. All displayed times and manually entered times use Philippine time. This section makes no OpenAI or Claude calls.</p>
     </div>
 
     <div class="help-card">
