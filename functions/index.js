@@ -1507,7 +1507,8 @@ exports.testBriefingDelivery = onCall(
 
 // ─────────────────────────────────────────────────────────────
 // Calendars (functions/calendar.js): his secret iCal links, read twice a day,
-// keeping the next 36 hours of meetings that name one of his accounts. The
+// keeping the next 36 hours of meetings that name one of his accounts and
+// 90 days of all-day entries (leave, holidays) for the Calendar page. The
 // owner's only: the briefs they lead to are owner-only AI.
 // ─────────────────────────────────────────────────────────────
 async function fetchCalendar(url) {
@@ -1526,8 +1527,9 @@ async function fetchCalendar(url) {
   return body;
 }
 
-// Read every saved link and keep the matched meetings in meetings-<uid>.
-// Unmatched events are counted, never stored. The link itself never appears
+// Read every saved link and keep the matched meetings, and the all-day
+// entries (title and dates only), in meetings-<uid>. Other timed events are
+// counted, never stored. The link itself never appears
 // in a result or a log.
 async function readCalendars(db, uid, now) {
   const coll = db.collection(BRIEFINGS_COLL);
@@ -1537,23 +1539,29 @@ async function readCalendars(db, uid, now) {
   const links = Calendar.cleanLinks(calendarSnap.exists ? calendarSnap.data().links : []);
   const kept = accountsSnap && accountsSnap.exists ? cleanAccounts((accountsSnap.data() || {}).accounts) : [];
   const accounts = kept.length ? kept : DEFAULT_ACCOUNTS;
-  const from = now, to = now + Calendar.WINDOW_HOURS * 3600000;
+  const from = now, to = now + Calendar.WINDOW_HOURS * 3600000, span = Calendar.dayWindow(now);
+  const priorSnap = await coll.doc("meetings-" + uid).get().catch(() => null);
+  const prior = priorSnap && priorSnap.exists ? priorSnap.data() : {};
   const results = await Promise.all(links.map(async (link) => {
     try {
-      const events = Calendar.eventsBetween(await fetchCalendar(link.url), from, to);
-      const meetings = Calendar.matchMeetings(events, accounts, link.service);
-      return {meetings, source: Calendar.readResult(link.service, events, meetings, "")};
+      const read = Calendar.readCalendar(await fetchCalendar(link.url), from, to, span.fromDay, span.toDay);
+      const meetings = Calendar.matchMeetings(read.events, accounts, link.service);
+      const days = Calendar.matchDays(read.days, link.service);
+      return {meetings, days, source: Calendar.readResult(link.service, read.events, meetings, "", days)};
     } catch (error) {
       logger.warn("Calendar read failed", {uid, service: link.service, message: error.message});
-      return {meetings: [], source: Calendar.readResult(link.service, [], [], error.message)};
+      // A failed read keeps that calendar's leave and holidays from the last
+      // good read, rather than blanking 90 days until the next run.
+      const kept = (prior.days || []).filter((d) => d && d.calendar === link.service && d.end >= span.fromDay);
+      return {meetings: [], days: kept, source: Calendar.readResult(link.service, [], [], error.message)};
     }
   }));
-  const before = await coll.doc("meetings-" + uid).get().then((snap) => (snap.exists ? snap.data().items || [] : [])).catch(() => []);
   const built = {};
-  before.forEach((m) => { if (m && m.id && m.briefId) built[m.id] = m.briefId; });
+  (prior.items || []).forEach((m) => { if (m && m.id && m.briefId) built[m.id] = m.briefId; });
   const record = {
     uid, kind: "meetings", checkedAt: new Date(now).toISOString(),
     items: Calendar.mergeMeetings(results.map((r) => r.meetings)).map((m) => (built[m.id] ? Object.assign({}, m, {briefId: built[m.id]}) : m)),
+    days: Calendar.mergeDays(results.map((r) => r.days)),
     sources: results.map((r) => r.source),
   };
   await coll.doc("meetings-" + uid).set(record);

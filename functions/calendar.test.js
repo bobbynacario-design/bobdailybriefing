@@ -69,7 +69,8 @@ test("only meetings naming one of his accounts are kept, with a stable id", () =
 test("results from both calendars merge without repeats, soonest first; a failed read says why", () => {
   const a = {id: "m1", start: "2026-10-02T00:00:00Z"}, b = {id: "m2", start: "2026-10-01T00:00:00Z"};
   assert.deepEqual(Cal.mergeMeetings([[a], [b, a]]).map((m) => m.id), ["m2", "m1"]);
-  assert.deepEqual(Cal.readResult("Google", [1, 2, 3], [a], ""), {service: "Google", ok: true, events: 3, matched: 1});
+  assert.deepEqual(Cal.readResult("Google", [1, 2, 3], [a], ""), {service: "Google", ok: true, events: 3, matched: 1, allDay: 0});
+  assert.equal(Cal.readResult("Google", [], [], "", [{}, {}]).allDay, 2);
   assert.deepEqual(Cal.readResult("Outlook", [], [], "HTTP 404"), {service: "Outlook", ok: false, error: "HTTP 404"});
   assert.throws(() => Cal.eventsBetween("not a calendar", 0, 1), "a broken file throws, so the caller can report it");
 });
@@ -102,4 +103,49 @@ test("a brief is due for a meeting with none yet, from 30 minutes to 30 hours ah
     {id: "later", start: at(31)}, {id: "past", start: at(-2)}];
   assert.deepEqual(Cal.dueForBriefs(items, now).map((m) => m.id), ["tonight", "tomorrow"]);
   assert.deepEqual(Cal.dueForBriefs(null, now), []);
+});
+
+// What Zoho People pushes into Google or Microsoft 365: approved leave and
+// public holidays as all-day entries, beside ordinary meetings.
+const ZOHO = lines([
+  "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Google Inc//Google Calendar 70.9054//EN",
+  "BEGIN:VEVENT", "UID:hol-1", "SUMMARY:Bonifacio Day", "DTSTART;VALUE=DATE:20261130", "DTEND;VALUE=DATE:20261201", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:leave-1", "SUMMARY:Annual Leave", "DTSTART;VALUE=DATE:20261019", "DTEND;VALUE=DATE:20261022", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:xmas", "SUMMARY:Christmas Day", "DTSTART;VALUE=DATE:20201225", "RRULE:FREQ=YEARLY", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:gone", "SUMMARY:Cancelled leave", "STATUS:CANCELLED", "DTSTART;VALUE=DATE:20261023", "DTEND;VALUE=DATE:20261024", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:old", "SUMMARY:Last month's leave", "DTSTART;VALUE=DATE:20260901", "DTEND;VALUE=DATE:20260903", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:late", "SUMMARY:Far-off holiday", "DTSTART;VALUE=DATE:20270301", "DTEND;VALUE=DATE:20270302", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:meet", "SUMMARY:QBE review", "DTSTART:20261012T010000Z", "DTEND:20261012T020000Z", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:running", "SUMMARY:Started before today", "DTSTART;VALUE=DATE:20261008", "DTEND;VALUE=DATE:20261013", "END:VEVENT",
+  "END:VCALENDAR",
+]);
+
+test("all-day entries: leave and holidays kept with inclusive end days, timed, cancelled and out-of-window ones left out", () => {
+  const span = Cal.dayWindow(Date.parse("2026-10-10T03:00:00Z"));
+  assert.deepEqual(span, {fromDay: "2026-10-10", toDay: "2027-01-08"});
+  assert.equal(Cal.dayWindow(Date.parse("2026-10-09T16:30:00Z")).fromDay, "2026-10-10", "the window starts on the Manila date");
+  const days = Cal.daysBetween(ZOHO, span.fromDay, span.toDay);
+  assert.deepEqual(days.map((d) => [d.title, d.start, d.end]), [
+    ["Started before today", "2026-10-08", "2026-10-12"],
+    ["Annual Leave", "2026-10-19", "2026-10-21"],
+    ["Bonifacio Day", "2026-11-30", "2026-11-30"],
+    ["Christmas Day", "2026-12-25", "2026-12-25"],
+  ]);
+  const both = Cal.readCalendar(ZOHO, Date.parse("2026-10-10T00:00:00Z"), Date.parse("2026-10-13T00:00:00Z"), span.fromDay, span.toDay);
+  assert.deepEqual(both.events.map((e) => e.title), ["QBE review"], "one parse gives the timed events too");
+  assert.equal(both.days.length, 4);
+  assert.equal(Cal.eventsBetween(ZOHO, Date.parse("2026-10-10T00:00:00Z"), Date.parse("2026-10-13T00:00:00Z")).length, 1, "meetings still skip all-day entries");
+});
+
+test("all-day entries get stable ids and merge across calendars without repeats", () => {
+  const span = Cal.dayWindow(Date.parse("2026-10-10T03:00:00Z"));
+  const google = Cal.matchDays(Cal.daysBetween(ZOHO, span.fromDay, span.toDay), "Google");
+  assert.match(google[0].id, /^d[0-9a-f]{16}$/);assert.equal(google[0].calendar, "Google");
+  assert.equal(google[0].id, Cal.matchDays(Cal.daysBetween(ZOHO, span.fromDay, span.toDay), "Google")[0].id);
+  const outlookCopy = google.map((d) => Object.assign({}, d, {id: d.id + "x", calendar: "Outlook"}));
+  const merged = Cal.mergeDays([google, outlookCopy]);
+  assert.equal(merged.length, 4, "the same leave pushed to both calendars shows once");
+  assert.deepEqual(merged.map((d) => d.start), ["2026-10-08", "2026-10-19", "2026-11-30", "2026-12-25"]);
+  const many = Array.from({length: Cal.MAX_DAYS + 5}, (_, i) => ({id: "d" + i, title: "Day " + i, start: "2026-10-10", end: "2026-10-10"}));
+  assert.equal(Cal.mergeDays([many]).length, Cal.MAX_DAYS);
 });
