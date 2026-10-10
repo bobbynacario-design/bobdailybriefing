@@ -34,6 +34,8 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/radar-assistant-core.js"></script>
 <script src="./lib/flights-core.js"></script>
 <script src="./lib/flights-ui.js"></script>
+<script src="./lib/daybook-calendar-core.js"></script>
+<script src="./lib/daybook-calendar-ui.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -1213,6 +1215,42 @@ window.fbLoadLlmUsage = async function() {
   }
 };
 
+window.fbLoadDaybookEvents = async function() {
+  var uid=getUid();if(!uid)throw new Error('Sign in first');
+  var ref=doc(db,COLL,'calendar-events-'+uid),snap;
+  try {snap=await getDoc(ref);}
+  catch(e) {
+    if(e.code!=='permission-denied')throw e;
+    if(uid!==getUid())throw new Error('Account changed');
+    await setDoc(ref,{uid:uid},{merge:true});snap=await getDoc(ref);
+  }
+  if(uid!==getUid())throw new Error('Account changed');
+  var items=snap.exists()?snap.data().items || []:[];
+  if(!Array.isArray(items) || items.some(function(e){return DaybookCalendarCore.manual(e).error;}))throw new Error('Calendar events could not be read. Editing is disabled until the saved data can be loaded.');
+  return items;
+};
+window.fbWriteDaybookEvent = async function(raw,remove,expected) {
+  var uid=getUid();if(!uid)throw new Error('Sign in first');
+  if(!raw || !/^[a-zA-Z0-9_-]{8,80}$/.test(raw.id || ''))throw new Error('Invalid event identifier.');
+  var clean=remove?null:DaybookCalendarCore.manual(raw);
+  if(clean && clean.error)throw new Error(clean.error);
+  var ref=doc(db,COLL,'calendar-events-'+uid);
+  var next=await runTransaction(db,async function(tx) {
+    if(uid!==getUid())throw new Error('Account changed');
+    var snap=await tx.get(ref),items=snap.exists()?snap.data().items || []:[];
+    if(!Array.isArray(items))throw new Error('Calendar data could not be read. Reload before editing.');
+    var previous=items.find(function(e){return e.id===raw.id;});
+    if((expected===null && previous) || (expected!==null && (!previous || (previous.updatedAt || '')!==expected)))throw new Error('This event changed on another device. Reload the calendar before editing.');
+    items=items.filter(function(e){return e.id!==raw.id;});
+    if(!remove)items.push(Object.assign({},clean.event,{updatedAt:new Date().toISOString()}));
+    if(items.length>250)throw new Error('Your calendar has 250 events. Remove an old event before adding another.');
+    if(uid!==getUid())throw new Error('Account changed');
+    tx.set(ref,{uid:uid,kind:'calendar-events',items:items,updatedAt:new Date().toISOString()});
+    return items;
+  });
+  if(uid!==getUid())throw new Error('Account changed');
+  return next;
+};
 window._fbReady = true;
 </script>
 
@@ -1603,6 +1641,29 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .flight-source{font-size:12px;line-height:1.6;padding:.65rem .8rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg2);min-width:0}
 .flight-source a{font-size:12px;color:var(--txt)}
 @media(max-width:600px){.flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.flight-source-list{grid-template-columns:1fr}}
+.daycal-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(260px,1fr);gap:1rem;align-items:start}
+.daycal-toolbar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.75rem 0}
+.daycal-toolbar h2{font-family:var(--serif);font-size:18px;margin:0 auto 0 0}
+.daycal-week,.daycal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.daycal-week span{text-align:center;font-family:var(--mono);font-size:10px;color:var(--txt3);padding:.4rem 0}
+.daycal-day{background:var(--bg2);color:var(--txt);border:1px solid var(--rim);border-radius:6px;min-height:105px;min-width:0;text-align:left;padding:.35rem;cursor:pointer;overflow:hidden}
+.daycal-day:hover,.daycal-day:focus-visible{border-color:var(--gold);outline:2px solid var(--gold-dim)}
+.daycal-day.is-other{opacity:.55}.daycal-day.is-today .daycal-number{background:var(--gold);color:var(--bg);border-radius:4px;padding:0 .25rem}
+.daycal-day.is-selected{border-color:var(--gold);background:var(--gold-dim)}
+.daycal-number{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:.25rem}
+.daycal-bar{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--gold);background:var(--bg3);border-radius:3px;padding:.15rem .2rem;font-size:10px;line-height:1.4;margin:.15rem 0}
+.daycal-meeting{border-left-color:var(--blue)}.daycal-task{border-left-color:var(--purple)}.daycal-travel{border-left-color:var(--green)}.daycal-sale{border-left-color:var(--amber)}.daycal-review{border-left-color:var(--red)}
+.daycal-event{border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:8px;background:var(--bg2);padding:.7rem;margin:.5rem 0;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.daycal-event.daycal-meeting{border-left-color:var(--blue)}.daycal-event.daycal-task{border-left-color:var(--purple)}.daycal-event.daycal-travel{border-left-color:var(--green)}.daycal-event.daycal-sale{border-left-color:var(--amber)}.daycal-event.daycal-review{border-left-color:var(--red)}
+.daycal-agenda h3{font-family:var(--serif);font-size:16px;margin:1rem 0 .5rem}.daycal-agenda h3:first-child{margin-top:0}
+.daycal-editor{border:1px solid var(--rim);border-radius:10px;background:var(--bg2);padding:1rem;margin:1rem 0}.daycal-editor h3{font-size:15px;margin-bottom:.75rem}
+.daycal-editor .flights-controls{grid-template-columns:repeat(3,minmax(0,1fr))}.daycal-editor textarea{min-height:65px;width:100%;background:var(--bg3);color:var(--txt);border:1px solid var(--rim);border-radius:8px;padding:.5rem .65rem;font-family:var(--sans);font-size:12px}
+.daycal-layout:has(#daycal-month-view[hidden]){grid-template-columns:1fr}
+.daycal-toolbar select{background:var(--bg2);color:var(--txt);border:1px solid var(--rim);border-radius:6px;padding:.4rem;font-size:12px}
+.daycal-toolbar label{font-size:12px}.daycal-toolbar [aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
+[hidden].daycal-editor,[hidden]#daycal-month-view{display:none}
+@media(max-width:900px){.daycal-layout{grid-template-columns:1fr}.daycal-day{min-height:90px}}
+@media(max-width:600px){.daycal-day{min-height:75px;padding:.2rem}.daycal-bar{font-size:9px;padding:.1rem}.daycal-week span{font-size:9px}.daycal-editor .flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .flight-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;align-items:start}
 .flight-city{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;min-width:0}
 .flight-city>summary{cursor:pointer;list-style:none;display:block;padding:.6rem .8rem;font-size:12px;line-height:1.5}
@@ -2710,6 +2771,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <symbol id="i-pse" viewBox="0 0 24 24"><path d="M6 4v16M12 6v13M18 3.5v15"/><rect x="4" y="8" width="4" height="6.5" rx="1"/><rect x="10" y="11" width="4" height="4.5" rx="1"/><rect x="16" y="6" width="4" height="8" rx="1"/></symbol>
   <symbol id="i-miro" viewBox="0 0 24 24"><path d="M3.5 16.5a8.5 8.5 0 0 1 17 0"/><path d="M12 16.5l4.2-5.2"/><circle cx="12" cy="16.5" r="1.3"/><path d="M3.5 20h17"/></symbol>
   <symbol id="i-sports" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5v17"/><path d="M6 6c3 2.6 3 9.4 0 12M18 6c-3 2.6-3 9.4 0 12"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M7 14h2M12 14h2M7 18h2"/></symbol>
   <symbol id="i-flights" viewBox="0 0 24 24"><path d="M12 3c-.9 0-1.5 1-1.5 2.5V9L4 13v2l6.5-2v4.5L8 19v1.5l4-1 4 1V19l-2.5-1.5V13l6.5 2v-2l-6.5-4V5.5C13.5 4 12.9 3 12 3z"/></symbol>
   <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.4a2.4 2.4 0 1 1 3.3 2.2c-.6.3-1 .8-1 1.5v.5"/><path d="M12 16.6v.1"/></symbol>
   <symbol id="i-decisions" viewBox="0 0 24 24"><path d="M12 21v-7"/><path d="M12 14L6.5 8.5M12 14l5.5-5.5"/><path d="M6 4.5V9h4.5M18 4.5V9h-4.5"/></symbol>
@@ -2827,6 +2889,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <button class="ntab" data-page="pse" onclick="switchPage('pse',this)">PSE</button>
     <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">Markets</button>
     <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">Sports</button>
+    <button class="ntab" data-page="calendar" onclick="switchPage('calendar',this)">Calendar</button>
     <button class="ntab" data-page="flights" onclick="switchPage('flights',this)">Flights</button>
     <button class="ntab owner-only" data-page="about" onclick="switchPage('about',this)">About you</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">Help</button>
@@ -3514,6 +3577,30 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 </div>
 
 <!-- ═══════════════ FLIGHTS PAGE ═══════════════ -->
+<div class="page" id="page-calendar">
+  <div class="hero"><div class="hero-inner"><div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg> Calendar</div><div class="hero-sub">Your Daybook plans, meetings and deadlines · Philippine time</div></div></div>
+  <div class="daycal-toolbar"><button class="tool-chip" onclick="daycalMonth(-1)" aria-label="Previous month">←</button><h2 id="daycal-month"></h2><button class="tool-chip" onclick="daycalMonth(1)" aria-label="Next month">→</button><button class="tool-chip" onclick="daycalToday()">Today</button><button id="daycal-view-month" class="tool-chip" onclick="daycalView('month')" aria-pressed="true">Month</button><button id="daycal-view-list" class="tool-chip" onclick="daycalView('list')" aria-pressed="false">List</button></div>
+  <div class="daycal-toolbar"><label>Show <select id="daycal-filter" onchange="paintDaybookCalendar()"><option value="all">All items</option><option value="meeting">Meetings</option><option value="task">Tasks &amp; research deadlines</option><option value="travel">Travel plans</option><option value="sale">Flight sale deadlines</option><option value="review">Decision reviews</option><option value="personal">Personal</option></select></label><label><input id="daycal-done" type="checkbox" onchange="paintDaybookCalendar()"> Include completed tasks</label><button class="tool-chip" id="daycal-add" onclick="daycalNew()" disabled>Add event</button><button class="tool-chip" onclick="renderDaybookCalendar()">Reload</button><button class="tool-chip" onclick="daycalExport()">Export month .ICS</button><span class="flights-note" id="daycal-count"></span></div>
+  <p id="daycal-status" class="flights-note" role="status"></p>
+  <div id="daycal-overlaps"></div>
+  <form id="daycal-editor" class="daycal-editor" hidden onsubmit="event.preventDefault();daycalSave()">
+    <h3 id="daycal-editor-title">Add event</h3>
+    <div class="flights-controls">
+      <label>Title<input id="daycal-title" required maxlength="160" placeholder="Meeting, task or personal plan"></label>
+      <label>Type<select id="daycal-kind"><option value="personal">Personal</option><option value="task">Task</option><option value="meeting">Meeting</option><option value="travel">Travel plan</option></select></label>
+      <label>Start date<input id="daycal-start" type="date" required></label>
+      <label>End date (optional)<input id="daycal-end" type="date"></label>
+      <label>Time (optional, PHT)<input id="daycal-time" type="time"></label>
+      <label>Location<input id="daycal-location" maxlength="200"></label>
+      <label style="grid-column:1/-1">Notes<textarea id="daycal-notes" maxlength="1000"></textarea></label>
+    </div>
+    <p class="flights-note">Leave time blank for an all-day or multi-day plan. Timed events use one date.</p>
+    <div class="flight-actions"><button class="tool-chip" id="daycal-save" type="submit">Save event</button><button class="tool-chip" type="button" onclick="daycalCancel()">Cancel</button></div>
+  </form>
+  <div class="daycal-layout"><div id="daycal-month-view"><div class="daycal-week" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div class="daycal-grid" id="daycal-grid"></div></div><div class="daycal-agenda" id="daycal-agenda" aria-live="polite"></div></div>
+  <details class="flight-all"><summary>What this calendar includes</summary><p class="flights-note">Your added events and dated tasks; decision review dates; active research deadlines; saved flight dates and flight-sale booking deadlines. Saved fares are tentative plans, not booked tickets. Broad sale travel windows are not shown as scheduled trips. Potential meeting/travel overlaps are prompts to check, not confirmed conflicts.</p><p class="flights-note">Connected calendars currently supply only account-related meetings in the next 36 hours, refreshed at 06:00 and 18:00 PHT. This is not a complete Google or Outlook calendar sync. Set up those links under About you. Reload reads saved app data; it does not trigger model calls or a new calendar import. Export downloads the selected month's visible items for you to import; it does not write to an external calendar or enable reminders.</p></details>
+</div>
+
 <div class="page" id="page-flights">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Your travel scout</div>
@@ -3824,6 +3911,13 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li><b>Evidence Check</b> — states whether the optional forecasting panel has actually demonstrated an edge. "Unproven" means exactly that.</li>
       </ul>
       <p class="help-key">Best use: scan meaningful probability changes, ask what new information could explain them, then verify against primary reporting. The tab surfaces research prompts; it does not recommend bets or execute trades.</p>
+    </div>
+
+    <div class="help-card">
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg> Calendar</div>
+      <p>Open <b>Home → Calendar</b> for a month grid like PokerHQ, or switch to List. Click a day for its agenda; use Today and the month arrows to navigate. Filter meetings, tasks, travel, sales, decision reviews or personal events. Add, edit or delete your own events and mark dated tasks done. These events are private to your signed-in account and sync through Firebase.</p>
+      <p>Calendar combines your added events, decision review dates, active research deadlines, saved flight plans and flight-sale booking deadlines. A saved fare is a <b>tentative plan, not a booking</b>; broad promotional travel windows are not scheduled trips. Meeting/travel overlaps are prompts to check. Source buttons open the existing app sections without starting model calls.</p>
+      <p>Connected calendar imports currently show only account-related meetings in the next 36 hours, checked at 06:00 and 18:00 PHT; this is not a full Google or Outlook sync. Connect calendars under About you. Reload reads saved data. Export month .ICS downloads this month's filtered items for you to import elsewhere; it does not write to another calendar, book flights or send notifications. All displayed times and manually entered times use Philippine time. This section makes no OpenAI or Claude calls.</p>
     </div>
 
     <div class="help-card">
@@ -4221,6 +4315,7 @@ function clearPrivateSession() {
   groundingLoadToken++;
   setText('grounding-numbers','Sign in to load published numbers.');
   if (window.resetFlights) window.resetFlights();
+  if (window.resetDaybookCalendar) window.resetDaybookCalendar();
   decisionEntries = []; decisionEditingId = null; decisionLinkedSignal = null; decisionDatedCache = {};
   decisionRadarJournal = null; decisionRadarLive = null; decisionRefPrice = {};
   _currentData = null; commandLoadToken++; commandCenterData = null; commandCenterInputs = null;
@@ -4503,6 +4598,7 @@ function switchPage(id, el) {
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
   if (id==='flights') pending = renderFlights();
+  if (id==='calendar') pending = renderDaybookCalendar();
   if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
   if (id==='about') pending = renderAbout();
   setPageHash(id);
@@ -4533,6 +4629,7 @@ function switchPageMobile(id, el) {
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
   if (id==='flights') pending = renderFlights();
+  if (id==='calendar') pending = renderDaybookCalendar();
   if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
   if (id==='about') pending = renderAbout();
   setPageHash(id);
