@@ -307,3 +307,39 @@ test("his Called it? verdicts that week reach the read, with the conviction they
   assert.ok(input.text.includes("- Graded Thu 24 Sep: A claims documentation gap — the read broke (conviction 5 when written)"));
   assert.ok(buildMirrorPrompt(input).includes('"Graded" lines are his own verdicts on whether a read held'));
 });
+
+// ── his weekly commitments (lib/weekly-review-core.js) ──
+
+test("his weekly commitments go in, in his focus order, with the days he ticked and how he marked them", () => {
+  const W = require("./weekly-review-core");
+  const c = (id, text, area, ticks, extra) => Object.assign({id, text, area, measure: "", ticks, result: ""}, extra || {});
+  const review = {"2026-09-21": {start: "2026-09-21", reflection: "Site visits ate Wednesday.", commitments: [
+    c("c-cccccc", "Walk 30 minutes on four days", "health", ["2026-09-22"]),
+    c("c-aaaaaa", "Give my open calls a review date", "money", [], {measure: "All three dated", result: "missed"}),
+    c("c-bbbbbb", "Two hours of report writing on three days", "work", ["2026-09-22", "2026-09-24"], {result: "partly"}),
+  ]}};
+  const input = buildMirrorInput({entries: week(), decisions: [], mirrors: {}, todayKey: TODAY, core, review, reviewCore: W});
+  assert.equal(input.commitments, 3);
+  assert.match(input.text, /HIS COMMITMENTS — what he committed to for the week, listed in his focus order \(money, then work, then health, then poker\)/);
+  const lines = input.text.split("\n").filter((line) => /^\d\. \[/.test(line));
+  assert.deepEqual(lines, [
+    '1. [Money] "Give my open calls a review date" (how he would know: "All three dated") — no ticks; he marked it missed; week of Mon 21 Sep',
+    '2. [Work] "Two hours of report writing on three days" — ticked on Tue 22 Sep, Thu 24 Sep (2 days); he marked it partly; week of Mon 21 Sep',
+    '3. [Health] "Walk 30 minutes on four days" — ticked on Tue 22 Sep (1 day); not reviewed yet; week of Mon 21 Sep',
+  ]);
+  assert.match(input.text, /His review note for the week of Mon 21 Sep: "Site visits ate Wednesday\."/);
+  const prompt = buildMirrorPrompt(input, null);
+  assert.match(prompt, /- commitments: if a HIS COMMITMENTS block is given, one entry per numbered commitment/);
+  assert.match(prompt, /His order of focus is money, then work, then health, then poker/);
+  // A week with only commitments still gets a read; none at all still costs nothing.
+  assert.ok(buildMirrorInput({entries: {}, decisions: [], mirrors: {}, todayKey: TODAY, core, review, reviewCore: W}));
+  assert.equal(buildMirrorInput({entries: {}, decisions: [], mirrors: {}, todayKey: TODAY, core, review: {}, reviewCore: W}), null);
+  assert.equal(buildMirrorInput({entries: week(), decisions: [], mirrors: {}, todayKey: TODAY, core}).commitments, 0, "older callers without a review still work");
+});
+
+test("the commitments read is kept, bounded, and absent reads stay empty", () => {
+  const raw = {week_in_a_line: "A thin week.", question: "What made Tuesday work?", commitments: [{commitment: "Walk 30 minutes", read: "Ticked Tuesday only."}, {commitment: "", read: "dropped"}]};
+  assert.deepEqual(cleanMirror(raw).commitments, [{commitment: "Walk 30 minutes", read: "Ticked Tuesday only."}]);
+  assert.deepEqual(cleanMirror({week_in_a_line: "x", question: "y"}).commitments, []);
+  assert.ok(MIRROR_SCHEMA.required.includes("commitments"));
+});

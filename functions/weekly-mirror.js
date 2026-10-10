@@ -238,7 +238,28 @@ function previousMirror(mirrors, todayKey) {
 // read back (no model call is made for an empty week). `now` (ms) says how far
 // into today the read is taken: today is still going, so an unfinished quest on
 // it is not a miss — the first real read held a 6:45 AM "not done" against him.
-function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goals}) {
+// His weekly commitments (lib/weekly-review-core.js) for the weeks this window
+// touches, in his focus order, with the days he ticked and how he marked them.
+function commitmentBlock(reviewCore, review, win) {
+  if (!reviewCore || typeof reviewCore.cleanWeeks !== "function" || !review || typeof review !== "object") return {lines: [], count: 0};
+  const weeks = reviewCore.cleanWeeks(review), lines = [], seen = {};
+  const rank = (area) => { const i = reviewCore.AREAS.findIndex((a) => a[0] === area); return i < 0 ? 99 : i; };
+  win.days.map((key) => reviewCore.weekStart(key)).forEach((start) => {
+    const week = weeks[start];
+    if (seen[start] || !week || !week.commitments.length) return;
+    seen[start] = true;
+    week.commitments.slice().sort((a, b) => rank(a.area) - rank(b.area)).forEach((c) => {
+      const days = c.ticks.filter((key) => win.days.indexOf(key) >= 0);
+      lines.push((lines.length + 1) + ". [" + reviewCore.areaLabel(c.area) + "] " + quote(c.text, 140) + (c.measure ? " (how he would know: " + quote(c.measure, 100) + ")" : "") +
+        " — " + (days.length ? "ticked on " + days.map(dayLabel).join(", ") + " (" + days.length + (days.length === 1 ? " day)" : " days)") : "no ticks") +
+        (c.result ? "; he marked it " + c.result : "; not reviewed yet") + "; week of " + dayLabel(start));
+    });
+    if (week.reflection) lines.push("His review note for the week of " + dayLabel(start) + ": " + quote(week.reflection, 400));
+  });
+  return {lines, count: lines.filter((line) => /^\d+\. /.test(line)).length};
+}
+
+function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goals, review, reviewCore}) {
   if (!DAY.test(text(todayKey))) return null;
   const win = mirrorWindow(todayKey);
   const records = core && typeof core.clean === "function" ? core.clean(entries && typeof entries === "object" ? entries : {}) : (entries || {});
@@ -261,7 +282,8 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goa
   });
   const journal = decisionBlock(decisions, win);
   stats.decisions = journal.logged + journal.closed + journal.graded;
-  if (!stats.days && !stats.decisions) return null;
+  const commitments = commitmentBlock(reviewCore, review, win);
+  if (!stats.days && !stats.decisions && !commitments.count) return null;
 
   const parts = [
     "THE WEEK — " + dayLabel(win.from) + " to " + dayLabel(win.to) + ", one line per day (Manila dates):",
@@ -279,6 +301,10 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goa
       parts.push((index + 1) + ". " + quote(goal.text, 120) + " — " + (days.length ? "ticked on " + days.map(dayLabel).join(", ") + " (" + days.length + " of 7 days)" : "no ticks this week") + next);
     });
   }
+  if (commitments.count) {
+    parts.push("", "HIS COMMITMENTS — what he committed to for the week, listed in his focus order (money, then work, then health, then poker); a tick means he marked that day as moving it forward:");
+    parts.push(...commitments.lines);
+  }
   const previous = previousMirror(mirrors, todayKey);
   if (previous) {
     parts.push("", "LAST MIRROR (" + dayLabel(previous.weekKey) + "):");
@@ -289,7 +315,7 @@ function buildMirrorInput({entries, decisions, mirrors, todayKey, core, now, goa
       parts.push("- His written answer" + (same ? "" : " (to an earlier wording, " + quote(previous.answer.question, 200) + ")") + ": " + quote(previous.answer.text, 600));
     }
   }
-  return {text: parts.join("\n"), stats, window: win, previous: previous ? previous.weekKey : null, goals: active.length};
+  return {text: parts.join("\n"), stats, window: win, previous: previous ? previous.weekKey : null, goals: active.length, commitments: commitments.count};
 }
 
 const SYSTEM = "You read back a person's week to them from what they recorded in a private app. " +
@@ -338,6 +364,13 @@ function buildMirrorPrompt(input, profile) {
     "- goals: if a HIS GOALS block is given, one entry per goal in its order: goal is its text; read is one or two sentences on",
     "  whether the week moved it, citing days and what he did or wrote, with a small next step only where the record points to",
     "  one. Never scold or grade: no ticks is a fact, not a failure. An empty list if there is no HIS GOALS block.",
+    "- commitments: if a HIS COMMITMENTS block is given, one entry per numbered commitment in its order: commitment is its text; read",
+    "  is one or two sentences on whether the week moved it, citing the days he ticked, his own mark and anything he wrote that bears",
+    "  on it. No ticks is a fact, not a failure: say what the record shows and, only if it points to one, a smaller version to try.",
+    "  An empty list if there is no HIS COMMITMENTS block.",
+    "- His order of focus is money, then work, then health, then poker. Where the record supports more than one, lead with the",
+    "  higher one, and let try_next serve the highest area the record gives you something real to build on. Never invent activity",
+    "  in an area he did not record.",
     "- No diagnosis or clinical words, no flattery, no generic self-help, no emojis. Plain English, short sentences, \"you\" not \"Bob\".",
     "  Never mention the app, the record, data or JSON — talk about his week.",
     "- Each string at most 60 words; week_in_a_line at most 25.",
@@ -350,7 +383,7 @@ function buildMirrorPrompt(input, profile) {
 const MIRROR_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["week_in_a_line", "themes", "energy", "said_vs_did", "reading", "decisions", "last_week", "try_next", "question", "confidence", "goals"],
+  required: ["week_in_a_line", "themes", "energy", "said_vs_did", "reading", "decisions", "last_week", "try_next", "question", "confidence", "goals", "commitments"],
   properties: {
     week_in_a_line: {type: "string"},
     themes: {
@@ -377,6 +410,10 @@ const MIRROR_SCHEMA = {
     goals: {
       type: "array",
       items: {type: "object", additionalProperties: false, required: ["goal", "read"], properties: {goal: {type: "string"}, read: {type: "string"}}},
+    },
+    commitments: {
+      type: "array",
+      items: {type: "object", additionalProperties: false, required: ["commitment", "read"], properties: {commitment: {type: "string"}, read: {type: "string"}}},
     },
   },
 };
@@ -406,6 +443,7 @@ function cleanMirror(raw) {
     try_next: {action: clip(raw.try_next && raw.try_next.action, 300), why: clip(raw.try_next && raw.try_next.why, 400)},
     question: clip(raw.question, 300),
     goals: arr(raw.goals).filter((item) => item && text(item.goal)).slice(0, 3).map((item) => ({goal: clip(item.goal, 160), read: clip(item.read, 500)})),
+    commitments: arr(raw.commitments).filter((item) => item && text(item.commitment)).slice(0, 6).map((item) => ({commitment: clip(item.commitment, 160), read: clip(item.read, 500)})),
     confidence: ["thin", "fair", "rich"].includes(raw.confidence) ? raw.confidence : "fair",
   };
   return out.week_in_a_line && out.question ? out : null;

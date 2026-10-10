@@ -25,8 +25,10 @@ const {authorize, daybookRole, guardedGeneration} = require("./generation-guard"
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
   isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, hasNewReminders, weeklyReadDue,
+  commitmentLine, weeklyReviewDue,
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
+const WeeklyReviewCore = require("./weekly-review-core");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 const Ask = require("./ask-daybook");
 const Haiku = require("./haiku");
@@ -509,7 +511,7 @@ exports.generateBobDailyBriefing = onCall(
 // Everything the mirror reads, each read caught on its own: a failed journal
 // query costs the decisions paragraph, not the whole read-back.
 async function loadMirrorSources(db, uid) {
-  const [boost, journal, stored, goals] = await Promise.all([
+  const [boost, journal, stored, goals, review] = await Promise.all([
     db.collection(BRIEFINGS_COLL).doc("daily-boost-" + uid).get()
       .then((snap) => (snap.exists ? snap.data().entries || {} : {})).catch(() => ({})),
     db.collection(JOURNAL_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(100).get()
@@ -518,8 +520,10 @@ async function loadMirrorSources(db, uid) {
       .then((snap) => (snap.exists ? snap.data().mirrors || {} : {})).catch(() => ({})),
     db.collection(BRIEFINGS_COLL).doc("goals-" + uid).get()
       .then((snap) => (snap.exists ? snap.data().goals || [] : [])).catch(() => []),
+    db.collection(BRIEFINGS_COLL).doc("review-" + uid).get()
+      .then((snap) => (snap.exists ? snap.data().weeks || {} : {})).catch(() => ({})),
   ]);
-  return {entries: boost, decisions: journal, mirrors: stored, goals};
+  return {entries: boost, decisions: journal, mirrors: stored, goals, review};
 }
 
 exports.generateWeeklyMirror = onCall(
@@ -534,7 +538,7 @@ exports.generateWeeklyMirror = onCall(
     const uid = request.auth.uid;
     const todayKey = phtDateKey();
     const sources = await loadMirrorSources(db, uid);
-    const input = buildMirrorInput(Object.assign({todayKey, core: DailyBoostCore, now: Date.now()}, sources));
+    const input = buildMirrorInput(Object.assign({todayKey, core: DailyBoostCore, reviewCore: WeeklyReviewCore, now: Date.now()}, sources));
     // Nothing recorded this week: say so without paying for a model call.
     if (!input) return {mirror: null, reason: "empty"};
 
@@ -1321,8 +1325,14 @@ function withAudit(state, entry) {
 // The weekly read is owner-only AI, so only an owner's push announces it.
 async function dailyBoostFor(db, uid, now, lastWeeklyNudge, weeklyAllowed) {
   const dayKey = phtDateKey(now);
-  let weekly = false;
-  if (weeklyAllowed && weeklyReadDue(dayKey, {}, lastWeeklyNudge)) {
+  // His weekly commitments (Today's "This week" card): one line in the push,
+  // and Sunday's review counts as the weekly nudge.
+  const review = await db.collection(BRIEFINGS_COLL).doc("review-" + uid).get()
+    .then((snap) => (snap.exists ? snap.data().weeks || {} : {}))
+    .catch((error) => { logger.warn("Weekly review lookup failed", {message: error.message}); return {}; });
+  const commitment = commitmentLine(WeeklyReviewCore, review, dayKey);
+  let weekly = lastWeeklyNudge !== dayKey && weeklyReviewDue(WeeklyReviewCore, review, dayKey);
+  if (!weekly && weeklyAllowed && weeklyReadDue(dayKey, {}, lastWeeklyNudge)) {
     try {
       const reads = await db.collection(BRIEFINGS_COLL).doc("weekly-mirror-" + uid).get();
       weekly = weeklyReadDue(dayKey, reads.exists ? reads.data().mirrors : {}, lastWeeklyNudge);
@@ -1339,10 +1349,10 @@ async function dailyBoostFor(db, uid, now, lastWeeklyNudge, weeklyAllowed) {
         .catch(() => []),
     ]);
     const entries = doc.exists ? doc.data().entries : {};
-    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey, lean), reminders: dueReminders(DailyBoostCore, entries, dayKey), experiment: dueExperiment(DailyBoostCore, entries, dayKey), weekly};
+    return {spark: todaysSparkTitle(DailyBoostCore, entries, dayKey, lean), reminders: dueReminders(DailyBoostCore, entries, dayKey), experiment: dueExperiment(DailyBoostCore, entries, dayKey), weekly, commitment};
   } catch (error) {
     logger.warn("Daily Boost lookup failed", {message: error.message});
-    return {spark: "", reminders: [], experiment: null, weekly};
+    return {spark: "", reminders: [], experiment: null, weekly, commitment};
   }
 }
 
@@ -1380,7 +1390,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const remindersOnly = quiet && remindersNew;
   const weeklyOnly = quiet && !remindersNew && boost.weekly;
 
-  const copy = notificationCopy(items, !!options.test, {spark: boost.spark, reminders: boost.reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly});
+  const copy = notificationCopy(items, !!options.test, {spark: boost.spark, reminders: boost.reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {

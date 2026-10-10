@@ -81,23 +81,47 @@ function notificationCopy(items, test, extra) {
   const experiment = extra.experiment && extra.experiment.plan ? extra.experiment : null;
   const sparkLine = extra.spark ? "\nToday’s spark: " + extra.spark : "";
   const experimentLine = experiment ? "\nExperiment to review: " + experiment.plan : "";
-  const weeklyLine = extra.weekly ? "\nIt’s Sunday: read your week back." : "";
+  const weeklyLine = extra.weekly ? "\nIt’s Sunday: review your week and set next week’s three." : "";
+  const commitment = extra.commitment && extra.commitment.text ? extra.commitment : null;
+  const commitmentLine = commitment ? "\nThis week: " + (commitment.text.length > 90 ? commitment.text.slice(0, 89).trimEnd() + "…" : commitment.text) +
+    (commitment.ticked ? " · ticked " + commitment.ticked + (commitment.ticked === 1 ? " day" : " days") + " so far" : commitment.elapsed <= 1 ? " · new this week" : " · not ticked yet") : "";
   const toCheck = reminders.length ? reminders[0].metric + (reminders.length > 1 ? " · +" + (reminders.length - 1) + " more" : "") : "";
   if (extra.remindersOnly && toCheck) {
-    return {title: test ? "Test · To check today" : "⏰ To check today", body: toCheck + experimentLine + weeklyLine + sparkLine};
+    return {title: test ? "Test · To check today" : "⏰ To check today", body: toCheck + experimentLine + weeklyLine + commitmentLine + sparkLine};
   }
   if (extra.weeklyOnly) {
-    return {title: test ? "Test · Your week" : "Your week is ready to read back", body: "A few minutes on Today: what kept coming up, and one thing to carry forward." + experimentLine + sparkLine};
+    return {title: test ? "Test · Your week" : "Your weekly review is ready", body: "A few minutes on Today: score this week’s commitments and set next week’s three. Your week read back is there too." + experimentLine + sparkLine};
   }
   const lead = items[0];
   const title = test ? "Test · Morning 5" : "Your Morning 5 is ready";
   const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
-  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + reminderLine + experimentLine + weeklyLine + sparkLine};
+  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + reminderLine + experimentLine + weeklyLine + commitmentLine + sparkLine};
   const remaining = Math.max(0, items.length - 1);
   return {
     title,
-    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + reminderLine + experimentLine + weeklyLine + sparkLine,
+    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + reminderLine + experimentLine + weeklyLine + commitmentLine + sparkLine,
   };
+}
+
+// This week's commitment for the push, read with the same shared core as
+// Today's card (lib/weekly-review-core.js): the one ticked on the fewest days
+// so far and not ticked today; ties go to his focus order (money, work,
+// health, poker). Like the experiment, it only rides on a push already going out.
+function commitmentLine(core, weeks, dayKey) {
+  if (!core || typeof core.cleanWeeks !== "function" || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return null;
+  const week = core.cleanWeeks(weeks && typeof weeks === "object" ? weeks : {})[core.weekStart(dayKey)];
+  const rank = (area) => { const i = core.FOCUS.indexOf(area); return i < 0 ? core.FOCUS.length : i; };
+  const open = (week ? week.commitments : []).map((c) => ({c, p: core.progress(c, dayKey)})).filter((x) => !x.p.today)
+    .sort((a, b) => a.p.ticked - b.p.ticked || rank(a.c.area) - rank(b.c.area));
+  return open.length ? {text: open[0].c.text, area: open[0].c.area, ticked: open[0].p.ticked, elapsed: open[0].p.elapsed} : null;
+}
+
+// Sunday's weekly review (Today's "This week" card) is worth one nudge that
+// day when there is a week to score or a next week to set.
+function weeklyReviewDue(core, weeks, dayKey) {
+  if (!core || typeof core.plan !== "function" || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return false;
+  if (new Date(dayKey + "T00:00:00Z").getUTCDay() !== 0) return false;
+  return core.plan(core.cleanWeeks(weeks && typeof weeks === "object" ? weeks : {}), dayKey).due;
 }
 
 // Sunday's weekly read (functions/weekly-mirror.js) is worth one nudge that day,
@@ -170,6 +194,8 @@ module.exports = {
   notificationCopy,
   todaysSparkTitle,
   weeklyReadDue,
+  commitmentLine,
+  weeklyReviewDue,
   dueReminders,
   dueExperiment,
   reminderIds,

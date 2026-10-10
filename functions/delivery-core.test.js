@@ -75,16 +75,45 @@ test("Sunday's weekly read is worth one nudge that day, until it has been read",
 test("the weekly read rides along with a push, or is the push on a quiet Sunday", () => {
   const items = [{source: "Radar", title: "NVDA confirmed"}];
   assert.equal(notificationCopy(items, false, {spark: "Look back on your week", weekly: true}).body,
-    "Radar: NVDA confirmed\nIt’s Sunday: read your week back.\nToday’s spark: Look back on your week");
+    "Radar: NVDA confirmed\nIt’s Sunday: review your week and set next week’s three.\nToday’s spark: Look back on your week");
   assert.deepEqual(notificationCopy([], false, {spark: "Look back on your week", weekly: true, weeklyOnly: true}), {
-    title: "Your week is ready to read back",
-    body: "A few minutes on Today: what kept coming up, and one thing to carry forward.\nToday’s spark: Look back on your week",
+    title: "Your weekly review is ready",
+    body: "A few minutes on Today: score this week’s commitments and set next week’s three. Your week read back is there too.\nToday’s spark: Look back on your week",
   });
   assert.equal(notificationCopy([], true, {weekly: true, weeklyOnly: true}).title, "Test · Your week");
   const due = [{metric: "Check whether: margins recover", due: "2026-09-27"}];
   assert.equal(notificationCopy([], false, {reminders: due, remindersOnly: true, weekly: true}).body,
-    "Check whether: margins recover\nIt’s Sunday: read your week back.", "a reminders-only push mentions it too");
+    "Check whether: margins recover\nIt’s Sunday: review your week and set next week’s three.", "a reminders-only push mentions it too");
   assert.equal(notificationCopy(items, false, {spark: ""}).body, "Radar: NVDA confirmed", "no line on other days");
+});
+
+test("this week's least-ticked commitment rides along with a push; Sunday's review counts as the weekly nudge", () => {
+  const {commitmentLine, weeklyReviewDue} = require("./delivery-core");
+  const W = require("./weekly-review-core");
+  const c = (id, text, area, ticks) => ({id, text, area, measure: "", ticks, result: ""});
+  const weeks = {"2026-10-12": {start: "2026-10-12", commitments: [
+    c("c-aaaaaa", "Give my open calls a review date", "money", ["2026-10-12", "2026-10-13"]),
+    c("c-bbbbbb", "Two hours of report writing on three days", "work", ["2026-10-13"]),
+    c("c-cccccc", "Walk 30 minutes on four days", "health", ["2026-10-13"]),
+  ]}};
+  assert.deepEqual(commitmentLine(W, weeks, "2026-10-14"), {text: "Two hours of report writing on three days", area: "work", ticked: 1, elapsed: 3},
+    "fewest ticks first, ties to the focus order (work before health)");
+  weeks["2026-10-12"].commitments[1].ticks.push("2026-10-14");
+  assert.equal(commitmentLine(W, weeks, "2026-10-14").text, "Walk 30 minutes on four days", "a commitment ticked today is left out");
+  assert.equal(commitmentLine(W, {}, "2026-10-14"), null);
+  assert.equal(commitmentLine(null, weeks, "2026-10-14"), null);
+  const items = [{source: "Radar", title: "NVDA confirmed"}];
+  assert.equal(notificationCopy(items, false, {commitment: {text: "Walk 30 minutes on four days", ticked: 1, elapsed: 3}, spark: "S"}).body,
+    "Radar: NVDA confirmed\nThis week: Walk 30 minutes on four days · ticked 1 day so far\nToday’s spark: S");
+  assert.match(notificationCopy(items, false, {commitment: {text: "x", ticked: 0, elapsed: 1}}).body, /This week: x · new this week$/);
+  assert.match(notificationCopy(items, false, {commitment: {text: "x", ticked: 0, elapsed: 4}}).body, /This week: x · not ticked yet$/);
+  assert.match(notificationCopy(items, false, {commitment: {text: "y".repeat(120), ticked: 2, elapsed: 4}}).body, /This week: y{89}… · ticked 2 days so far$/);
+  // Sunday: a week to score, or next week to set.
+  assert.equal(weeklyReviewDue(W, weeks, "2026-10-18"), true);
+  assert.equal(weeklyReviewDue(W, {}, "2026-10-18"), true, "nothing set: next week still to plan");
+  assert.equal(weeklyReviewDue(W, weeks, "2026-10-17"), false, "not a Sunday");
+  const done = {"2026-10-12": Object.assign({}, weeks["2026-10-12"], {reviewedAt: "x"}), "2026-10-19": {start: "2026-10-19", commitments: [c("c-dddddd", "Next", "money", [])]}};
+  assert.equal(weeklyReviewDue(W, done, "2026-10-18"), false, "already reviewed and next week set");
 });
 
 test("today's spark is the one on the day's entry, else the app's own default", () => {
