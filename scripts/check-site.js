@@ -18,7 +18,7 @@ const scripts=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
 for (const [,attributes,code] of scripts) if (!attributes.includes('type="module"')) new vm.Script(code);
 const context=vm.createContext({});
 for (const [,attributes,code] of scripts) if (attributes.includes('data-bundled=') && !attributes.includes('ui-shell')) vm.runInContext(code,context);
-for (const name of ['CommandCenterCore','CommandReviewCore','IntelligenceSearchCore','EvidenceSetsCore','EntityTimelineCore','RadarAssistantCore','FlightsCore','DaybookCalendarCore','AppReliability']) assert.ok(context[name],name+' must initialize');
+for (const name of ['CommandCenterCore','CommandReviewCore','IntelligenceSearchCore','EvidenceSetsCore','EntityTimelineCore','RadarAssistantCore','FlightsCore','DaybookCalendarCore','WeeklyReviewCore','AppReliability']) assert.ok(context[name],name+' must initialize');
 const briefing={date:'2026-09-09',sections:{insurance:[{headline:'Insurance outage investigation',body:'Source fixture',relevance_level:'high'}]}};
 assert.equal(context.CommandCenterCore.buildCommandCenter({briefing}).morningFive[0].title,'Insurance outage investigation');
 const index=context.IntelligenceSearchCore.buildIndex({briefings:[{key:'fixture',saved:Date.now(),data:briefing}]});

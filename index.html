@@ -36,6 +36,8 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/flights-ui.js"></script>
 <script src="./lib/daybook-calendar-core.js"></script>
 <script src="./lib/daybook-calendar-ui.js"></script>
+<script src="./lib/weekly-review-core.js"></script>
+<script src="./lib/weekly-review-ui.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -1233,6 +1235,34 @@ window.fbLoadLlmUsage = async function() {
   }
 };
 
+// The weekly loop (lib/weekly-review-*.js): his commitments by week on
+// review-<uid>. Every change goes through one transaction on the latest copy.
+window.fbLoadReview = async function() {
+  var uid=getUid();if(!uid)throw new Error('Sign in first');
+  var ref=doc(db,COLL,'review-'+uid),snap;
+  try {snap=await getDoc(ref);}
+  catch(e) {
+    if(e.code!=='permission-denied')throw e;
+    if(uid!==getUid())throw new Error('Account changed');
+    await setDoc(ref,{uid:uid},{merge:true});snap=await getDoc(ref);
+  }
+  if(uid!==getUid())throw new Error('Account changed');
+  return snap.exists()?snap.data().weeks || {}:{};
+};
+window.fbUpdateReview = async function(mutate) {
+  var uid=getUid();if(!uid)throw new Error('Sign in first');
+  var ref=doc(db,COLL,'review-'+uid);
+  var next=await runTransaction(db,async function(tx) {
+    if(uid!==getUid())throw new Error('Account changed');
+    var snap=await tx.get(ref),latest=JSON.parse(JSON.stringify(snap.exists()?snap.data().weeks || {}:{}));
+    var weeks=WeeklyReviewCore.cleanWeeks(mutate(latest));
+    if(uid!==getUid())throw new Error('Account changed');
+    tx.set(ref,{uid:uid,kind:'weekly-review',weeks:weeks,updatedAt:new Date().toISOString()});
+    return weeks;
+  });
+  if(uid!==getUid())throw new Error('Account changed');
+  return next;
+};
 window.fbLoadDaybookEvents = async function() {
   var uid=getUid();if(!uid)throw new Error('Sign in first');
   var ref=doc(db,COLL,'calendar-events-'+uid),snap;
@@ -1701,6 +1731,27 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .timeoff-links{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem}.timeoff-links a.tool-chip{text-decoration:none}
 .timeoff-city{display:inline-flex;gap:.35rem;align-items:center;flex:1 1 220px;min-width:0}.timeoff-city input{min-width:0;flex:1;padding:.35rem .55rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg3);color:var(--txt);font-size:12px}
 @media(max-width:900px){.timeoff-grid{grid-template-columns:1fr}}
+.weekly-card,.weekly-review{background:var(--bg2);border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:12px;padding:.9rem 1rem;margin:0 0 1rem;font-size:13px;line-height:1.6}
+.weekly-card[hidden],.weekly-review[hidden]{display:none}
+.weekly-head,.weekly-review-head{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}.weekly-head h2,.weekly-review-head h2{font-family:var(--serif);font-size:18px;margin:0}
+.weekly-head .tool-chip,.weekly-review-head .tool-chip{margin-left:auto}
+.weekly-due{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin:.6rem 0;padding:.55rem .7rem;border-radius:8px;background:var(--gold-dim);color:var(--txt)}
+.weekly-primary{border-color:var(--gold)!important;color:var(--gold)!important;font-weight:700}
+.weekly-list{list-style:none;margin:.5rem 0 0;padding:0}
+.weekly-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.4rem .8rem;align-items:center;padding:.55rem 0;border-top:1px solid var(--rim)}
+.weekly-item:first-child{border-top:0}.weekly-item .flights-note{margin:.1rem 0 0}
+.weekly-area{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--gold);margin-right:.25rem}
+.weekly-dots{display:flex;gap:4px}.weekly-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--rim2);background:transparent}
+.weekly-dot.is-on{background:var(--green);border-color:var(--green)}.weekly-dot.is-today{outline:2px solid var(--gold-dim);outline-offset:1px;border-color:var(--gold)}.weekly-dot.is-future{opacity:.45}
+.weekly-step{margin-top:.9rem;padding-top:.8rem;border-top:1px dashed var(--rim2)}.weekly-step h3{font-size:14px;margin:0 0 .45rem}
+.weekly-facts{margin:.2rem 0 .4rem 1rem;padding:0}
+.weekly-result{border:1px solid var(--rim);border-radius:8px;padding:.45rem .7rem;margin:.4rem 0}.weekly-result legend{font-size:13px;padding:0 .3rem}.weekly-result label{margin-right:1rem;font-size:13px}
+.weekly-reflect{display:block;font-size:12px;color:var(--txt2);margin-top:.5rem}.weekly-reflect textarea,.weekly-row input,.weekly-row select{width:100%;min-width:0;background:var(--bg3);color:var(--txt);border:1px solid var(--rim);border-radius:8px;padding:.45rem .6rem;font-family:var(--sans);font-size:13px}
+.weekly-reflect textarea{min-height:56px;margin-top:.25rem}
+.weekly-row{display:grid;grid-template-columns:150px minmax(0,1.6fr) minmax(0,1fr);gap:.45rem;margin:.4rem 0}
+.weekly-ideas{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem}.weekly-ideas .tool-chip{text-transform:none;letter-spacing:0;text-align:left}
+.weekly-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.9rem}
+@media(max-width:700px){.weekly-row{grid-template-columns:1fr}.weekly-item{grid-template-columns:1fr auto}.weekly-item .tool-chip{grid-column:1/-1;justify-self:start}}
 .flight-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;align-items:start}
 .flight-city{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;min-width:0}
 .flight-city>summary{cursor:pointer;list-style:none;display:block;padding:.6rem .8rem;font-size:12px;line-height:1.5}
@@ -3113,6 +3164,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <p class="display-note">Kept on this device.</p>
 </div>
 <div class="page active" id="page-today">
+  <section class="weekly-card" id="weekly-card" hidden aria-labelledby="weekly-title"></section>
+  <section class="weekly-review" id="weekly-review" hidden aria-label="Weekly review"></section>
 
   <section class="start-here" id="boost-start" hidden aria-live="polite" aria-label="Start here"><div class="start-here-text"><div class="boost-kicker" id="boost-start-kicker">Start here</div><div class="start-here-main" id="boost-start-main"></div><div class="start-here-then" id="boost-start-then"></div></div><div class="start-here-actions"><button type="button" class="btn-sec" id="boost-start-go">Start ↓</button><button type="button" class="tool-chip" id="boost-start-skip" title="Show the next thing instead, for this visit">Not now</button></div></section>
   <section class="daily-boost" id="boost-panel" aria-labelledby="boost-heading">
@@ -3767,6 +3820,12 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     </div>
 
     <div class="help-card">
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> This week and the weekly review</div>
+      <p><b>This week</b>, at the top of Today, holds up to three commitments for Monday to Sunday (Philippine time), each in an area: work, money, poker, time and leave, health, learning or life. Tap <b>Did it today</b> on any day you moved one forward; the dots show the days so far. Small and checkable beats ambitious.</p>
+      <p>On Sunday the card offers the <b>weekly review</b>: what your records show for the week (your ticks, days you opened Daybook, leave, calendar tasks, decision reviews and events you starred in PokerHQ), marking each commitment done, partly or missed with an optional line on what helped, then up to three commitments for next week. Ideas come from your own records: last week’s unfinished commitments, PokerHQ stars next week, upcoming leave, decision reviews due, your goals’ next moves and your last weekly read. A week with little recorded is called thin. If you miss Sunday, the card asks on Monday. <b>Read your week back (AI)</b> opens the existing weekly read. The review itself makes no AI calls. Commitments are private to your account.</p>
+    </div>
+
+    <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg> Your daily spark</div>
       <ul>
         <li><b>A new theme each day</b> — sparks rotate so two days in a row never share a theme, and one you had in the last two weeks is skipped. <b>Try another quest</b> moves to a different theme.</li>
@@ -4283,6 +4342,7 @@ function onSignedIn() {
   applyDaybookRole();  // first: Daily Boost reads it to decide on the weekly read
   if (window.renderDailyBoost) window.renderDailyBoost();
   if (window.renderWeeklyMirror) window.renderWeeklyMirror();
+  if (window.renderWeeklyCard) window.renderWeeklyCard(true);
   setApplicationLocked(false);
   document.querySelectorAll('.page').forEach(function(el) { el.inert = false; });
   document.getElementById('auth-overlay').classList.add('hidden');
@@ -4356,6 +4416,7 @@ function clearPrivateSession() {
   setText('grounding-numbers','Sign in to load published numbers.');
   if (window.resetFlights) window.resetFlights();
   if (window.resetDaybookCalendar) window.resetDaybookCalendar();
+  if (window.resetWeeklyReview) window.resetWeeklyReview();
   decisionEntries = []; decisionEditingId = null; decisionLinkedSignal = null; decisionDatedCache = {};
   decisionRadarJournal = null; decisionRadarLive = null; decisionRefPrice = {};
   _currentData = null; commandLoadToken++; commandCenterData = null; commandCenterInputs = null;
@@ -4617,6 +4678,7 @@ function switchPage(id, el) {
   if (id) trackUse('page_' + id);
   if (id==='today' && window.renderDailyBoost) window.renderDailyBoost();
   if (id==='today' && window.renderWeeklyMirror) window.renderWeeklyMirror();
+  if (id==='today' && window.renderWeeklyCard) window.renderWeeklyCard();
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -4630,6 +4692,7 @@ function switchPage(id, el) {
   if (id==='evidence') pending = renderEvidencePage();
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
+  if (id==='today' && window.renderWeeklyCard) window.renderWeeklyCard();
   if (id==='research') pending = renderResearchList();
   if (id==='radar') pending = renderRadar();
   if (id==='journal') pending = renderJournal();
