@@ -18,9 +18,14 @@ New observations and approaching campaign deadlines are labelled separately.
 The Flights section scouts airline pages and labelled sale announcements for international travel from
 Manila (MNL), Cebu (CEB) and Clark (CRK), with flexible dates and worldwide
 destinations. It uses no model calls, fare API subscription, affiliate feed or
-automated booking. Current sources: PAL Manila/Cebu, Cathay Philippine/US/UK
-offers, AirAsia Philippine campaigns, Cebu Pacific seat sales and Scoot
-Manila/Cebu/Clark.
+automated booking. Current sources: PAL Manila/Cebu airport pages and country
+pages (Manila to Japan, South Korea, Vietnam, Australia and the US; Cebu to
+Japan and the US), Cathay Philippines/Cebu plus Japan, Australia, US, Canada
+and UK pages, AirAsia Philippine campaigns, Cebu Pacific seat sales and Scoot
+Manila/Cebu/Clark (Scoot currently returns HTTP 403, so Clark has no priced
+fares). Fares are trimmed round-robin across routes, cheapest first, to at most
+`MAX_OFFERS` (400), so one busy route cannot crowd out a destination and the
+document stays well under the 1 MiB Firestore limit; the dry run logs `bytes`.
 
 Cebu Pacific's JavaScript seat-sale page is also checked, with a public Hello
 Mnl press-release RSS feed and Logistics News PH's Cebu Pacific feed as labelled

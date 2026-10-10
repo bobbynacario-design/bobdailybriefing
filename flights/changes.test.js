@@ -13,4 +13,7 @@ test('price changes require the same itinerary and recent, actually rechecked ev
   assert.equal(trackChanges([offer],{...prior,generatedAt:'2026-09-01'},now)[0].change.status,'first-observation');
   assert.equal(trackChanges([{...offer,id:'new'}],prior,now)[0].change.status,'new');
   assert.equal(trackChanges([offer],null,now)[0].change.status,'first-observation');
+  const sources=[{url:'https://a.test/p',status:'ok'},{url:'https://a.test/down',status:'unavailable'}];
+  assert.equal(trackChanges([{...offer,id:'new',sourceUrl:'https://a.test/p'}],{...prior,sources},now)[0].change.status,'new');
+  for(const sourceUrl of ['https://a.test/added','https://a.test/down'])assert.equal(trackChanges([{...offer,id:'new',sourceUrl}],{...prior,sources},now)[0].change.status,'first-observation',sourceUrl);
 });

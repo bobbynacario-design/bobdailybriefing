@@ -3,10 +3,11 @@ import {fileURLToPath} from 'node:url';
 import {dirname,join} from 'node:path';
 import {initializeApp,cert,applicationDefault} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
-import {SOURCES,ORIGINS,USER_AGENT} from './config.js';
+import {SOURCES,ORIGINS,USER_AGENT,MAX_OFFERS} from './config.js';
 import {parseSource} from './parse.js';
 import {checkAnnouncementLinks,preferAnnouncement} from './announcement-links.js';
 import {trackChanges} from './changes.js';
+import {trimOffers} from './trim.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 
 const started=Date.now(), dryRun=process.argv.includes('--dry-run'), force=process.argv.includes('--force');
@@ -51,7 +52,9 @@ async function main() {
     if(failed.has(offer.discoveryUrl || offer.sourceUrl) && !byId.has(offer.id) && Date.now()-Date.parse(offer.checkedAt)<48*3600000 &&
       (!offer.departureDate || offer.departureDate>=checkedAt.slice(0,10))) byId.set(offer.id,offer);
   }
-  const offers=trackChanges([...byId.values()].slice(0,150),prior,checkedAt);
+  // Leave headroom under the 1 MiB document limit; trim harder if a page grows.
+  let limit=MAX_OFFERS, offers=trackChanges(trimOffers([...byId.values()],limit),prior,checkedAt);
+  while(limit>60 && Buffer.byteLength(JSON.stringify(offers))>850000) offers=trackChanges(trimOffers([...byId.values()],limit-=40),prior,checkedAt);
   const sources=results.map(({items,...row})=>({...row,offerCount:items.length}));
   const successful=results.filter(r=>r.status==='ok').length;
   const doc={asOf,generatedAt:checkedAt,origins:ORIGINS,offers,sources,
@@ -59,7 +62,7 @@ async function main() {
     changes:{newOffers:offers.filter(d=>d.change.status==='new').length,priceDrops:offers.filter(d=>d.change.status==='dropped').length,priceRises:offers.filter(d=>d.change.status==='rose').length,comparedWith:prior?.generatedAt || null},
     coverage:'Airline fares and labelled sale announcements; not an exhaustive worldwide fare search or live seat inventory.',modelCalls:0};
   sources.forEach(s=>console.log(s.id+': '+s.status+' · '+s.message));
-  console.log(JSON.stringify({summary:doc.summary,origins:ORIGINS,airlines:[...new Set(offers.map(d=>d.airline))],destinations:[...new Set(offers.map(d=>d.destination))]}));
+  console.log(JSON.stringify({bytes:Buffer.byteLength(JSON.stringify(doc)),offersFound:byId.size,summary:doc.summary,origins:ORIGINS,airlines:[...new Set(offers.map(d=>d.airline))],destinations:[...new Set(offers.map(d=>d.destination))]}));
   if(dryRun) return;
   if(!successful) throw Error('No airline source produced readable offers; previous scout preserved.');
   const batch=db.batch();
