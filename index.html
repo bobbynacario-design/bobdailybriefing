@@ -3789,6 +3789,13 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     </div>
 
     <div class="help-card">
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Flights — fares and seat sales</div>
+      <p>Flights scouts Manila, Cebu and Clark for international offers, with flexible dates. The scout requests public airline pages and labelled announcement feeds at 08:00 and 20:00 Philippine time; scheduled runs may start late. It makes no OpenAI or Claude calls and uses no paid flight-search API. Firebase loads the latest scout and your saved shortlist; saving or removing a deal writes to your account. Reload latest scout reads the saved feed rather than starting a new airline search. These requests use the app's existing hosting and Firebase services.</p>
+      <p>Seat sales appear first with their booking deadline and travel window. A starting base fare excludes the charges described on the card and does not confirm a seat on a particular route. Announcement links are checked during the scout; a reachable fallback publisher is used when available. If a publisher cannot be reached, its link is marked unavailable while the extracted terms and airline booking link remain visible. Confirm eligible routes, seats and the final total directly with the airline.</p>
+      <p>Flight samples show the original fare and an approximate PHP equivalent where the app has a dated USD/PHP or AUD/PHP rate. The exchange rate and date are inside Fare details &amp; restrictions; bank or card rates and fees may differ. Date filters match exact sample departures or overlapping campaign travel windows. Undated campaigns are omitted from date searches. Expired sales disappear from the live list; saved snapshots remain historical references. Dynamic or blocked airline pages are marked unavailable, and worldwide coverage is incomplete.</p>
+    </div>
+
+    <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-sports"/></svg> Sports — NBA and Tennis</div>
       <p>The Sports tab defaults to <b>NBA</b>, with <b>Tennis</b> beside it and FIFA retained as an archive. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
       <ul>
