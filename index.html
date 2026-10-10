@@ -1158,7 +1158,7 @@ window.fbSetSavedFlight = async function(offer, keep) {
     var saved = Object.assign({},snap.exists() ? snap.data().savedOffers || {} : {});
     if (keep) {
       if (!saved[offer.id] && Object.keys(saved).length >= 100) throw new Error('Your shortlist has 100 offers. Remove one before saving another.');
-      var fields = ['id','kind','airline','origin','destination','originName','destinationName','departureDate','returnDate','tripType','cabin','currency','amount','priceLabel','priceBasis','fees','baggage','connections','bookingEnd','travelPeriod','sourceUrl','bookingUrl','checkedAt','airlineSeen','terms','title','discount','campaign','origins','baseFareAmount','bookingStart','travelStart','travelEnd','destinationKeywords','evidenceUrl','publisher','discoveryUrl','publishedAt'];
+      var fields = ['id','kind','airline','origin','destination','originName','destinationName','departureDate','returnDate','tripType','cabin','currency','amount','priceLabel','priceBasis','fees','baggage','connections','bookingEnd','travelPeriod','sourceUrl','bookingUrl','checkedAt','airlineSeen','terms','title','discount','campaign','origins','baseFareAmount','bookingStart','travelStart','travelEnd','destinationKeywords','evidenceUrl','publisher','discoveryUrl','publishedAt','evidenceStatus'];
       var copy = {};
       fields.forEach(function(key) { if (offer[key] !== undefined) copy[key] = offer[key]; });
       copy.savedAt = new Date().toISOString(); saved[offer.id] = copy;

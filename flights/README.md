@@ -8,7 +8,11 @@ offers, AirAsia Philippine campaigns, Cebu Pacific seat sales and Scoot
 Manila/Cebu/Clark.
 
 Cebu Pacific's JavaScript seat-sale page is also checked, with a public Hello
-Mnl press-release RSS feed as a labelled fallback. The reader requires an
+Mnl press-release RSS feed and Logistics News PH's Cebu Pacific feed as labelled
+fallbacks. Article links are checked during the scout; matching campaigns prefer
+a reachable publisher. When no publisher opens, the card keeps the extracted
+terms and airline booking link, but shows the announcement link as unavailable.
+The reader requires an
 international campaign, an explicit one-way base fare, fee exclusions, booking
 dates and a travel window. Missing booking years come from the dated article;
 old, expired or incomplete announcements are rejected. Campaigns appear first,

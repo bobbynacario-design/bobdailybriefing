@@ -9,6 +9,7 @@ export const SOURCES = [
   {id:'airasia-ph',airline:'AirAsia',type:'promos',url:'https://www.airasia.com/promotions/ph/'},
   {id:'cebu-promo',airline:'Cebu Pacific',type:'promos',url:'https://www.cebupacificair.com/en-PH/seat-sale'},
   {id:'cebu-announcements',airline:'Cebu Pacific',publisher:'Hello Mnl · press-release fallback',type:'campaign-feed',url:'https://hellomnl.com/tag/cebu-pacific/feed/'},
+  {id:'cebu-announcements-backup',airline:'Cebu Pacific',publisher:'Logistics News PH · announcement fallback',type:'campaign-feed',url:'https://logisticsnews.ph/tag/cebu-pacific/feed/'},
   {id:'scoot-manila',airline:'Scoot',type:'fares',url:'https://flights.flyscoot.com/en-ph/flights-from-manila'},
   {id:'scoot-cebu',airline:'Scoot',type:'fares',url:'https://flights.flyscoot.com/en-ph/flights-from-cebu'},
   {id:'scoot-clark',airline:'Scoot',type:'fares',url:'https://flights.flyscoot.com/en-ph/flights-from-clark'}

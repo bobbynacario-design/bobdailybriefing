@@ -27,3 +27,11 @@ test('reads feed content and ignores unsafe article links and unrelated items',(
   assert.equal(parseCebuCampaigns(feed,source,checked).length,1);
   assert.equal(parseCebuCampaigns('<html>app shell</html>',source,checked).length,0);
 });
+test('extracts the backup publisher phrasing with matching sale and travel dates',()=>{
+  const html='<p>Cebu Pacific has launched an international seat sale offering one-way base fares starting at PHP 10. The sale period runs from October 8 through October 11, 2026, with applicable travel dates extending from February 1 to June 30, 2027. Quoted fares do not include taxes, fees, and additional surcharges.</p>';
+  const d=campaignFromArticle({...article,html,publisher:'Logistics News PH',evidenceUrl:'https://logisticsnews.ph/sale'},checked);
+  assert.equal(d.baseFareAmount,10);assert.equal(d.bookingEnd,'2026-10-11');assert.equal(d.travelStart,'2027-02-01');
+  const source={type:'campaign-feed',url:'https://logisticsnews.ph/tag/cebu-pacific/feed/',publisher:'Logistics News PH'};
+  const feed='<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title>'+article.title+'</title><link>https://logisticsnews.ph/sale</link><pubDate>'+article.publishedAt+'</pubDate><content:encoded><![CDATA['+html+']]></content:encoded></item></channel></rss>';
+  assert.equal(parseCebuCampaigns(feed,source,checked).length,1);
+});

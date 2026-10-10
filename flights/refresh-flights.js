@@ -5,6 +5,7 @@ import {initializeApp,cert,applicationDefault} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {SOURCES,ORIGINS,USER_AGENT} from './config.js';
 import {parseSource} from './parse.js';
+import {checkAnnouncementLinks,preferAnnouncement} from './announcement-links.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 
 const started=Date.now(), dryRun=process.argv.includes('--dry-run'), force=process.argv.includes('--force');
@@ -39,10 +40,10 @@ async function main() {
   const results=[];
   // Two at a time, bounded timeout per public page. No anti-bot bypass or retries.
   for(let i=0;i<SOURCES.length;i+=2) results.push(...await Promise.all(SOURCES.slice(i,i+2).map(fetchSource)));
-  const fresh=results.flatMap(r=>r.items), byId=new Map();
+  const fresh=await checkAnnouncementLinks(results.flatMap(r=>r.items)), byId=new Map();
   for(const offer of fresh) {
     const existing=byId.get(offer.id);
-    if(!existing || offer.publisher===offer.airline)byId.set(offer.id,offer);
+    byId.set(offer.id,preferAnnouncement(existing,offer));
   }
   const failed=new Set(results.filter(r=>r.status!=='ok').map(r=>r.url));
   for(const offer of prior?.offers || []) {

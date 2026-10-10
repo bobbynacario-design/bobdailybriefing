@@ -17,10 +17,10 @@ export function campaignFromArticle({title,html,publishedAt,evidenceUrl,publishe
   const published=Date.parse(publishedAt),checked=Date.parse(checkedAt);
   if(!Number.isFinite(published)||published>checked||checked-published>45*86400000||!/Cebu Pacific/i.test(title+' '+body)||!/seat sale/i.test(title+' '+body))return null;
   if(!/international/i.test(body))return null;
-  const quote=body.match(/(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)\s+one[ -]way\s+base fare/i);
-  const booking=body.match(new RegExp('(?:From|runs? from)\\s+'+monthPattern+'\\s+(\\d{1,2})\\s*(?:to|[-–])\\s*(?:'+monthPattern+'\\s+)?(\\d{1,2})(?:,?\\s+(20\\d{2}))?','i'));
-  const travel=body.match(new RegExp('travel period[^.]{0,70}?'+monthPattern+'\\s+(\\d{1,2})\\s*(?:through|to|[-–])\\s*'+monthPattern+'\\s+(\\d{1,2}),?\\s+(20\\d{2})','i'));
-  if(!quote||!booking||!travel||!/exclusive of fees and surcharges/i.test(body))return null;
+  const quote=body.match(/(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)\s+one[ -]way\s+base fare/i) || body.match(/one[ -]way\s+base fares?\s+(?:starting at|from|as low as)\s+(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)/i);
+  const booking=body.match(new RegExp('(?:From|runs? from)\\s+'+monthPattern+'\\s+(\\d{1,2})\\s*(?:through|to|[-–])\\s*(?:'+monthPattern+'\\s+)?(\\d{1,2})(?:,?\\s+(20\\d{2}))?','i'));
+  const travel=body.match(new RegExp('(?:travel period|travel dates)[^.]{0,70}?'+monthPattern+'\\s+(\\d{1,2})\\s*(?:through|to|[-–])\\s*'+monthPattern+'\\s+(\\d{1,2}),?\\s+(20\\d{2})','i'));
+  if(!quote||!booking||!travel||!/(?:exclusive of fees and surcharges|do not include taxes,? fees,? and (?:additional )?surcharges)/i.test(body))return null;
   const year=booking[5]||String(new Date(published).getUTCFullYear());
   const bookingStart=day(year,booking[1],booking[2]),bookingEnd=day(year,booking[3]||booking[1],booking[4]);
   const travelStart=day(travel[5],travel[1],travel[2]),travelEnd=day(travel[5],travel[3],travel[4]);
@@ -44,7 +44,7 @@ export function parseCebuCampaigns(html,source,checkedAt) {
   if(source.type==='campaign-feed') {
     $('item').slice(0,15).each((_,element)=>{
       const item=$(element),evidenceUrl=item.find('link').text().trim();
-      try {const u=new URL(evidenceUrl);if(u.protocol!=='https:'||u.hostname!=='hellomnl.com'||u.username||u.password)return;}catch{return;}
+      try {const u=new URL(evidenceUrl);if(u.protocol!=='https:'||!['hellomnl.com','logisticsnews.ph'].includes(u.hostname)||u.hostname!==new URL(source.url).hostname||u.username||u.password)return;}catch{return;}
       const record=campaignFromArticle({title:item.find('title').text(),html:item.find('content\\:encoded').text(),publishedAt:item.find('pubDate').text(),evidenceUrl,publisher:source.publisher,discoveryUrl:source.url},checkedAt);
       if(record)items.push(record);
     });
