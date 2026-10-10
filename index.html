@@ -1599,6 +1599,26 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .flight-source{font-size:12px;line-height:1.6;padding:.65rem .8rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg2);min-width:0}
 .flight-source a{font-size:12px;color:var(--txt)}
 @media(max-width:600px){.flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.flight-source-list{grid-template-columns:1fr}}
+.flight-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;align-items:start}
+.flight-city{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;min-width:0}
+.flight-city>summary{cursor:pointer;list-style:none;display:block;padding:.6rem .8rem;font-size:12px;line-height:1.5}
+.flight-city-line{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:.1rem .75rem}
+.flight-city-line>:last-child{margin-left:auto;text-align:right}
+.flight-city>summary::-webkit-details-marker{display:none}
+.flight-city[open]>summary{border-bottom:1px solid var(--rim)}
+.flight-city .flights-note{margin:0}
+.flight-city>.flights-note{padding:.55rem .8rem .7rem}
+.flight-city-name{font-family:var(--serif);font-size:15px;font-weight:700;color:var(--txt);overflow-wrap:anywhere}
+.flight-city-price{font-weight:700;color:var(--gold);text-align:right;white-space:nowrap}
+.flight-city-when{color:var(--txt2)}
+.flight-down{color:var(--green);font-weight:700}
+.flight-samples{padding:0 .8rem}
+.flight-sample{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.15rem .75rem;padding:.6rem 0;border-bottom:1px solid var(--rim);font-size:12px;line-height:1.5;scroll-margin:6rem}
+.flight-sample .flight-actions{grid-column:1/-1;margin-top:.15rem}
+.flight-sample-price{text-align:right;white-space:nowrap}
+.flight-hit{background:var(--gold-dim)}
+@media(max-width:900px){.flight-board{grid-template-columns:1fr}}
+@media(max-width:600px){.flight-city-when+.flights-note{margin-left:0;text-align:left}}
 .sports-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}
 .sports-module-tabs{display:flex;gap:.45rem;flex-wrap:wrap;margin:0 0 1rem}
 .sports-module-tab{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:.45rem .8rem;border-radius:8px;border:1px solid var(--rim);background:transparent;color:var(--txt3);cursor:pointer;transition:all .15s}
@@ -3501,7 +3521,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <label>Departure<select id="flights-origin" onchange="renderFlightOffers()"><option value="All">Manila, Cebu &amp; Clark</option><option value="MNL">Manila (MNL)</option><option value="CEB">Cebu (CEB)</option><option value="CRK">Clark (CRK)</option></select></label>
     <label>Destination or airline<input id="flights-destination" placeholder="Anywhere worldwide" oninput="renderFlightOffers()"></label>
     <label>Trip<select id="flights-trip" onchange="renderFlightOffers()"><option value="All">All offers</option><option value="round-trip">Round trip</option><option value="one-way">One way</option><option value="campaigns">Seat sales &amp; campaigns</option></select></label>
-    <label>Currency<select id="flights-currency" onchange="renderFlightOffers()"><option value="All">All currencies</option></select></label>
+    <label>Cabin<select id="flights-cabin" onchange="renderFlightOffers()"><option value="economy">Economy</option><option value="premium">Business &amp; premium</option><option value="All">All cabins</option></select></label>
     <label>Depart from<input id="flights-from" type="date" onchange="renderFlightOffers()"></label>
     <label>Depart through<input id="flights-to" type="date" onchange="renderFlightOffers()"></label>
   </div>
@@ -3803,7 +3823,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Flights — fares and seat sales</div>
-      <p><b>Trips worth checking first</b> ranks up to three distinct destinations using fresh economy return samples, your trip length and an optional PHP budget. Set an extra-cost allowance for planning; it is added to the fare when checking your budget, but is not a verified ticket total. The cards explain why each option was selected and which taxes, baggage or stops remain unconfirmed. Checked-baggage preference highlights gaps; confirmed-nonstop-only excludes flights with unknown stops. The remaining samples are under Browse all. Compare another observed option opens that destination's next matching sample.</p>
+      <p><b>Trips worth checking first</b> ranks up to three distinct destinations using fresh economy return samples, your trip length and an optional PHP budget. Set an extra-cost allowance for planning; it is added to the fare when checking your budget, but is not a verified ticket total. The cards explain why each option was selected and which taxes, baggage or stops remain unconfirmed. Checked-baggage preference highlights gaps; confirmed-nonstop-only excludes flights with unknown stops. Below it, <b>All destinations</b> lists every city by region, cheapest first, with its best fare, dates (weekday and nights) and how many fares were seen; open a city for every observed date pair, each with its own airline link and Save. "All N fares to …" on a shortlist card opens that city. Cabin defaults to Economy; the status line counts the business and premium fares it hides.</p>
       <p><b>Price changes</b> compare the same route, cabin, currency, journey and exact travel dates with the previous scout, for up to seven days. A changed date is a new observation, not a price drop. Old retained offers cannot produce fresh change signals. Seat sales show approaching booking deadlines in Philippine time. The shortlist uses the current free sources and makes no model calls; live seat confirmation and final all-in prices remain on the airline.</p>
       <p>Flights scouts Manila, Cebu and Clark for international offers, with flexible dates. The scout requests public airline pages and labelled announcement feeds at 08:00 and 20:00 Philippine time; scheduled runs may start late. It makes no OpenAI or Claude calls and uses no paid flight-search API. Firebase loads the latest scout and your saved shortlist; saving or removing a deal writes to your account. Reload latest scout reads the saved feed rather than starting a new airline search. These requests use the app's existing hosting and Firebase services.</p>
       <p>Seat sales appear first with their booking deadline and travel window. A starting base fare excludes the charges described on the card and does not confirm a seat on a particular route. Announcement links are checked during the scout; a reachable fallback publisher is used when available. If a publisher cannot be reached, its link is marked unavailable while the extracted terms and airline booking link remain visible. Confirm eligible routes, seats and the final total directly with the airline.</p>

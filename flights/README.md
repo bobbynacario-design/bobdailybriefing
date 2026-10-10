@@ -65,9 +65,13 @@ the last successful snapshot intact and records a failed feed-health status.
 Offers older than 26 hours are labelled old in the UI. Airline-advertised fares
 may already be unavailable even when the source check is recent.
 
-The UI filters airports, destination/airline, currency, journey and departure
-window. Quotes are sorted within native currency, journey and cabin groups;
-discount percentages are never ranked against priced fares.
+The UI filters airports, destination/airline, cabin (Economy by default; the
+status line counts hidden business and premium fares), journey and departure
+window. Priced fares appear on a destination board: one row per city (airports
+such as NRT/HND/TYO merge), grouped by region near to far, ranked by the PHP
+estimate with fares lacking a current rate after them. Opening a city lists every
+observed date pair with weekday dates, nights, airline link and Save. Discount
+percentages are never ranked against priced fares.
 USD and AUD fares also show approximate PHP equivalents using the existing
 PH market snapshot rates, with their date and an older-rate label at four days.
 Unsupported currencies or failed FX reads show no inferred conversion. Bank or
