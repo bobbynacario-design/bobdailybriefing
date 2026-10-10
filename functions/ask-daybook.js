@@ -43,12 +43,17 @@ const LOOKUP_LIMIT = 12;
 // lookups cheap; a Radar name is short and every labelled part of it answers
 // some question (the score's reason, catalyst, read, levels, tripwire).
 const CLIP_TEXT = 450;
-const CLIP_FOR = {Radar: 1200};
+const CLIP_FOR = {Radar: 1200, Calendar: 600, Commitments: 900, Poker: 600, Flights: 600};
+// The overviews of his life data are computed across all their records
+// (lib/life-records-core.js), so they run long and are returned whole,
+// without a matched-word excerpt repeating part of them.
+const LIFE_OVERVIEWS = ["calendar:overview", "commitments:overview", "poker:overview", "flights:overview"];
+const CLIP_OVERVIEW = 2400;
 const MAX_THREAD = 3;
 const KEEP_ANSWERS = 20;
 // The search index's source names, as the lookup tool offers them.
 const ASK_SOURCES = ["Profile", "Activity", "Briefing", "News", "Research", "Decisions", "Reflections", "Evidence", "Dossier", "Meeting",
-  "Weekly read", "Numbers", "Radar", "Markets", "Sports"];
+  "Weekly read", "Numbers", "Radar", "Markets", "Sports", "Calendar", "Commitments", "Poker", "Flights"];
 // What he has told Daybook about himself, and what it has picked up from him
 // (the About you page). Few records, so a lookup may read them all at once.
 const ABOUT_SOURCES = ["Profile", "Activity"];
@@ -85,10 +90,20 @@ const ORIGIN = {
   Radar: "A Radar signal (the app's daily market scan)",
   Markets: "A Markets scenario read (AI panel)",
   Sports: "A sports feed item",
+  Calendar: "An entry on his calendar (his own event, a meeting with one of his accounts, or an all-day entry such as leave or a holiday)",
+  Commitments: "His own weekly commitments (his words) and the days he ticked",
+  Poker: "A tournament he starred in PokerHQ (★ Playing These: his decision to play)",
+  Flights: "A fare he saved on Flights (an airline's advertised sample, not a booking)",
 };
 // A record whose kind is not its source's: the Radar overview is computed by
 // the app across the scan, not one name and not AI-written.
-const ORIGIN_BY_ID = {"radar:overview": "The Radar's overview of today's scan, computed by the app (not AI-written)"};
+const ORIGIN_BY_ID = {
+  "radar:overview": "The Radar's overview of today's scan, computed by the app (not AI-written)",
+  "calendar:overview": "An overview of his calendar computed by the app: time off, leave and what is coming up (not AI-written)",
+  "commitments:overview": "An overview of his weekly commitments computed by the app, with his focus order (not AI-written)",
+  "poker:overview": "An overview of his PokerHQ ★ picks computed by the app: buy-ins, PokerHQ's grades and series abroad (not AI-written)",
+  "flights:overview": "An overview of the Flights scout computed by the app: fares for his time off, cheapest cities and poker trips (not AI-written)",
+};
 function originOf(source, id) {
   return ORIGIN_BY_ID[id] || ORIGIN[source] || "An item from his app (" + source + ")";
 }
@@ -101,7 +116,7 @@ const SEARCH_TOOL = {
   name: "search_daybook",
   description: "Look up Bob's own Daybook: his profile and what the app has picked up from him (Profile, Activity), his briefings, " +
     "news he was shown, research reports, decisions, notes, saved evidence, dossiers, meeting briefs, weekly reads, Your numbers, " +
-    "and the Radar, Markets and Sports feeds. Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
+    "the Radar, Markets and Sports feeds, and his life data: his calendar (events, leave, holidays), weekly commitments, PokerHQ ★ picks and Flights. Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
   parameters: {
     type: "object",
     properties: {
@@ -217,9 +232,15 @@ function buildAskPrompt({question, today, accounts, web}) {
     "- A question about the Radar (the app's daily market scan: a name's score, status, reason, catalyst, levels or tripwire, or today's Taker and Wildcard picks): look up sources Radar; the term \"radar\" reads today's names, highest score first, and \"Taker\" or \"Wildcard\" finds those picks. Its \"Radar overview\" record is computed across the whole scan: the picks with their scores, grouped by score band with each band's record, volume, early flags, themes and status counts. A name is early only when its meta says early. The Radar holds today's scan only, so it cannot say how a name has changed; say so if asked. Its levels are the scan's own, never a recommendation.",
     "- A question about one Radar name: open with its score, status and pick (from meta). State as a caveat what its record shows against it: volume below its 20-day norm (under 1×), and a score band with no clear edge (under 50% beat their benchmark, or average excess between -0.25 and +0.25 points, the card's own noise line). Give the band's record as how names in that band have done before, never as a forecast.",
     "- A question about today's picks, several Radar names or the Radar as a whole: build the answer from the Radar overview record and cite it. Give the picks grouped by score band as it groups them, with each band's record, and say plainly which group has no clear edge; then how many are on volume below their norm, and the themes. Name each pick once, with its score. Say once what all share (e.g. \"all six are early\"); never repeat status words such as forming or early for each name, and never open each name with its own status.",
+    "- A question about his time, plans or week (leave, holidays, what is coming up, his commitments, poker plans, trips, fares): look up sources Calendar, Commitments, Poker and Flights as fits, with the term \"overview\" plus the question's own words. Each has an overview record computed by the app across all its records: his time off (leave joined with weekends and holidays) and what is coming up; this week's commitments with the days ticked, last week's results and his focus order; his ★ PokerHQ picks with buy-ins, PokerHQ's grades and series abroad; and the Flights scout's fares that fit his time off, cheapest cities and poker trips. Build the answer from the overview and cite it; dated questions (\"in December\") can also narrow by dates.",
+    "- His calendar in Daybook holds his own Daybook events, meetings matched to his accounts and all-day entries from his linked calendars, not every appointment: never call a day free or say he has nothing on; say what is listed.",
+    "- Commitments are his own words; a tick is a day he marked doing something toward one. Never infer progress beyond the ticks and the results he marked. For \"what should I focus on\", follow his focus order as the overview states it (money, then work, then health, then poker) and draw on his commitments and calendar.",
+    "- PokerHQ: a ★ (Playing These) is his decision to play; a grade (target, stretch, skip) is only PokerHQ's check of a buy-in against his bankroll rule, not a decision. Daybook never sees his bankroll amount; never state or guess it, and give no advice on stakes beyond PokerHQ's own grade.",
+    "- Flights fares are airlines' advertised samples on the airlines' own dates, checked on the scout's date: \"the scout saw Taipei from ≈ PHP … on …\", never that a seat is available at that price. Exact dates are searched with the Google Flights links on Flights.",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
     "  - His profile, his own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\", \"you describe yourself as…\" is right.",
     "  - Activity is what he did in the app (votes, open calls, what he opens): describe it as what he did, never as what he said.",
+    "  - His commitments and his calendar entries are his own plans: \"you committed to…\", \"your calendar has…\". A ★ in PokerHQ is his choice to play; a saved fare is one he kept, not a booking.",
     "  - A dossier, meeting brief or weekly read is AI-written for him; a saved page or report is something he kept: never present these as his view.",
     "  - A briefing story or news item he was shown: at most \"your 25 Sep briefing said…\". Being shown something is not interest.",
     "  - A Radar record is the app's scan. Its \"Score reason\", score, status, early flag, levels and score-band record are computed from prices and volume: \"the scan scores it…\". Its catalyst and its \"Why it's moving\" / \"What would break it\" read are AI-written from news it found: \"the Radar's read says…\", never plain fact.",
@@ -295,9 +316,10 @@ function dayOf(saved) {
 // words they are.
 function lookupOutput(hits, registry) {
   const results = arr(hits).map((item) => {
-    const parts = [item.detail, item.excerpt, item.body].map(text).filter(Boolean).filter((part, i, all) => all.indexOf(part) === i);
+    const overview = LIFE_OVERVIEWS.indexOf(item.id) >= 0;
+    const parts = [item.detail, overview ? "" : item.excerpt, item.body].map(text).filter(Boolean).filter((part, i, all) => all.indexOf(part) === i);
     return {ref: refFor(registry, item), kind: originOf(item.source, item.id), date: dayOf(item.saved), title: clip(item.title, 200),
-      text: clip(parts.join(" — "), CLIP_FOR[item.source] || CLIP_TEXT), meta: clip(item.meta, 100)};
+      text: clip(parts.join(" — "), overview ? CLIP_OVERVIEW : CLIP_FOR[item.source] || CLIP_TEXT), meta: clip(item.meta, 100)};
   });
   return JSON.stringify(results.length ? {results} : {results: [], note: "Nothing in his Daybook matched these terms."});
 }
@@ -404,6 +426,29 @@ function aboutRecords(docs, todayKey) {
   return out;
 }
 
+// His calendar, weekly commitments, PokerHQ ★ picks and Flights as index rows,
+// with their computed overviews (lib/life-records-core.js, synced here).
+// life = {core, calendar, flights, review}: the shared modules, passed in so
+// this file stays pure. The PokerHQ bankroll only feeds PokerHQ's own grade.
+function lifeRecords(docs, life) {
+  if (!life || !life.core || typeof life.core.records !== "function") return [];
+  const value = (doc) => {
+    if (!doc) return null;
+    try { return typeof doc.value === "string" ? JSON.parse(doc.value) : doc.value; } catch (error) { return null; }
+  };
+  const bankroll = value(docs.pokerBankroll);
+  const tourneys = value(docs.pokerTourneys);
+  return life.core.records({
+    today: docs.todayKey,
+    now: docs.now,
+    calendar: {manual: arr(docs.calendarEvents && docs.calendarEvents.items), meetings: docs.calendarMeetings || null},
+    review: docs.review || null,
+    poker: Array.isArray(tourneys) ? {tourneys, sessions: arr(value(docs.pokerSessions)),
+      bankroll: bankroll && Number(bankroll.amount) > 0 ? {amount: Number(bankroll.amount), rule: Number(bankroll.rule) || 5} : null} : null,
+    flights: docs.flights ? {latest: docs.flights, saved: (docs.flightsSaved && docs.flightsSaved.savedOffers) || {}, history: docs.flightsHistory || null, fx: docs.fx || null} : null,
+  }, {calendar: life.calendar, flights: life.flights, review: life.review});
+}
+
 // One lookup. With no terms, it reads every Profile and Activity record (they
 // are few, and a question about him has no words to match); otherwise the
 // usual planned search.
@@ -418,7 +463,7 @@ function lookupRecords(index, plan, searchCore, now) {
 
 // The search index's input, from the documents the server read for him. The
 // reflections mirror the app's (daily-boost.js dailyBoostSearchEntries).
-function askIndexInput(docs, core) {
+function askIndexInput(docs, core, life) {
   docs = docs || {};
   const briefings = [];
   arr(docs.briefings).forEach((doc) => {
@@ -444,7 +489,7 @@ function askIndexInput(docs, core) {
     meetingBriefs: docs.meetings && docs.meetings.items,
     mirrors: docs.mirrors && docs.mirrors.mirrors,
     grounding: docs.grounding,
-    records: aboutRecords(docs, docs.todayKey),
+    records: aboutRecords(docs, docs.todayKey).concat(lifeRecords(docs, life)),
     news: docs.news,
     radar: docs.radar,
     radarJournal: docs.radarJournal,
@@ -508,5 +553,5 @@ function keepAnswers(items, id, answer) {
 module.exports = {
   requestIntent, intentInstructions, sentenceCount, reviewAnswer, refineAnswer,
   cleanQuestion, cleanThread, originOf, buildAskPrompt, buildAskInput, cleanPlan, newRegistry, lookupOutput, cleanAnswer,
-  askIndexInput, aboutRecords, lookupRecords, runLookups, providerError, keepAnswers, SYSTEM, ABOUT_SOURCES, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
+  askIndexInput, aboutRecords, lifeRecords, lookupRecords, runLookups, providerError, keepAnswers, SYSTEM, ABOUT_SOURCES, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
 };

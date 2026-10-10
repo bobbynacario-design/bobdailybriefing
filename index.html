@@ -3879,6 +3879,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <ul>
         <li>Open <b>Search</b> (Ctrl+K), type a question in plain English and tap <b>Ask Daybook</b> (or Ctrl+Enter). For example: “What have I got on QBE since August?”, “Why did I make the ETH call?”, “What is the NSW field-worker labour rate?”</li>
         <li>It looks things up in your Daybook up to three times, choosing its own words, sources and dates: briefings, news, reports, decisions, notes, evidence, dossiers, meeting briefs, weekly reads, Your numbers and the feeds. Your accounts’ other names count as lookup words.</li>
+        <li>It also reads your own plans: your <b>calendar</b> (your events, account meetings, and leave and holidays from your linked calendars), your <b>weekly commitments</b> and ticks, the tournaments you <b>★ starred in PokerHQ</b>, and <b>Flights</b>. Each has an overview the app works out itself — your time off, this week’s progress in your focus order (money, work, health, poker), your picks’ buy-ins and PokerHQ’s grades, and the scouted fares that fit your leave — so “What’s my next time off?”, “How am I going on this week’s commitments?”, “What poker have I starred in October and what will the buy-ins come to?” or “Any fares for my Christmas leave?” are answered from those figures. A grade is PokerHQ’s affordability check, not a decision; it never sees your bankroll amount; fares are the airlines’ advertised samples, not live prices.</li>
         <li>From the <b>Radar</b> it reads today’s scan: each name’s score and status, the reason for the score, its catalyst and read (AI-written, and said so), its levels and tripwire, how names in its score band have done before, and which names are today’s Taker and Wildcard picks. For example: “Why is SOXX on the radar?”, “What are today’s Wildcard picks?”. It has no earlier days, so it can’t say how a name has changed.</li>
         <li>Every claim carries a ref: <b>S1</b> opens that record where it lives; <b>W1</b> opens a web page. A claim with no ref it found is dropped, and when your Daybook has nothing on it, it says so rather than guessing.</li>
         <li>It keeps straight whose words are whose, as the meeting brief does: <b>you noted</b> only for your notes, decisions and the note on a saved page. A dossier, meeting brief or weekly read is AI-written; a briefing story is something you were shown.</li>
@@ -4970,6 +4971,20 @@ function openIndexedIntelligenceItem(item) {
   if (item.source === 'Reflections') { openReflectionDay(item.ref); return; }
   if (item.source === 'Dossier') return openDossierResult(item.ref);
   if (item.source === 'Weekly read') { openWeeklyReadResult(); return; }
+  // His life data (Ask Daybook): PokerHQ is its own app; commitments are on
+  // Today's This week card; a calendar entry opens on its day.
+  if (item.source === 'Poker') { window.open('https://bobbynacario-design.github.io/pokerhq/', '_blank', 'noopener'); return; }
+  if (item.source === 'Commitments') {
+    switchPage('today', document.querySelector('.ntab[data-page="today"]'));
+    var week = document.getElementById('weekly-card');
+    if (week && !week.hidden) setTimeout(function() { week.scrollIntoView({behavior:'smooth', block:'start'}); }, 80);
+    return;
+  }
+  if (item.source === 'Calendar') {
+    switchPage('calendar', document.querySelector('.ntab[data-page="calendar"]'));
+    if (/^\d{4}-\d{2}-\d{2}$/.test(item.ref || '') && typeof daycalSelect === 'function') daycalSelect(item.ref);
+    return;
+  }
   if (item.source === 'Evidence' || item.source === 'Meeting' || item.source === 'Numbers') return openEvidencePageResult(item);
   if (item.source === 'Briefing') {
     var archived = intelligenceSearchState.briefings.find(function (entry) { return entry.key === item.ref; });

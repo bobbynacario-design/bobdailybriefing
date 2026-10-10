@@ -214,3 +214,54 @@ test("a Radar lookup returns the whole card, highest score first, and the prompt
   assert.ok(prompt.includes("- A question about one Radar name: open with its score"), "the one-name rule is for one name only");
   assert.match(prompt, /never one this answer already covers/);
 });
+
+// ── his life data: calendar, commitments, PokerHQ ★ picks, Flights ──
+test("life data: the server reads his calendar, commitments, PokerHQ picks and Flights, with computed overviews", () => {
+  const life = {core: require("./life-records-core"), calendar: require("./daybook-calendar-core"), flights: require("./flights-core"), review: require("./weekly-review-core")};
+  const fare = {id: "b".repeat(20), kind: "advertised-fare", airline: "Philippine Airlines", origin: "MNL", originName: "Manila", destination: "TPE", destinationName: "Taipei",
+    currency: "PHP", amount: 16000, tripType: "round-trip", cabin: "Economy", departureDate: "2026-12-21", returnDate: "2026-12-24",
+    sourceUrl: "https://www.philippineairlines.com/deals", bookingUrl: "https://www.philippineairlines.com/book", checkedAt: "2026-10-01T01:00:00Z"};
+  const lifeDocs = {todayKey: "2026-10-01", now,
+    calendarEvents: {uid: "u", items: [{id: "evt-aaaaaaaa", title: "Dentist", start: "2026-10-06", end: "2026-10-06", kind: "personal"}]},
+    calendarMeetings: {days: ["21", "22", "23", "24"].map((d) => ({id: "l" + d, title: "0175 - Annual Leave", start: "2026-12-" + d, end: "2026-12-" + d, calendar: "Google"}))},
+    review: {weeks: {"2026-09-28": {commitments: [{id: "c-aaaaaa", text: "Walk 30 minutes", area: "health", ticks: ["2026-09-29"]}]}}},
+    // PokerHQ stores its values as JSON strings.
+    pokerTourneys: {value: JSON.stringify([{date: "2026-10-20", name: "Tuesday Grind", venue: "Okada Manila", buyin: 300, planning: true}, {date: "2026-10-21", name: "Not starred", buyin: 500}])},
+    pokerBankroll: {value: JSON.stringify({amount: 76543, rule: 5})},
+    pokerSessions: {value: "[]"},
+    flights: {asOf: "2026-10-01", offers: [fare]}, flightsSaved: {savedOffers: {}}};
+  const input = Ask.askIndexInput(lifeDocs, boostCore, life);
+  const ids = input.records.map((r) => r.id);
+  ["calendar:overview", "commitments:overview", "poker:overview", "flights:overview", "calendar:manual-evt-aaaaaaaa", "commitments:2026-09-28", "poker:2026-10-20:tuesday-grind"]
+    .forEach((id) => assert.ok(ids.includes(id), id));
+  assert.ok(!ids.some((id) => /not-starred/.test(id)), "only starred tournaments");
+  assert.ok(!JSON.stringify(input.records).includes("76543") && !JSON.stringify(input.records).includes("76,543"), "the bankroll amount never reaches a record");
+  assert.deepEqual(Ask.askIndexInput(lifeDocs, boostCore).records.filter((r) => /^(calendar|poker):/.test(r.id)), [], "without the cores, no life records");
+
+  const index = Core.buildIndex(input);
+  const registry = Ask.newRegistry();
+  const out = JSON.parse(Ask.lookupOutput(Core.searchPlan(index, {terms: ["overview", "leave"], sources: ["Calendar", "Flights"], since: "2026-12-01"}, {now}), registry)).results;
+  assert.deepEqual(out.map((r) => r.title).slice(0, 2), ["Calendar overview: your time off, leave, holidays and what is coming up",
+    "Flights overview: fares for your time off, cheapest destinations and poker trips"], "overviews are undated, so a date-bounded lookup still finds them");
+  assert.equal(out[0].kind, "An overview of his calendar computed by the app: time off, leave and what is coming up (not AI-written)");
+  assert.ok(out[0].text.length > 450, "an overview gets the long clip");
+  assert.ok(out[0].text.includes("Sat 19 Dec – Thu 24 Dec (December 2026): 6 days off for 4 leave days"), "the overview reaches the model with its figures");
+  assert.ok(out.some((r) => r.title === "Annual Leave" && r.kind.startsWith("An entry on his calendar")), "the leave itself, dated in December");
+  const flightsText = out.find((r) => r.title.startsWith("Flights overview")).text;
+  assert.ok(flightsText.includes("scouted fares inside these dates: Taipei from Manila ≈ PHP 16,000"), "the fare inside his leave");
+  assert.ok(Ask.originOf("Poker", "poker:2026-10-20:tuesday-grind").includes("his decision to play"));
+  assert.ok(Ask.originOf("Commitments", "commitments:2026-09-28").includes("his words"));
+  ["Calendar", "Commitments", "Poker", "Flights"].forEach((s) => assert.ok(Ask.ASK_SOURCES.includes(s) && Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes(s), s));
+  assert.deepEqual(Ask.cleanPlan({terms: ["leave"], sources: ["Calendar", "Nope"]}).sources, ["Calendar"]);
+});
+
+test("the prompt says how to ask about his time and plans, and keeps PokerHQ and fares honest", () => {
+  const prompt = Ask.buildAskPrompt({question: "When is my next leave?", today: "t", accounts: [], web: false});
+  assert.ok(prompt.includes("look up sources Calendar, Commitments, Poker and Flights as fits, with the term \"overview\""), "planning lookups start from the overviews");
+  assert.ok(prompt.includes("never call a day free or say he has nothing on"), "the calendar is not every appointment");
+  assert.ok(prompt.includes("follow his focus order as the overview states it (money, then work, then health, then poker)"));
+  assert.ok(prompt.includes("a grade (target, stretch, skip) is only PokerHQ's check of a buy-in against his bankroll rule") && prompt.includes("never state or guess it"));
+  assert.ok(prompt.includes("never that a seat is available at that price"));
+  assert.ok(prompt.includes("\"you committed to…\""), "commitments are his words");
+  assert.match(Ask.SEARCH_TOOL.description, /his calendar \(events, leave, holidays\), weekly commitments, PokerHQ ★ picks and Flights/);
+});

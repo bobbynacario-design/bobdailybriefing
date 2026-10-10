@@ -29,6 +29,10 @@ const {
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
 const WeeklyReviewCore = require("./weekly-review-core");
+// His calendar, PokerHQ picks and Flights as Ask Daybook records.
+const LifeRecordsCore = require("./life-records-core");
+const DaybookCalendarCore = require("./daybook-calendar-core");
+const FlightsCore = require("./flights-core");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 const Ask = require("./ask-daybook");
 const Haiku = require("./haiku");
@@ -755,8 +759,10 @@ async function loadAskIndex(db, uid) {
   // His own documents, newest first, as the app's Search reads them.
   const own = (name, n) => db.collection(name).where("uid", "==", uid).orderBy("saved", "desc").limit(n).get()
     .then((snap) => snap.docs.map((doc) => Object.assign({id: doc.id}, doc.data()))).catch(() => []);
+  const pokerhq = (id) => db.collection("pokerhq-bob").doc(id).get().then((snap) => (snap.exists ? snap.data() : null)).catch(() => null);
   const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
-    profile, accounts, usage, goals, radarJournal] = await Promise.all([
+    profile, accounts, usage, goals, radarJournal,
+    calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx] = await Promise.all([
     own(BRIEFINGS_COLL, 100), own(REPORTS_COLL, 50), own(JOURNAL_COLL, 100),
     get(COMMAND_PREF_PREFIX + uid), get("dossiers-" + uid), get("meeting-briefs-" + uid), get("weekly-mirror-" + uid), get("daily-boost-" + uid),
     get("grounding-latest"), latest("news"), latest("radar"), latest("miro"), latest("sports"),
@@ -764,10 +770,18 @@ async function loadAskIndex(db, uid) {
     get("profile-" + uid), get("accounts-" + uid), get("usage-" + uid), get("goals-" + uid),
     // How each Radar score band has done before (the card's "Band record").
     get("radar-journal"),
+    // His life data: calendar (own events; linked meetings and all-day
+    // entries), weekly review, PokerHQ (same project), Flights and the FX
+    // snapshot that turns a foreign fare into pesos.
+    get("calendar-events-" + uid), get("meetings-" + uid), get("review-" + uid),
+    pokerhq("tourneys"), pokerhq("bankroll"), pokerhq("sessions"),
+    get("flights-latest"), get("flights-saved-" + uid), get("flights-history"), get("radar-ph"),
   ]);
   const index = IntelligenceSearchCore.buildIndex(Ask.askIndexInput(
     {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
-      profile, accounts, usage, goals, radarJournal, todayKey: phtDateKey()}, DailyBoostCore));
+      profile, accounts, usage, goals, radarJournal, todayKey: phtDateKey(), now: Date.now(),
+      calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx}, DailyBoostCore,
+    {core: LifeRecordsCore, calendar: DaybookCalendarCore, flights: FlightsCore, review: WeeklyReviewCore}));
   askIndexCache = {uid, at: Date.now(), index};
   return index;
 }

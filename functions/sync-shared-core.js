@@ -16,7 +16,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const SHARED = ["command-center-core.js", "briefing-prompt-core.js", "daily-boost.js", "intelligence-search-core.js", "weekly-review-core.js"];
+const SHARED = ["command-center-core.js", "briefing-prompt-core.js", "daily-boost.js", "intelligence-search-core.js", "weekly-review-core.js",
+  "daybook-calendar-core.js", "flights-core.js", "life-records-core.js"];
 
 const libDir = path.resolve(__dirname, "..", "lib");
 SHARED.forEach((name) => {
