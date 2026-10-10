@@ -27,7 +27,7 @@ assert.deepEqual(duplicateIds(sports), [], 'sports.html must not contain duplica
 
 [
   'page-today', 'page-history', 'page-trends', 'page-research', 'page-radar',
-  'page-command', 'page-calendar', 'page-evidence', 'page-timeline', 'page-journal', 'page-pse', 'page-miro', 'page-flights', 'page-sports', 'page-help', 'page-decisions', 'page-about'
+  'today-five', 'page-calendar', 'page-evidence', 'page-timeline', 'page-journal', 'page-pse', 'page-miro', 'page-flights', 'page-sports', 'page-help', 'page-decisions', 'page-about'
 ].forEach(function (id) {
   assert.ok(html.includes('id="' + id + '"'), 'missing application page #' + id);
 });
@@ -40,7 +40,7 @@ assert.ok(html.includes('./lib/briefing-prompt-core.js'), 'Shared briefing promp
 assert.ok(html.includes('./lib/intelligence-search-core.js'), 'Unified search core must load before the app script');
 assert.ok(html.includes('./lib/evidence-sets-core.js'), 'Evidence sets core must load before the app script');
 assert.ok(html.includes('./lib/entity-timeline-core.js'), 'Entity timeline core must load before the app script');
-assert.ok(html.includes("if (id==='command') pending = renderCommandCenter()"), 'navigation must render Command Center');
+assert.ok(html.includes("if (id==='today') pending = renderTodayFive()"), 'Today must render the Morning 5');
 assert.ok(html.includes('fbLoadCommandPrefs') && html.includes('fbSaveCommandPrefs'),
   'Command Center preferences must load and save through the signed-in account');
 assert.ok(html.includes('Why this rank?'), 'Command Center must explain item ranking');

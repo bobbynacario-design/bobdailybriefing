@@ -1731,6 +1731,11 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .timeoff-links{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem}.timeoff-links a.tool-chip{text-decoration:none}
 .timeoff-city{display:inline-flex;gap:.35rem;align-items:center;flex:1 1 220px;min-width:0}.timeoff-city input{min-width:0;flex:1;padding:.35rem .55rem;border:1px solid var(--rim);border-radius:8px;background:var(--bg3);color:var(--txt);font-size:12px}
 @media(max-width:900px){.timeoff-grid{grid-template-columns:1fr}}
+.today-five{margin:0 0 1rem;scroll-margin-top:110px}#command-settings{scroll-margin-top:110px}.today-five #command-load-status:empty{display:none}
+.command-more{margin-top:.6rem;border:1px solid var(--rim);border-radius:10px;background:var(--bg2);padding:.2rem .8rem}
+.command-more>summary{cursor:pointer;padding:.55rem 0;font-family:var(--mono);font-size:11px;color:var(--txt2)}
+.command-more[open]>summary{border-bottom:1px solid var(--rim);margin-bottom:.7rem}
+.command-more .command-panel,.command-more .command-settings{margin-bottom:.8rem}
 .weekly-card,.weekly-review{background:var(--bg2);border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:12px;padding:.9rem 1rem;margin:0 0 1rem;font-size:13px;line-height:1.6}
 .weekly-card[hidden],.weekly-review[hidden]{display:none}
 .weekly-head,.weekly-review-head{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}.weekly-head h2,.weekly-review-head h2{font-family:var(--serif);font-size:18px;margin:0}
@@ -2966,7 +2971,6 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <div class="nav-brand"><img class="nav-mark" src="./assets/icons/daybook-mark.svg" alt="" width="22" height="22">DAYBOOK <span id="nav-brand-date" aria-label="Today"></span></div>
   <div class="nav-center">
     <button class="ntab active" data-page="today" onclick="switchPage('today',this)">Today</button>
-    <button class="ntab" data-page="command" onclick="switchPage('command',this)">◎ Command</button>
     <button class="ntab" data-page="evidence" onclick="switchPage('evidence',this)">▣ Evidence</button>
     <button class="ntab" data-page="timeline" onclick="switchPage('timeline',this)">◷ Timeline</button>
     <button class="ntab" data-page="history" onclick="switchPage('history',this)">History</button>
@@ -3025,76 +3029,6 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 </div>
 
 <!-- ═══════════════ TODAY PAGE ═══════════════ -->
-<div class="page" id="page-command">
-  <div id="command-load-status" role="status"></div>
-  <div class="hero command-hero" style="margin-bottom:1.25rem">
-    <div class="hero-eyebrow">Cross-feed daily priorities</div>
-    <div class="hero-date" style="font-size:22px">◎ Command Center</div>
-    <div class="hero-sub" id="command-sub">One prioritized view across the briefing, markets, decisions and followed sports.</div>
-    <div class="hero-divider"></div>
-  </div>
-  <details class="command-settings" id="command-settings">
-    <summary>Personal priority controls</summary>
-    <div class="command-settings-body">
-      <div class="command-settings-note">Boost or reduce a source's rank, or quiet it completely. Reliability warnings cannot be muted. Preferences sync to your signed-in account; pins and dismissals reset each PHT day.</div>
-      <div class="command-source-controls" id="command-source-controls"></div>
-      <div class="command-settings-actions">
-        <button class="tool-chip" onclick="resetCommandPreferences()">Reset source controls</button>
-        <button class="tool-chip" onclick="clearCommandDailyState()">Clear today's pins &amp; dismissals</button>
-        <span class="command-hidden-note" id="command-pref-status">Using default priorities</span>
-      </div>
-      <div class="command-delivery">
-        <div class="command-delivery-head">
-          <div><div class="command-delivery-title">Morning delivery</div><div class="command-delivery-status" id="command-delivery-status">Muted until enabled on this device</div></div>
-          <div class="command-settings-actions" id="command-delivery-actions"></div>
-        </div>
-        <div class="command-delivery-grid">
-          <div class="command-delivery-card">
-            <span class="command-delivery-label">Quiet hours · PHT</span>
-            <div class="command-quiet-hours"><input type="time" id="command-quiet-start" value="22:00" onchange="setCommandQuietHours()"><span>to</span><input type="time" id="command-quiet-end" value="06:00" onchange="setCommandQuietHours()"></div>
-            <div class="command-settings-note">Delivery checks every 30 minutes from 06:00–11:30 PHT and sends only after a material Morning 5 change.</div>
-          </div>
-          <div class="command-delivery-card">
-            <span class="command-delivery-label">Minimum delivery score by source</span>
-            <div class="command-thresholds" id="command-delivery-thresholds"></div>
-            <div class="command-settings-note">Reliability failures always remain eligible. Priority weights are applied before these thresholds.</div>
-          </div>
-        </div>
-        <div class="command-delivery-audit" id="command-delivery-audit"><div class="command-hidden-note">No delivery activity yet.</div></div>
-      </div>
-    </div>
-  </details>
-  <div class="command-summary">
-    <div class="command-stat"><div class="command-stat-value" id="command-act">—</div><div class="command-stat-label">Act now</div></div>
-    <div class="command-stat"><div class="command-stat-value" id="command-review">—</div><div class="command-stat-label">Decision reviews</div></div>
-    <div class="command-stat"><div class="command-stat-value" id="command-total">—</div><div class="command-stat-label">Relevant signals</div></div>
-    <div class="command-stat"><div class="command-stat-value" id="command-sources">—</div><div class="command-stat-label">Sources represented</div></div>
-  </div>
-  <div class="command-layout">
-    <section class="command-panel">
-      <div class="command-panel-head"><div><div class="command-panel-title">Morning 5</div><div class="command-panel-meta">Source-diverse, highest priority first · mark each one</div></div><div class="command-head-actions"><button type="button" class="tool-chip" id="command-delivery-quick" hidden aria-pressed="false" onclick="toggleCommandDelivery(this)">Morning push · off</button><button class="tool-chip" onclick="renderCommandCenter()">Refresh</button></div></div>
-      <div class="command-five" id="command-five"><div class="command-empty">Open Command Center to build today's priority stack.</div></div>
-      <div id="command-review-today"></div>
-    </section>
-    <section class="command-panel">
-      <div class="command-panel-head"><div><div class="command-panel-title">Attention Queue</div><div class="command-panel-meta" id="command-queue-meta">Everything beyond the Morning 5</div></div></div>
-      <div class="command-filters">
-        <button class="command-filter active" data-command-filter="all" onclick="setCommandFilter('all',this)">All</button>
-        <button class="command-filter" data-command-filter="act" onclick="setCommandFilter('act',this)">Act</button>
-        <button class="command-filter" data-command-filter="monitor" onclick="setCommandFilter('monitor',this)">Monitor</button>
-        <button class="command-filter" data-command-filter="system" onclick="setCommandFilter('system',this)">System</button>
-      </div>
-      <div class="command-queue" id="command-queue"><div class="command-empty">Loading cross-feed priorities…</div></div>
-    </section>
-  </div>
-  <details class="command-panel command-review-panel command-week" id="command-week">
-    <summary><span class="command-panel-title">Weekly discipline</span><span class="command-week-line" id="command-review-week-line">Rolling 7 PHT days</span></summary>
-    <div class="command-settings-note">How you handled the Morning 5 over the last seven PHT days. These are workflow measures, not evidence of forecasting skill.</div>
-    <div id="command-review-week"><div class="command-empty">No review history yet.</div></div>
-  </details>
-  <div class="radar-disclaimer">Priority is a deterministic triage aid built from existing app data. It does not create trades, bets, or new factual claims; open the source tab before acting.</div>
-</div>
-
 <div class="page" id="page-evidence">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">From reading to useful research</div>
@@ -3166,6 +3100,69 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 <div class="page active" id="page-today">
   <section class="weekly-card" id="weekly-card" hidden aria-labelledby="weekly-title"></section>
   <section class="weekly-review" id="weekly-review" hidden aria-label="Weekly review"></section>
+  <section class="today-five" id="today-five" aria-label="Morning 5">
+    <div id="command-load-status" role="status"></div>
+    <section class="command-panel">
+      <div class="command-panel-head"><div><div class="command-panel-title">Morning 5</div><div class="command-panel-meta">Source-diverse, highest priority first · mark each one</div></div><div class="command-head-actions"><button type="button" class="tool-chip" id="command-delivery-quick" hidden aria-pressed="false" onclick="toggleCommandDelivery(this)">Morning push · off</button><button class="tool-chip" onclick="renderCommandCenter()">Refresh</button></div></div>
+      <div class="command-five" id="command-five"><div class="command-empty">Open Command Center to build today's priority stack.</div></div>
+      <div id="command-review-today"></div>
+    </section>
+    <details class="command-more" id="command-more"><summary>More priorities, Morning 5 settings and weekly discipline</summary>
+      <div class="command-summary">
+    <div class="command-stat"><div class="command-stat-value" id="command-act">—</div><div class="command-stat-label">Act now</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="command-review">—</div><div class="command-stat-label">Decision reviews</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="command-total">—</div><div class="command-stat-label">Relevant signals</div></div>
+    <div class="command-stat"><div class="command-stat-value" id="command-sources">—</div><div class="command-stat-label">Sources represented</div></div>
+  </div>
+      <section class="command-panel">
+      <div class="command-panel-head"><div><div class="command-panel-title">Attention Queue</div><div class="command-panel-meta" id="command-queue-meta">Everything beyond the Morning 5</div></div></div>
+      <div class="command-filters">
+        <button class="command-filter active" data-command-filter="all" onclick="setCommandFilter('all',this)">All</button>
+        <button class="command-filter" data-command-filter="act" onclick="setCommandFilter('act',this)">Act</button>
+        <button class="command-filter" data-command-filter="monitor" onclick="setCommandFilter('monitor',this)">Monitor</button>
+        <button class="command-filter" data-command-filter="system" onclick="setCommandFilter('system',this)">System</button>
+      </div>
+      <div class="command-queue" id="command-queue"><div class="command-empty">Loading cross-feed priorities…</div></div>
+    </section>
+      <details class="command-settings" id="command-settings">
+    <summary>Personal priority controls</summary>
+    <div class="command-settings-body">
+      <div class="command-settings-note">Boost or reduce a source's rank, or quiet it completely. Reliability warnings cannot be muted. Preferences sync to your signed-in account; pins and dismissals reset each PHT day.</div>
+      <div class="command-source-controls" id="command-source-controls"></div>
+      <div class="command-settings-actions">
+        <button class="tool-chip" onclick="resetCommandPreferences()">Reset source controls</button>
+        <button class="tool-chip" onclick="clearCommandDailyState()">Clear today's pins &amp; dismissals</button>
+        <span class="command-hidden-note" id="command-pref-status">Using default priorities</span>
+      </div>
+      <div class="command-delivery">
+        <div class="command-delivery-head">
+          <div><div class="command-delivery-title">Morning delivery</div><div class="command-delivery-status" id="command-delivery-status">Muted until enabled on this device</div></div>
+          <div class="command-settings-actions" id="command-delivery-actions"></div>
+        </div>
+        <div class="command-delivery-grid">
+          <div class="command-delivery-card">
+            <span class="command-delivery-label">Quiet hours · PHT</span>
+            <div class="command-quiet-hours"><input type="time" id="command-quiet-start" value="22:00" onchange="setCommandQuietHours()"><span>to</span><input type="time" id="command-quiet-end" value="06:00" onchange="setCommandQuietHours()"></div>
+            <div class="command-settings-note">Delivery checks every 30 minutes from 06:00–11:30 PHT and sends only after a material Morning 5 change.</div>
+          </div>
+          <div class="command-delivery-card">
+            <span class="command-delivery-label">Minimum delivery score by source</span>
+            <div class="command-thresholds" id="command-delivery-thresholds"></div>
+            <div class="command-settings-note">Reliability failures always remain eligible. Priority weights are applied before these thresholds.</div>
+          </div>
+        </div>
+        <div class="command-delivery-audit" id="command-delivery-audit"><div class="command-hidden-note">No delivery activity yet.</div></div>
+      </div>
+    </div>
+  </details>
+      <details class="command-panel command-review-panel command-week" id="command-week">
+    <summary><span class="command-panel-title">Weekly discipline</span><span class="command-week-line" id="command-review-week-line">Rolling 7 PHT days</span></summary>
+    <div class="command-settings-note">How you handled the Morning 5 over the last seven PHT days. These are workflow measures, not evidence of forecasting skill.</div>
+    <div id="command-review-week"><div class="command-empty">No review history yet.</div></div>
+  </details>
+      <div class="radar-disclaimer">Priority is a deterministic triage aid built from existing app data. It does not create trades, bets, or new factual claims; open the source tab before acting.</div>
+    </details>
+  </section>
 
   <section class="start-here" id="boost-start" hidden aria-live="polite" aria-label="Start here"><div class="start-here-text"><div class="boost-kicker" id="boost-start-kicker">Start here</div><div class="start-here-main" id="boost-start-main"></div><div class="start-here-then" id="boost-start-then"></div></div><div class="start-here-actions"><button type="button" class="btn-sec" id="boost-start-go">Start ↓</button><button type="button" class="tool-chip" id="boost-start-skip" title="Show the next thing instead, for this visit">Not now</button></div></section>
   <section class="daily-boost" id="boost-panel" aria-labelledby="boost-heading">
@@ -3784,10 +3781,10 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="help-card help-wide member-only" id="member-access-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-shield"/></svg> Your access — what an invited account gets</div>
       <ul>
-        <li><b>Shared with you</b> — Command and its Morning 5, Radar, Markets, PSE, Sports and Your numbers (on Evidence). Daybook&rsquo;s daily jobs refresh them, and every account reads the same copy.</li>
+        <li><b>Shared with you</b> — the Morning 5 on Today, Radar, Markets, PSE, Sports and Your numbers (on Evidence). Daybook&rsquo;s daily jobs refresh them, and every account reads the same copy.</li>
         <li><b>Yours alone</b> — your sparks, notes, goals, experiments, decisions, evidence sets, accounts and any report you add. Only your account can open them in Daybook.</li>
         <li><b>Not included</b> — the AI features (the daily briefing, Go deeper, the weekly read, meeting briefs and deep research) run on the owner&rsquo;s account, so their buttons are not shown here and Today has no briefing of its own.</li>
-        <li><b>Morning delivery</b> — you can turn on the Morning 5 notification on Command, on each device you use.</li>
+        <li><b>Morning delivery</b> — you can turn on the Morning 5 notification in Morning 5 settings on Today, on each device you use.</li>
       </ul>
     </div>
     <div class="help-card help-wide owner-only">
@@ -3814,7 +3811,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
       <p>Top to bottom: your <b>daily spark</b> (a small idea and a 2- or 10-minute quest), then <b>Your experiments</b> and <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> when something is due, then the <b>briefing</b>. Once the spark is done, or you tap <b>Tuck away · briefing first</b>, it shrinks to one line so the briefing comes first; it opens again tomorrow.</p>
       <p><b>Waiting on the AI</b> — Go deeper, the briefing, the weekly read, a meeting brief and deep research all show a turning ring and a timer counting up while they work. Past the usual time for that job the line adds <b>longer than usual</b>; it does not invent progress steps, because the server does not report any.</p>
-      <p><b>Morning 5</b> (Home → Command) — the five items that matter most today, each with <b>Acted</b>, <b>Reviewed</b> and <b>Ignored</b> on its card; tap the lit one again to clear it. The <b>Attention Queue</b> holds everything beyond those five, so nothing shows twice. Items you dismissed, or that have dropped off today’s feeds, wait under <b>Also on today’s list</b>; <b>Close review</b> marks anything left as ignored. <b>Weekly discipline</b> is folded at the bottom. <b>Morning push</b>, next to Refresh, turns the Morning 5 notification on for this device or mutes it; its settings stay under <b>Personal priority controls</b>.</p>
+      <p><b>Morning 5</b> (on Today, under This week) — the five items that matter most today, each with <b>Acted</b>, <b>Reviewed</b> and <b>Ignored</b> on its card; tap the lit one again to clear it. The <b>Attention Queue</b> holds everything beyond those five, so nothing shows twice. Items you dismissed, or that have dropped off today’s feeds, wait under <b>Also on today’s list</b>; <b>Close review</b> marks anything left as ignored. <b>Weekly discipline</b> is folded at the bottom. <b>Morning push</b>, next to Refresh, turns the Morning 5 notification on for this device or mutes it; its settings stay under <b>Personal priority controls</b>.</p>
       <p><b>On a phone</b> only the row of sections stays at the top while you scroll; scroll back up for search, the theme and the lock. The sync mark shows just its icon (✓ saved, ⟳ working) and spells out a problem only when there is one.</p>
       <p class="help-key">Nothing here is a streak to keep. A missed day is just a missed day.</p>
     </div>
@@ -4063,7 +4060,6 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 <!-- MOBILE BOTTOM NAV -->
 <div class="mobile-nav">
   <button class="mob-tab active" id="mob-today" onclick="switchPageMobile('today',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-today"/></svg></span>TODAY</button>
-  <button class="mob-tab" id="mob-command" onclick="switchPageMobile('command',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-command"/></svg></span>CMD</button>
   <button class="mob-tab" id="mob-evidence" onclick="switchPageMobile('evidence',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-evidence"/></svg></span>EVID</button>
   <button class="mob-tab" id="mob-timeline" onclick="switchPageMobile('timeline',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-timeline"/></svg></span>TIME</button>
   <button class="mob-tab" id="mob-history" onclick="switchPageMobile('history',this)"><span class="mob-tab-icon"><svg class="ico"><use href="#i-history"/></svg></span>HISTORY</button>
@@ -4357,8 +4353,9 @@ function onSignedIn() {
   if (window.fbLoadHistory) {
     Promise.resolve(window.fbLoadHistory()).then(function () {
       if (window.loadFeedHealth) window.loadFeedHealth();
-      if (document.getElementById('page-command') && document.getElementById('page-command').classList.contains('active')) {
-        renderCommandCenter();
+      // The briefing is in memory now: rebuild Today's Morning 5 with it.
+      if (document.getElementById('page-today') && document.getElementById('page-today').classList.contains('active')) {
+        renderTodayFive(true);
       }
     });
   }
@@ -4419,7 +4416,7 @@ function clearPrivateSession() {
   if (window.resetWeeklyReview) window.resetWeeklyReview();
   decisionEntries = []; decisionEditingId = null; decisionLinkedSignal = null; decisionDatedCache = {};
   decisionRadarJournal = null; decisionRadarLive = null; decisionRefPrice = {};
-  _currentData = null; commandLoadToken++; commandCenterData = null; commandCenterInputs = null;
+  _currentData = null; commandLoadToken++; commandLoadedAt = 0; commandCenterData = null; commandCenterInputs = null;
   commandPreferences = normalizeCommandPreferences(null); commandPrefsAvailable = false;
   sportsCachedData = null; _miroCachedData = null; _miroCachedJournal = null;
   if (_currentReportUrl && _currentReportUrl.indexOf('blob:') === 0) URL.revokeObjectURL(_currentReportUrl);
@@ -4674,6 +4671,9 @@ applyDisplay();
 
 // ── PAGE SWITCHING ──
 function switchPage(id, el) {
+  // Morning 5 lives on Today (folded in 2026-10-11); #command links, including
+  // the morning push, land on it there.
+  if (id === 'command') { var toToday = switchPage('today', document.querySelector('.ntab[data-page="today"]')); revealMorningFive(); return toToday; }
   var pending;
   if (id) trackUse('page_' + id);
   if (id==='today' && window.renderDailyBoost) window.renderDailyBoost();
@@ -4688,7 +4688,7 @@ function switchPage(id, el) {
   var mob = document.getElementById('mob-'+id);
   if (mob) mob.classList.add('active');
   if (id==='history') pending = renderHistory();
-  if (id==='command') pending = renderCommandCenter();
+  if (id==='today') pending = renderTodayFive();
   if (id==='evidence') pending = renderEvidencePage();
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
@@ -4710,6 +4710,7 @@ function switchPage(id, el) {
   return Promise.resolve(pending);
 }
 function switchPageMobile(id, el) {
+  if (id === 'command') { switchPageMobile('today', document.getElementById('mob-today')); revealMorningFive(); return; }
   var pending;
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab,.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -4720,7 +4721,7 @@ function switchPageMobile(id, el) {
     if (t.getAttribute('data-page')===id) t.classList.add('active');
   });
   if (id==='history') pending = renderHistory();
-  if (id==='command') pending = renderCommandCenter();
+  if (id==='today') pending = renderTodayFive();
   if (id==='evidence') pending = renderEvidencePage();
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
@@ -4751,6 +4752,7 @@ function setPageHash(id) {
 function navFromHash() {
   var id = (location.hash || '').replace(/^#/, '').trim();
   if (!id) return;
+  if (id === 'command') { switchPage('command'); return; }
   var btn = document.querySelector('.ntab[data-page="' + id + '"]');
   var pg = document.getElementById('page-' + id);
   if (btn && pg && !pg.classList.contains('active')) switchPage(id, btn);
@@ -6323,7 +6325,7 @@ function aboutLearnedHtml(d) {
   var weights = d.weights || [];
   html += aboutItem('Your Morning 5 priorities', 'Command and the morning push', (weights.length
     ? '<div class="about-chips">' + weights.map(function(w) { return '<span class="about-chip">' + esc(w) + '</span>'; }).join('') + '</div><p class="about-quiet" style="margin-top:.45rem">Everything else is Normal.</p>'
-    : '<p>Every source at Normal.</p>') + '<button type="button" class="tool-chip" data-about-go="command">Change on Command →</button>', {icon: 'command'});
+    : '<p>Every source at Normal.</p>') + '<button type="button" class="tool-chip" data-about-go="command">Change in Morning 5 settings →</button>', {icon: 'command'});
   var used = d.used || [], most = used.reduce(function(max, u) { return Math.max(max, Number(u.count) || 0); }, 0) || 1;
   html += aboutItem('What you open most', 'nothing yet', used.length
     ? '<ul class="about-bars">' + used.map(function(u) {
@@ -6373,7 +6375,7 @@ document.addEventListener('click', function(event) {
   var go = target.getAttribute('data-about-go');
   if (go === 'accounts') { switchPage('evidence', document.querySelector('.ntab[data-page="evidence"]')); editAccounts(); }
   else if (go === 'goals') { switchPage('today', document.querySelector('.ntab[data-page="today"]')); var goalsPanel = document.getElementById('boost-goals-panel'); if (goalsPanel) { goalsPanel.open = true; goalsPanel.scrollIntoView({block:'center', behavior:'smooth'}); } }
-  else if (go === 'command') { switchPage('command', document.querySelector('.ntab[data-page="command"]')); var settings = document.getElementById('command-settings'); if (settings) settings.open = true; }
+  else if (go === 'command') { switchPage('today', document.querySelector('.ntab[data-page="today"]')); revealMorningFive(true); }
 });
 
 async function loadMeetingBriefs() {
@@ -8448,6 +8450,31 @@ function setCommandFilter(filter, button) {
   if (button) button.classList.add('active');
   paintCommandCenter();
 }
+// Morning 5 on Today. A visit within five minutes repaints from the snapshots
+// already read, with whatever briefing is now on screen; otherwise it reads the
+// feeds again. renderCommandCenter stamps commandLoadedAt.
+var commandLoadedAt = 0;
+function renderTodayFive(force) {
+  if (!force && commandCenterInputs && Date.now() - commandLoadedAt < 300000) {
+    commandCenterInputs.briefing = _currentData || ((window._briefingHistory || [])[0] || {}).data || commandCenterInputs.briefing;
+    rebuildCommandCenter();
+    return Promise.resolve();
+  }
+  return renderCommandCenter();
+}
+// Scroll to Today's Morning 5, or open its settings (the old Command page's).
+function revealMorningFive(openSettings) {
+  var box = document.getElementById('today-five');
+  if (!box) return;
+  var settings = document.getElementById('command-settings');
+  if (openSettings) {
+    var more = document.getElementById('command-more');
+    if (more) more.open = true;
+    if (settings) settings.open = true;
+  }
+  var target = openSettings && settings ? settings : box;
+  setTimeout(function() { if (target.scrollIntoView) target.scrollIntoView({behavior:'smooth', block:'start'}); }, 80);
+}
 function renderCommandCenter() {
   var five = document.getElementById('command-five');
   var queue = document.getElementById('command-queue');
@@ -8468,9 +8495,10 @@ function renderCommandCenter() {
     read(window.daybookMember || !window.fbLoadMeetings ? function() { return null; } : function() { return window.fbLoadMeetings(window._firebaseUid); })
   ]).then(function (data) {
     if (token !== commandLoadToken) return;
+    commandLoadedAt = Date.now();
     var names = ['Radar','Markets','Sports','Decisions','Feed health','Preferences','News','Numbers','Meetings'];
     var failed = data.map(function(result,i) { return result.ok ? '' : names[i]; }).filter(Boolean);
-    setText('command-load-status',failed.length ? 'Partial results — unavailable: ' + failed.join(', ') + '. Refresh to retry.' : 'All sources loaded.');
+    setText('command-load-status',failed.length ? 'Morning 5 is partial — unavailable: ' + failed.join(', ') + '. Refresh to retry.' : '');
     commandPrefsAvailable = data[5].ok;
     data = data.map(function(result) { return result.value; });
     window._feedHealthData = data[4] || window._feedHealthData || null;
