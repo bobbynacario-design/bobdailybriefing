@@ -1643,7 +1643,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 @media(max-width:600px){.flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.flight-source-list{grid-template-columns:1fr}}
 .daycal-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(260px,1fr);gap:1rem;align-items:start}
 .daycal-toolbar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.75rem 0}
-.daycal-toolbar h2{font-family:var(--serif);font-size:18px;margin:0 auto 0 0}
+.daycal-toolbar h2{font-family:var(--serif);font-size:18px;margin:0;min-width:9.5rem;text-align:center}
+.daycal-nav{display:inline-flex;align-items:center;gap:.5rem}.daycal-nav:first-child{margin-right:auto}
 .daycal-week,.daycal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
 .daycal-week span{text-align:center;font-family:var(--mono);font-size:10px;color:var(--txt3);padding:.4rem 0}
 .daycal-day{background:var(--bg2);color:var(--txt);border:1px solid var(--rim);border-radius:6px;min-height:105px;min-width:0;text-align:left;padding:.35rem;cursor:pointer;overflow:hidden}
@@ -1663,7 +1664,11 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .daycal-toolbar label{font-size:12px}.daycal-toolbar [aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
 [hidden].daycal-editor,[hidden]#daycal-month-view{display:none}
 @media(max-width:900px){.daycal-layout{grid-template-columns:1fr}.daycal-day{min-height:90px}}
-@media(max-width:600px){.daycal-day{min-height:75px;padding:.2rem}.daycal-bar{font-size:9px;padding:.1rem}.daycal-week span{font-size:9px}.daycal-editor .flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Phone cells are ~46px wide: titles cannot be read there, so items become
+   colour strips and the agenda below carries the detail. */
+@media(max-width:600px){.daycal-day{min-height:58px;padding:.25rem}.daycal-bar{font-size:0;height:5px;padding:0;border-left:0;border-radius:3px;margin:.2rem 0 0;background:var(--gold)}
+  .daycal-bar.daycal-meeting{background:var(--blue)}.daycal-bar.daycal-task{background:var(--purple)}.daycal-bar.daycal-travel{background:var(--green)}.daycal-bar.daycal-sale{background:var(--amber)}.daycal-bar.daycal-review{background:var(--red)}
+  .daycal-day .flights-note{font-size:9px;margin:.15rem 0 0}.daycal-week span{font-size:9px}.daycal-editor .flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.daycal-toolbar h2{font-size:16px;min-width:8.5rem}}
 .flight-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;align-items:start}
 .flight-city{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;min-width:0}
 .flight-city>summary{cursor:pointer;list-style:none;display:block;padding:.6rem .8rem;font-size:12px;line-height:1.5}
@@ -3576,10 +3581,10 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <div class="radar-disclaimer">Sports framing only. Scores, fixtures, standings and market context depend on the configured data provider in sports/refresh-sports.js. No betting execution.</div>
 </div>
 
-<!-- ═══════════════ FLIGHTS PAGE ═══════════════ -->
+<!-- ═══════════════ CALENDAR PAGE ═══════════════ -->
 <div class="page" id="page-calendar">
   <div class="hero"><div class="hero-inner"><div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg> Calendar</div><div class="hero-sub">Your Daybook plans, meetings and deadlines · Philippine time</div></div></div>
-  <div class="daycal-toolbar"><button class="tool-chip" onclick="daycalMonth(-1)" aria-label="Previous month">←</button><h2 id="daycal-month"></h2><button class="tool-chip" onclick="daycalMonth(1)" aria-label="Next month">→</button><button class="tool-chip" onclick="daycalToday()">Today</button><button id="daycal-view-month" class="tool-chip" onclick="daycalView('month')" aria-pressed="true">Month</button><button id="daycal-view-list" class="tool-chip" onclick="daycalView('list')" aria-pressed="false">List</button></div>
+  <div class="daycal-toolbar"><span class="daycal-nav"><button class="tool-chip" onclick="daycalMonth(-1)" aria-label="Previous month">←</button><h2 id="daycal-month"></h2><button class="tool-chip" onclick="daycalMonth(1)" aria-label="Next month">→</button></span><span class="daycal-nav"><button class="tool-chip" onclick="daycalToday()">Today</button><button id="daycal-view-month" class="tool-chip" onclick="daycalView('month')" aria-pressed="true">Month</button><button id="daycal-view-list" class="tool-chip" onclick="daycalView('list')" aria-pressed="false">List</button></span></div>
   <div class="daycal-toolbar"><label>Show <select id="daycal-filter" onchange="paintDaybookCalendar()"><option value="all">All items</option><option value="meeting">Meetings</option><option value="task">Tasks &amp; research deadlines</option><option value="travel">Travel plans</option><option value="sale">Flight sale deadlines</option><option value="review">Decision reviews</option><option value="personal">Personal</option></select></label><label><input id="daycal-done" type="checkbox" onchange="paintDaybookCalendar()"> Include completed tasks</label><button class="tool-chip" id="daycal-add" onclick="daycalNew()" disabled>Add event</button><button class="tool-chip" onclick="renderDaybookCalendar()">Reload</button><button class="tool-chip" onclick="daycalExport()">Export month .ICS</button><span class="flights-note" id="daycal-count"></span></div>
   <p id="daycal-status" class="flights-note" role="status"></p>
   <div id="daycal-overlaps"></div>
@@ -3601,6 +3606,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <details class="flight-all"><summary>What this calendar includes</summary><p class="flights-note">Your added events and dated tasks; decision review dates; active research deadlines; saved flight dates and flight-sale booking deadlines. Saved fares are tentative plans, not booked tickets. Broad sale travel windows are not shown as scheduled trips. Potential meeting/travel overlaps are prompts to check, not confirmed conflicts.</p><p class="flights-note">Connected calendars currently supply only account-related meetings in the next 36 hours, refreshed at 06:00 and 18:00 PHT. This is not a complete Google or Outlook calendar sync. Set up those links under About you. Reload reads saved app data; it does not trigger model calls or a new calendar import. Export downloads the selected month's visible items for you to import; it does not write to an external calendar or enable reminders.</p></details>
 </div>
 
+<!-- ═══════════════ FLIGHTS PAGE ═══════════════ -->
 <div class="page" id="page-flights">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Your travel scout</div>
@@ -3915,7 +3921,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg> Calendar</div>
-      <p>Open <b>Home → Calendar</b> for a month grid like PokerHQ, or switch to List. Click a day for its agenda; use Today and the month arrows to navigate. Filter meetings, tasks, travel, sales, decision reviews or personal events. Add, edit or delete your own events and mark dated tasks done. These events are private to your signed-in account and sync through Firebase.</p>
+      <p>Open <b>Home → Calendar</b> for a month grid like PokerHQ, or switch to List. Click a day for its agenda; use Today and the month arrows to navigate. Filter meetings, tasks, travel, sales, decision reviews or personal events. Add, edit or delete your own events (delete asks first) and mark dated tasks done. These events are private to your signed-in account and sync through Firebase. On a phone, days show coloured strips by type; tap a day and its agenda appears below. List shows a multi-day plan once, on its first day.</p>
       <p>Calendar combines your added events, decision review dates, active research deadlines, saved flight plans and flight-sale booking deadlines. A saved fare is a <b>tentative plan, not a booking</b>; broad promotional travel windows are not scheduled trips. Meeting/travel overlaps are prompts to check. Source buttons open the existing app sections without starting model calls.</p>
       <p>Connected calendar imports currently show only account-related meetings in the next 36 hours, checked at 06:00 and 18:00 PHT; this is not a full Google or Outlook sync. Connect calendars under About you. Reload reads saved data. Export month .ICS downloads this month's filtered items for you to import elsewhere; it does not write to another calendar, book flights or send notifications. All displayed times and manually entered times use Philippine time. This section makes no OpenAI or Claude calls.</p>
     </div>
@@ -5518,7 +5524,7 @@ document.addEventListener('visibilitychange', function() { if (document.visibili
 var USAGE_LABELS = {
   fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence', ask_send_decision:'Ask: decision draft', ask_send_check:'Ask: to check', ask_send_take:'Ask: my take', ask_send_copy:'Ask: copy as text', 'ask_send_confirm-check':'Ask: check added',
   page_today:'Today', page_command:'Morning 5', page_evidence:'Evidence', page_decisions:'Decisions', page_research:'Research', page_timeline:'Timeline',
-  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_flights:'Flights', page_pse:'PSE', page_trends:'Trends',
+  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_flights:'Flights', page_calendar:'Calendar', page_pse:'PSE', page_trends:'Trends',
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
   card_more:'More like this', card_less:'Less like this', card_remind:'Remind me',
   aha_save:'Aha: save insight', aha_decision:'Aha: open as decision', aha_note:'Aha: write my take', aha_check:'Aha: check later', aha_link:'Aha: jump to a story',
