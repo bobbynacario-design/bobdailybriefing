@@ -11,7 +11,7 @@ import {trimOffers} from './trim.js';
 import {updateHistory} from './history.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 
-const started=Date.now(), dryRun=process.argv.includes('--dry-run'), force=process.argv.includes('--force');
+const started=Date.now(), dryRun=process.argv.includes('--dry-run'), force=process.argv.includes('--force') || process.env.FLIGHTS_FORCE==='1';
 const root=dirname(fileURLToPath(import.meta.url));
 const checkedAt=new Date().toISOString();
 const asOf=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());

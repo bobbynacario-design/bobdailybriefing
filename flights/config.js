@@ -1,8 +1,11 @@
 export const ORIGINS = ['MNL','CEB','CRK'];
+export const DOMESTIC = {MPH:'Boracay (Caticlan)',ENI:'El Nido',IAO:'Siargao'};
 // Airline pages plus a labelled public press-release fallback. No paid APIs.
 // Country pages list different sample fares from the airport pages, so they
 // widen route coverage (Australia, Japan, North America) with the same reader.
 export const SOURCES = [
+  {id:'pal-boracay',airline:'Philippine Airlines',label:'Boracay (Caticlan)',type:'fares',url:'https://flights.philippineairlines.com/en-ph/flights-to-boracay-caticlan'},
+  {id:'pal-siargao',airline:'Philippine Airlines',label:'Siargao',type:'fares',url:'https://flights.philippineairlines.com/en-ph/flights-to-siargao'},
   {id:'pal-manila',airline:'Philippine Airlines',label:'From Manila',type:'fares',url:'https://flights.philippineairlines.com/en-ph/flights-from-manila'},
   {id:'pal-cebu',airline:'Philippine Airlines',label:'From Cebu',type:'fares',url:'https://flights.philippineairlines.com/en-ph/flights-from-cebu'},
   {id:'pal-manila-japan',airline:'Philippine Airlines',label:'Manila → Japan',type:'fares',url:'https://flights.philippineairlines.com/en-ph/flights-from-manila-to-japan'},

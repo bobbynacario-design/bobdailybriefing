@@ -20,10 +20,11 @@ on:
         type: choice
         options: [radar, markets, news, grounding, flights]
       force:
-        # Radar only. A manual run normally no-ops once today's radar doc exists;
+        # Radar and Flights: bypass the saved-feed freshness check.
+        # A radar run normally no-ops once today's radar doc exists;
         # this re-scores and overwrites it (Claude research + forecast panel), e.g. to put
         # a scoring change live the same day.
-        description: Radar only - re-run even if today's radar is already written
+        description: Radar or Flights - refresh even when a recent feed exists
         required: false
         default: false
         type: boolean
@@ -192,3 +193,5 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       - run: npm --prefix flights ci
       - run: npm --prefix flights run refresh
+        env:
+          FLIGHTS_FORCE: ${{ github.event.inputs.force == 'true' && '1' || '' }}

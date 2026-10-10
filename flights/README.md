@@ -98,3 +98,5 @@ field, limited to 100 snapshots. Removal merges against the latest transaction
 snapshot. A failed preference read disables saving; account changes discard
 pending renders. Saved snapshots remain available when the live offer changes
 or disappears and are clearly labelled historical/expired where applicable.
+
+Domestic selector: International remains the default. Domestic choices are limited to Boracay (Caticlan/MPH), El Nido (ENI), and Siargao (IAO), with individual destination choices. PAL destination pages are scouted for Boracay and Siargao; only departures from Manila, Cebu and Clark are accepted. Other Philippine destinations and broad international campaigns are excluded from domestic results. El Nido provides a labelled Cebu Pacific booking fallback when no readable quote is available, without claiming a confirmed route, fare or seat. Domestic shortlist checks omit Philippine international travel tax.

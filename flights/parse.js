@@ -1,9 +1,9 @@
 import {load} from 'cheerio';
 import {createHash} from 'node:crypto';
-import {ORIGINS} from './config.js';
+import {ORIGINS,DOMESTIC} from './config.js';
 import {parseCebuCampaigns} from './campaigns.js';
 
-// Airport codes used to reject domestic itineraries. Origin selection is explicit.
+// Domestic fares are limited to the three requested destinations.
 const PH = new Set('MNL CEB CRK DVO ILO KLO MPH PPS TAG TAC BCD CGY ZAM GES DGT BXU DRP LGP LAO TUG RXS CYZ CBO DPL PAG SJI IAO SUG USU WNP WNP BSO RZP ENI MBT TBH JOL TWT CYP DTI VRC WNP SFE BQA BPH CRM OMH SGS LWA MXI LBX'.split(' '));
 const text = v => String(v || '').replace(/\s+/g,' ').trim();
 const id = v => createHash('sha256').update(v).digest('hex').slice(0,20);
@@ -47,7 +47,7 @@ export function parseFares(html, source, checkedAt) {
     if(!card.length || card[0].tagName==='html') return;
     const originText=card.find('[data-test="origin-text"]').text(), destinationText=$(element).text();
     const origin=airport(originText),destination=airport(destinationText);
-    if(!ORIGINS.includes(origin) || !outsidePH(destination)) return;
+    if(!ORIGINS.includes(origin) || !(outsidePH(destination) || DOMESTIC[destination])) return;
     const dates=parseDates(card.find('[data-test="dates"],[data-test="departing-text"]').first().text());
     if(!dates.departureDate || dates.departureDate<checkedAt.slice(0,10) || (dates.returnDate && dates.returnDate<dates.departureDate)) return;
     const quote=text(card.find('[data-test="price"]').text());
@@ -65,10 +65,10 @@ export function parseFares(html, source, checkedAt) {
     const key=[source.airline,origin,destination,dates.departureDate,dates.returnDate,tripType,cabin,currency].join('|');
     if(seen.has(key)) return;seen.add(key);
     records.push({id:id(key),kind:'advertised-fare',airline:source.airline,origin,destination,
-      originName:cleanName(originText),destinationName:cleanName(destinationText),...dates,tripType,cabin,currency,amount,
+      originName:cleanName(originText),destinationName:DOMESTIC[destination] || cleanName(destinationText),...dates,tripType,cabin,currency,amount,
       priceLabel:quote,priceBasis:'Advertised from fare; availability and final total need confirmation',
-      taxesIncluded:source.airline==='Philippine Airlines' ? true : null,travelTaxIncluded:source.airline==='Philippine Airlines' ? false : null,checkedBaggageIncluded:null,stops:null,
-      fees:source.airline==='Philippine Airlines' ? 'Airline states taxes, fees and surcharges included; Philippine travel tax excluded.' : 'Check taxes, fees and Philippine travel tax on the airline.',
+      taxesIncluded:source.airline==='Philippine Airlines' ? true : null,travelTaxIncluded:DOMESTIC[destination] ? null : source.airline==='Philippine Airlines' ? false : null,checkedBaggageIncluded:null,stops:null,
+      fees:DOMESTIC[destination] ? 'Domestic flight: Philippine international travel tax does not apply. Confirm taxes and fees on the airline.' : source.airline==='Philippine Airlines' ? 'Airline states taxes, fees and surcharges included; Philippine travel tax excluded.' : 'Check taxes, fees and Philippine travel tax on the airline.',
       baggage:'Confirm baggage allowance for the selected fare.',connections:'Confirm stops and connection times on the airline.',
       bookingEnd:'',travelPeriod:'Exact sample dates shown; other dates may cost more.',sourceUrl:source.url,bookingUrl,checkedAt,
       airlineSeen:text(card.find('[data-test="last-seen"]').text()),terms:'Displayed fares may no longer be available. Check fare conditions, baggage, changes and refunds before booking.'});
@@ -86,15 +86,15 @@ export function parseAirAsiaPromos(html, source, checkedAt) {
       const bookingUrl=officialUrl($(anchor).attr('href'),source.url);
       if(!bookingUrl) continue;
       const u=new URL(bookingUrl),origin=u.searchParams.get('origin'),destination=u.searchParams.get('destination');
-      if(!ORIGINS.includes(origin) || !outsidePH(destination)) continue;
+      if(!ORIGINS.includes(origin) || !(outsidePH(destination) || DOMESTIC[destination])) continue;
       const key=[source.airline,origin,destination,discount].join('|');if(seen.has(key))continue;seen.add(key);
       const label=text(card.find('[aria-label]').first().attr('aria-label'));
       const destinationName=label.split(/\s+Fly from\s+/i)[0] || destination;
       // Hidden aria-label numbers are not a visible fare quote and are never used as prices.
-      records.push({id:id(key),kind:'promo',airline:source.airline,origin,destination,originName:origin==='MNL'?'Manila':origin==='CEB'?'Cebu':'Clark',destinationName,
+      records.push({id:id(key),kind:'promo',airline:source.airline,origin,destination,originName:origin==='MNL'?'Manila':origin==='CEB'?'Cebu':'Clark',destinationName:DOMESTIC[destination] || destinationName,
         title:discount,amount:null,currency:'',tripType:'not-stated',cabin:'Not stated',departureDate:'',returnDate:'',
         discount,priceBasis:'Discount campaign; final fare not quoted',bookingEnd:'',travelPeriod:'Travel dates and booking deadline not verified on this page.',
-        fees:'Check taxes, fees and Philippine travel tax.',baggage:'Confirm baggage allowance.',connections:'Confirm stops and connection times.',
+        fees:DOMESTIC[destination] ? 'Domestic flight: Philippine international travel tax does not apply. Confirm taxes and fees on the airline.' : 'Check taxes, fees and Philippine travel tax.',baggage:'Confirm baggage allowance.',connections:'Confirm stops and connection times.',
         sourceUrl:source.url,bookingUrl,checkedAt,airlineSeen:'',terms:'Listed on the airline promo page. Terms, dates and availability must be checked before relying on this offer.'});
     }
   });
@@ -104,6 +104,6 @@ export function parseSource(html, source, checkedAt) {
   const items=source.type==='fares' ? parseFares(html,source,checkedAt) : source.id==='airasia-ph' ? parseAirAsiaPromos(html,source,checkedAt) : source.airline==='Cebu Pacific' ? parseCebuCampaigns(html,source,checkedAt) : [];
   const blocked=/sec-if-cpt|captcha|access denied|verify you are human/i.test(html);
   if(source.type==='campaign-feed' && !items.length && !blocked && /<rss\b/i.test(html) && /<channel>/i.test(html))return {items,status:'ok',message:'No current eligible sale announcements in the readable feed.'};
-  return {items,status:items.length ? 'ok' : 'unavailable',message:items.length ? items.length+(source.type==='campaign-feed'?' sale announcements read; route availability not verified':' international offers read') : blocked ?
-    'Airline page requires an interactive browser; no fares extracted.' : 'No readable international offers with verified route and fare fields. Check the airline directly.'};
+  return {items,status:items.length ? 'ok' : 'unavailable',message:items.length ? items.length+(source.type==='campaign-feed'?' sale announcements read; route availability not verified':' eligible offers read') : blocked ?
+    'Airline page requires an interactive browser; no fares extracted.' : 'No readable eligible offers with verified route and fare fields. Check the airline directly.'};
 }

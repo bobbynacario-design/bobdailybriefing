@@ -36,3 +36,14 @@ test('validates dates and rejects off-domain or executable booking links',()=>{
   assert.equal(officialUrl('javascript:alert(1)',source.url),'');assert.equal(officialUrl('https://philippineairlines.com.evil.test',source.url),'');
   assert.equal(officialUrl('/en-ph/offer',source.url),'https://flights.philippineairlines.com/en-ph/offer');
 });
+
+test('accepts only the requested domestic destinations and normalizes Boracay',()=>{
+ for(const [code,name] of [['MPH','Boracay'],['ENI','El Nido'],['IAO','Siargao']]) {
+  const d=parseFares(fare({destination:name+' ('+code+')',price:'PHP 5,000*'}),source,checked)[0];
+  assert.equal(d.destination,code);assert.equal(d.travelTaxIncluded,null);
+  assert.match(d.fees,/international travel tax does not apply/);
+ }
+ assert.equal(parseFares(fare({destination:'Kalibo (KLO)'}),source,checked).length,0);
+ assert.equal(parseFares(fare({destination:'Puerto Princesa (PPS)'}),source,checked).length,0);
+ assert.equal(parseFares(fare({destination:'Siargao (IAO)',origin:'Davao (DVO)'}),source,checked).length,0);
+});
