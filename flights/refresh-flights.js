@@ -8,6 +8,7 @@ import {parseSource} from './parse.js';
 import {checkAnnouncementLinks,preferAnnouncement} from './announcement-links.js';
 import {trackChanges} from './changes.js';
 import {trimOffers} from './trim.js';
+import {updateHistory} from './history.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 
 const started=Date.now(), dryRun=process.argv.includes('--dry-run'), force=process.argv.includes('--force');
@@ -27,7 +28,7 @@ async function fetchSource(source) {
   }
 }
 async function main() {
-  let prior=null;
+  let prior=null, priorHistory=null;
   if(!dryRun) {
     const key=join(root,'../radar/serviceAccountKey.json');
     initializeApp({projectId:'pokerhq-a67e4',credential:existsSync(key) ? cert(JSON.parse(readFileSync(key,'utf8'))) : applicationDefault()});
@@ -38,6 +39,8 @@ async function main() {
       await recordRunHealth(db,'flights',{status:'skipped',asOf:prior.asOf,durationMs:Date.now()-started,message:'Recent scout reused; no model calls.'});
       console.log('Recent flight scout already available.');return;
     }
+    const history=await db.collection('briefings-bob').doc('flights-history').get();
+    priorHistory=history.exists ? history.data() : null;
   }
   const results=[];
   // Two at a time, bounded timeout per public page. No anti-bot bypass or retries.
@@ -61,13 +64,15 @@ async function main() {
     summary:{successfulSources:successful,totalSources:SOURCES.length,fareCount:offers.filter(d=>d.kind==='advertised-fare').length,promoCount:offers.filter(d=>d.kind==='promo').length},
     changes:{newOffers:offers.filter(d=>d.change.status==='new').length,priceDrops:offers.filter(d=>d.change.status==='dropped').length,priceRises:offers.filter(d=>d.change.status==='rose').length,comparedWith:prior?.generatedAt || null},
     coverage:'Airline fares and labelled sale announcements; not an exhaustive worldwide fare search or live seat inventory.',modelCalls:0};
+  const history=updateHistory(priorHistory,offers,asOf,checkedAt);
   sources.forEach(s=>console.log(s.id+': '+s.status+' · '+s.message));
-  console.log(JSON.stringify({bytes:Buffer.byteLength(JSON.stringify(doc)),offersFound:byId.size,summary:doc.summary,origins:ORIGINS,airlines:[...new Set(offers.map(d=>d.airline))],destinations:[...new Set(offers.map(d=>d.destination))]}));
+  console.log(JSON.stringify({bytes:Buffer.byteLength(JSON.stringify(doc)),historyRoutes:Object.keys(history.routes).length,historyBytes:Buffer.byteLength(JSON.stringify(history)),offersFound:byId.size,summary:doc.summary,origins:ORIGINS,airlines:[...new Set(offers.map(d=>d.airline))],destinations:[...new Set(offers.map(d=>d.destination))]}));
   if(dryRun) return;
   if(!successful) throw Error('No airline source produced readable offers; previous scout preserved.');
   const batch=db.batch();
   batch.set(db.collection('briefings-bob').doc('flights-latest'),doc);
   batch.set(db.collection('briefings-bob').doc('flights-'+asOf),doc);
+  batch.set(db.collection('briefings-bob').doc('flights-history'),history);
   await batch.commit();
   await recordRunHealth(db,'flights',{status:'ok',asOf,durationMs:Date.now()-started,message:offers.length+' offers; '+successful+'/'+SOURCES.length+' sources readable; no model calls.'});
 }

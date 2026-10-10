@@ -14,6 +14,17 @@ Each refreshed offer compares against the previous scout (at most seven days
 old). Price changes require matching exact travel dates, route, cabin, journey
 and currency. Retained failed-source records never generate new change signals.
 New observations and approaching campaign deadlines are labelled separately.
+Offers from a page the previous scout did not read are first observations.
+
+Price memory: each scout also writes `briefings-bob/flights-history` (no uid,
+so members can read it), holding the lowest advertised fare per route per PHT
+day for 60 days. A route is origin, destination, journey, cabin and currency,
+across airlines and sample dates, because sample dates rotate between scouts.
+Only offers re-read in that scout count. The app compares a city's best fare
+with earlier days of the same route only: below every earlier day is a
+"new low"; otherwise it states the lowest seen and the difference. Memory
+began on 10 Oct 2026, so the first comparison appears after the next day's
+scout.
 
 The Flights section scouts airline pages and labelled sale announcements for international travel from
 Manila (MNL), Cebu (CEB) and Clark (CRK), with flexible dates and worldwide
