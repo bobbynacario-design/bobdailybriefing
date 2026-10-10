@@ -1158,7 +1158,7 @@ window.fbSetSavedFlight = async function(offer, keep) {
     var saved = Object.assign({},snap.exists() ? snap.data().savedOffers || {} : {});
     if (keep) {
       if (!saved[offer.id] && Object.keys(saved).length >= 100) throw new Error('Your shortlist has 100 offers. Remove one before saving another.');
-      var fields = ['id','kind','airline','origin','destination','originName','destinationName','departureDate','returnDate','tripType','cabin','currency','amount','priceLabel','priceBasis','fees','baggage','connections','bookingEnd','travelPeriod','sourceUrl','bookingUrl','checkedAt','airlineSeen','terms','title','discount','campaign','origins','baseFareAmount','bookingStart','travelStart','travelEnd','destinationKeywords','evidenceUrl','publisher','discoveryUrl','publishedAt','evidenceStatus'];
+      var fields = ['id','kind','airline','origin','destination','originName','destinationName','departureDate','returnDate','tripType','cabin','currency','amount','priceLabel','priceBasis','fees','baggage','connections','bookingEnd','travelPeriod','sourceUrl','bookingUrl','checkedAt','airlineSeen','terms','title','discount','campaign','origins','baseFareAmount','bookingStart','travelStart','travelEnd','destinationKeywords','evidenceUrl','publisher','discoveryUrl','publishedAt','evidenceStatus','taxesIncluded','travelTaxIncluded','checkedBaggageIncluded','stops','change'];
       var copy = {};
       fields.forEach(function(key) { if (offer[key] !== undefined) copy[key] = offer[key]; });
       copy.savedAt = new Date().toISOString(); saved[offer.id] = copy;
@@ -1590,6 +1590,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .flight-card{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;padding:.9rem;font-size:12px;line-height:1.6;min-width:0}
 .flight-route{font-family:var(--serif);font-size:18px;font-weight:700;color:var(--txt);overflow-wrap:anywhere}
 .flight-price{font-size:16px;font-weight:700;color:var(--gold);margin:.35rem 0}
+.flight-reason{font-size:12px;color:var(--txt2);margin:.5rem 0}.flight-all{margin:1rem 0}.flight-all>summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--gold);padding:.7rem 0}.flight-trip-settings{margin:.7rem 0}.flight-trip-settings>summary{cursor:pointer;font-size:12px;color:var(--txt2)}
+.flight-trip-settings .flights-controls{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:.65rem}.flight-trip-settings .flights-toolbar{justify-content:flex-start;gap:1rem}@media(max-width:600px){.flight-trip-settings .flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .flight-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.65rem}
 .flight-actions a{font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:underline}
 .flight-flag{font-family:var(--mono);font-size:10px;color:var(--amber)}
@@ -3504,7 +3506,18 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <label>Depart through<input id="flights-to" type="date" onchange="renderFlightOffers()"></label>
   </div>
   <div class="flights-toolbar"><label><input type="checkbox" id="flights-saved-only" onchange="renderFlightOffers()"> My saved shortlist</label><button class="tool-chip" onclick="renderFlights()">Reload latest scout</button></div>
+  <details class="flight-trip-settings" open><summary>My trip settings · return fares per person</summary>
+    <div class="flights-controls">
+      <label>Budget in PHP (optional)<input id="flights-budget" type="number" min="0" step="500" placeholder="No limit" oninput="renderFlightOffers()"></label>
+      <label>Minimum nights<input id="flights-min-nights" type="number" min="0" max="90" value="3" oninput="renderFlightOffers()"></label>
+      <label>Maximum nights<input id="flights-max-nights" type="number" min="0" max="90" value="10" oninput="renderFlightOffers()"></label>
+      <label>Extra-cost allowance in PHP<input id="flights-extra" type="number" min="0" step="500" value="0" oninput="renderFlightOffers()"></label>
+    </div>
+    <div class="flights-toolbar"><label><input type="checkbox" id="flights-baggage" onchange="renderFlightOffers()"> I need checked baggage</label><label><input type="checkbox" id="flights-direct" onchange="renderFlightOffers()"> Confirmed nonstop only</label></div>
+    <p class="flights-note">These settings rank the shortlist. Your allowance is a planning estimate for extra charges, not a verified total; confirm passenger and fare conditions on the airline. All observed samples remain below.</p>
+  </details>
   <p class="flights-note" id="flights-status" role="status"></p>
+  <div id="flights-assistant"></div>
   <div id="flights-out"><div class="empty-state">LOADING FLIGHT SCOUT…</div></div>
   <div id="flights-sources"></div>
   <div class="radar-disclaimer">Airline fares and labelled sale announcements, checked twice daily. Seat sales show starting base fares and campaign travel windows; fees and route availability need checking. Priced flight samples stay in their original currency, with PHP estimates where a stored rate is available. Confirm the final total, dates, passenger count, tax, baggage and connections on the airline before booking.</div>
@@ -3790,6 +3803,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Flights — fares and seat sales</div>
+      <p><b>Trips worth checking first</b> ranks up to three distinct destinations using fresh economy return samples, your trip length and an optional PHP budget. Set an extra-cost allowance for planning; it is added to the fare when checking your budget, but is not a verified ticket total. The cards explain why each option was selected and which taxes, baggage or stops remain unconfirmed. Checked-baggage preference highlights gaps; confirmed-nonstop-only excludes flights with unknown stops. The remaining samples are under Browse all. Compare another observed option opens that destination's next matching sample.</p>
+      <p><b>Price changes</b> compare the same route, cabin, currency, journey and exact travel dates with the previous scout, for up to seven days. A changed date is a new observation, not a price drop. Old retained offers cannot produce fresh change signals. Seat sales show approaching booking deadlines in Philippine time. The shortlist uses the current free sources and makes no model calls; live seat confirmation and final all-in prices remain on the airline.</p>
       <p>Flights scouts Manila, Cebu and Clark for international offers, with flexible dates. The scout requests public airline pages and labelled announcement feeds at 08:00 and 20:00 Philippine time; scheduled runs may start late. It makes no OpenAI or Claude calls and uses no paid flight-search API. Firebase loads the latest scout and your saved shortlist; saving or removing a deal writes to your account. Reload latest scout reads the saved feed rather than starting a new airline search. These requests use the app's existing hosting and Firebase services.</p>
       <p>Seat sales appear first with their booking deadline and travel window. A starting base fare excludes the charges described on the card and does not confirm a seat on a particular route. Announcement links are checked during the scout; a reachable fallback publisher is used when available. If a publisher cannot be reached, its link is marked unavailable while the extracted terms and airline booking link remain visible. Confirm eligible routes, seats and the final total directly with the airline.</p>
       <p>Flight samples show the original fare and an approximate PHP equivalent where the app has a dated USD/PHP or AUD/PHP rate. The exchange rate and date are inside Fare details &amp; restrictions; bank or card rates and fees may differ. Date filters match exact sample departures or overlapping campaign travel windows. Undated campaigns are omitted from date searches. Expired sales disappear from the live list; saved snapshots remain historical references. Dynamic or blocked airline pages are marked unavailable, and worldwide coverage is incomplete.</p>

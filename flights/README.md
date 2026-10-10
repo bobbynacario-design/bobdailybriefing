@@ -1,5 +1,20 @@
 # Flights scout
 
+The trip assistant ranks up to three distinct destinations from fresh economy
+return samples using PHP fare equivalents, trip nights, optional budget and a
+user-provided extra-cost allowance. It explains its choice, offers alternate
+observed samples, and lists missing taxes, baggage and stops. A baggage
+preference highlights unconfirmed allowance; nonstop-only requires explicit
+stop data. Unsupported or stale FX rates are omitted from PHP ranking. This
+is a shortlist of advertised samples, not live availability, a verified all-in
+total or a claim to find the cheapest possible flight. All other offers remain
+in a collapsed browser. No paid provider or model call is used.
+
+Each refreshed offer compares against the previous scout (at most seven days
+old). Price changes require matching exact travel dates, route, cabin, journey
+and currency. Retained failed-source records never generate new change signals.
+New observations and approaching campaign deadlines are labelled separately.
+
 The Flights section scouts airline pages and labelled sale announcements for international travel from
 Manila (MNL), Cebu (CEB) and Clark (CRK), with flexible dates and worldwide
 destinations. It uses no model calls, fare API subscription, affiliate feed or

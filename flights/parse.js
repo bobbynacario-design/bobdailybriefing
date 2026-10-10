@@ -67,6 +67,7 @@ export function parseFares(html, source, checkedAt) {
     records.push({id:id(key),kind:'advertised-fare',airline:source.airline,origin,destination,
       originName:cleanName(originText),destinationName:cleanName(destinationText),...dates,tripType,cabin,currency,amount,
       priceLabel:quote,priceBasis:'Advertised from fare; availability and final total need confirmation',
+      taxesIncluded:source.airline==='Philippine Airlines' ? true : null,travelTaxIncluded:source.airline==='Philippine Airlines' ? false : null,checkedBaggageIncluded:null,stops:null,
       fees:source.airline==='Philippine Airlines' ? 'Airline states taxes, fees and surcharges included; Philippine travel tax excluded.' : 'Check taxes, fees and Philippine travel tax on the airline.',
       baggage:'Confirm baggage allowance for the selected fare.',connections:'Confirm stops and connection times on the airline.',
       bookingEnd:'',travelPeriod:'Exact sample dates shown; other dates may cost more.',sourceUrl:source.url,bookingUrl,checkedAt,
