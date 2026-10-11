@@ -227,7 +227,7 @@ if (usageDays) {
   const quiet = days.filter((d) => (commits[d] || 0) <= 4), build = days.filter((d) => (commits[d] || 0) > 4);
   info('Days with taps: ' + days.length + ' (quiet ' + quiet.length + ': ' + quiet.join(' ') + '; build ' + build.length + ')');
   const pages = {};
-  quiet.forEach((d) => Object.entries(usage.days[d]).forEach(([k, n]) => { if (!/^page_|^fn_generatewithopenai$|^fn_runaskdaybook$|^card_deeper$|^dossier_note$/.test(k)) return; pages[k] = pages[k] || {taps: 0, days: 0}; pages[k].taps += n; pages[k].days += 1; }));
+  quiet.forEach((d) => Object.entries(usage.days[d]).forEach(([k, n]) => { if (!/^page_|^fn_generatewithopenai$|^fn_runaskdaybook$|^card_deeper$|^dossier_note$|^checkin_|^push_open$/.test(k)) return; pages[k] = pages[k] || {taps: 0, days: 0}; pages[k].taps += n; pages[k].days += 1; }));
   Object.entries(pages).sort((a, b) => b[1].days - a[1].days || b[1].taps - a[1].taps)
     .forEach(([k, v]) => info(k.padEnd(26) + ' on ' + v.days + ' of ' + quiet.length + ' quiet days, ' + v.taps + ' taps'));
 }
