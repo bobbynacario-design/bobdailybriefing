@@ -540,7 +540,7 @@ test('About you: what it has picked up says what each thing steers, and never gu
   assert.match(html,/if \(v && window\.voteBriefingStory\) window\.voteBriefingStory\(\{headline: v\.headline, source: v\.source, section: v\.section, url: v\.url\}, v\.vote\);/,'Take back votes the same way again, which takes it back');
 });
 // Your calendars (functions/calendar.js), on About you.
-const CAL_FNS=['calendarLinkFor','calendarLinkLabel','calendarLinksHtml','meetingTime','calendarComingHtml','paintCalendar','calendarLinksToSave','saveCalendarLinks'];
+const CAL_FNS=['calendarLinkFor','calendarLinkLabel','calendarLinksHtml','meetingTime','calendarComingMeetings','calendarComingHtml','paintCalendar','calendarLinksToSave','saveCalendarLinks'];
 function calendarEnvironment(extra={}){
   const env=environment(CAL_FNS,{esc:escHtml,_firebaseUid:'bob',URL,...extra});
   vm.runInContext(html.match(/var CALENDAR_SERVICES = \[[\s\S]*?\n\];/)[0],env.context);
@@ -610,6 +610,26 @@ test('calendars: saving reads them at once and shows what it found, without the 
   assert.match(element('calendar-status').textContent,/That is not a Google Calendar calendar link/);
   // The page and its section are the owner's.
   assert.ok(html.includes('<section class="command-panel about-panel owner-only" id="about-calendar"'));
+});
+test('calendars: every meeting in the next 36 hours is listed; only account meetings get a brief button',async()=>{
+  const at=(h)=>new Date(Date.now()+h*3600000).toISOString();
+  const qbe={id:'mq',title:'QBE catch-up',start:at(20),end:at(21),accounts:['QBE'],calendar:'Outlook'};
+  const record={checkedAt:at(-1),items:[qbe],events:[
+    {id:'mt',title:'Team Catch Up',start:at(3),end:at(3.5),calendar:'Outlook',recurring:true},qbe,
+    {id:'mo',title:'Ended earlier',start:at(-3),end:at(-2),calendar:'Outlook'},{id:'mf',title:'Next week',start:at(80),end:at(81),calendar:'Outlook'}],
+    sources:[{service:'Outlook',ok:true,events:2,matched:1,allDay:0,listed:26}]};
+  const {context,element}=calendarEnvironment({fbSaveCalendar:async()=>{},fbCheckCalendarNow:async()=>record});
+  vm.runInContext('_calendarLinks=[{service:"Outlook",url:"https://outlook.office365.com/owa/calendar/a/b/calendar.ics"}];',context);
+  element('calendar-Google').value='';element('calendar-Outlook').value='';
+  await context.saveCalendarLinks();
+  const coming=element('calendar-coming').innerHTML;
+  assert.deepEqual([...coming.matchAll(/<span class="calendar-title">([^<]+)<\/span>/g)].map(m=>m[1]),['Team Catch Up','QBE catch-up'],'soonest first; ended and later ones left out; the account meeting once');
+  assert.match(coming,/<span class="calendar-title">Team Catch Up<\/span><span class="calendar-meta"><span>Outlook<\/span><\/span><\/span><\/li>/,'no brief state or button');
+  assert.match(coming,/<span class="about-chip is-account">QBE<\/span><span>Outlook<\/span><span>No brief yet<\/span><\/span><\/span><button type="button" class="tool-chip" data-meeting-open="0">Build brief<\/button>/);
+  assert.match(element('calendar-links').innerHTML,/<span class="calendar-read">26 meetings and 0 all-day entries \(leave, holidays\) in the next 90 days; 2 in the next 36 hours, 1 naming your accounts<\/span>/);
+  assert.equal(element('about-glance-calendar').textContent,'Outlook · 2 meetings ahead');
+  vm.runInContext('_meetings={checkedAt:'+JSON.stringify(at(-1))+',items:[],events:[]};',context);context.paintCalendar();
+  assert.match(element('calendar-coming').innerHTML,/<p class="calendar-none">No meetings in the next 36 hours\.<\/p>/);
 });
 test('a meeting in the Morning 5 opens its brief, or Build brief with the meeting filled in',async()=>{
   const calls=[];

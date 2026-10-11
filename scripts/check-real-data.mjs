@@ -132,6 +132,28 @@ if (cal) {
   })(), 'first leave day ' + next);
 }
 
+// Calendar: every linked meeting, counted from the raw record. An account
+// meeting sits in both items and events under one id. A repeating meeting is
+// named once in the next 8 weeks with how many times it comes up.
+if (cal && calendarMeetings && Array.isArray(calendarMeetings.events)) {
+  const ids = new Set(), named = new Set();
+  (calendarMeetings.items || []).forEach((m) => { if (m && m.id && m.title && m.start) { ids.add(m.id); named.add(m.id); } });
+  calendarMeetings.events.forEach((e) => { if (e && e.id && e.title && e.start) { ids.add(e.id); if ((e.accounts || []).length) named.add(e.id); } });
+  check('Calendar overview: meetings match the linked calendars', cal.body.includes('for the next 90 days (' + ids.size + ', ' + named.size + ' naming your accounts)'),
+    ids.size + ' meetings, ' + named.size + ' naming your accounts');
+  const until = Calendar.offset(today, 56), series = {};
+  calendarMeetings.events.forEach((e) => {
+    if (!e || !e.recurring || !e.title) return;
+    const day = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Manila'}).format(new Date(e.start));
+    if (day < today || day > until) return;
+    const key = e.title.toLowerCase();
+    series[key] = series[key] || {title: e.title, n: 0};
+    series[key].n++;
+  });
+  Object.values(series).filter((s) => s.n > 1 && cal.body.includes(s.title + ' (Meeting')).forEach((s) =>
+    check('Calendar overview: ' + s.title + ' repeats ' + s.n + ' times in 8 weeks', cal.body.includes(s.title + ' (Meeting; next of ' + s.n + ' in these 8 weeks)'), s.n + ' from the raw events'));
+}
+
 // Commitments: weeks with commitments, from the raw review document.
 const commits = byId['commitments:overview'];
 if (commits) {

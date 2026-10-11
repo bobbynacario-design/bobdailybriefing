@@ -34,12 +34,20 @@
     input=input || {};var events=[];
     function add(e) {if(date(e.start) && date(e.end || e.start) && (e.end || e.start)>=e.start && e.title)events.push(Object.assign({end:e.start,time:'',done:false,detail:'',page:'',ref:''},e));}
     arr(input.manual).forEach(function(r){var m=manual(r);if(m.event)add(Object.assign({},m.event,{id:'manual-'+m.event.id,ref:m.event.id,origin:'manual',detail:m.event.notes,source:'Your event'}));});
-    arr(input.meetings && input.meetings.items).forEach(function(m){
+    // Meetings from his linked calendars: the account meetings in the next 36
+    // hours (items, carrying their brief) first, then every meeting the last
+    // read listed for 90 days (events). An account meeting is in both under
+    // one id and shows once. A meeting naming an account leads to its brief;
+    // the rest are shown as they are. recurring marks a repeating series.
+    var meetings=input.meetings || {},matched=arr(meetings.items).length;
+    arr(meetings.items).concat(arr(meetings.events)).forEach(function(m,i){
       if(!m || !m.start || !text(m.title))return;
       var s=pht(m.start),end=m.end?pht(m.end):s;
       if(!s || !end)return;
-      var last=end.time==='00:00' && Date.parse(m.end)>Date.parse(m.start)?offset(end.day,-1):end.day;
-      add({id:'meeting-'+text(m.id,100),kind:'meeting',title:text(m.title,160),start:s.day,end:last,time:s.time,utcStart:new Date(m.start).toISOString(),utcEnd:m.end && Date.parse(m.end)>Date.parse(m.start)?new Date(m.end).toISOString():'',detail:'Imported account meeting · '+text(m.calendar,40),source:'Connected calendar',page:m.briefId?'evidence':'about',ref:text(m.briefId,120)});
+      var last=end.time==='00:00' && Date.parse(m.end)>Date.parse(m.start)?offset(end.day,-1):end.day,calendar=text(m.calendar,40);
+      var account=i<matched || arr(m.accounts).length>0;
+      add({id:'meeting-'+text(m.id,100),kind:'meeting',title:text(m.title,160),start:s.day,end:last,time:s.time,utcStart:new Date(m.start).toISOString(),utcEnd:m.end && Date.parse(m.end)>Date.parse(m.start)?new Date(m.end).toISOString():'',
+        detail:account?'Imported account meeting · '+calendar:'',source:account?'Connected calendar':(calendar || 'Connected')+' calendar',page:account?(m.briefId?'evidence':'about'):'',ref:text(m.briefId,120),recurring:m.recurring===true});
     });
     // All-day entries from his linked calendars: leave and holidays pushed
     // from Zoho People, birthdays and the like. Title and dates only. Zoho
@@ -76,10 +84,13 @@
     return Array.from({length:42},function(_,i){var day=new Date(begin+i*86400000).toISOString().slice(0,10);return {day:day,other:day.slice(0,7)!==month};});
   }
   function filtered(events,kind,done){return arr(events).filter(function(e){return (!kind || kind==='all' || e.kind===kind) && (done || !e.done);});}
+  // A repeating meeting (a weekly team catch-up) is one he skips while away,
+  // so only one-off meetings count as overlapping a trip or time off.
+  function clashes(e){return e.kind!=='allday' && !e.done && !(e.kind==='meeting' && e.recurring);}
   function conflicts(events) {
     var out=[];
     arr(events).filter(function(e){return e.kind==='travel' && !e.done;}).forEach(function(t){
-      arr(events).filter(function(e){return e.kind==='meeting' && !e.done && e.start<=t.end && e.end>=t.start;}).forEach(function(m){out.push({trip:t,meeting:m});});
+      arr(events).filter(function(e){return e.kind==='meeting' && clashes(e) && e.start<=t.end && e.end>=t.start;}).forEach(function(m){out.push({trip:t,meeting:m});});
     });return out;
   }
   function ics(events,now) {
@@ -193,6 +204,6 @@
         url:Object.keys(urls).sort(function(a,b){return urls[b]-urls[a];})[0] || ''};
     }).sort(function(a,b){return a.start.localeCompare(b.start);});
   }
-  root.DaybookCalendarCore={poker:poker,offWindows:offWindows,pokerCity:pokerCity,pokerFestivals:pokerFestivals,pokerGrade:pokerGrade,pokerDate:pokerDate,leaveNeeded:leaveNeeded,weekend:weekend,date:date,offset:offset,pht:pht,manual:manual,build:build,onDay:onDay,grid:grid,filtered:filtered,conflicts:conflicts,ics:ics,kinds:kinds};
+  root.DaybookCalendarCore={poker:poker,clashes:clashes,offWindows:offWindows,pokerCity:pokerCity,pokerFestivals:pokerFestivals,pokerGrade:pokerGrade,pokerDate:pokerDate,leaveNeeded:leaveNeeded,weekend:weekend,date:date,offset:offset,pht:pht,manual:manual,build:build,onDay:onDay,grid:grid,filtered:filtered,conflicts:conflicts,ics:ics,kinds:kinds};
   if(typeof module!=='undefined' && module.exports)module.exports=root.DaybookCalendarCore;
 })(typeof globalThis!=='undefined'?globalThis:this);
