@@ -171,6 +171,24 @@ answers.forEach((a) => {
 });
 if (!answers.length) warn('Ask answers', 'none in the last day');
 
+// Notes drafted in the last day: their figures against the dossier they came
+// from, and the links they carry against that dossier's own.
+const Note = require('./client-note.js');
+const [notesDoc, dossierDoc] = await Promise.all([get(COLL, 'client-notes-' + uid), get(COLL, 'dossiers-' + uid)]);
+const notes = Object.values((notesDoc && notesDoc.items) || {}).filter((n) => n && Date.parse(n.generatedAt) > now - 86400000);
+notes.forEach((n) => {
+  const dossier = ((dossierDoc && dossierDoc.items) || {})[n.key];
+  if (!dossier) return warn('Note: ' + String(n.subject).slice(0, 60), 'its dossier is no longer kept');
+  const untraced = Note.traceNote(n, dossier, [todayLine, n.recipient && n.recipient.name, n.angle]);
+  check('Note: ' + String(n.subject).slice(0, 60) + ' — figures', !untraced.length || (n.unverified || []).length, untraced.length ? 'untraced: ' + untraced.join(', ') + (n.unverified ? ' (shown to him)' : ' (NOT shown to him)') : 'all traced');
+  const allowed = new Set(Note.noteSources(dossier).map((s) => s.url));
+  check('Note: ' + String(n.subject).slice(0, 60) + ' — links', (n.sources || []).every((s) => allowed.has(s.url)), (n.sources || []).length + ' links');
+});
+if (notesDoc) {
+  const all = Object.values(notesDoc.items || {}), used = all.filter((n) => n.usedAt);
+  warn('Draft a note so far', all.length + ' drafted, ' + used.length + ' opened in mail' + (used.length ? ', average changed ' + Math.round(used.reduce((s, n) => s + (Number(n.changed) || 0), 0) / used.length * 100) + '%' : ''));
+}
+
 const failed = results.filter((r) => !r.ok);
 results.forEach((r) => console.log((r.warn ? 'WARN ' : r.ok ? 'ok   ' : 'FAIL ') + r.name + (r.detail ? ' — ' + r.detail : '')));
 console.log('\n' + (results.length - failed.length) + ' of ' + results.length + ' passed' + (failed.length ? '; ' + failed.length + ' FAILED' : '') + ' · ' + today);

@@ -49,6 +49,7 @@ const shell = readFileSync(new URL('../lib/ui-shell.js', import.meta.url), 'utf8
   assert.ok(new RegExp("\\['" + page + "',").test(shell), page + ' must sit in a page family');
   assert.ok(html.includes("if (id==='" + page + "') pending = "), page + ' keeps its render');
 });
+assert.ok(html.includes('data-dossier-act="note"') && html.includes("window.openNoteDrafter(panel, d, key)") && html.includes("httpsCallable(functions, 'draftClientNote'"), 'Go deeper offers Draft a note');
 assert.ok(html.includes("openSearchBrowse('history')") && html.includes("openSearchBrowse('timeline')") && html.includes("openSearchBrowse('trends')"), 'Search opens the archive tools');
 assert.ok(html.includes('fbLoadCommandPrefs') && html.includes('fbSaveCommandPrefs'),
   'Command Center preferences must load and save through the signed-in account');

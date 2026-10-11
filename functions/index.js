@@ -36,6 +36,7 @@ const FlightsCore = require("./flights-core");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 const Ask = require("./ask-daybook");
 const Haiku = require("./haiku");
+const Note = require("./client-note");
 const Calendar = require("./calendar");
 const IntelligenceSearchCore = require("./intelligence-search-core");
 const {dispatchFeed} = require("./news-dispatch");
@@ -65,15 +66,17 @@ function protectGeneration(feature, handler) {
       if (feature === "dossier" && !cleanStory(data.story)) throw new HttpsError("invalid-argument", "Choose a briefing story to go deeper on.");
       if (feature === "meeting" && !cleanTopic(data.topic)) throw new HttpsError("invalid-argument", "Name the client, insurer or topic (at least three characters).");
       if (feature === "ask" && !Ask.cleanQuestion(data.question)) throw new HttpsError("invalid-argument", "Type a question first (at least three characters).");
-      const daily = feature === "briefing" || feature === "mirror" || feature === "dossier" || feature === "meeting" || feature === "ask";
+      if (feature === "note" && !Note.cleanNoteRequest(data)) throw new HttpsError("invalid-argument", "Choose who the note is for.");
+      const daily = feature === "briefing" || feature === "mirror" || feature === "dossier" || feature === "meeting" || feature === "ask" || feature === "note";
       return await guardedGeneration({db:getFirestore(), uid:request.auth.uid, feature,
         period:daily ? phtDateKey() : phtDateKey().slice(0,7),
         cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : feature === "dossier" ? DOSSIER_DAILY_CAP :
-          feature === "meeting" ? MEETING_DAILY_CAP : feature === "ask" ? ASK_DAILY_CAP : DEEP_RESEARCH_CAP,
+          feature === "meeting" ? MEETING_DAILY_CAP : feature === "ask" ? ASK_DAILY_CAP : feature === "note" ? NOTE_DAILY_CAP : DEEP_RESEARCH_CAP,
         requestId:data.requestId,
         input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : feature === "dossier" ? {story:storyDossierKey(cleanStory(data.story)),refresh:data.refresh === true} :
           feature === "meeting" ? {topic:cleanTopic(data.topic),items:cleanMaterial(data.material).length} :
-          feature === "ask" ? {question:Ask.cleanQuestion(data.question),web:data.web === true,thread:Ask.cleanThread(data.thread).length} : {topic:data.topic.trim(),premium:!!data.premium}
+          feature === "ask" ? {question:Ask.cleanQuestion(data.question),web:data.web === true,thread:Ask.cleanThread(data.thread).length} :
+          feature === "note" ? Note.cleanNoteRequest(data) : {topic:data.topic.trim(),premium:!!data.premium}
       }, () => handler(request));
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -97,6 +100,8 @@ const MEETING_DAILY_CAP = parseInt(process.env.MEETING_DAILY_CAP || "5", 10);
 const MEETING_AUTO_CAP = parseInt(process.env.MEETING_AUTO_CAP || "3", 10);
 // Ask Daybook questions a day (Bob chose 20 on 2026-10-01).
 const ASK_DAILY_CAP = parseInt(process.env.ASK_DAILY_CAP || "20", 10);
+// Draft a note (functions/client-note.js): Haiku, a cent or so each.
+const NOTE_DAILY_CAP = parseInt(process.env.NOTE_DAILY_CAP || "15", 10);
 const REPORTS_COLL = "reports-bob";
 const REPORTS_META = "reports-bob-meta";
 const WEBHOOK_EVENTS_COLL = "openai-webhook-events";
@@ -658,6 +663,57 @@ exports.generateStoryDossier = onCall(
     dossier.generatedAt = new Date().toISOString();
     await ref.set({uid, kind: "dossiers", items: keepDossiers(stored, key, dossier), updatedAt: dossier.generatedAt});
     return {key, dossier};
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Draft a note (functions/client-note.js): from a stored Go deeper dossier, a
+// short email to an instructing party or a colleague, for Bob to edit and send
+// himself. Written only from the dossier (no web search), traced figure by
+// figure, kept per account (latest thirty) with what he did with it.
+// ─────────────────────────────────────────────────────────────
+exports.draftClientNote = onCall(
+  {
+    region: "asia-southeast1",
+    timeoutSeconds: 120,
+    memory: "256MiB",
+    secrets: [ANTHROPIC_API_KEY],
+  },
+  protectGeneration("note", async (request) => {
+    const db = getFirestore();
+    const uid = request.auth.uid;
+    const req = Note.cleanNoteRequest(request.data);
+    const dossierSnap = await db.collection(BRIEFINGS_COLL).doc("dossiers-" + uid).get().catch(() => null);
+    const dossier = dossierSnap && dossierSnap.exists ? ((dossierSnap.data() || {}).items || {})[req.key] : null;
+    if (!dossier || !dossier.summary) throw new HttpsError("failed-precondition", "Build the Go deeper dossier first: the note is written from it.");
+    const today = new Intl.DateTimeFormat("en-AU", {timeZone: "Asia/Manila", weekday: "long", day: "numeric", month: "long", year: "numeric"}).format(new Date()) + " (" + phtDateKey() + ")";
+    const extra = [today, req.recipient.name, req.angle];
+    const call = (prompt) => Haiku.mirror({apiKey: ANTHROPIC_API_KEY.value(), system: Note.SYSTEM, prompt, schema: Note.SCHEMA, timeoutMs: 60000,
+      onUsage: (billingModel, u) => recordUsage(db, "client-note", billingModel, u, phtDateKey())});
+    const prompt = Note.buildNotePrompt({dossier, recipient: req.recipient, angle: req.angle, profile: await loadProfile(db, uid)});
+    let note;
+    try {
+      note = Note.cleanNote(parseBriefing(await call(prompt)));
+      let untraced = note ? Note.traceNote(note, dossier, extra) : [];
+      // One correction for a figure or date the dossier does not state.
+      if (note && untraced.length) {
+        const fixed = Note.cleanNote(parseBriefing(await call(prompt + "\n\nYOUR FIRST DRAFT:\n" + JSON.stringify(note) + "\n\n" + Note.correctionPrompt(untraced))));
+        if (fixed) { note = fixed; untraced = Note.traceNote(note, dossier, extra); }
+      }
+      if (note && untraced.length) note.unverified = untraced;
+    } catch (err) {
+      if (err && err.code && ["unavailable", "failed-precondition", "aborted"].includes(err.code)) throw new HttpsError(err.code, err.message);
+      logger.error("Client note failed", {message: err && err.message});
+      note = null;
+    }
+    if (!note) throw new HttpsError("internal", "The note came back unusable. Try again in a minute.");
+    Object.assign(note, {key: req.key, headline: (dossier.story || {}).headline || "", recipient: req.recipient, angle: req.angle,
+      sources: Note.noteSources(dossier), model: Haiku.MODEL, generatedAt: new Date().toISOString()});
+    const id = "n" + Date.now().toString(36);
+    const ref = db.collection(BRIEFINGS_COLL).doc("client-notes-" + uid);
+    const stored = await ref.get().then((snap) => (snap.exists ? snap.data().items || {} : {})).catch(() => ({}));
+    await ref.set({uid, kind: "client-notes", items: Note.keepNotes(stored, id, note), updatedAt: note.generatedAt});
+    return {id, note};
   })
 );
 

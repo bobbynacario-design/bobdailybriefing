@@ -38,6 +38,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/daybook-calendar-ui.js"></script>
 <script src="./lib/weekly-review-core.js"></script>
 <script src="./lib/weekly-review-ui.js"></script>
+<script src="./lib/client-note.js"></script>
 
 <!-- Firebase -->
 <script type="module">
@@ -393,6 +394,32 @@ window.fbGenerateDossier = async function(story, refresh) {
   var generate = httpsCallable(functions, 'generateStoryDossier', { timeout: 250000 });
   var res = await generate({ story: story, refresh: refresh === true, requestId: crypto.randomUUID() });
   return res.data;
+};
+// Draft a note (functions/client-note.js, lib/client-note.js): an email from a
+// dossier, for him to send himself; what he did with it is merged into the note.
+window.fbDraftClientNote = async function(key, recipient, angle) {
+  if (!getUid()) throw new Error('Sign in first');
+  var draft = httpsCallable(functions, 'draftClientNote', { timeout: 130000 });
+  var res = await draft({ key: key, recipient: recipient, angle: angle || '', requestId: crypto.randomUUID() });
+  return res.data;
+};
+window.fbLoadClientNotes = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'client-notes-' + uid));
+    return snap.exists() ? (snap.data().items || {}) : {};
+  } catch (e) {
+    // None drafted yet: the shared rule reads a missing doc as denied.
+    if (e && e.code === 'permission-denied') return {};
+    throw e;
+  }
+};
+window.fbUpdateClientNote = async function(id, patch) {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  if (!/^n[a-z0-9]{6,14}$/.test(id || '')) throw new Error('Invalid note');
+  var items = {}; items[id] = patch;
+  await setDoc(doc(db, COLL, 'client-notes-' + uid), {uid: uid, items: items}, {merge: true});
 };
 // About you (PROFILE_FIELDS in lib/briefing-prompt-core.js): the one profile
 // every AI feature reads. Null until he saves one; the defaults apply.
@@ -2142,6 +2169,14 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 
 /* ── WATCH CARD ── */
 .dossier{margin:-.6rem 0 1.4rem;padding:1rem 1.2rem;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--txt2);font-size:13.5px;line-height:1.6}.dossier-status{font-family:var(--mono);font-size:11px;color:var(--txt3)}.dossier-status.is-error{color:var(--amber)}.dossier-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.4rem .8rem;margin-bottom:.5rem}.dossier-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber)}.dossier-meta{font-family:var(--mono);font-size:10px;color:var(--txt3)}.dossier-summary{font-family:var(--serif);font-size:15.5px;line-height:1.55;color:var(--txt);margin:.2rem 0 .7rem}.dossier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 1.2rem}.dossier-part{margin:.6rem 0}.dossier-part h4{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);font-weight:500;margin:0 0 .3rem}.dossier-part p{margin:0}.dossier-part ul,.dossier-part ol{margin:0;padding-left:1.15rem}.dossier-part li{margin:.2rem 0}.dossier-part strong{color:var(--txt)}.dossier-src{color:var(--txt3);font-size:12px}.dossier-chips{display:flex;flex-wrap:wrap;gap:.35rem}.dossier-chips span{font-size:12px;line-height:1.4;padding:.25rem .6rem;border:1px solid var(--line);border-radius:8px;color:var(--txt2);max-width:100%}.dossier-sources a{color:var(--txt2);text-decoration:none;border-bottom:1px solid var(--line)}.dossier-sources a:hover{color:var(--txt)}.dossier-note{font-size:11px;color:var(--txt3);margin:.7rem 0 .5rem}.dossier-actions{display:flex;flex-wrap:wrap;gap:.45rem}
+.note-drafter{margin-top:.9rem;padding-top:.8rem;border-top:1px solid var(--rim)}.note-drafter h4{margin:0 0 .25rem;font-size:14px}
+.note-intro,.note-summary,.note-sources{font-size:12.5px;color:var(--txt2);margin:.2rem 0 .6rem}.note-sources a{color:inherit}
+.note-form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end}.note-field{display:flex;flex-direction:column;gap:.25rem;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--txt3);margin-bottom:.5rem}
+.note-angle-field{flex:1 1 260px}.note-field select,.note-field input,.note-field textarea{font-family:inherit;font-size:14px;letter-spacing:0;color:var(--txt);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:.5rem .6rem;min-width:0}
+.note-out .note-field{width:100%}.note-out textarea{width:100%;line-height:1.55;resize:vertical;font-family:var(--sans,inherit)}
+.note-status{font-family:var(--mono);font-size:11px;color:var(--txt3);min-height:1em}.note-unverified{font-size:13px;color:var(--amber);margin:.1rem 0 .5rem}
+.note-actions,.note-rate{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.4rem 0}.note-rate span{font-size:12.5px;color:var(--txt2);margin-right:.2rem}
+.note-rate [aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
 .aha-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.aha-card{background:var(--gold-dim);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:1.1rem 1.35rem}.aha-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.45rem}.aha-kind{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.aha-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.aha-title{font-family:var(--serif);font-size:21px;line-height:1.3;color:var(--txt);margin:.15rem 0 .5rem}.aha-insight{font-size:14px;line-height:1.65;color:var(--txt2)}.aha-chain{margin:.7rem 0 .2rem;padding-left:1.25rem;font-size:13px;line-height:1.6;color:var(--txt2)}.aha-chain li{margin:.2rem 0}.aha-links{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.75rem}.aha-links span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}.aha-links .card-act{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.aha-wrong{margin-top:.7rem;font-size:12px;line-height:1.6;color:var(--txt2)}.aha-wrong strong{color:var(--txt)}
 .wildcard-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.wildcard-card{border-left:3px solid var(--purple);background:linear-gradient(135deg,var(--purple-dim),transparent 55%),var(--bg2)}.wildcard-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.5rem}.wildcard-lens{display:inline-flex;align-items:center;gap:.35rem;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.wildcard-lens .ico{color:var(--purple)}.wildcard-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.wildcard-card .card-hl{display:block;margin-bottom:.45rem}.wildcard-bridge{font-size:13px;line-height:1.65;color:var(--txt2);border-top:1px solid var(--rim);padding-top:.6rem;margin:.2rem 0 .1rem}.wildcard-bridge strong{color:var(--txt)}
 .card.is-kb,.aha-card.is-kb{outline:2px solid var(--gold);outline-offset:3px}.card[tabindex="-1"]:focus,.aha-card[tabindex="-1"]:focus{outline:none}.card.is-kb[tabindex="-1"]:focus,.aha-card.is-kb[tabindex="-1"]:focus{outline:2px solid var(--gold)}
@@ -3835,6 +3870,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-news"/></svg> Reading the briefing</div>
       <ul>
+        <li><b>Draft a note</b> — under a dossier, pick who it is for (your accounts, or a colleague) and, if you like, your angle. You get a short email written only from that dossier, with its links added at the end: edit it there, then <b>Open in Gmail</b>, <b>Open in Outlook</b> or <b>Copy</b>. Daybook sends nothing. Its figures and dates are checked against the dossier, and any it cannot find are listed in amber. To show whether it saves you time, Daybook keeps how much you changed each draft before opening it in your mail, and your one-tap rating.</li>
         <li><b>Go deeper</b> — on any story, a short dossier opens under the card: what happened, how it came about, the key numbers, the BI and claims angle, who is exposed, three questions to ask a client, what would change the read, and its sources (only pages the search really returned). It is kept, so opening it again costs nothing; <b>Save to Evidence</b> files it with its sources, <b>Share</b> sends the story, its link and the dossier as plain text, and <b>Open as decision</b> starts a journal draft from it. <b>Rebuild</b> (tap twice) searches again and replaces it. What would change the read only gives a date when a source states one. Up to ten new ones a day.</li>
         <li><b>Share briefing</b> — beside Copy briefing: every story with its link and why it matters, plus each Go deeper already built on the day's stories, as plain text for an email, WhatsApp or Teams. On a phone it opens the share sheet; on a computer it copies, ready to paste. It never builds a dossier, so it costs nothing, and whoever gets it needs no Daybook account.</li>
         <li><b>How stories are ranked</b> — <span class="help-pill" style="color:var(--green)">HIGH</span> means you would act on it or raise it this week; being about insurance or BI earns a story its place, not the label. The link to your files has to be in the story itself, not reasoned into it, and a story about other people's losses or the wider market stays medium unless it changes one of your files. A running story stays high only when what changed asks something new of you. So some days have one or two highs, and some none. A market close (PSEi, ASX, the peso) is not a story on its own: those numbers are in the strip at the top, and a move only earns a card through its cause. The <b>→ Why it matters</b> line starts with the substance, never a stock opener.</li>
@@ -4407,6 +4443,7 @@ function clearPrivateSession() {
   groundingLoadToken++;
   setText('grounding-numbers','Sign in to load published numbers.');
   if (window.resetFlights) window.resetFlights();
+  if (window.resetClientNotes) window.resetClientNotes();
   if (window.resetDaybookCalendar) window.resetDaybookCalendar();
   if (window.resetWeeklyReview) window.resetWeeklyReview();
   decisionEntries = []; decisionEditingId = null; decisionLinkedSignal = null; decisionDatedCache = {};
@@ -5643,7 +5680,7 @@ var USAGE_LABELS = {
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
   card_more:'More like this', card_less:'Less like this', card_remind:'Remind me',
   aha_save:'Aha: save insight', aha_decision:'Aha: open as decision', aha_note:'Aha: write my take', aha_check:'Aha: check later', aha_link:'Aha: jump to a story',
-  dossier_save:'Dossier: save to Evidence', dossier_share:'Dossier: share', fn_sharebriefing:'Share briefing', dossier_decision:'Dossier: open as decision', dossier_rebuild:'Dossier: rebuild', dossier_close:'Dossier: close',
+  dossier_save:'Dossier: save to Evidence', dossier_share:'Dossier: share', fn_sharebriefing:'Share briefing', dossier_decision:'Dossier: open as decision', dossier_note:'Dossier: draft a note', dossier_rebuild:'Dossier: rebuild', dossier_close:'Dossier: close',
   account_brief:'Account: meeting brief', account_timeline:'Account: timeline', call_badge:'Your call badge', evidence_show_all:'Evidence: show all',
   'btn_meeting-run':'Build meeting brief', 'btn_accounts-edit':'Edit accounts', 'btn_openai-generate-btn':'Generate briefing',
   'btn_boost-mirror-run':'Read my week back', 'btn_boost-goals-edit':'Set goals', 'btn_boost-done':'Quest done', 'btn_boost-swap':'Try another quest',
@@ -11927,6 +11964,7 @@ function dossierHtml(d) {
   html += '<p class="dossier-note">An analytical read built from what the search found, not advice.</p>';
   return html + '<div class="dossier-actions"><button type="button" class="card-act" data-dossier-act="save">＋ Save to Evidence</button>' +
     '<button type="button" class="card-act" data-dossier-act="share" title="Send this story, its link and this dossier: the share sheet on a phone, the clipboard on a computer">↗ Share</button>' +
+    '<button type="button" class="card-act owner-only" data-dossier-act="note" title="A short email about this story to a client or colleague, from this dossier, for you to edit and send">✉ Draft a note</button>' +
     '<button type="button" class="card-act" data-dossier-act="decision">Open as decision</button>' +
     '<button type="button" class="card-act" data-dossier-act="rebuild" title="Search again and replace this dossier. Counts towards the ten a day.">Rebuild</button>' +
     '<button type="button" class="card-act" data-dossier-act="close">Close</button></div>';
@@ -12050,6 +12088,11 @@ function renderDossier(panel, d, sec, idx) {
     var title = 'Go deeper · ' + (st.headline || '');
     shareOrCopy(title, storyShareLines(st, d, '').concat(['', 'From Daybook' + (_currentData && _currentData.date ? ', ' + _currentData.date : '') + ': an analytical read built from a web search, not advice.']).join('\n'),
       share, 'Story, link and Go deeper copied. Paste it into an email or chat.');
+  });
+  var note = panel.querySelector('[data-dossier-act="note"]');
+  if (note) note.addEventListener('click', function() {
+    var key = panel.dataset.key || window.BriefingPromptCore.storyDossierKey(d.story || {});
+    if (window.openNoteDrafter) window.openNoteDrafter(panel, d, key);
   });
   panel.querySelector('[data-dossier-act="decision"]').addEventListener('click', function() {
     var story = d.story || {}, inAWeek = new Date(Date.parse(manilaDateKey() + 'T00:00:00Z') + 7*86400000).toISOString().slice(0,10);
