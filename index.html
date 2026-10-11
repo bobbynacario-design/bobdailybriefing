@@ -1790,6 +1790,13 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .weekly-row{display:grid;grid-template-columns:150px minmax(0,1.6fr) minmax(0,1fr);gap:.45rem;margin:.4rem 0}
 .weekly-ideas{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem}.weekly-ideas .tool-chip{text-transform:none;letter-spacing:0;text-align:left}
 .weekly-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.9rem}
+.checkin{background:var(--bg2);border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:12px;padding:.7rem .9rem;margin:0 0 .8rem;font-size:13px;line-height:1.55}
+.checkin[hidden]{display:none}
+.checkin-kicker{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--txt2)}
+.checkin-q{font-weight:600;margin:.2rem 0 .35rem}.checkin-q .flights-note{font-weight:400;margin-left:.3rem}
+.checkin-item{margin:0 0 .4rem}
+.checkin-choices{display:flex;flex-wrap:wrap;gap:.35rem}.checkin-choices .tool-chip{text-transform:none;letter-spacing:0;text-align:left}
+.checkin .flights-note{margin:.35rem 0 0}.checkin #checkin-status:empty{display:none}
 @media(max-width:700px){.weekly-row{grid-template-columns:1fr}.weekly-item{grid-template-columns:1fr auto}.weekly-item .tool-chip{grid-column:1/-1;justify-self:start}}
 .flight-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;align-items:start}
 .flight-city{background:var(--bg2);border:1px solid var(--rim);border-radius:10px;min-width:0}
@@ -3272,6 +3279,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
   <div id="auto-load-banner"></div>
 
+  <section class="checkin" id="checkin" hidden aria-label="Morning check-in"></section>
   <div class="briefing-actions"><button class="btn-sec owner-only" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button><button class="nav-btn" onclick="shareBriefing(this)" title="Every story with its link, plus each Go deeper already built: the share sheet on a phone, the clipboard on a computer">Share briefing</button><button class="nav-btn" onclick="copyAsText()">Copy briefing</button><button class="nav-btn" onclick="exportPDF()">Export PDF</button><button class="nav-btn" onclick="commandGo('command')">Open Morning 5</button></div>
   <details class="import-panel"><summary>Import / advanced</summary>
   <div class="paste-zone">
@@ -3851,6 +3859,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> This week and the weekly review</div>
       <p><b>This week</b>, at the top of Today, holds up to three commitments for Monday to Sunday (Philippine time), each in an area, listed in your order of focus: money, work, health, poker, then time and leave, learning and life. Empty rows start as money, work and health. Tap <b>Did it today</b> on any day you moved one forward; the dots show the days so far. Small and checkable beats ambitious.</p>
+      <p><b>Morning check-in</b>, just above the Generate button, asks one question a morning that one tap answers. With nothing set for the week it offers three ideas from your records, in your focus order: tap one and it becomes this week’s commitment. Once you have commitments it asks whether you moved one forward yesterday: <b>Yes</b> ticks that day. <b>Not now</b> and <b>No</b> just hide the question until tomorrow, on that device. When nothing is due, the card stays hidden.</p>
       <p>On Sunday the card offers the <b>weekly review</b>: what your records show for the week (your ticks, days you opened Daybook, leave, calendar tasks, decision reviews and events you starred in PokerHQ), marking each commitment done, partly or missed with an optional line on what helped, then up to three commitments for next week. Ideas come from your own records and follow your focus order, at most two per area: last week’s unfinished commitments, open market calls without a review date, decision reviews due, calendar tasks and working-question deadlines, PokerHQ stars next week, upcoming leave, your goals’ next moves and your last weekly read. Where your records say nothing about money, work or health, one plainly labelled starter idea fills the gap. A week with little recorded is called thin. If you miss Sunday, the card asks on Monday. <b>Read your week back (AI)</b> opens the existing weekly read. The review itself makes no AI calls. Commitments are private to your account.</p>
     </div>
 
@@ -4369,7 +4378,7 @@ function onSignedIn() {
   applyDaybookRole();  // first: Daily Boost reads it to decide on the weekly read
   if (window.renderDailyBoost) window.renderDailyBoost();
   if (window.renderWeeklyMirror) window.renderWeeklyMirror();
-  if (window.renderWeeklyCard) window.renderWeeklyCard(true);
+  if (window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard(true)).then(function () { if (window.renderCheckin) window.renderCheckin(); });
   setApplicationLocked(false);
   document.querySelectorAll('.page').forEach(function(el) { el.inert = false; });
   document.getElementById('auth-overlay').classList.add('hidden');
@@ -4723,7 +4732,7 @@ function switchPage(id, el) {
   if (id) trackUse('page_' + id);
   if (id==='today' && window.renderDailyBoost) window.renderDailyBoost();
   if (id==='today' && window.renderWeeklyMirror) window.renderWeeklyMirror();
-  if (id==='today' && window.renderWeeklyCard) window.renderWeeklyCard();
+  if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -4737,7 +4746,7 @@ function switchPage(id, el) {
   if (id==='evidence') pending = renderEvidencePage();
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
-  if (id==='today' && window.renderWeeklyCard) window.renderWeeklyCard();
+  if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
   if (id==='research') pending = renderResearchList();
   if (id==='radar') pending = renderRadar();
   if (id==='journal') pending = renderJournal();
@@ -5705,12 +5714,13 @@ var USAGE_LABELS = {
   fn_setcommandreviewstate:'Morning 5: mark handled', fn_savecommandevidence:'Morning 5: save', fn_commandtogglepin:'Morning 5: pin',
   fn_commanddismiss:'Morning 5: dismiss', fn_commandopenurl:'Morning 5: open article', command_why:'Morning 5: why this rank',
   fn_completecommandreviewday:'Morning 5: close review', 'open_command-week':'Morning 5: weekly discipline', 'open_grounding-panel':'Evidence: your numbers',
-  push_open:'Opened from a push'
+  push_open:'Opened from a push',
+  checkin_pick:'Check-in: picked this week’s commitment', checkin_later:'Check-in: not now', checkin_yes:'Check-in: yes, moved it forward', checkin_no:'Check-in: no'
 };
 // The features worth knowing about when unused: shown under "Not used lately".
 var USAGE_WATCH = ['card_deeper', 'aha_save', 'aha_decision', 'aha_check', 'account_brief', 'call_badge', 'btn_meeting-run', 'fn_setdecisionverdict',
   'btn_boost-mirror-run', 'btn_boost-goals-edit', 'btn_boost-trial-save', 'card_remind', 'card_more', 'dossier_decision', 'page_command', 'page_timeline', 'mirror_try',
-  'fn_savecommandevidence', 'fn_commandtogglepin', 'fn_commanddismiss', 'command_why', 'push_open'];
+  'fn_savecommandevidence', 'fn_commandtogglepin', 'fn_commanddismiss', 'command_why', 'push_open', 'checkin_pick', 'checkin_yes'];
 function usageSummary(days, today, span) {
   span = span || 30;
   var since = new Date(Date.parse(today + 'T00:00:00Z') - (span - 1) * 86400000).toISOString().slice(0, 10), totals = {}, daysUsed = {}, active = 0;
