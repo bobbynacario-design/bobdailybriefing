@@ -184,12 +184,82 @@ function sentenceCount(value) {
   return Array.from(new Intl.Segmenter("en-AU", {granularity: "sentence"}).segment(plain)).filter((part) => /[\p{L}\p{N}]/u.test(part.segment)).length;
 }
 
-function reviewAnswer(raw, {question, registry, searched, web}) {
+// Strict correctness: every figure and date an answer gives must be one the
+// records the lookups returned state (or the question, today's date or the
+// thread), unless the answer says, in that sentence, that it calculated it.
+// 11 Oct: an answer gave "Sat 31 Oct" for picks that end on Thu 29 Oct; the
+// records never said 31 Oct. Figures are amounts, percentages, decimals and
+// any number from 10 up; dates are a day and month ("31 Oct", "October 31",
+// "2026-10-31"). Small counts and words ("ten") are left alone: they appear
+// everywhere and a check on them would prove nothing.
+const MONTH_NAMES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const MONTH = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+// Each pattern gives the dates it names; a range in one month ("21 to Thu
+// 24 Dec", "21–24 Dec") names both ends.
+const DATE_PATTERNS = [
+  [new RegExp("\\b(\\d{4})-(\\d{2})-(\\d{2})\\b", "g"), (m) => [dateKey(m[3], MONTH_NAMES[Number(m[2]) - 1])]],
+  [new RegExp("\\b(\\d{1,2})\\s*(?:–|—|-|to|and)\\s*(?:(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\\.?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+" + MONTH + "\\b\\.?", "gi"),
+    (m) => [dateKey(m[1], m[3]), dateKey(m[2], m[3])]],
+  [new RegExp("\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+" + MONTH + "\\b\\.?", "gi"), (m) => [dateKey(m[1], m[2])]],
+  [new RegExp("\\b" + MONTH + "\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b(?!\\s*[:\\d])", "gi"), (m) => [dateKey(m[2], m[1])]],
+];
+function dateKey(day, month) {
+  const d = Number(day), mon = String(month || "").slice(0, 3).toLowerCase();
+  return d >= 1 && d <= 31 && MONTH_NAMES.indexOf(mon) >= 0 ? d + " " + mon : "";
+}
+const AMOUNT = /(?:(PHP|USD|AUD|NZD|A\$|US\$|\$|₱|€|£)\s?)?(\d(?:[\d,]*\d)?(?:\.\d+)?)(\s?%)?/g;
+function numberKey(value) {
+  const n = Math.abs(Number(String(value).replace(/,/g, "")));
+  return Number.isFinite(n) ? String(n) : "";
+}
+// The dates and numbers a text states, as comparable keys. Dates are taken
+// out first so "31 Oct" is a date, not the number 31 (though the day also
+// counts as a number the text states).
+function figureKeys(value) {
+  let rest = String(value == null ? "" : value).replace(/\[[SW]\d+\]/g, " ");
+  const dates = new Set(), numbers = new Set();
+  DATE_PATTERNS.forEach(([pattern, key]) => {
+    rest = rest.replace(pattern, (...m) => {
+      key(m).filter(Boolean).forEach((k) => { dates.add(k); numbers.add(k.split(" ")[0]); });
+      return " ";
+    });
+  });
+  for (const m of rest.matchAll(AMOUNT)) { const k = numberKey(m[2]); if (k) numbers.add(k); }
+  return {dates, numbers};
+}
+// The figures in an answer that no returned record (or the question, today or
+// the thread) states, as written, at most six. A sentence that says it
+// calculated its figures keeps its numbers; its dates are still checked.
+function untracedFigures(answer, registry, extra) {
+  const evidence = arr(registry && registry.list).map((entry) => {
+    const item = entry.item || {};
+    return [item.title, item.detail, item.body, item.meta, dayOf(item.saved)].join(" ");
+  }).concat(arr(extra)).join(" \n ");
+  const known = figureKeys(evidence);
+  const out = [];
+  const segments = Array.from(new Intl.Segmenter("en-AU", {granularity: "sentence"}).segment(String(answer || ""))).map((s) => s.segment);
+  segments.forEach((sentence) => {
+    let rest = sentence.replace(/\[[SW]\d+\]/g, " ");
+    DATE_PATTERNS.forEach(([pattern, key]) => {
+      rest = rest.replace(pattern, (...m) => { if (key(m).some((k) => k && !known.dates.has(k))) out.push(m[0].trim()); return " "; });
+    });
+    if (/\bcalculat/i.test(sentence)) return;
+    for (const m of rest.matchAll(AMOUNT)) {
+      const k = numberKey(m[2]), n = Number(k);
+      const figure = !!m[1] || !!m[3] || /\./.test(m[2]) || n >= 10;
+      if (k && figure && !known.numbers.has(k)) out.push(m[0].trim());
+    }
+  });
+  return out.filter((f, i) => out.indexOf(f) === i).slice(0, 6);
+}
+const FIGURE_PROBLEM = "These figures are not in the records the lookups returned: ";
+
+function reviewAnswer(raw, {question, registry, searched, web, extra}) {
   const intent = requestIntent(question);
   let parsed;
   try { parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); } catch (error) { parsed = null; }
   if (parsed && typeof parsed.answer === "string") parsed.answer = splitRefs(parsed.answer);
-  const clean = cleanAnswer(parsed, registry, searched, web, question);
+  const clean = cleanAnswer(parsed, registry, searched, web, question, extra);
   const problems = [];
   if (!clean || typeof parsed.answer !== "string") problems.push("Return a usable answer in the requested JSON object.");
   else {
@@ -205,6 +275,7 @@ function reviewAnswer(raw, {question, registry, searched, web}) {
     const known = new Set(clean.sources.concat(clean.web_sources).map((source) => source.ref));
     if (Array.from(parsed.answer.matchAll(/\[([SW]\d+)\]/g)).some((match) => !known.has(match[1]))) problems.push("Cite only refs returned by the lookups or verified web search; remove unsupported claims, not just their refs.");
     if (registry.list.length && !clean.sources.length && !clean.web_sources.length && !text(parsed.not_found)) problems.push("Support the answer with the relevant returned refs, or explain that the records do not answer it.");
+    if (arr(clean.unverified).length) problems.push(FIGURE_PROBLEM + clean.unverified.join(", ") + ". Remove each one or replace it with the figure a record states. If one is your own calculation from returned figures, keep it and put the word \"calculated\" in that sentence (e.g. \"PHP 12,500 for the ten, calculated from their buy-ins\").");
   }
   return {raw: clean ? JSON.stringify({answer: clean.answer, not_found: clean.not_found, follow_ups: clean.follow_ups,
     web_sources: arr(parsed.web_sources)}) : raw, problems,
@@ -218,7 +289,9 @@ async function refineAnswer({raw, revise, ...context}) {
   if (!review.problems.length) return review.raw;
   // One correction at most, with the same evidence and no extra retrieval.
   review = reviewAnswer(await revise(review.correction), context);
-  if (review.problems.length) throw Object.assign(new Error("The answer did not meet your requested format. Try again."), {code: "internal"});
+  // A figure still untraced after the correction does not sink the answer:
+  // cleanAnswer lists it as unverified and the app shows it under the answer.
+  if (review.problems.some((p) => !p.startsWith(FIGURE_PROBLEM))) throw Object.assign(new Error("The answer did not meet your requested format. Try again."), {code: "internal"});
   return review.raw;
 }
 
@@ -334,7 +407,7 @@ function lookupOutput(hits, registry) {
 
 // What is stored and shown: known fields, bounded; refs kept only when a
 // lookup returned them, web links only when the search returned the page.
-function cleanAnswer(raw, registry, searched, web, question) {
+function cleanAnswer(raw, registry, searched, web, question, extra) {
   if (!raw || typeof raw !== "object") return null;
   let answer = answerText(raw.answer);
   if (!answer) return null;
@@ -357,8 +430,12 @@ function cleanAnswer(raw, registry, searched, web, question) {
     return {ref, source: item.source, title: clip(item.title, 200), date: dayOf(item.saved), id: clip(item.id, 220),
       page: clip(item.page, 40), appRef: clip(item.ref, 220), meta: clip(item.meta, 100)};
   });
+  // Web answers draw on pages whose text the server never sees, so only an
+  // answer from his own records is traced.
+  const unverified = web ? [] : untracedFigures(answer, registry, [question].concat(arr(extra)));
   return {
     answer,
+    ...(unverified.length ? {unverified} : {}),
     // When no lookup found anything, say so even if the model did not.
     not_found: clip(raw.not_found, 240) || (registry.list.length ? "" : web ? "Nothing in your Daybook matched; this answer is from the web." : "Nothing in your Daybook matched this."),
     follow_ups: requestIntent(question).suppressFollowups ? [] : arr(raw.follow_ups).map((q) => clip(q, 160)).filter(Boolean).slice(0, 2),
@@ -569,5 +646,5 @@ function keepAnswers(items, id, answer) {
 module.exports = {
   requestIntent, intentInstructions, sentenceCount, reviewAnswer, refineAnswer,
   cleanQuestion, cleanThread, originOf, buildAskPrompt, buildAskInput, cleanPlan, newRegistry, lookupOutput, cleanAnswer,
-  askIndexInput, aboutRecords, lifeRecords, splitRefs, lookupRecords, runLookups, providerError, keepAnswers, SYSTEM, ABOUT_SOURCES, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
+  askIndexInput, aboutRecords, lifeRecords, splitRefs, untracedFigures, figureKeys, lookupRecords, runLookups, providerError, keepAnswers, SYSTEM, ABOUT_SOURCES, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
 };

@@ -12,6 +12,7 @@
     "test:lib": "node --test lib/*.test.js",
     "test:grounding": "npm --prefix grounding test",
     "check:app": "node scripts/check-app-smoke.js",
+    "check:real": "node scripts/check-real-data.mjs",
     "check:functions": "npm --prefix functions run check",
     "audit": "npm --prefix functions audit --omit=dev --audit-level=high && npm --prefix radar audit --omit=dev --audit-level=high && npm --prefix miro audit --omit=dev --audit-level=high && npm --prefix sports audit --omit=dev --audit-level=high && npm --prefix news audit --omit=dev --audit-level=high && npm --prefix grounding/publisher audit --omit=dev --audit-level=high && npm --prefix flights audit --omit=dev --audit-level=high",
     "deploy:functions": "npm --prefix functions run deploy",

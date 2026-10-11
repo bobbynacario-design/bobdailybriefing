@@ -279,3 +279,43 @@ test("refs written together are split, so each is kept, listed and checked", () 
   assert.ok(prompt.includes("Each ref goes in its own brackets: [S1] [S2], never [S1, S2]."));
   assert.ok(prompt.includes("the overview's ideas from his records") && prompt.includes("never round to a month's start or end"));
 });
+
+// ── strict correctness: figures and dates must be in the returned records ──
+test("every figure and date in an answer must be stated by a returned record, or be marked as calculated", () => {
+  const registry = Ask.newRegistry();
+  Ask.lookupOutput([{id: "poker:overview", source: "Poker", title: "Poker overview", detail: "12 upcoming ★ picks, PHP 30,300 in buy-ins.",
+    body: "Oct 2026: 11 events, Tue 13 Oct – Thu 29 Oct, PHP 15,300. Scout checked 2026-10-11. Leave Mon 21 Dec – Thu 24 Dec. Band record 55.7% beat."},
+  {id: "calendar:x", source: "Calendar", title: "Dentist", detail: "Tue 20 Oct at 09:30", saved: Date.parse("2026-10-20T00:00:00Z")}], registry);
+  const extra = ["Sunday 11 October 2026 (2026-10-11)"];
+  const trace = (answer) => Ask.untracedFigures(answer, registry, extra);
+  assert.deepEqual(trace("You starred 12 picks, PHP 30,300 in all [S1]. October runs Tue 13 Oct to Thu 29 Oct, PHP 15,300 [S1]. 55.7% beat [S1]."), [], "all stated");
+  assert.deepEqual(trace("October runs from Tue 13 Oct to Sat 31 Oct [S1]."), ["31 Oct"], "a date no record states");
+  assert.deepEqual(trace("Ten of them come to PHP 12,500 [S1]. That is 61%."), ["PHP 12,500", "61%"], "an unlabelled sum and a percentage");
+  assert.deepEqual(trace("Ten of them come to PHP 12,500, calculated from their buy-ins, ending 30 Nov [S1]."), ["30 Nov"], "a calculated sentence keeps its numbers, not its dates");
+  assert.deepEqual(trace("Your leave runs Mon 21 to Thu 24 Dec [S1], the dentist is at 09:30 on 20 Oct [S2], checked on 11 Oct, today 11 October 2026."), [],
+    "a range in one month, an ISO date in a record, a time, and today's date");
+  assert.deepEqual(trace("Your leave runs Mon 22 to Thu 24 Dec [S1]."), ["22 to Thu 24 Dec"], "a range with a wrong end");
+  assert.deepEqual(trace("Picks 89, 88 and 76 [S1]."), ["89", "88", "76"], "no trailing comma in a flagged figure");
+  assert.deepEqual(trace("You have 3 open calls and ten picks [S1]."), [], "small counts and words are left alone");
+
+  const clean = Ask.cleanAnswer({answer: "October ends Sat 31 Oct [S1]."}, registry, [], false, "q", extra);
+  assert.deepEqual(clean.unverified, ["31 Oct"]);
+  assert.equal(Ask.cleanAnswer({answer: "October ends Sat 31 Oct [S1]."}, registry, [], true, "q", extra).unverified, undefined, "a web answer is not traced");
+  assert.equal(Ask.cleanAnswer({answer: "October runs to Thu 29 Oct [S1]."}, registry, [], false, "q", extra).unverified, undefined, "nothing untraced, no field");
+});
+
+test("an untraced figure gets one correction; if it survives, the answer is kept with it listed, while other problems still fail", async () => {
+  const registry = Ask.newRegistry();
+  Ask.lookupOutput([{id: "o", source: "Poker", title: "Poker overview", detail: "11 events, Tue 13 Oct – Thu 29 Oct, PHP 15,300."}], registry);
+  const reply = (answer) => JSON.stringify({answer, not_found: "", follow_ups: [], web_sources: []});
+  const context = {question: "What poker have I starred?", registry, searched: [], web: false, extra: []};
+  let prompt = "";
+  const fixed = await Ask.refineAnswer({...context, raw: reply("They run to Sat 31 Oct [S1]."), revise: async (p) => { prompt = p; return reply("They run to Thu 29 Oct [S1]."); }});
+  assert.match(prompt, /These figures are not in the records the lookups returned: 31 Oct\. Remove each one/);
+  assert.match(prompt, /put the word "calculated" in that sentence/);
+  assert.equal(JSON.parse(fixed).answer, "They run to Thu 29 Oct [S1].");
+  const kept = await Ask.refineAnswer({...context, raw: reply("They run to Sat 31 Oct [S1]."), revise: async () => reply("They still run to Sat 31 Oct [S1].")});
+  assert.deepEqual(Ask.cleanAnswer(JSON.parse(kept), registry, [], false, context.question, []).unverified, ["31 Oct"], "kept, and listed under the answer");
+  await assert.rejects(Ask.refineAnswer({...context, question: "In one sentence, what poker have I starred?", raw: reply("One [S1]. Two [S1]."), revise: async () => reply("Still one [S1]. Still two [S1].")}),
+    /did not meet your requested format/, "a format problem still fails after one correction");
+});

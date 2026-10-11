@@ -301,7 +301,7 @@ test('search results for the personal sources open where they live',async()=>{
   assert.ok(html.includes("  if (item.source === 'Dossier') return openDossierResult(item.ref);"),'wired into the opener search uses');
 });
 // Ask Daybook (functions/ask-daybook.js), in the Search overlay.
-const ASK_FNS=['looksLikeFollowUp','askAnswerHtml','paintAskHistory','runAskDaybook','askError','showAskAnswer','newAskQuestion','openAskSource','saveAskAnswer','askCostText','paintAskCost','askAnswerText','askDecisionSubject','handleAskSend'];
+const ASK_FNS=['looksLikeFollowUp','askUnverifiedText','askAnswerHtml','paintAskHistory','runAskDaybook','askError','showAskAnswer','newAskQuestion','openAskSource','saveAskAnswer','askCostText','paintAskCost','askAnswerText','askDecisionSubject','handleAskSend'];
 function askEnvironment(extra={}){
   const env=environment(ASK_FNS,{esc:escHtml,_firebaseUid:'bob',aiWorkingHtml:text=>'<working>'+text,runIntelligenceSearch:()=>{},...extra});
   vm.runInContext(html.match(/var _askThread = [^\n]*;/)[0],env.context);
@@ -1637,4 +1637,15 @@ test('a folded page opens by its hash with no tab of its own, and a missing page
   context.location.hash='#radar';context.navFromHash();
   context.location.hash='#nope';context.navFromHash();
   assert.equal(opened.length,1,'an open page and a missing page are left alone');
+});
+
+// Strict correctness (11 Oct): figures the server could not trace are listed under the answer and in the copied text.
+test('Ask Daybook: figures not found in the cited records are shown under the answer and kept in the copy',()=>{
+  const {context}=askEnvironment();
+  const a={question:'What poker?',answer:'They run to Sat 31 Oct [S1].',unverified:['31 Oct','PHP <12,500>'],sources:[{ref:'S1',source:'Poker',title:'Poker overview'}],follow_ups:[]};
+  const out=context.askAnswerHtml(a);
+  assert.ok(out.includes('<p class="ask-unverified">Not in the records it cited: 31 Oct, PHP &lt;12,500>. Check before relying on them.</p>'),'listed and escaped');
+  assert.ok(context.askAnswerText(a).includes('\nNot in the records it cited: 31 Oct, PHP <12,500>. Check before relying on them.\nSources:'));
+  assert.ok(!context.askAnswerHtml({question:'q',answer:'Fine [S1].',sources:[{ref:'S1',source:'Poker',title:'x'}]}).includes('ask-unverified'),'nothing to list, no line');
+  assert.equal(context.askUnverifiedText({unverified:['31 Oct']}),'Not in the records it cited: 31 Oct. Check before relying on it.');
 });

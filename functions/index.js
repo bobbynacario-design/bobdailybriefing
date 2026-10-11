@@ -854,6 +854,9 @@ exports.askDaybook = onCall(
     const tools = [Ask.SEARCH_TOOL].concat(web ? [{type: "web_search", search_context_size: "medium"}] : []);
     const include = web ? ["web_search_call.action.sources"] : undefined;
     const registry = Ask.newRegistry();
+    // Besides the records, an answer may repeat figures from today's date and
+    // the thread; the figure check counts those as stated.
+    const traceExtra = [today].concat(thread.map((turn) => turn.q + " " + turn.a));
     const usage = {inputTokens: 0, outputTokens: 0, cachedTokens: 0};
     const searched = [];
     let webSearches = 0;
@@ -896,7 +899,7 @@ exports.askDaybook = onCall(
           return extractText(fixed);
         };
       }
-      raw = await Ask.refineAnswer({raw, revise, question, registry, searched, web});
+      raw = await Ask.refineAnswer({raw, revise, question, registry, searched, web, extra: traceExtra});
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       throw new HttpsError(err.code || "internal", err.message);
@@ -910,7 +913,7 @@ exports.askDaybook = onCall(
 
     let answer;
     try {
-      answer = Ask.cleanAnswer(parseBriefing(raw), registry, searched, web, question);
+      answer = Ask.cleanAnswer(parseBriefing(raw), registry, searched, web, question, traceExtra);
     } catch (err) {
       answer = null;
     }

@@ -2619,7 +2619,7 @@ body.light .hero-eyebrow,body.light .boost-kicker,body.light .boost-why,body.lig
 .ask-text{font-size:16px;line-height:1.7;color:var(--txt);margin:0 0 .6rem}
 .ask-ref{display:inline-block;font-family:var(--mono);font-size:11px;line-height:1.4;padding:0 .3rem;margin-left:.15rem;border:1px solid var(--gold-dim);border-radius:5px;color:var(--gold);background:transparent;cursor:pointer;text-decoration:none;vertical-align:1px}
 .ask-ref:hover{border-color:var(--gold)}
-.ask-gap{font-size:14px;color:var(--txt2);margin:0 0 .6rem}
+.ask-gap{font-size:14px;color:var(--txt2);margin:0 0 .6rem}.ask-unverified{font-size:13px;color:var(--amber);margin:0 0 .6rem}
 .ask-sources{list-style:none;margin:0 0 .7rem;padding:0;display:grid;gap:.35rem;font-size:14px;line-height:1.5;color:var(--txt2)}
 .ask-sources li{display:flex;gap:.45rem;align-items:baseline}
 .ask-actions{display:flex;flex-wrap:wrap;gap:.4rem}
@@ -3878,6 +3878,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li>It looks things up in your Daybook up to three times, choosing its own words, sources and dates: briefings, news, reports, decisions, notes, evidence, dossiers, meeting briefs, weekly reads, Your numbers and the feeds. Your accounts’ other names count as lookup words.</li>
         <li>It also reads your own plans: your <b>calendar</b> (your events, account meetings, and leave and holidays from your linked calendars), your <b>weekly commitments</b> and ticks, the tournaments you <b>★ starred in PokerHQ</b>, and <b>Flights</b>. Each has an overview the app works out itself — your time off, this week’s progress in your focus order (money, work, health, poker), your picks’ buy-ins and PokerHQ’s grades, and the scouted fares that fit your leave — so “What’s my next time off?”, “How am I going on this week’s commitments?”, “What poker have I starred in October and what will the buy-ins come to?” or “Any fares for my Christmas leave?” are answered from those figures. A grade is PokerHQ’s affordability check, not a decision; it never sees your bankroll amount; fares are the airlines’ advertised samples, not live prices.</li>
         <li>From the <b>Radar</b> it reads today’s scan: each name’s score and status, the reason for the score, its catalyst and read (AI-written, and said so), its levels and tripwire, how names in its score band have done before, and which names are today’s Taker and Wildcard picks. For example: “Why is SOXX on the radar?”, “What are today’s Wildcard picks?”. It has no earlier days, so it can’t say how a name has changed.</li>
+        <li><b>Figures are checked.</b> Every amount, percentage, date and number from 10 up in an answer must appear in the records it looked up, or the answer must say it calculated it. Anything else goes back for one correction; a figure still not found is listed under the answer as “Not in the records it cited”.</li>
         <li>Every claim carries a ref: <b>S1</b> opens that record where it lives; <b>W1</b> opens a web page. A claim with no ref it found is dropped, and when your Daybook has nothing on it, it says so rather than guessing.</li>
         <li>It keeps straight whose words are whose, as the meeting brief does: <b>you noted</b> only for your notes, decisions and the note on a saved page. A dossier, meeting brief or weekly read is AI-written; a briefing story is something you were shown.</li>
         <li><b>Also check the web</b> is off unless you tick it. Saved-record questions use Claude Haiku; web questions use OpenAI (about $0.30–0.35). Saved-record cost depends on the material read; see the usage report for actual spend. Up to twenty questions a day. Nothing is sent until you tap, and it never gives trading advice.</li>
@@ -5068,6 +5069,7 @@ function askAnswerHtml(a, following) {
   });
   var html = '<div class="ask-answer"><p class="ask-q">' + (following ? 'Following up · ' : '') + esc(a.question || '') + '</p><p class="ask-text">' + body + '</p>';
   if (a.not_found) html += '<p class="ask-gap">' + esc(a.not_found) + '</p>';
+  if ((a.unverified || []).length) html += '<p class="ask-unverified">' + esc(askUnverifiedText(a)) + '</p>';
   var list = (a.sources || []).map(function(s) {
     return '<li><button type="button" class="ask-ref" data-ask-ref="' + esc(s.ref) + '">' + esc(s.ref) + '</button><span>' + esc([s.source, s.title, s.date].filter(Boolean).join(' · ')) + '</span></li>';
   }).concat((a.web_sources || []).map(function(w) {
@@ -5165,10 +5167,14 @@ function openAskSource(ref) {
 }
 // An answer as plain text: no ref marks, then the sources it cited. Evidence,
 // a decision draft and Copy as text all use it.
+// Figures the server could not trace to the records the answer cites.
+function askUnverifiedText(a) {
+  return 'Not in the records it cited: ' + (a.unverified || []).join(', ') + '. Check before relying on ' + ((a.unverified || []).length === 1 ? 'it.' : 'them.');
+}
 function askAnswerText(a) {
   var sources = (a.sources || []).map(function(s) { return s.ref + ' ' + [s.source, s.title, s.date].filter(Boolean).join(' · '); })
     .concat((a.web_sources || []).map(function(w) { return w.ref + ' ' + w.title + ' ' + w.url; }));
-  return [String(a.answer).replace(/\s*\[[SW]\d+\]/g, '')].concat(a.not_found ? [a.not_found] : [], sources.length ? ['Sources:'].concat(sources) : []).join('\n');
+  return [String(a.answer).replace(/\s*\[[SW]\d+\]/g, '')].concat(a.not_found ? [a.not_found] : [], (a.unverified || []).length ? [askUnverifiedText(a)] : [], sources.length ? ['Sources:'].concat(sources) : []).join('\n');
 }
 // Saved to Evidence as a document.
 function saveAskAnswer() {
