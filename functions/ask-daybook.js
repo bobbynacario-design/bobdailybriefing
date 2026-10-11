@@ -167,9 +167,16 @@ function intentInstructions(intent) {
   return lines.join("\n");
 }
 
+// A model sometimes writes refs together, "[S12, S8]" or "[S1; S2]". Each is
+// split into its own brackets so it is checked, kept and listed like any other
+// (11 Oct: two answers lost their refs this way).
+function splitRefs(value) {
+  return String(value == null ? "" : value).replace(/\[\s*([SW]\d+(?:\s*(?:[,;&]|and)\s*[SW]\d+)+)\s*\]/g,
+    (match, list) => list.split(/\s*(?:[,;&]|and)\s*/).map((ref) => "[" + ref.trim() + "]").join(" "));
+}
 function answerText(value) {
   // Keep requested bullet lines intact. All HTML is still escaped by the app.
-  return text(value).replace(/\r\n?/g, "\n").replace(/[^\S\n]+/g, " ").replace(/\n{3,}/g, "\n\n").slice(0, 1600).trim();
+  return splitRefs(text(value)).replace(/\r\n?/g, "\n").replace(/[^\S\n]+/g, " ").replace(/\n{3,}/g, "\n\n").slice(0, 1600).trim();
 }
 
 function sentenceCount(value) {
@@ -181,6 +188,7 @@ function reviewAnswer(raw, {question, registry, searched, web}) {
   const intent = requestIntent(question);
   let parsed;
   try { parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); } catch (error) { parsed = null; }
+  if (parsed && typeof parsed.answer === "string") parsed.answer = splitRefs(parsed.answer);
   const clean = cleanAnswer(parsed, registry, searched, web, question);
   const problems = [];
   if (!clean || typeof parsed.answer !== "string") problems.push("Return a usable answer in the requested JSON object.");
@@ -234,7 +242,7 @@ function buildAskPrompt({question, today, accounts, web}) {
     "- A question about today's picks, several Radar names or the Radar as a whole: build the answer from the Radar overview record and cite it. Give the picks grouped by score band as it groups them, with each band's record, and say plainly which group has no clear edge; then how many are on volume below their norm, and the themes. Name each pick once, with its score. Say once what all share (e.g. \"all six are early\"); never repeat status words such as forming or early for each name, and never open each name with its own status.",
     "- A question about his time, plans or week (leave, holidays, what is coming up, his commitments, poker plans, trips, fares): look up sources Calendar, Commitments, Poker and Flights as fits, with the term \"overview\" plus the question's own words. Each has an overview record computed by the app across all its records: his time off (leave joined with weekends and holidays) and what is coming up; this week's commitments with the days ticked, last week's results and his focus order; his ★ PokerHQ picks with buy-ins, PokerHQ's grades and series abroad; and the Flights scout's fares that fit his time off, cheapest cities and poker trips. Build the answer from the overview and cite it; dated questions (\"in December\") can also narrow by dates.",
     "- His calendar in Daybook holds his own Daybook events, meetings matched to his accounts and all-day entries from his linked calendars, not every appointment: never call a day free or say he has nothing on; say what is listed.",
-    "- Commitments are his own words; a tick is a day he marked doing something toward one. Never infer progress beyond the ticks and the results he marked. For \"what should I focus on\", follow his focus order as the overview states it (money, then work, then health, then poker) and draw on his commitments and calendar.",
+    "- Commitments are his own words; a tick is a day he marked doing something toward one. Never infer progress beyond the ticks and the results he marked. For \"what should I focus on\", follow his focus order as the overview states it (money, then work, then health, then poker): give his commitments, then the overview's ideas from his records, each with where it comes from, and say plainly that a starter idea is only a starter. A date range, a count or a first or last date must be one the records state; never round to a month's start or end.",
     "- PokerHQ: a ★ (Playing These) is his decision to play; a grade (target, stretch, skip) is only PokerHQ's check of a buy-in against his bankroll rule, not a decision. Daybook never sees his bankroll amount; never state or guess it, and give no advice on stakes beyond PokerHQ's own grade.",
     "- Flights fares are airlines' advertised samples on the airlines' own dates, checked on the scout's date: \"the scout saw Taipei from ≈ PHP … on …\", never that a seat is available at that price. Exact dates are searched with the Google Flights links on Flights.",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
@@ -247,7 +255,7 @@ function buildAskPrompt({question, today, accounts, web}) {
     web
       ? "- You may also search the web for what is new. Cite each web fact with [W1], [W2]… matching web_sources, copying each url exactly from a search result."
       : "- Do not use the web: answer only from what the lookups return.",
-    "- Put the ref after each claim it supports, e.g. \"QBE lifted its cat allowance [S3].\" Never cite a ref a lookup did not return.",
+    "- Put the ref after each claim it supports, e.g. \"QBE lifted its cat allowance [S3].\" Each ref goes in its own brackets: [S1] [S2], never [S1, S2]. Never cite a ref a lookup did not return.",
     "- If the lookups find nothing useful, say so plainly in one sentence and leave answer short; never fill the gap from memory.",
     "- Dates and reported figures only as the records state them. Simple differences or percentages calculated from comparable recorded figures must be labelled as calculations and cite their inputs. Say who reported something when it matters.",
     "- Do not turn a list of interests or values into a ranking, personality trait or claim about priorities unless he explicitly recorded that comparison. Keep descriptions proportional to what his own words support.",
@@ -430,6 +438,12 @@ function aboutRecords(docs, todayKey) {
 // with their computed overviews (lib/life-records-core.js, synced here).
 // life = {core, calendar, flights, review}: the shared modules, passed in so
 // this file stays pure. The PokerHQ bankroll only feeds PokerHQ's own grade.
+// The last weekly read's one suggestion, for the week's ideas.
+function latestTryNext(doc) {
+  const mirrors = (doc && doc.mirrors) || {};
+  const last = mirrors[Object.keys(mirrors).sort().pop()];
+  return last && last.try_next && typeof last.try_next.action === "string" ? last.try_next.action : "";
+}
 function lifeRecords(docs, life) {
   if (!life || !life.core || typeof life.core.records !== "function") return [];
   const value = (doc) => {
@@ -443,6 +457,8 @@ function lifeRecords(docs, life) {
     now: docs.now,
     calendar: {manual: arr(docs.calendarEvents && docs.calendarEvents.items), meetings: docs.calendarMeetings || null},
     review: docs.review || null,
+    extra: {decisions: arr(docs.decisions), evidenceSets: arr(docs.prefs && docs.prefs.evidenceSets && docs.prefs.evidenceSets.sets),
+      goals: arr(docs.goals && docs.goals.goals), tryNext: latestTryNext(docs.mirrors)},
     poker: Array.isArray(tourneys) ? {tourneys, sessions: arr(value(docs.pokerSessions)),
       bankroll: bankroll && Number(bankroll.amount) > 0 ? {amount: Number(bankroll.amount), rule: Number(bankroll.rule) || 5} : null} : null,
     flights: docs.flights ? {latest: docs.flights, saved: (docs.flightsSaved && docs.flightsSaved.savedOffers) || {}, history: docs.flightsHistory || null, fx: docs.fx || null} : null,
@@ -553,5 +569,5 @@ function keepAnswers(items, id, answer) {
 module.exports = {
   requestIntent, intentInstructions, sentenceCount, reviewAnswer, refineAnswer,
   cleanQuestion, cleanThread, originOf, buildAskPrompt, buildAskInput, cleanPlan, newRegistry, lookupOutput, cleanAnswer,
-  askIndexInput, aboutRecords, lifeRecords, lookupRecords, runLookups, providerError, keepAnswers, SYSTEM, ABOUT_SOURCES, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
+  askIndexInput, aboutRecords, lifeRecords, splitRefs, lookupRecords, runLookups, providerError, keepAnswers, SYSTEM, ABOUT_SOURCES, SEARCH_TOOL, ASK_SOURCES, MAX_LOOKUPS, LOOKUP_LIMIT, MAX_THREAD, KEEP_ANSWERS,
 };

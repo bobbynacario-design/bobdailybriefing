@@ -70,7 +70,7 @@
     events.forEach(function(e){if(e.origin==='manual')counts.own++;else if(/^meeting-/.test(e.id))counts.meeting++;else if(/^day-/.test(e.id))counts.allday++;});
     var lines=[];
     if(windows.length) {
-      lines.push('Time off ahead (leave joined with the weekends and all-day entries next to it): '+windows.map(function(w) {
+      lines.push('Time off ahead (leave joined with the weekends and all-day entries next to it; a public holiday counts only when your linked calendars list it): '+windows.map(function(w) {
         var clashes=events.filter(function(e){return e.kind!=='allday' && !e.done && e.start<=w.end && e.end>=w.start;});
         return L.span(w.start,w.end)+' ('+months(w.start,w.end)+'): '+w.days+' days off for '+w.leave+' leave '+(w.leave===1?'day':'days')+(w.holidays.length?', includes '+w.holidays.join(', '):'')+
           ', back at work '+L.day(w.back)+(clashes.length?'; overlaps '+clashes.map(function(e){return e.title+' ('+L.span(e.start,e.end)+')';}).join(', '):'');
@@ -91,7 +91,7 @@
   }
 
   // ---- Commitments --------------------------------------------------------
-  function commitmentsRecords(input,W,F,today,now) {
+  function commitmentsRecords(input,W,F,today,now,K) {
     if(!W || !input.review)return [];
     var L=labeller(F,now),weeks=W.cleanWeeks(input.review.weeks),start=W.weekStart(today);
     var keys=Object.keys(weeks).filter(function(k){return weeks[k].commitments.length && k<=start;}).sort().reverse();
@@ -121,11 +121,30 @@
     if(plan.review)lines.push('Due now: the review of the week of '+L.day(plan.review)+'.');
     if(plan.set)lines.push('Due now: setting the commitments for the week of '+L.day(plan.set)+'.');
     if(!all.length)lines.push('You have not set any weekly commitments yet. The weekly review on Today sets up to three a week, in your focus order.');
+    var ideaWeek=plan.set || start,ideas=ideasFor(input,W,K,L,weeks,ideaWeek);
+    if(ideas.length)lines.push('Ideas for the week of '+L.day(ideaWeek)+' from your records, in your focus order (the weekly review offers the same): '+
+      ideas.map(function(s){return W.areaLabel(s.area)+': '+s.text+' ('+s.why+')';}).join('; ')+'.');
     out.push({id:'commitments:overview',source:'Commitments',title:'Commitments overview: this week\'s commitments, progress and your focus order',
       detail:thisWeek && thisWeek.commitments.length?'This week: '+thisWeek.commitments.length+' commitment'+(thisWeek.commitments.length===1?'':'s')+', '+thisWeek.commitments.filter(function(c){return c.ticks.length;}).length+' ticked at least once so far.'
         :'No commitments set for this week.',
       body:lines.join(' '),meta:'Computed from your weekly review · as of '+today,page:'today',ref:'',saved:'',rank:1000,entities:[]});
     return out;
+  }
+
+  // The weekly review's ideas (WeeklyReviewCore.suggestions) from the same
+  // records the review reads: decisions, working questions, calendar tasks and
+  // leave, ★ picks, goals and the last weekly read's suggestion.
+  function ideasFor(input,W,K,L,weeks,week) {
+    if(typeof W.suggestions!=='function')return [];
+    var extra=input.extra || {},cal=input.calendar || {};
+    var events=K?K.build({manual:cal.manual,meetings:cal.meetings}):[];
+    var windows=K && cal.meetings?K.offWindows({manual:cal.manual,meetings:cal.meetings},week).map(function(w){return Object.assign({},w,{label:L.span(w.start,w.end)});}):[];
+    var starred=K && input.poker?arr(input.poker.tourneys).filter(function(t){return t && t.planning===true;}).map(function(t) {
+      var d=K.pokerDate(t.date);
+      return d?{day:d,name:text(t.name,100) || 'Tournament',venue:text(t.venue,160).split(',')[0].trim().slice(0,60),label:L.day(d)}:null;
+    }).filter(Boolean):[];
+    return W.suggestions({weeks:weeks,decisions:arr(extra.decisions),evidenceSets:arr(extra.evidenceSets),events:events,windows:windows,pokerStarred:starred,
+      goals:arr(extra.goals),tryNext:text(extra.tryNext,200)},week);
   }
 
   // ---- PokerHQ ------------------------------------------------------------
@@ -153,11 +172,11 @@
     });
     var upcoming=poker.tourneys.filter(function(t){var d=t && K.pokerDate(t.date);return d && d>=today;});
     var month={},lines=[];
-    picks.forEach(function(p){var m=monthOf(p.day);month[m]=month[m] || {n:0,spend:0};month[m].n++;month[m].spend+=p.buyin;});
+    picks.forEach(function(p){var m=monthOf(p.day);month[m]=month[m] || {n:0,spend:0,first:p.day,last:p.day};month[m].n++;month[m].spend+=p.buyin;month[m].last=p.day;});
     var total=picks.reduce(function(n,p){return n+p.buyin;},0);
     if(picks.length) {
       lines.push('Your ★ picks in PokerHQ (Playing These: your decision to play), upcoming: '+picks.length+' events from '+L.day(picks[0].day)+' to '+L.day(picks[picks.length-1].day)+', '+peso(total)+' in buy-ins in all; by month: '+
-        Object.keys(month).map(function(m){return m+' '+month[m].n+' ('+peso(month[m].spend)+')';}).join(', ')+'.');
+        Object.keys(month).map(function(m){return m+': '+month[m].n+(month[m].n===1?' event on '+L.day(month[m].first):' events, '+L.span(month[m].first,month[m].last))+', '+peso(month[m].spend);}).join('; ')+'.');
       lines.push('Next: '+picks.slice(0,6).map(function(p){return L.day(p.day)+' '+p.name+' at '+p.venue+(p.buyin?' ('+peso(p.buyin)+')':'');}).join('; ')+(picks.length>6?'; and '+(picks.length-6)+' more':'')+'.');
       if(bankroll) {
         var by={target:[],stretch:[],skip:[]};picks.forEach(function(p){by[p.grade].push(p);});
@@ -258,7 +277,7 @@
     if(!today)return [];
     return [].concat(
       guarded(function(){return calendarRecords(input,K,F,today,now);}),
-      guarded(function(){return commitmentsRecords(input,W,F,today,now);}),
+      guarded(function(){return commitmentsRecords(input,W,F,today,now,K);}),
       guarded(function(){return pokerRecords(input,K,F,today,now);}),
       guarded(function(){return flightsRecords(input,K,F,today,now);}));
   }

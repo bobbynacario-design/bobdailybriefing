@@ -265,3 +265,17 @@ test("the prompt says how to ask about his time and plans, and keeps PokerHQ and
   assert.ok(prompt.includes("\"you committed to…\""), "commitments are his words");
   assert.match(Ask.SEARCH_TOOL.description, /his calendar \(events, leave, holidays\), weekly commitments, PokerHQ ★ picks and Flights/);
 });
+
+test("refs written together are split, so each is kept, listed and checked", () => {
+  const registry = Ask.newRegistry();
+  Ask.lookupOutput([{id: "a", source: "Poker", title: "Tuesday Grind", detail: "PHP 300"}, {id: "b", source: "Poker", title: "Saturday Survivor", detail: "PHP 3,000"}], registry);
+  const clean = Ask.cleanAnswer({answer: "From PHP 300 to PHP 3,000 [S1, S2]. Graded target [S2; S1]. Unknown [S1, S9]."}, registry, [], false, "q");
+  assert.equal(clean.answer, "From PHP 300 to PHP 3,000 [S1] [S2]. Graded target [S2] [S1]. Unknown [S1].");
+  assert.deepEqual(clean.sources.map((s) => s.ref), ["S1", "S2"], "both refs are listed");
+  assert.equal(Ask.splitRefs("[W1,W2] and [S3 and S4]"), "[W1] [W2] and [S3] [S4]");
+  const review = Ask.reviewAnswer(JSON.stringify({answer: "Two picks [S1, S2].", not_found: "", follow_ups: []}), {question: "What poker have I starred?", registry, searched: [], web: false});
+  assert.deepEqual(review.problems, [], "a combined ref is not a problem once split");
+  const prompt = Ask.buildAskPrompt({question: "q", today: "t", accounts: [], web: false});
+  assert.ok(prompt.includes("Each ref goes in its own brackets: [S1] [S2], never [S1, S2]."));
+  assert.ok(prompt.includes("the overview's ideas from his records") && prompt.includes("never round to a month's start or end"));
+});
