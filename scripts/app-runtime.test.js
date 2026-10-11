@@ -1610,6 +1610,28 @@ test('a Daybook window told to open a page goes there, and only within Daybook',
   assert.equal(loc.assigned,null); assert.equal(loc.hash,'#command');
   assert.ok(html.includes("navigator.serviceWorker.addEventListener('message', function(event) { openFromServiceWorker(event.data); });"));
 });
+// Step 3 of the 11 Oct audit: Ask was only behind Search (17 asks in 16 days, most of them tests).
+test('Ask on Today opens Search with the question and asks it as a new thread, with three one-tap questions',()=>{
+  const calls=[];
+  const {context,element}=environment(['askFromToday','todayAskQuestions','renderTodayAsk'],{esc:escHtml,_askThread:[{q:'old',a:'x'}],_currentData:{hit:true},
+    openIntelligenceSearch:()=>calls.push('open'),runAskDaybook:q=>calls.push('ask '+q),
+    accountHitsIn:b=>b && b.hit?[{name:'Allianz',headlines:['Storm claims rise']}]:[],activeAccounts:()=>[{name:'QBE'}]});
+  const input=element('today-ask-input');input.value='  What is new on SA Power Networks?  ';
+  let prevented=false;
+  assert.equal(context.askFromToday({preventDefault(){prevented=true;}}),false,'the form never submits the page');
+  assert.ok(prevented);assert.deepEqual(calls,['open','ask What is new on SA Power Networks?']);
+  assert.equal(element('intel-search-input').value,'What is new on SA Power Networks?');assert.equal(input.value,'');
+  assert.deepEqual([...context._askThread],[],'a question from Today is not a follow-up to the last one');
+  input.focus=()=>calls.push('focus');input.value='hi';context.askFromToday(null);
+  assert.deepEqual(calls.slice(2),['focus'],'too short: nothing asked, the box gets the cursor');calls.pop();
+  context.askFromToday(null,'When’s my next time off?');assert.deepEqual(calls.slice(2),['open','ask When’s my next time off?'],'a one-tap question asks at once');
+  assert.deepEqual([...context.todayAskQuestions({hit:true})],['What should I focus on this week?','What’s new on Allianz this week?','When’s my next time off?']);
+  assert.equal(context.todayAskQuestions(null)[1],'What’s new on QBE this week?','no account in today’s briefing: the top of his list');
+  context.renderTodayAsk();
+  const chips=element('today-ask-chips').innerHTML;
+  assert.equal((chips.match(/data-track="today_ask_chip"/g) || []).length,3);assert.match(chips,/data-q="What’s new on Allianz this week\?"/);
+  assert.ok(/id="page-today">\s*<section class="today-ask owner-only" id="today-ask"/.test(html),'first on Today, owner-only like Ask itself');
+});
 test('a page opened by a push tap counts it once and takes the mark off the address',()=>{
   const used=[], replaced=[];
   const {context}=environment(['consumePushTap'],{URL,trackUse:name=>used.push(name),history:{replaceState:(s,t,u)=>replaced.push(u)}});
