@@ -31,10 +31,12 @@ test("the prompt carries the material, the recipient's concerns, his angle and t
   assert.match(prompt, /send a short email about one news story to QBE, an insurer instructing him on claims/);
   assert.match(prompt, /HIS ANGLE \(his own words; build the note around it\): ask whether their open files use the old rates/);
   assert.match(prompt, /Figure: 4\.2% — rise in field worker labour rates \(AER\)/);
-  assert.match(prompt, /BI and claims angle \(AI-written analysis\): Recovery claims/);
-  assert.match(prompt, /Reported by: AER, Thursday, September 24, 2026/);
+  assert.match(prompt, /Possible BI and claims angle \(a read to raise, not fact\): Recovery claims/);
+  assert.match(prompt, /Reported by: AER \(publication date not given\)\nIn his briefing of: Thursday, September 24, 2026/);
+  assert.ok(prompt.includes("Give no publication date: the material only has the date of his briefing."));
+  assert.ok(prompt.includes("Never mention AI, a dossier, an analysis or where the read came from: the email is from Bob."));
+  assert.ok(!/AI-written/.test(prompt), "nothing in the prompt for the model to repeat");
   assert.ok(prompt.includes("copy figures exactly, never round, convert or add them up"));
-  assert.ok(prompt.includes("present it as a possibility to look at, never as established fact"));
   assert.ok(prompt.includes("Do not include links or a sources line"));
   assert.ok(prompt.includes('start with "Hi [Name],"'));
   assert.ok(!/\n\n\n/.test(prompt), "no runs of blank lines");
@@ -56,7 +58,7 @@ test("every figure and date in a draft is traced to the dossier; an invented one
   assert.deepEqual(Note.traceNote(ok, dossier, []), []);
   const bad = {subject: "Ausgrid rates up 4.5%", body: "Hi [Name],\nThe AER said rates rise from 1 August, worth $2.1m to QBE.\nKind regards,\nBob"};
   assert.deepEqual(Note.traceNote(bad, dossier, []), ["4.5%", "1 August", "$2.1"]);
-  assert.match(Note.correctionPrompt(["4.5%"]), /not in the material: 4\.5%\. Rewrite it without them/);
+  assert.match(Note.correctionPrompt(["4.5%"], []), /not in the material: 4\.5%\. Remove them/);
 });
 
 test("the email's links are the story's, then the dossier's checked sources, three at most and each once", () => {
@@ -70,4 +72,18 @@ test("the stored map keeps the latest thirty notes", () => {
   for (let i = 0; i < 35; i++) items = Note.keepNotes(items, "n" + i, {generatedAt: "2026-10-" + String(10 + Math.floor(i / 10)).padStart(2, "0") + "T00:00:" + String(i % 60).padStart(2, "0") + "Z"});
   assert.equal(Object.keys(items).length, 30);
   assert.ok(!items.n0 && items.n34);
+});
+
+test("the first real note's faults are caught in code: the instructions showing through, and length", () => {
+  const leaky = {subject: "Midwife PI exemption ends", body: "Hi [Name],\n\nMy read, which is an AI-assisted analysis and not established fact, is that BI will not respond.\n\nKind regards,\nBob"};
+  assert.match(Note.noteProblems(leaky, dossier)[0], /It mentions "AI-assisted"/);
+  const plainAi = {subject: "New rules", body: "Hi [Name],\n\nMy read is that AI tools will speed up claims triage.\n\nKind regards,\nBob"};
+  assert.match(Note.noteProblems(plainAi, dossier)[0], /It mentions "AI"/, "AI, when the story is not about AI");
+  const aiStory = Object.assign({}, dossier, {summary: "Insurers adopt AI triage for claims."});
+  assert.deepEqual(Note.noteProblems(plainAi, aiStory), [], "a story about AI may say AI");
+  const long = {subject: "Long", body: "Hi [Name],\n\n" + "word ".repeat(150) + "\n\nKind regards,\nBob"};
+  assert.deepEqual(Note.noteProblems(long, dossier), ["It is 150 words between greeting and sign-off; keep it to 130."]);
+  assert.equal(Note.noteWords("Hi [Name],\n\nOne two three.\n\nKind regards,\nBob"), 3, "greeting and sign-off are not counted");
+  assert.equal(Note.correctionPrompt(["4.5%"], ["It is 150 words between greeting and sign-off; keep it to 130."]),
+    "Fix your draft: It gives figures or dates that are not in the material: 4.5%. Remove them, or use the material's own figure copied exactly. It is 150 words between greeting and sign-off; keep it to 130. Keep everything else. Return the same JSON object.");
 });

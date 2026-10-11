@@ -695,9 +695,11 @@ exports.draftClientNote = onCall(
     try {
       note = Note.cleanNote(parseBriefing(await call(prompt)));
       let untraced = note ? Note.traceNote(note, dossier, extra) : [];
-      // One correction for a figure or date the dossier does not state.
-      if (note && untraced.length) {
-        const fixed = Note.cleanNote(parseBriefing(await call(prompt + "\n\nYOUR FIRST DRAFT:\n" + JSON.stringify(note) + "\n\n" + Note.correctionPrompt(untraced))));
+      // One correction for a figure or date the dossier does not state, or for
+      // the instructions showing through, or for length.
+      const problems = note ? Note.noteProblems(note, dossier) : [];
+      if (note && (untraced.length || problems.length)) {
+        const fixed = Note.cleanNote(parseBriefing(await call(prompt + "\n\nYOUR FIRST DRAFT:\n" + JSON.stringify(note) + "\n\n" + Note.correctionPrompt(untraced, problems))));
         if (fixed) { note = fixed; untraced = Note.traceNote(note, dossier, extra); }
       }
       if (note && untraced.length) note.unverified = untraced;

@@ -60,11 +60,14 @@ const KIND_NOTES = {
 function noteMaterial(dossier) {
   const d = dossier || {}, story = d.story || {};
   const lines = ["Story: " + clip(story.headline, 300)];
-  if (story.source || story.date) lines.push("Reported by: " + [clip(story.source, 120), clip(story.date, 60)].filter(Boolean).join(", "));
+  // The date is his briefing's, not the article's (11 Oct: a note said
+  // "reported on 11 October" from it).
+  if (story.source) lines.push("Reported by: " + clip(story.source, 120) + " (publication date not given)");
+  if (story.date) lines.push("In his briefing of: " + clip(story.date, 60));
   if (d.summary) lines.push("Summary: " + clip(d.summary, 700));
   arr(d.background).forEach((b) => lines.push("Background: " + clip(b, 420)));
   arr(d.numbers).forEach((n) => lines.push("Figure: " + clip(n && n.figure, 40) + (n && n.what ? " — " + clip(n.what, 200) : "") + (n && n.source ? " (" + clip(n.source, 100) + ")" : "")));
-  if (d.bi_angle) lines.push("BI and claims angle (AI-written analysis): " + clip(d.bi_angle, 900));
+  if (d.bi_angle) lines.push("Possible BI and claims angle (a read to raise, not fact): " + clip(d.bi_angle, 900));
   if (arr(d.exposed).length) lines.push("Exposed: " + arr(d.exposed).map((x) => clip(x, 140)).join("; "));
   arr(d.client_questions).forEach((q) => lines.push("Question for a client: " + clip(q, 320)));
   if (d.would_change) lines.push("What would change the read: " + clip(d.would_change, 700));
@@ -96,9 +99,9 @@ function buildNotePrompt({dossier, recipient, angle, profile}) {
     "RULES:",
     "- subject: at most 10 words, specific to the story and to why it matters to them. No \"FYI\" or \"Update\" on its own.",
     "- body: start with \"Hi [Name],\" on its own line (he fills in the name), then at most 130 words in two or three short paragraphs, then \"Kind regards,\" and \"Bob\" on their own lines.",
-    "- First paragraph: what happened, attributed to who reported it (\"The ABC reported on 25 Sep that…\"). Second: why it may matter for " + (r.kind === "colleague" ? "your files" : "their files") + ", marked as his read (\"This may…\", \"It could…\"), drawn from the BI and claims angle. End with one question or offer, adapted from the questions for a client where one fits.",
+    "- First paragraph: what happened, attributed to who reported it (\"Insurance Business reported that…\"). Give no publication date: the material only has the date of his briefing. Second: why it may matter for " + (r.kind === "colleague" ? "our files" : "their files") + ", in his own hedged words (\"My read is…\", \"This may…\", \"It could…\"), drawn from the BI and claims angle. End with one question or offer, adapted from the questions for a client where one fits.",
     "- Use only the material. Every figure, date and name must be in it; copy figures exactly, never round, convert or add them up. Leave out a figure rather than guess.",
-    "- The BI and claims angle is AI-written analysis: present it as a possibility to look at, never as established fact or as the client's position.",
+    "- The BI and claims angle is a possibility to raise, never established fact or the recipient's position. Write it as his read in plain words. Never mention AI, a dossier, an analysis or where the read came from: the email is from Bob.",
     "- No legal advice, no investment advice, no promises about cover or outcomes. Do not name claimants or files.",
     "- Do not include links or a sources line; they are added after your text.",
     "- Plain English, Australian spelling, no emojis, no markdown, no bullet points. Use newline characters between paragraphs.",
@@ -138,9 +141,30 @@ function traceNote(note, dossier, extra) {
   return untracedFigures([note.subject, note.body].join("\n"), registry, arr(extra));
 }
 
-function correctionPrompt(untraced) {
-  return "Your draft gives figures or dates that are not in the material: " + untraced.join(", ") + ". " +
-    "Rewrite it without them, or with the material's own figure copied exactly. Keep everything else. Return the same JSON object.";
+// What else the first real note (11 Oct) got wrong, checked in code: the
+// instructions leaking into the email, and the length.
+const LEAKS = /\b(AI-assisted|AI-written|AI-generated|dossier|not established fact|the material)\b/i;
+// "AI" itself only counts when the story is not about AI.
+const AI_WORDS = /\b(AI|A\.I\.|artificial intelligence)\b/i;
+function noteWords(body) {
+  const lines = text(body).split("\n").map((l) => l.trim()).filter(Boolean);
+  const inner = lines.filter((l, i) => !(i === 0 && /^hi\b/i.test(l)) && !/^(kind regards|regards|thanks|cheers),?$/i.test(l) && !(i === lines.length - 1 && /^bob$/i.test(l)));
+  return inner.join(" ").split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+}
+function noteProblems(note, dossier) {
+  const problems = [];
+  const all = note.subject + "\n" + note.body;
+  const leak = all.match(LEAKS) || (dossier && AI_WORDS.test(noteMaterial(dossier)) ? null : all.match(AI_WORDS));
+  if (leak) problems.push("It mentions \"" + leak[0] + "\": the email is from Bob, so never mention AI, a dossier, an analysis or the material.");
+  const words = noteWords(note.body);
+  if (words > 145) problems.push("It is " + words + " words between greeting and sign-off; keep it to 130.");
+  return problems;
+}
+function correctionPrompt(untraced, problems) {
+  const lines = [];
+  if (arr(untraced).length) lines.push("It gives figures or dates that are not in the material: " + untraced.join(", ") + ". Remove them, or use the material's own figure copied exactly.");
+  arr(problems).forEach((p) => lines.push(p));
+  return "Fix your draft: " + lines.join(" ") + " Keep everything else. Return the same JSON object.";
 }
 
 // The stored map keeps the latest thirty notes, oldest dropped first.
@@ -153,4 +177,4 @@ function keepNotes(items, id, note) {
   return out;
 }
 
-module.exports = {cleanNoteRequest, noteMaterial, buildNotePrompt, noteSources, cleanNote, traceNote, correctionPrompt, keepNotes, SYSTEM, SCHEMA, KINDS, KEEP_NOTES};
+module.exports = {cleanNoteRequest, noteMaterial, buildNotePrompt, noteSources, cleanNote, traceNote, noteProblems, noteWords, correctionPrompt, keepNotes, SYSTEM, SCHEMA, KINDS, KEEP_NOTES};
