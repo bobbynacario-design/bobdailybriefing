@@ -69,8 +69,9 @@ test("only meetings naming one of his accounts are kept, with a stable id", () =
 test("results from both calendars merge without repeats, soonest first; a failed read says why", () => {
   const a = {id: "m1", start: "2026-10-02T00:00:00Z"}, b = {id: "m2", start: "2026-10-01T00:00:00Z"};
   assert.deepEqual(Cal.mergeMeetings([[a], [b, a]]).map((m) => m.id), ["m2", "m1"]);
-  assert.deepEqual(Cal.readResult("Google", [1, 2, 3], [a], ""), {service: "Google", ok: true, events: 3, matched: 1, allDay: 0});
+  assert.deepEqual(Cal.readResult("Google", [1, 2, 3], [a], ""), {service: "Google", ok: true, events: 3, matched: 1, allDay: 0, listed: 0});
   assert.equal(Cal.readResult("Google", [], [], "", [{}, {}]).allDay, 2);
+  assert.equal(Cal.readResult("Google", [], [], "", [], [{}, {}, {}]).listed, 3);
   assert.deepEqual(Cal.readResult("Outlook", [], [], "HTTP 404"), {service: "Outlook", ok: false, error: "HTTP 404"});
   assert.throws(() => Cal.eventsBetween("not a calendar", 0, 1), "a broken file throws, so the caller can report it");
 });
@@ -135,6 +136,65 @@ test("all-day entries: leave and holidays kept with inclusive end days, timed, c
   assert.deepEqual(both.events.map((e) => e.title), ["QBE review"], "one parse gives the timed events too");
   assert.equal(both.days.length, 4);
   assert.equal(Cal.eventsBetween(ZOHO, Date.parse("2026-10-10T00:00:00Z"), Date.parse("2026-10-13T00:00:00Z")).length, 1, "meetings still skip all-day entries");
+});
+
+// What his real Outlook feed holds (12 Oct 2026): a Brisbane-time series,
+// an occurrence the organiser cancelled (Outlook keeps it, retitled and
+// marked free), a meeting with no subject, and one that names an account.
+const DIARY = lines([
+  "BEGIN:VCALENDAR", "VERSION:2.0", "METHOD:PUBLISH", "PRODID:Microsoft Exchange Server 2010",
+  "BEGIN:VTIMEZONE", "TZID:E. Australia Standard Time",
+  "BEGIN:STANDARD", "DTSTART:16010101T000000", "TZOFFSETFROM:+1000", "TZOFFSETTO:+1000", "END:STANDARD",
+  "END:VTIMEZONE",
+  "BEGIN:VEVENT", "UID:team", "SUMMARY:Team Catch Up", "DTSTART;TZID=E. Australia Standard Time:20260720T100000",
+  "DTEND;TZID=E. Australia Standard Time:20260720T103000", "RRULE:FREQ=WEEKLY;BYDAY=MO,FR;UNTIL=20270716T000000Z", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:team", "RECURRENCE-ID;TZID=E. Australia Standard Time:20261012T100000", "SUMMARY:Team Catch Up",
+  "DTSTART;TZID=E. Australia Standard Time:20261012T150000", "DTEND;TZID=E. Australia Standard Time:20261012T153000", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:team", "RECURRENCE-ID;TZID=E. Australia Standard Time:20261016T100000", "SUMMARY:Canceled: Team Catch Up",
+  "X-MICROSOFT-CDO-BUSYSTATUS:FREE", "DTSTART;TZID=E. Australia Standard Time:20261016T100000", "DTEND;TZID=E. Australia Standard Time:20261016T103000", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:blank", "SUMMARY: ", "DTSTART:20261012T223000Z", "DTEND:20261012T230000Z", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:qbe", "SUMMARY:QBE catch-up", "DTSTART:20261014T020000Z", "DTEND:20261014T030000Z", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:gone", "SUMMARY:Cancelled: QBE call", "DTSTART:20261014T040000Z", "DTEND:20261014T043000Z", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:early", "SUMMARY:Before the window", "DTSTART:20261011T150000Z", "DTEND:20261011T155000Z", "END:VEVENT",
+  "END:VCALENDAR",
+]);
+
+test("every timed meeting is listed for the 90 days, from midnight Manila: series expanded, organiser-cancelled and other days' left out", () => {
+  const now = Date.parse("2026-10-11T22:21:00Z"); // Mon 12 Oct, 06:21 Manila
+  const span = Cal.dayWindow(now);
+  const read = Cal.readCalendar(DIARY, now, now + Cal.WINDOW_HOURS * 3600000, span.fromDay, span.toDay);
+  assert.deepEqual(read.listed.slice(0, 4).map((e) => [e.title, e.start, e.recurring]), [
+    ["Team Catch Up", "2026-10-12T05:00:00.000Z", true],   // moved to 15:00 Brisbane = 13:00 Manila
+    ["(No title)", "2026-10-12T22:30:00.000Z", false],
+    ["QBE catch-up", "2026-10-14T02:00:00.000Z", false],
+    ["Team Catch Up", "2026-10-19T00:00:00.000Z", true],   // Fri 16 Oct was cancelled; next is Mon 19 Oct 10:00 Brisbane
+  ]);
+  assert.ok(!read.listed.some((e) => /^cancel/i.test(e.title)), "Outlook's retitled cancellations are left out");
+  assert.ok(!read.listed.some((e) => e.title === "Before the window"), "Sunday 23:00 Manila is before today");
+  assert.equal(read.listed[read.listed.length - 1].start, "2027-01-08T00:00:00.000Z", "the last is Fri 8 Jan, the window's last day");
+  assert.equal(read.listed.filter((e) => e.title === "Team Catch Up").length, 25, "Mon and Fri for 13 weeks, less the cancelled Friday");
+  assert.deepEqual(read.events.map((e) => e.title), ["Team Catch Up", "(No title)"], "the 36 hours briefs look at are a slice of the same list");
+});
+
+test("listed meetings carry the matched copy's id, the accounts named and the repeat flag, never an undefined field", () => {
+  const now = Date.parse("2026-10-11T22:21:00Z"), span = Cal.dayWindow(now);
+  const read = Cal.readCalendar(DIARY, now, now + 4 * 86400000, span.fromDay, span.toDay);
+  const listed = Cal.listEvents(read.listed, accounts, "Outlook");
+  const matched = Cal.matchMeetings(read.events, accounts, "Outlook");
+  const qbe = listed.find((e) => e.title === "QBE catch-up");
+  assert.deepEqual(qbe, {id: matched[0].id, title: "QBE catch-up", start: "2026-10-14T02:00:00.000Z", end: "2026-10-14T03:00:00.000Z", calendar: "Outlook", accounts: ["QBE"]});
+  assert.deepEqual(Object.keys(listed[0]).sort(), ["calendar", "end", "id", "recurring", "start", "title"]);
+  listed.forEach((e) => Object.keys(e).forEach((k) => assert.notEqual(e[k], undefined, k)));
+});
+
+test("meetings from both calendars merge without repeats, soonest first, up to the cap", () => {
+  const a = {id: "m1", title: "Team Catch Up", start: "2026-10-16T00:00:00.000Z", end: "2026-10-16T00:30:00.000Z", calendar: "Outlook"};
+  const b = {id: "m2", title: "Dentist", start: "2026-10-13T01:00:00.000Z", end: "2026-10-13T02:00:00.000Z", calendar: "Google"};
+  const sameOnGoogle = Object.assign({}, a, {id: "m9", title: "team catch up", calendar: "Google"});
+  assert.deepEqual(Cal.mergeEvents([[a], [b, a, sameOnGoogle]]).map((e) => e.id), ["m2", "m1"]);
+  const many = Array.from({length: Cal.MAX_EVENTS + 5}, (_, i) => ({id: "m" + i, title: "x", start: new Date(Date.UTC(2026, 9, 12) + i * 3600000).toISOString(), end: ""}));
+  assert.equal(Cal.mergeEvents([many]).length, Cal.MAX_EVENTS);
+  assert.deepEqual(Cal.mergeEvents(null), []);
 });
 
 test("all-day entries get stable ids and merge across calendars without repeats", () => {
