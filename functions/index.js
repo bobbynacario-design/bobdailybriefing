@@ -23,7 +23,7 @@ const {
 } = require("./market-facts");
 const {authorize, daybookRole, guardedGeneration} = require("./generation-guard");
 const {
-  normalizeDelivery, isQuietTime, selectDeliverable, askedAfter, urgentItems, pushKind, pushedAfter,
+  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
   notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, newReminders, weeklyReadDue,
   commitmentLine, weeklyReviewDue,
 } = require("./delivery-core");
@@ -1351,13 +1351,18 @@ async function userCommandInputs(db, uid, prefs, shared, now) {
     db.collection(JOURNAL_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(100).get(),
     db.collection(BRIEFINGS_COLL).doc("meetings-" + uid).get().catch(() => null),
   ]);
-  let briefing = null;
+  let briefing = null, briefingDay = "";
   briefingSnap.docs.some((doc) => {
     const value = doc.data();
     if (!value.data) return false;
     try { briefing = JSON.parse(value.data); } catch (error) { briefing = null; }
+    const saved = Number(value.saved && value.saved.toMillis ? value.saved.toMillis() : value.saved);
+    if (briefing && Number.isFinite(saved)) briefingDay = phtParts(saved < 1e12 ? saved * 1000 : saved).date;
     return !!briefing;
   });
+  // Only today's briefing: at 06:00 the latest is usually yesterday's, which he
+  // has read, and he builds today's himself when he opens the app.
+  if (briefingDay !== phtParts(now).date) briefing = null;
   const decisions = decisionsSnap.docs.map((doc) => Object.assign({id: doc.id}, doc.data()));
   return Object.assign({}, shared, {
     briefing,
@@ -1432,6 +1437,27 @@ async function dailyBoostFor(db, uid, now, lastWeeklyNudge, weeklyAllowed) {
   }
 }
 
+// Today's plan for the push: his own calendar events, the linked calendars'
+// all-day entries (read already, as meetings) and, for the owner only, his ★
+// PokerHQ picks: pokerhq-bob is Bob's, never a member's. Best effort: a failed
+// read leaves the line off.
+async function todayFor(db, uid, meetings, dayKey, owner) {
+  try {
+    const [events, tourneys] = await Promise.all([
+      db.collection(BRIEFINGS_COLL).doc("calendar-events-" + uid).get().then((snap) => (snap.exists ? snap.data().items || [] : [])),
+      owner ? db.collection("pokerhq-bob").doc("tourneys").get().then((snap) => {
+        const value = snap.exists ? snap.data().value : null;
+        const list = typeof value === "string" ? JSON.parse(value) : value;
+        return Array.isArray(list) ? list : [];
+      }) : [],
+    ]);
+    return todayLine(DaybookCalendarCore, {manual: events, meetings, tourneys}, dayKey);
+  } catch (error) {
+    logger.warn("Today line failed", {message: error.message});
+    return "";
+  }
+}
+
 async function deliverMorningFiveForUser(db, prefDoc, options) {
   options = options || {};
   const prefs = prefDoc.data();
@@ -1454,22 +1480,27 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const inputs = await userCommandInputs(db, prefs.uid, prefs, shared, now);
   const command = buildCommandCenter(inputs, now);
   const dayKey = local.date;
-  // The whole ranked list, so leaving out feed failures and calls already asked
-  // about still leaves up to five items.
-  const items = selectDeliverable(command.items, config, state.asked);
+  // The whole ranked list: the top work item leads, feed failures stay out, and
+  // open calls not yet asked about get their own "Due:" line.
+  const items = selectDeliverable(command.items, config, state.led);
+  const asks = decisionAsks(command.items, state.asked);
   const boost = await dailyBoostFor(db, prefs.uid, now, state.lastWeeklyNudge, role === "owner");
+  const today = await todayFor(db, prefs.uid, inputs.meetings, dayKey, role === "owner");
   // Only reminders no push has carried yet.
   const reminders = newReminders(boost.reminders, state.lastReminderIds);
   // One morning push a day; after it, only a meeting about to start.
   const urgent = urgentItems(items, state.pushed, dayKey);
-  const kind = options.test ? "test" : pushKind(state, dayKey, {items, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment}, urgent);
+  const kind = options.test ? "test" : pushKind(state, dayKey, {items, asks, today, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment}, urgent);
   if (!kind) return {status: state.morningDay === dayKey ? "already-sent" : "nothing-to-send"};
   const sentItems = kind === "urgent" ? urgent : items;
-  const remindersOnly = kind !== "urgent" && !items.length && reminders.length > 0;
-  const weeklyOnly = kind !== "urgent" && !items.length && !reminders.length && !!boost.weekly;
+  const alone = kind !== "urgent" && !items.length && !asks.length && !today;
+  const remindersOnly = alone && reminders.length > 0;
+  const weeklyOnly = alone && !reminders.length && !!boost.weekly;
 
+  // No spark line since 11 Oct: Daily Boost was done on 0 of 13 days, and the
+  // push he chose reads lead, today, this week.
   const copy = kind === "urgent" ? notificationCopy(urgent, false, {urgent: true}) :
-    notificationCopy(items, kind === "test", {spark: boost.spark, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
+    notificationCopy(items, kind === "test", {today, asks, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
@@ -1494,11 +1525,12 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
     if (!options.test && response.successCount) {
       if (kind === "morning") {
         next.morningDay = dayKey;
+        next.led = ledAfter(next.led, items[0], dayKey);
         // Every reminder now due counts as announced, so only new ones ride the next push.
         next.lastReminderIds = reminderIds(boost.reminders);
         if (boost.weekly) next.lastWeeklyNudge = dayKey;
       }
-      next.asked = askedAfter(next.asked, sentItems, dayKey);
+      next.asked = askedAfter(next.asked, kind === "morning" ? asks : [], dayKey);
       next.pushed = pushedAfter(next.pushed, sentItems, dayKey);
       delete next.lastSignature;
       next.lastSentAt = new Date(now).toISOString();

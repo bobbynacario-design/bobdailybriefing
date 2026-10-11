@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  normalizeDelivery, isQuietTime, selectDeliverable, askKey, askedAfter, urgentItems, pushKind, pushedAfter,
+  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, askKey, askedAfter, urgentItems, pushKind, pushedAfter,
   notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, hasNewReminders, newReminders,
 } = require("./delivery-core");
 
@@ -27,28 +27,88 @@ test("quiet hours work across midnight and can be disabled with matching times",
 test("feed failures never go in the push; thresholds filter the rest, one per source first, five at most", () => {
   const items = [
     {id: "health", source: "Reliability", score: 100, urgency: "act"},
-    {id: "brief", source: "Briefing", score: 79},
     {id: "radar", source: "Radar", score: 91},
+    {id: "brief", source: "Briefing", score: 79},
   ];
   assert.deepEqual(selectDeliverable(items, {sourceThresholds: {Briefing: 70, Radar: 95}}).map((item) => item.id), ["brief"]);
+  // Ranked as command.items comes, highest first.
   const many = ["a", "b", "c"].map((id) => ({id: "radar-" + id, source: "Radar", score: 92}))
-    .concat([{id: "n1", source: "Numbers", score: 87}, {id: "b1", source: "Briefing", score: 90}, {id: "b2", source: "Briefing", score: 90}]);
-  assert.deepEqual(selectDeliverable(many, {}).map((item) => item.id), ["radar-a", "n1", "b1", "radar-b", "radar-c"], "each source once before any repeats");
+    .concat([{id: "b1", source: "Briefing", score: 90}, {id: "b2", source: "Briefing", score: 90}, {id: "n1", source: "Numbers", score: 87}]);
+  assert.deepEqual(selectDeliverable(many, {}).map((item) => item.id), ["b1", "radar-a", "n1", "radar-b", "radar-c"], "work leads; each source once before any repeats");
+});
+
+// Bob's choice, 11 Oct: work first.
+test("the top work item leads, even under its threshold and below a Radar setup; money follows", () => {
+  const radar = {id: "radar-AMD", source: "Radar", title: "AMD / confirmed setup", score: 96};
+  const news = {id: "news-1", source: "News", title: "Insurer lifts BI reserves", score: 74};
+  const picked = selectDeliverable([radar, news], {});
+  assert.deepEqual(picked.map((item) => item.id), ["news-1", "radar-AMD"]);
+  assert.equal(notificationCopy(picked, false).body, "News: Insurer lifts BI reserves · +1 more");
+  assert.deepEqual(selectDeliverable([radar], {}).map((item) => item.id), ["radar-AMD"], "with no work item at all, the best of the rest leads");
+});
+
+// A changed number stays on the list for a week: it led no more than once.
+test("what has led a morning push only leads again when nothing new can", () => {
+  const {ledAfter} = require("./delivery-core");
+  const diesel = {id: "grounding-fold-diesel", source: "Numbers", title: "Diesel terminal gate prices", score: 87};
+  const news = {id: "news-1", source: "News", title: "Insurer lifts BI reserves", score: 74};
+  const radar = {id: "radar-AMD", source: "Radar", title: "AMD / forming setup", score: 88};
+  const led = ledAfter({}, diesel, "2026-10-12");
+  assert.deepEqual(selectDeliverable([radar, diesel, news], {}, led).map((item) => item.id), ["news-1", "radar-AMD", "grounding-fold-diesel"], "new work first; the old lead is still in +N more");
+  assert.deepEqual(selectDeliverable([radar, diesel], {}, led).map((item) => item.id)[0], "radar-AMD", "no new work: something new leads");
+  assert.deepEqual(selectDeliverable([diesel], {}, led).map((item) => item.id), ["grounding-fold-diesel"], "nothing new at all: it may lead again");
+  const briefing = {id: "briefing-interruptions-0", source: "Briefing", title: "Today's story", score: 90};
+  assert.equal(selectDeliverable([briefing], {}, ledAfter({}, Object.assign({}, briefing, {title: "Yesterday's story"}), "2026-10-12"))[0].title, "Today's story", "keyed by title too: a briefing slot holds a new story each day");
+  assert.deepEqual(ledAfter(led, null, "2026-10-27"), {}, "kept 14 days");
 });
 
 // 4-11 Oct: 11 of 20 pushes led with the same open ETH call.
-test("an open call or a due review rides one push, then stays on Today; a new review date is news again", () => {
-  const eth = {id: "decision-eth", source: "Decisions", title: "Review open call: ETH", urgency: "act", score: 97};
+test("an open call or a due review gets one Due line, then stays on Today; a new review date is news again", () => {
+  const eth = {id: "decision-eth", source: "Decisions", title: "Review open call: ETH", urgency: "act", score: 97, since: "2026-07-21"};
   const radar = {id: "radar-AMD", source: "Radar", title: "AMD / confirmed setup", urgency: "act", score: 92};
-  assert.deepEqual(selectDeliverable([eth, radar], {}).map((item) => item.id), ["decision-eth", "radar-AMD"]);
-  const asked = askedAfter({}, [eth, radar], "2026-10-12");
+  assert.deepEqual(selectDeliverable([eth, radar], {}).map((item) => item.id), ["radar-AMD"], "never an item of its own");
+  const asks = decisionAsks([eth, radar], {});
+  assert.deepEqual(asks.map((item) => item.id), ["decision-eth"]);
+  assert.equal(notificationCopy([radar], false, {asks}).body, "Radar: AMD / confirmed setup\nDue: ETH call open since 21 Jul. Close it or set a review date.");
+  const asked = askedAfter({}, asks.concat([radar]), "2026-10-12");
   assert.deepEqual(asked, {"decision-eth|Review open call: ETH": "2026-10-12"}, "only Decisions act items are remembered");
-  assert.deepEqual(selectDeliverable([eth, radar], {}, asked).map((item) => item.id), ["radar-AMD"], "asked once, left out after");
+  assert.deepEqual(decisionAsks([eth], asked), [], "asked once, left out after");
   const due = Object.assign({}, eth, {title: "Review due: ETH"});
-  assert.deepEqual(selectDeliverable([due], {}, asked).map((item) => item.id), ["decision-eth"], "the review date he set later is a new ask");
+  assert.deepEqual(decisionAsks([due], asked).map((item) => item.id), ["decision-eth"], "the review date he set later is a new ask");
+  assert.equal(notificationCopy([], false, {asks: [due]}).body, "Due: review your ETH call today.");
   assert.equal(askKey(due), "decision-eth|Review due: ETH");
   assert.deepEqual(askedAfter(asked, [], "2026-12-12"), {}, "forgotten after 60 days, so a call still open is asked again");
   assert.deepEqual(askedAfter(asked, [], "2026-12-10"), asked);
+});
+
+// Uses the synced twin of lib/daybook-calendar-core.js, as the deployed function does.
+test("today's line comes from his calendar and his starred PokerHQ picks, a span named on its first day only", () => {
+  const K = require("./daybook-calendar-core");
+  const day = "2026-10-13";
+  const meetings = {items: [{id: "m1", title: "QBE review", start: "2026-10-13T06:00:00Z", end: "2026-10-13T07:00:00Z", calendar: "Outlook"}],
+    days: [{id: "d1", title: "0175 - Annual Leave", start: "2026-10-13", end: "2026-10-13", calendar: "Google"},
+      {id: "d2", title: "APPT Championship Manila - Strategy: Risk Assessment", start: "2026-10-08", end: "2026-10-19", calendar: "Google"},
+      {id: "d3", title: "Bonifacio Day", start: "2026-10-13", end: "2026-10-14", calendar: "Google"}]};
+  const manual = [{id: "evt-aaaaaaaa", title: "Dentist", start: day, end: day, time: "09:30", kind: "personal"},
+    {id: "evt-bbbbbbbb", title: "Done already", start: day, end: day, time: "08:00", kind: "task", done: true}];
+  const tourneys = [{name: "Step 1 - Championship MEGA Qualifier", date: day, planning: true}, {name: "Not starred", date: day, planning: false}];
+  assert.equal(todayLine(K, {manual, meetings, tourneys}, day),
+    "Today: 09:30 Dentist · Annual Leave · Bonifacio Day (to 14 Oct) · +1 more",
+    "timed first; the festival that began on 8 Oct and the account meeting (its own push item) are left out");
+  assert.equal(todayLine(K, {tourneys}, day), "Today: ♠ Step 1 - Championship MEGA Qualifier");
+  assert.equal(todayLine(K, {}, day), "");
+  assert.equal(todayLine(null, {tourneys}, day), "");
+});
+
+test("the morning push reads: lead, today, this week, then what is due; with no lead the lines stand alone", () => {
+  const lead = [{source: "News", title: "Insurer lifts BI reserves"}];
+  const extra = {today: "Today: ♠ Step 1 MEGA Qualifier", commitment: {text: "Save 5k", ticked: 0, elapsed: 2},
+    asks: [{title: "Review open call: ETH", since: "2026-07-21"}], reminders: [{metric: "APRA claims data"}]};
+  assert.equal(notificationCopy(lead, false, extra).body, ["News: Insurer lifts BI reserves", "Today: ♠ Step 1 MEGA Qualifier", "This week: Save 5k · not ticked yet",
+    "Due: ETH call open since 21 Jul. Close it or set a review date.", "⏰ To check: APRA claims data"].join("\n"));
+  assert.equal(notificationCopy([], false, {today: "Today: Dentist"}).body, "Today: Dentist");
+  assert.equal(pushKind({}, "2026-10-13", {items: [], today: "Today: Dentist"}, []), "morning", "today's plan alone is worth the morning push");
+  assert.equal(pushKind({}, "2026-10-13", {items: [], asks: [{}]}, []), "morning");
 });
 
 test("one morning push a day, then only a meeting about to start that today's pushes haven't carried", () => {
@@ -85,8 +145,8 @@ test("the notification carries today's spark as a second line when there is one"
   const items = [{source: "Radar", title: "NVDA confirmed"}];
   assert.equal(notificationCopy(items, false, "Test the “but for” story").body,
     "Radar: NVDA confirmed\nToday’s spark: Test the “but for” story");
-  assert.equal(notificationCopy([], true, "Look back on your week").body,
-    "No priority items currently clear your delivery thresholds.\nToday’s spark: Look back on your week");
+  assert.equal(notificationCopy([], true, "Look back on your week").body, "Today’s spark: Look back on your week", "with no lead the lines stand alone");
+  assert.equal(notificationCopy([], true).body, "No priority items currently clear your delivery thresholds.");
   assert.equal(notificationCopy(items, false, "").body, "Radar: NVDA confirmed");
 });
 
@@ -201,8 +261,7 @@ test("reminders ride in the Morning 5, or get a push of their own when nothing e
     body: "APRA quarterly claims data",
   });
   assert.equal(notificationCopy(items, false, {reminders: [], remindersOnly: true}).title, "Your Morning 5 is ready", "no reminders, no reminders-only copy");
-  assert.equal(notificationCopy([], true, {reminders}).body,
-    "No priority items currently clear your delivery thresholds.\n⏰ To check: Fair Work hearing list · +1 more");
+  assert.equal(notificationCopy([], true, {reminders}).body, "⏰ To check: Fair Work hearing list · +1 more");
 });
 
 test("one due experiment rides on an existing Morning 5 and points at its review", () => {

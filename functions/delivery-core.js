@@ -57,22 +57,75 @@ function asksOnce(item) {
   return !!item && item.source === "Decisions" && item.urgency === "act";
 }
 
+// Work leads the push (Bob's choice, 11 Oct): a meeting, today's top briefing
+// story, a changed number or insurance news, whichever ranks first, even under
+// his threshold. Money (Radar, Markets) and the rest follow as "+N more".
+const WORK_SOURCES = ["Meetings", "Briefing", "Numbers", "News", "Accounts"];
+
 // What the push can carry, from the whole ranked list: feed failures never
-// (they stay on Today and in the daily check), calls already asked about never,
-// the rest at his source thresholds, one per source first, five at most.
-function selectDeliverable(items, delivery, asked) {
+// (they stay on Today and in the daily check), and open calls go on their own
+// line (decisionAsks). The top work item leads; the rest come at his source
+// thresholds, one per source first, five in all at most.
+// led: {askKey: day} of recent leads. A changed number stays on the list for a
+// week, so without it one diesel price could lead seven mornings running:
+// something that has led once only leads again when nothing new can.
+function selectDeliverable(items, delivery, led) {
   const config = normalizeDelivery(delivery);
-  const seen = asked && typeof asked === "object" ? asked : {};
-  const eligible = (Array.isArray(items) ? items : []).filter((item) => {
-    if (!item || item.source === "Reliability") return false;
-    if (asksOnce(item) && seen[askKey(item)]) return false;
+  const before = led && typeof led === "object" ? led : {};
+  const pool = (Array.isArray(items) ? items : []).filter((item) => item && item.source !== "Reliability" && !asksOnce(item));
+  const fresh = (item) => !before[askKey(item)];
+  const work = (item) => WORK_SOURCES.indexOf(item.source) >= 0;
+  const lead = pool.find((item) => work(item) && fresh(item)) || pool.find(fresh) || pool.find(work);
+  const eligible = pool.filter((item) => {
+    if (item === lead) return false;
     const threshold = config.sourceThresholds[item.source] == null ? 80 : config.sourceThresholds[item.source];
     return Number(item.score) >= threshold;
   });
-  const picked = [], used = {};
+  const picked = lead ? [lead] : [], used = lead ? {[lead.source]: true} : {};
   eligible.forEach((item) => { if (picked.length < 5 && !used[item.source]) { picked.push(item); used[item.source] = true; } });
   eligible.forEach((item) => { if (picked.length < 5 && picked.indexOf(item) < 0) picked.push(item); });
   return picked;
+}
+
+// The open calls and due reviews no push has asked about yet, each for a "Due:" line.
+function decisionAsks(items, asked) {
+  const seen = asked && typeof asked === "object" ? asked : {};
+  return (Array.isArray(items) ? items : []).filter((item) => asksOnce(item) && !seen[askKey(item)]).slice(0, 2);
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function dayLabel(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ""));
+  return m ? Number(m[3]) + " " + MONTHS[Number(m[2]) - 1] : "";
+}
+
+function askLine(item) {
+  const open = /^Review open call: (.+)$/.exec(item.title || ""), due = /^Review due: (.+)$/.exec(item.title || "");
+  if (open) return "Due: " + open[1] + " call open" + (dayLabel(item.since) ? " since " + dayLabel(item.since) : "") + ". Close it or set a review date.";
+  if (due) return "Due: review your " + due[1] + " call today.";
+  return "Due: " + item.title;
+}
+
+// Today's plan from his calendar, built as the Calendar page builds it
+// (core: DaybookCalendarCore), plus his ★ PokerHQ picks for the day. Timed
+// entries first; a span of days (leave, a festival) is named on its first day
+// only; account meetings are left to the push's own Meetings items.
+function todayLine(core, input, dayKey) {
+  if (!core || typeof core.build !== "function" || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return "";
+  input = input || {};
+  const short = (value) => { const t = String(value || "").trim(); return t.length > 48 ? t.slice(0, 47).trimEnd() + "…" : t; };
+  let events = [];
+  try { events = core.onDay(core.build({manual: input.manual, meetings: input.meetings}), dayKey); } catch (error) { events = []; }
+  const entries = [];
+  events.filter((e) => !e.done && !/^meeting-/.test(e.id) && (e.time || e.start === dayKey))
+    .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"))
+    .forEach((e) => entries.push((e.time ? e.time + " " : "") + short(e.title) + (!e.time && e.end > e.start ? " (to " + dayLabel(e.end) + ")" : "")));
+  (Array.isArray(input.tourneys) ? input.tourneys : []).forEach((t) => {
+    if (t && t.planning === true && typeof core.pokerDate === "function" && core.pokerDate(t.date) === dayKey) entries.push("♠ " + short(t.name));
+  });
+  const unique = entries.filter((entry, index) => entries.indexOf(entry) === index);
+  if (!unique.length) return "";
+  return "Today: " + unique.slice(0, 3).join(" · ") + (unique.length > 3 ? " · +" + (unique.length - 3) + " more" : "");
 }
 
 // The calls a push just asked about, added to those asked before; a key is
@@ -102,10 +155,20 @@ function pushKind(state, dayKey, content, urgent) {
   state = state || {};
   content = content || {};
   if (state.morningDay !== dayKey) {
-    const any = (content.items || []).length || (content.reminders || []).length || content.weekly || content.experiment || content.commitment;
+    const any = (content.items || []).length || (content.reminders || []).length || (content.asks || []).length ||
+      content.today || content.weekly || content.experiment || content.commitment;
     return any ? "morning" : "";
   }
   return (urgent || []).length ? "urgent" : "";
+}
+
+// The morning push's lead, added to recent leads; kept 14 days.
+function ledAfter(led, item, dayKey) {
+  const out = {};
+  const cutoff = new Date(Date.parse(dayKey + "T00:00:00Z") - 14 * 86400000).toISOString().slice(0, 10);
+  Object.keys(led && typeof led === "object" ? led : {}).forEach((key) => { if (String(led[key]) >= cutoff) out[key] = led[key]; });
+  if (item) out[askKey(item)] = dayKey;
+  return out;
 }
 
 function pushedAfter(pushed, items, dayKey) {
@@ -141,11 +204,15 @@ function notificationCopy(items, test, extra) {
   if (extra.urgent && lead) return {title: test ? "Test · Starting soon" : "Starting soon", body: lead.source + ": " + lead.title};
   const title = test ? "Test · Morning 5" : "Your Morning 5 is ready";
   const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
-  if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + reminderLine + experimentLine + weeklyLine + commitmentLine + sparkLine};
+  const todayLine = extra.today ? "\n" + extra.today : "";
+  const askLines = (Array.isArray(extra.asks) ? extra.asks : []).map((item) => "\n" + askLine(item)).join("");
+  // The lead, then today's plan and this week, then what is due.
+  const lines = todayLine + commitmentLine + askLines + reminderLine + experimentLine + weeklyLine + sparkLine;
+  if (!lead) return {title, body: lines ? lines.slice(1) : "No priority items currently clear your delivery thresholds."};
   const remaining = Math.max(0, items.length - 1);
   return {
     title,
-    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + reminderLine + experimentLine + weeklyLine + commitmentLine + sparkLine,
+    body: lead.source + ": " + lead.title + (remaining ? " · +" + remaining + " more" : "") + lines,
   };
 }
 
@@ -242,9 +309,12 @@ module.exports = {
   askKey,
   asksOnce,
   selectDeliverable,
+  decisionAsks,
+  todayLine,
   askedAfter,
   urgentItems,
   pushKind,
+  ledAfter,
   pushedAfter,
   notificationCopy,
   todaysSparkTitle,
