@@ -23,8 +23,8 @@ const {
 } = require("./market-facts");
 const {authorize, daybookRole, guardedGeneration} = require("./generation-guard");
 const {
-  normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
-  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, hasNewReminders, weeklyReadDue,
+  normalizeDelivery, isQuietTime, selectDeliverable, askedAfter, urgentItems, pushKind, pushedAfter,
+  notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, newReminders, weeklyReadDue,
   commitmentLine, weeklyReviewDue,
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
@@ -1312,8 +1312,9 @@ exports.pollDeepResearchReports = onSchedule(
 // ── MORNING 5 WEB-PUSH DELIVERY ───────────────────────────────────────────
 // Delivery uses Firebase Cloud Messaging and the same deterministic Command
 // Center core as the browser. No LLM call is made. The scheduler runs through
-// the morning so quiet hours can delay a digest; the material-change signature
-// prevents repeat notifications when the queue is unchanged.
+// the morning so quiet hours can delay a digest. Since 11 Oct one push goes
+// each morning (state.morningDay), and after it only a meeting about to start;
+// an open call rides one push (state.asked), a reminder one (lastReminderIds).
 
 function phtParts(now) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -1452,29 +1453,33 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const shared = options.shared || await sharedCommandInputs(db);
   const inputs = await userCommandInputs(db, prefs.uid, prefs, shared, now);
   const command = buildCommandCenter(inputs, now);
-  const items = selectDeliverable(command.morningFive, config);
-  const signature = digestSignature(items);
+  const dayKey = local.date;
+  // The whole ranked list, so leaving out feed failures and calls already asked
+  // about still leaves up to five items.
+  const items = selectDeliverable(command.items, config, state.asked);
   const boost = await dailyBoostFor(db, prefs.uid, now, state.lastWeeklyNudge, role === "owner");
-  const changed = isMaterialChange(state.lastSignature, items);
-  // A reminder coming due is worth a push even on a morning the Morning 5 has
-  // not changed; one already announced is not.
-  const remindersNew = hasNewReminders(boost.reminders, state.lastReminderIds);
-  // So is Sunday's weekly read, once that day, until it has been read.
-  if (!options.test && !changed && !remindersNew && !boost.weekly) return {status: items.length ? "unchanged" : "below-threshold"};
-  const quiet = !options.test && !changed;
-  const remindersOnly = quiet && remindersNew;
-  const weeklyOnly = quiet && !remindersNew && boost.weekly;
+  // Only reminders no push has carried yet.
+  const reminders = newReminders(boost.reminders, state.lastReminderIds);
+  // One morning push a day; after it, only a meeting about to start.
+  const urgent = urgentItems(items, state.pushed, dayKey);
+  const kind = options.test ? "test" : pushKind(state, dayKey, {items, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment}, urgent);
+  if (!kind) return {status: state.morningDay === dayKey ? "already-sent" : "nothing-to-send"};
+  const sentItems = kind === "urgent" ? urgent : items;
+  const remindersOnly = kind !== "urgent" && !items.length && reminders.length > 0;
+  const weeklyOnly = kind !== "urgent" && !items.length && !reminders.length && !!boost.weekly;
 
-  const copy = notificationCopy(items, !!options.test, {spark: boost.spark, reminders: boost.reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
+  const copy = kind === "urgent" ? notificationCopy(urgent, false, {urgent: true}) :
+    notificationCopy(items, kind === "test", {spark: boost.spark, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
-      type: options.test ? "morning-digest-test" : remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : "morning-digest",
+      type: kind === "test" ? "morning-digest-test" : kind === "urgent" ? "starting-soon" : remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : "morning-digest",
       title: copy.title,
       body: copy.body,
       // The Morning 5 lists the due experiment, so the push still opens there.
       url: remindersOnly || weeklyOnly ? TODAY_URL : COMMAND_URL,
-      signature: remindersOnly ? "watch-reminders" : weeklyOnly ? "weekly-read" : (signature || "test-empty"),
+      // The notification tag (sw.js): a later push the same day replaces the morning one.
+      signature: kind === "urgent" ? "soon-" + urgent.map((item) => item.id).join("|") : kind === "test" ? "test-" + dayKey : "morning-" + dayKey,
     },
     webpush: {headers: {Urgency: "high"}},
   });
@@ -1487,17 +1492,27 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   await updateDeliveryState(db, prefDoc.ref, (next) => {
     next.tokens = validTokens;
     if (!options.test && response.successCount) {
-      if (!remindersOnly && !weeklyOnly) next.lastSignature = signature;
-      next.lastReminderIds = reminderIds(boost.reminders);
-      if (boost.weekly) next.lastWeeklyNudge = phtDateKey(now);
+      if (kind === "morning") {
+        next.morningDay = dayKey;
+        // Every reminder now due counts as announced, so only new ones ride the next push.
+        next.lastReminderIds = reminderIds(boost.reminders);
+        if (boost.weekly) next.lastWeeklyNudge = dayKey;
+      }
+      next.asked = askedAfter(next.asked, sentItems, dayKey);
+      next.pushed = pushedAfter(next.pushed, sentItems, dayKey);
+      delete next.lastSignature;
       next.lastSentAt = new Date(now).toISOString();
     }
     return withAudit(next, auditEntry(type, {
-      itemCount: items.length,
+      kind,
+      itemCount: sentItems.length,
       successCount: response.successCount,
       failureCount: response.failureCount,
-      lead: remindersOnly ? "To check: " + boost.reminders[0].metric : weeklyOnly ? "Weekly read" : (items[0] ? items[0].source + ": " + items[0].title : "No items above threshold"),
-      reminders: boost.reminders.length,
+      lead: remindersOnly ? "To check: " + reminders[0].metric : weeklyOnly ? "Weekly read" : (sentItems[0] ? sentItems[0].source + ": " + sentItems[0].title : "No items above threshold"),
+      reminders: reminders.length,
+      // What the phone showed, so a push can be checked without the phone.
+      title: copy.title,
+      body: String(copy.body || "").slice(0, 500),
     }));
   });
   return {status: type, successCount: response.successCount, failureCount: response.failureCount};

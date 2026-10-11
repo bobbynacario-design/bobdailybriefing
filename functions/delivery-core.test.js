@@ -3,8 +3,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  normalizeDelivery, isQuietTime, selectDeliverable, digestSignature,
-  isMaterialChange, notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, hasNewReminders,
+  normalizeDelivery, isQuietTime, selectDeliverable, askKey, askedAfter, urgentItems, pushKind, pushedAfter,
+  notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, hasNewReminders, newReminders,
 } = require("./delivery-core");
 
 test("normalizes delivery defaults and clamps source thresholds", () => {
@@ -24,22 +24,50 @@ test("quiet hours work across midnight and can be disabled with matching times",
   assert.equal(isQuietTime("12:00", "08:00", "08:00"), false);
 });
 
-test("source thresholds filter ordinary items but never suppress reliability", () => {
+test("feed failures never go in the push; thresholds filter the rest, one per source first, five at most", () => {
   const items = [
+    {id: "health", source: "Reliability", score: 100, urgency: "act"},
     {id: "brief", source: "Briefing", score: 79},
     {id: "radar", source: "Radar", score: 91},
-    {id: "health", source: "Reliability", score: 86},
   ];
-  const selected = selectDeliverable(items, {sourceThresholds: {Briefing: 70, Radar: 95}});
-  assert.deepEqual(selected.map((item) => item.id), ["brief", "health"]);
+  assert.deepEqual(selectDeliverable(items, {sourceThresholds: {Briefing: 70, Radar: 95}}).map((item) => item.id), ["brief"]);
+  const many = ["a", "b", "c"].map((id) => ({id: "radar-" + id, source: "Radar", score: 92}))
+    .concat([{id: "n1", source: "Numbers", score: 87}, {id: "b1", source: "Briefing", score: 90}, {id: "b2", source: "Briefing", score: 90}]);
+  assert.deepEqual(selectDeliverable(many, {}).map((item) => item.id), ["radar-a", "n1", "b1", "radar-b", "radar-c"], "each source once before any repeats");
 });
 
-test("material change tracks membership, order, urgency, and score bands", () => {
-  const initial = [{id: "a", score: 90, urgency: "act"}, {id: "b", score: 80, urgency: "monitor"}];
-  const signature = digestSignature(initial);
-  assert.equal(isMaterialChange(signature, initial), false);
-  assert.equal(isMaterialChange(signature, [{id: "a", score: 96, urgency: "act"}, initial[1]]), true);
-  assert.equal(isMaterialChange(signature, [initial[1], initial[0]]), true);
+// 4-11 Oct: 11 of 20 pushes led with the same open ETH call.
+test("an open call or a due review rides one push, then stays on Today; a new review date is news again", () => {
+  const eth = {id: "decision-eth", source: "Decisions", title: "Review open call: ETH", urgency: "act", score: 97};
+  const radar = {id: "radar-AMD", source: "Radar", title: "AMD / confirmed setup", urgency: "act", score: 92};
+  assert.deepEqual(selectDeliverable([eth, radar], {}).map((item) => item.id), ["decision-eth", "radar-AMD"]);
+  const asked = askedAfter({}, [eth, radar], "2026-10-12");
+  assert.deepEqual(asked, {"decision-eth|Review open call: ETH": "2026-10-12"}, "only Decisions act items are remembered");
+  assert.deepEqual(selectDeliverable([eth, radar], {}, asked).map((item) => item.id), ["radar-AMD"], "asked once, left out after");
+  const due = Object.assign({}, eth, {title: "Review due: ETH"});
+  assert.deepEqual(selectDeliverable([due], {}, asked).map((item) => item.id), ["decision-eth"], "the review date he set later is a new ask");
+  assert.equal(askKey(due), "decision-eth|Review due: ETH");
+  assert.deepEqual(askedAfter(asked, [], "2026-12-12"), {}, "forgotten after 60 days, so a call still open is asked again");
+  assert.deepEqual(askedAfter(asked, [], "2026-12-10"), asked);
+});
+
+test("one morning push a day, then only a meeting about to start that today's pushes haven't carried", () => {
+  const news = {id: "news-1", source: "News", score: 74};
+  const soon = {id: "meeting-q", source: "Meetings", score: 95};
+  const later = {id: "meeting-r", source: "Meetings", score: 90};
+  assert.equal(pushKind({}, "2026-10-12", {items: [news]}, []), "morning");
+  assert.equal(pushKind({morningDay: "2026-10-11"}, "2026-10-12", {items: []}, []), "", "nothing at all to say: no push");
+  assert.equal(pushKind({}, "2026-10-12", {items: [], commitment: {text: "x"}}, []), "morning", "a commitment alone is worth the morning push");
+  assert.equal(pushKind({morningDay: "2026-10-12"}, "2026-10-12", {items: [news]}, []), "", "the morning one has gone");
+  const pushed = pushedAfter(undefined, [news], "2026-10-12");
+  assert.deepEqual(pushed, {day: "2026-10-12", ids: ["news-1"]});
+  assert.deepEqual(urgentItems([news, soon, later], pushed, "2026-10-12").map((item) => item.id), ["meeting-q"], "only a meeting within three hours");
+  assert.equal(pushKind({morningDay: "2026-10-12"}, "2026-10-12", {}, urgentItems([soon], pushed, "2026-10-12")), "urgent");
+  const after = pushedAfter(pushed, [soon], "2026-10-12");
+  assert.deepEqual(urgentItems([soon], after, "2026-10-12"), [], "never twice");
+  assert.deepEqual(urgentItems([soon], after, "2026-10-13").map((item) => item.id), ["meeting-q"], "yesterday's pushes don't count today");
+  assert.deepEqual(notificationCopy([soon].map((item) => Object.assign({title: "Today 14:00 · QBE review"}, item)), false, {urgent: true}),
+    {title: "Starting soon", body: "Meetings: Today 14:00 · QBE review"});
 });
 
 test("notification copy leads with the highest ranked source", () => {
@@ -155,6 +183,10 @@ test("a reminder is announced once: checking one off re-sends nothing, a snoozed
   assert.equal(hasNewReminders([two[1]], sent), false, "A checked off: B was already announced");
   assert.equal(hasNewReminders([{metric: "A", due: "2026-09-30"}], sent), true, "A snoozed to a new day is news again");
   assert.equal(hasNewReminders([], sent), false);
+  // 3-11 Oct: one overdue reminder rode on every push. Now only new ones do.
+  const three = two.concat([{metric: "C", due: "2026-09-26"}]);
+  assert.deepEqual(newReminders(three, sent).map((item) => item.metric), ["C"]);
+  assert.deepEqual(newReminders(two, sent), []);
 });
 
 test("reminders ride in the Morning 5, or get a push of their own when nothing else changed", () => {

@@ -265,7 +265,7 @@ test('Command: the Morning push switch shows the delivery state, and waits for p
   assert.equal(quick.hidden,true,'hidden until preferences load, so a save cannot overwrite them');
   context.commandPrefsAvailable=true; context.renderCommandDeliveryControls();
   assert.equal(quick.hidden,false); assert.equal(quick.textContent,'Morning push · off'); assert.equal(quick.attrs['aria-pressed'],'false');
-  assert.match(quick.title,/^Tap to get the Morning 5 as a notification on this device/);
+  assert.match(quick.title,/^Tap to get the Morning 5 as one notification each morning on this device/);
   await context.toggleCommandDelivery(quick);
   assert.deepEqual(calls,['enable']); assert.equal(quick.textContent,'Morning push · on'); assert.equal(quick.attrs['aria-pressed'],'true'); assert.equal(quick.disabled,false);
   assert.match(quick.title,/Tap to mute/);

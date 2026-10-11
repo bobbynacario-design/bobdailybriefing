@@ -44,29 +44,74 @@ function isQuietTime(localTime, quietStart, quietEnd) {
   return start < end ? now >= start && now < end : now >= start || now < end;
 }
 
-function scoreBand(score) {
-  const value = Number(score) || 0;
-  return value >= 95 ? "critical" : value >= 85 ? "high" : value >= 70 ? "priority" : "watch";
+// The push says each thing once (11 Oct audit: the last 20 pushes all led with
+// the same open call or a failed feed). An act item that stays true day after
+// day, an open call or a review date passed, rides one push and then stays on
+// Today; asked holds those already sent, keyed by id and title, so a new review
+// date set on the same call is news again.
+function askKey(item) {
+  return String(item && item.id || "") + "|" + String(item && item.title || "");
 }
 
-function selectDeliverable(items, delivery) {
+function asksOnce(item) {
+  return !!item && item.source === "Decisions" && item.urgency === "act";
+}
+
+// What the push can carry, from the whole ranked list: feed failures never
+// (they stay on Today and in the daily check), calls already asked about never,
+// the rest at his source thresholds, one per source first, five at most.
+function selectDeliverable(items, delivery, asked) {
   const config = normalizeDelivery(delivery);
-  return (Array.isArray(items) ? items : []).filter((item) => {
-    if (!item || item.source === "Reliability") return !!item;
+  const seen = asked && typeof asked === "object" ? asked : {};
+  const eligible = (Array.isArray(items) ? items : []).filter((item) => {
+    if (!item || item.source === "Reliability") return false;
+    if (asksOnce(item) && seen[askKey(item)]) return false;
     const threshold = config.sourceThresholds[item.source] == null ? 80 : config.sourceThresholds[item.source];
     return Number(item.score) >= threshold;
-  }).slice(0, 5);
+  });
+  const picked = [], used = {};
+  eligible.forEach((item) => { if (picked.length < 5 && !used[item.source]) { picked.push(item); used[item.source] = true; } });
+  eligible.forEach((item) => { if (picked.length < 5 && picked.indexOf(item) < 0) picked.push(item); });
+  return picked;
 }
 
-function digestSignature(items) {
-  return (Array.isArray(items) ? items : []).map((item) => [
-    String(item.id || ""), scoreBand(item.score), String(item.urgency || ""),
-  ].join(":")).join("|");
+// The calls a push just asked about, added to those asked before; a key is
+// forgotten after 60 days, so a call still open two months on is asked again.
+function askedAfter(asked, items, dayKey) {
+  const out = {};
+  const cutoff = new Date(Date.parse(dayKey + "T00:00:00Z") - 60 * 86400000).toISOString().slice(0, 10);
+  Object.keys(asked && typeof asked === "object" ? asked : {}).forEach((key) => {
+    if (String(asked[key]) >= cutoff) out[key] = asked[key];
+  });
+  (Array.isArray(items) ? items : []).filter(asksOnce).forEach((item) => { out[askKey(item)] = dayKey; });
+  return out;
 }
 
-function isMaterialChange(previousSignature, items) {
-  const next = digestSignature(items);
-  return !!next && next !== String(previousSignature || "");
+// One morning push a day, then only what cannot wait: a meeting starting
+// within three hours (score 95 in command-center-core addMeetings) that today's
+// pushes have not carried. pushed: {day, ids} of what today's pushes carried.
+function urgentItems(items, pushed, dayKey) {
+  const ids = pushed && pushed.day === dayKey && Array.isArray(pushed.ids) ? pushed.ids : [];
+  return (Array.isArray(items) ? items : []).filter((item) =>
+    item && item.source === "Meetings" && Number(item.score) >= 95 && ids.indexOf(String(item.id)) < 0);
+}
+
+// "morning", "urgent" or "" (nothing to send). The morning push goes at the
+// first run out of quiet hours with anything at all to say.
+function pushKind(state, dayKey, content, urgent) {
+  state = state || {};
+  content = content || {};
+  if (state.morningDay !== dayKey) {
+    const any = (content.items || []).length || (content.reminders || []).length || content.weekly || content.experiment || content.commitment;
+    return any ? "morning" : "";
+  }
+  return (urgent || []).length ? "urgent" : "";
+}
+
+function pushedAfter(pushed, items, dayKey) {
+  const ids = pushed && pushed.day === dayKey && Array.isArray(pushed.ids) ? pushed.ids.slice() : [];
+  (Array.isArray(items) ? items : []).forEach((item) => { const id = String(item.id || ""); if (id && ids.indexOf(id) < 0) ids.push(id); });
+  return {day: dayKey, ids: ids.slice(-40)};
 }
 
 // extra (optional): {spark, reminders, experiment, remindersOnly}, or just the spark title.
@@ -93,6 +138,7 @@ function notificationCopy(items, test, extra) {
     return {title: test ? "Test · Your week" : "Your weekly review is ready", body: "A few minutes on Today: score this week’s commitments and set next week’s three. Your week read back is there too." + experimentLine + sparkLine};
   }
   const lead = items[0];
+  if (extra.urgent && lead) return {title: test ? "Test · Starting soon" : "Starting soon", body: lead.source + ": " + lead.title};
   const title = test ? "Test · Morning 5" : "Your Morning 5 is ready";
   const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
   if (!lead) return {title, body: "No priority items currently clear your delivery thresholds." + reminderLine + experimentLine + weeklyLine + commitmentLine + sparkLine};
@@ -167,8 +213,14 @@ function reminderIds(list) {
 }
 
 function hasNewReminders(list, notified) {
+  return newReminders(list, notified).length > 0;
+}
+
+// Only the reminders no push has carried yet: one overdue for a week was on
+// every push from 3 to 11 Oct.
+function newReminders(list, notified) {
   const seen = new Set(Array.isArray(notified) ? notified : []);
-  return reminderIds(list).some((id) => !seen.has(id));
+  return (Array.isArray(list) ? list : []).filter((item) => !seen.has(item.due + "|" + item.metric));
 }
 
 // Today's Daily Boost spark for the notification: the one already on the day's
@@ -187,10 +239,13 @@ module.exports = {
   DELIVERY_SOURCES,
   normalizeDelivery,
   isQuietTime,
-  scoreBand,
+  askKey,
+  asksOnce,
   selectDeliverable,
-  digestSignature,
-  isMaterialChange,
+  askedAfter,
+  urgentItems,
+  pushKind,
+  pushedAfter,
   notificationCopy,
   todaysSparkTitle,
   weeklyReadDue,
@@ -200,4 +255,5 @@ module.exports = {
   dueExperiment,
   reminderIds,
   hasNewReminders,
+  newReminders,
 };
