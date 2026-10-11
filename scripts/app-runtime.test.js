@@ -1623,3 +1623,18 @@ test('sports hides retired PBA even in legacy data and renders NBA probability s
   assert.match(element('sports-out').innerHTML,/Home 65%/);
   assert.doesNotMatch(element('sports-out').innerHTML,/PBA|draw 0%/);
 });
+
+// The 11 Oct prune: folded pages have no tab of their own, so a #trends,
+// #history or #journal link must still open its page.
+test('a folded page opens by its hash with no tab of its own, and a missing page does nothing',()=>{
+  const opened=[];
+  const page=(active)=>({classList:{contains:(c)=>c==='page' || (c==='active' && active)}});
+  const pages={'page-trends':page(false),'page-radar':page(true)};
+  const {context}=environment(['navFromHash'],{location:{hash:'#trends'},switchPage:(id,btn)=>opened.push([id,btn])});
+  context.document={querySelector:()=>null,getElementById:(id)=>pages[id] || null};
+  context.navFromHash();
+  assert.deepEqual(opened,[['trends',null]]);
+  context.location.hash='#radar';context.navFromHash();
+  context.location.hash='#nope';context.navFromHash();
+  assert.equal(opened.length,1,'an open page and a missing page are left alone');
+});

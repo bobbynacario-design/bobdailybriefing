@@ -41,6 +41,15 @@ assert.ok(html.includes('./lib/intelligence-search-core.js'), 'Unified search co
 assert.ok(html.includes('./lib/evidence-sets-core.js'), 'Evidence sets core must load before the app script');
 assert.ok(html.includes('./lib/entity-timeline-core.js'), 'Entity timeline core must load before the app script');
 assert.ok(html.includes("if (id==='today') pending = renderTodayFive()"), 'Today must render the Morning 5');
+// Eleven tabs since the 11 Oct prune; the folded pages open from their family's strip and from Search.
+const navTabs = (html.slice(html.indexOf('<div class="nav-center">'), html.indexOf('<div class="nav-right">')).match(/data-page="([a-z]+)"/g) || []).map((m) => m.slice(11, -1)).sort();
+assert.deepEqual(navTabs, ['about', 'calendar', 'decisions', 'evidence', 'flights', 'help', 'miro', 'radar', 'research', 'sports', 'today'], 'the bar holds eleven tabs');
+const shell = readFileSync(new URL('../lib/ui-shell.js', import.meta.url), 'utf8');
+['history', 'trends', 'timeline', 'journal', 'pse'].forEach((page) => {
+  assert.ok(new RegExp("\\['" + page + "',").test(shell), page + ' must sit in a page family');
+  assert.ok(html.includes("if (id==='" + page + "') pending = "), page + ' keeps its render');
+});
+assert.ok(html.includes("openSearchBrowse('history')") && html.includes("openSearchBrowse('timeline')") && html.includes("openSearchBrowse('trends')"), 'Search opens the archive tools');
 assert.ok(html.includes('fbLoadCommandPrefs') && html.includes('fbSaveCommandPrefs'),
   'Command Center preferences must load and save through the signed-in account');
 assert.ok(html.includes('Why this rank?'), 'Command Center must explain item ranking');
