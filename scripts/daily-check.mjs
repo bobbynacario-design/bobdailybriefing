@@ -137,6 +137,12 @@ section('Push');
   Object.entries(counts).filter(([lead, days]) => days.size >= 3 && lead && !/^Reliability:/.test(lead))
     .forEach(([lead, days]) => warn('push:stale:' + lead, 'Push led with "' + lead + '" on ' + days.size + ' different days.'));
   if (state.tokenUpdatedAt && hoursAgo(state.tokenUpdatedAt) > 24 * 45) warn('push:token', 'Phone push token last refreshed ' + phtTime(state.tokenUpdatedAt) + '.');
+  // Taps, counted by the app as push_open (from 11 Oct, v212).
+  const usage = (await get('usage-' + uid)) || {days: {}};
+  const week = Object.keys(usage.days || {}).filter((d) => d >= pht(Date.now() - 6 * 86400000));
+  const taps = week.reduce((n, d) => n + (Number(usage.days[d].push_open) || 0), 0);
+  const sentWeek = sent.filter((a) => hoursAgo(a.at) <= 24 * 7).length;
+  info('Last 7 days: ' + sentWeek + ' push(es) sent, ' + taps + ' opened from a push');
 }
 
 // 6. GitHub: CI, publish and feed workflows over the last day.

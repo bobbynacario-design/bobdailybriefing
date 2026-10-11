@@ -1,7 +1,7 @@
 /* Daybook service worker.
    App-shell requests are network-first so deploys update cleanly; cache is the
    offline fallback. Firebase and Google auth traffic always bypasses the cache. */
-var CACHE_NAME = 'bob-briefing-shell-v211';
+var CACHE_NAME = 'bob-briefing-shell-v212';
 
 var briefingMessaging = null;
 try {
@@ -103,15 +103,19 @@ self.addEventListener('notificationclick', function(event) {
   if (target.href.indexOf(scope) !== 0) target = new URL('./#command', scope);
   if (event.action === 'mute') target.searchParams.set('mute', 'delivery');
   var url = target.href;
+  // The app counts the tap (push_open) from this mark, then removes it.
+  target.searchParams.set('from', 'push');
+  var marked = target.href;
   event.waitUntil(clients.matchAll({type: 'window', includeUncontrolled: true}).then(function(windows) {
     // Most recently focused first, so this is the Daybook window he used last.
     var mine = windows.filter(function(w) { return w.url && w.url.indexOf(scope) === 0; })[0];
-    if (!mine) return clients.openWindow ? clients.openWindow(url) : null;
+    if (!mine) return clients.openWindow ? clients.openWindow(marked) : null;
     return Promise.resolve(mine.focus ? mine.focus() : mine).catch(function() { return mine; }).then(function(client) {
       client = client || mine;
-      if (client.url === url) return client;
-      var tell = function() { client.postMessage({type: 'daybook-open', url: url}); return client; };
-      return client.navigate ? client.navigate(url).then(function(moved) { return moved || tell(); }, tell) : tell();
+      var tell = function() { client.postMessage({type: 'daybook-open', url: marked}); return client; };
+      // Already there: raised and told, so the tap counts without a reload.
+      if (client.url === url) return tell();
+      return client.navigate ? client.navigate(marked).then(function(moved) { return moved || tell(); }, tell) : tell();
     });
   }));
 });

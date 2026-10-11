@@ -1572,13 +1572,13 @@ test('a tap on a push raises Daybook first, then moves it to the page, and never
   const calls=[];
   const tap=serviceWorker([windowClient('https://bobbynacario-design.github.io/pokerhq/#table',calls),windowClient(SCOPE+'#today',calls)]);
   await tap({url:SCOPE+'#command'});
-  assert.deepEqual(calls,['focus '+SCOPE+'#today','navigate '+SCOPE+'#command'],'raised while the tap allows it, then moved; PokerHQ left alone');
-  // Already there: raised, not reloaded.
+  assert.deepEqual(calls,['focus '+SCOPE+'#today','navigate '+SCOPE+'?from=push#command'],'raised while the tap allows it, then moved (marked as a push tap); PokerHQ left alone');
+  // Already there: raised and told (so the tap counts), not reloaded.
   const here=[]; await serviceWorker([windowClient(SCOPE+'#command',here)])({url:SCOPE+'#command'});
-  assert.deepEqual(here,['focus '+SCOPE+'#command']);
+  assert.deepEqual(here,['focus '+SCOPE+'#command','message daybook-open '+SCOPE+'?from=push#command']);
   // A Daybook window the worker does not control is told to go there itself.
   const loose=[]; await serviceWorker([windowClient(SCOPE+'#today',loose,{canNavigate:false})])({url:SCOPE+'#today'.replace('today','command')});
-  assert.deepEqual(loose,['focus '+SCOPE+'#today','navigate '+SCOPE+'#command','message daybook-open '+SCOPE+'#command']);
+  assert.deepEqual(loose,['focus '+SCOPE+'#today','navigate '+SCOPE+'?from=push#command','message daybook-open '+SCOPE+'?from=push#command']);
 });
 test('with no Daybook window open, a tap opens one; Mute and stray links stay inside Daybook',async()=>{
   const opened=[], calls=[];
@@ -1587,21 +1587,38 @@ test('with no Daybook window open, a tap opens one; Mute and stray links stay in
   await tap({url:SCOPE+'#command'},'mute');
   await tap({url:'https://bobbynacario-design.github.io/pokerhq/'});
   await tap(undefined);
-  assert.deepEqual(opened,[SCOPE+'#today',SCOPE+'?mute=delivery#command',SCOPE+'#command',SCOPE+'#command']);
+  assert.deepEqual(opened,[SCOPE+'?from=push#today',SCOPE+'?mute=delivery&from=push#command',SCOPE+'?from=push#command',SCOPE+'?from=push#command']);
   assert.deepEqual(calls,[],'the other app’s window is never raised or moved');
 });
 test('a Daybook window told to open a page goes there, and only within Daybook',()=>{
-  const {context}=environment(['openFromServiceWorker'],{URL});
+  const used=[];
+  const {context}=environment(['openFromServiceWorker'],{URL,trackUse:name=>used.push(name)});
   const loc={origin:'https://bobbynacario-design.github.io',pathname:'/bobdailybriefing/',search:'',hash:'#today',assigned:null,
     get href(){return this.origin+this.pathname+this.search+this.hash;},set href(v){this.assigned=v;}};
   context.location=loc;
   assert.equal(context.openFromServiceWorker({type:'daybook-open',url:SCOPE+'#command'}),true); assert.equal(loc.hash,'#command'); assert.equal(loc.assigned,null,'a page change is a hash change, no reload');
-  assert.equal(context.openFromServiceWorker({type:'daybook-open',url:SCOPE+'?mute=delivery#command'}),true); assert.equal(loc.assigned,SCOPE+'?mute=delivery#command','Mute loads the page so it can act');
+  assert.deepEqual(used,[],'only a push tap is counted');
+  // A push tap: counted once, the mark dropped, still only a hash change.
+  loc.hash='#today';
+  assert.equal(context.openFromServiceWorker({type:'daybook-open',url:SCOPE+'?from=push#command'}),true);
+  assert.deepEqual(used,['push_open']); assert.equal(loc.hash,'#command'); assert.equal(loc.assigned,null,'the mark alone never reloads the page');
+  assert.equal(context.openFromServiceWorker({type:'daybook-open',url:SCOPE+'?mute=delivery&from=push#command'}),true); assert.equal(loc.assigned,SCOPE+'?mute=delivery#command','Mute loads the page so it can act, without the mark');
+  assert.deepEqual(used,['push_open','push_open']);
   loc.assigned=null;
   ['https://bobbynacario-design.github.io/pokerhq/#x','https://evil.example.com/bobdailybriefing/','not a url'].forEach(url=>assert.equal(context.openFromServiceWorker({type:'daybook-open',url}),false,url));
   assert.equal(context.openFromServiceWorker({type:'other',url:SCOPE}),false); assert.equal(context.openFromServiceWorker(null),false);
   assert.equal(loc.assigned,null); assert.equal(loc.hash,'#command');
   assert.ok(html.includes("navigator.serviceWorker.addEventListener('message', function(event) { openFromServiceWorker(event.data); });"));
+});
+test('a page opened by a push tap counts it once and takes the mark off the address',()=>{
+  const used=[], replaced=[];
+  const {context}=environment(['consumePushTap'],{URL,trackUse:name=>used.push(name),history:{replaceState:(s,t,u)=>replaced.push(u)}});
+  context.window={location:{href:SCOPE+'?mute=delivery&from=push#command'}};
+  assert.equal(context.consumePushTap(),true);
+  assert.deepEqual(used,['push_open']); assert.deepEqual(replaced,['/bobdailybriefing/?mute=delivery#command'],'Mute is left for its own handler');
+  context.window={location:{href:SCOPE+'#command'}};
+  assert.equal(context.consumePushTap(),false); assert.deepEqual(used,['push_open'],'an ordinary visit is not a push tap');
+  assert.ok(/consumePushTap\(\);\s*consumeBriefingDeliveryMute\(\);/.test(html),'run on sign-in, before the mute handler');
 });
 
 
