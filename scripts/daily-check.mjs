@@ -130,7 +130,12 @@ section('Push');
   if (!(prefs.delivery || {}).enabled) info('Push is switched off.');
   else if (!day.length) warn('push:none', 'No push sent in the last 24 hours' + (sent[0] ? ' (last ' + phtTime(sent[0].at) + ')' : '') + '.');
   day.filter((a) => a.failureCount).forEach((a) => alert('push:failed', 'Push at ' + phtTime(a.at) + ' failed on ' + a.failureCount + ' device(s).'));
-  day.forEach((a) => info(phtTime(a.at) + ': ' + a.itemCount + ' items, led by "' + a.lead + '"'));
+  day.forEach((a) => {
+    info(phtTime(a.at) + (a.kind ? ' (' + a.kind + ')' : '') + ': ' + a.itemCount + ' items, led by "' + a.lead + '"');
+    // The full text, recorded since the 11 Oct push fix (bd0a742).
+    if (a.body) String(a.title + '\n' + a.body).split('\n').forEach((line) => info('    | ' + line));
+  });
+  if (day.filter((a) => a.kind === 'morning').length > 1) warn('push:two-mornings', 'More than one morning push in a day.');
   if (day.some((a) => /^Reliability:/.test(a.lead || ''))) warn('push:reliability-lead', 'A push led with a reliability notice; those belong on Help, not first on your phone.');
   const recent = sent.slice(0, 8), counts = {};
   recent.forEach((a) => { const k = a.lead || ''; (counts[k] = counts[k] || new Set()).add(pht(a.at)); });
