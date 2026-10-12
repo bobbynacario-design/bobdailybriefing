@@ -148,9 +148,13 @@ function num(v) { var n = Number(v); return isNaN(n) ? null : n; }
 // One request fetches all curated slugs (repeated `slug` query params). We map
 // each back to its config entry and pull P(YES) from the outcome arrays.
 
-async function fetchMarkets(markets) {
+// opts.closed asks Gamma for CLOSED markets, which it leaves out unless asked
+// (checked 12 Oct 2026: three resolved journal markets returned nothing without
+// it). opts.quiet skips the not-found line for a lookup that expects misses.
+async function fetchMarkets(markets, opts) {
+  opts = opts || {};
   var qs = markets.map(function (m) { return 'slug=' + encodeURIComponent(m.slug); }).join('&');
-  var url = GAMMA + '/markets?limit=500&' + qs;
+  var url = GAMMA + '/markets?limit=500&' + qs + (opts.closed ? '&closed=true' : '');
   var res = await fetchRetry(url, { headers: { 'accept': 'application/json' } }, 'Gamma');
   if (!res.ok) {
     var body = await res.text();
@@ -164,7 +168,7 @@ async function fetchMarkets(markets) {
   markets.forEach(function (cfg) {
     var r = bySlug[cfg.slug];
     if (!r) {
-      console.log('  market not found on Gamma: ' + cfg.slug + ' (skipped)');
+      if (!opts.quiet) console.log('  market not found on Gamma: ' + cfg.slug + ' (skipped)');
       return;
     }
     var outcomes = parseArr(r.outcomes);
@@ -601,8 +605,18 @@ async function main() {
   var extraSlugs = openSlugs.filter(function (s) { return !haveSlugs[s]; });
   var extra = [];
   if (extraSlugs.length) {
-    console.log('Checking ' + extraSlugs.length + ' off-list open market(s) for resolution...');
-    extra = await fetchMarkets(extraSlugs.map(function (s) { return { slug: s, label: s, theme: '', yesOutcome: 'Yes' }; }));
+    console.log('Checking ' + extraSlugs.length + ' journal market(s) outside today\'s list for resolution...');
+    // A curated market keeps its own YES outcome; one dropped from config is a Yes/No market.
+    var extraCfg = extraSlugs.map(function (s) {
+      return CONFIG.markets.filter(function (c) { return c.slug === s; })[0] || { slug: s, label: s, theme: '', yesOutcome: 'Yes' };
+    });
+    // Closed first: a market that has resolved is exactly what this lookup is for.
+    var closedExtra = await fetchMarkets(extraCfg, { closed: true, quiet: true });
+    var openExtra = await fetchMarkets(extraCfg, { quiet: true });
+    var seenExtra = {};
+    extra = closedExtra.concat(openExtra).filter(function (m) { if (seenExtra[m.slug]) return false; seenExtra[m.slug] = true; return true; });
+    var lost = extraSlugs.filter(function (s) { return !seenExtra[s]; });
+    console.log('  ' + closedExtra.length + ' closed, ' + (extra.length - closedExtra.length) + ' still open' + (lost.length ? ', not found: ' + lost.join(', ') : '') + '.');
   }
 
   var allForResolution = marketsData.concat(extra);
