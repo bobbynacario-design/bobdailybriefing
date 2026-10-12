@@ -70,3 +70,12 @@ test('prompt distinguishes negative YES outcomes and requests a specific reversa
   const prompt=buildPrompt([mover()],since,now);
   assert.match(prompt,/negative events/);assert.match(prompt,/conditional inference/);assert.match(prompt,/broad background narrative/);
 });
+test('only moves of 2+ points are researched, on Sonnet with the refusal fallback',async()=>{
+  assert.deepEqual(selectMovers([{...mover(),slug:'small',priceChange:.015},{...mover(),slug:'two',priceChange:-.02}]).map(m=>m.slug),['two']);
+  const requests=[];
+  const client={beta:{messages:{stream:args=>{requests.push(args);return{finalMessage:async()=>({stop_reason:'tool_use',usage:{input_tokens:5,output_tokens:5},
+    content:[{type:'web_search_tool_result',content:[{url,title:'Official release',page_age:'2026-10-08'}]},{type:'tool_use',name:'save_market_moves',input:{moves:[row()]}}]})};}}},messages:{stream:()=>{throw Error('beta path expected');}}};
+  const result=await explainMarketMoves({markets:[mover()],client,since,now});
+  assert.equal(result.status,'ok');assert.equal(result.model,'claude-sonnet-5-5');
+  assert.equal(requests[0].model,'claude-sonnet-5-5');assert.equal(requests[0].fallbacks,'default');assert.deepEqual(requests[0].betas,['server-side-fallback-2026-07-01']);
+});

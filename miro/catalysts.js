@@ -1,7 +1,12 @@
 // Display-only explanation of measured market moves. Never feeds the panel or journal.
 import Anthropic from '@anthropic-ai/sdk';
 
-const DEFAULT_MODEL = 'claude-opus-5-5';
+// Sonnet and moves of 2+ points since 2026-10-12. On Opus with every half-point
+// drift researched, this cost ~$0.40 a day (84k search-result tokens a call)
+// to explain one or two sub-3-point moves. What Changed still lists every move
+// of 0.5+ points; only the paid search is limited. MIRO_CATALYST_MODEL overrides.
+const DEFAULT_MODEL = 'claude-sonnet-5-5';
+const MIN_MOVE = .02;
 const MAX_MARKETS = 6;
 const MAX_SEARCHES = 12;
 const DEADLINE_MS = 4 * 60 * 1000;
@@ -16,7 +21,7 @@ const SAVE_TOOL = {
 };
 
 function selectMovers(markets) {
-  return (markets || []).filter(m => Number.isFinite(m.priceChange) && Math.abs(m.priceChange) >= .005 &&
+  return (markets || []).filter(m => Number.isFinite(m.priceChange) && Math.abs(m.priceChange) >= MIN_MOVE &&
     Number.isFinite(m.previousImpliedYes) && Number.isFinite(m.impliedYes))
     .sort((a,b) => Math.abs(b.priceChange)-Math.abs(a.priceChange) || (b.priority || 0)-(a.priority || 0)).slice(0, MAX_MARKETS);
 }
@@ -105,7 +110,10 @@ async function explainMarketMoves(opts) {
     for(let turn=0;turn<4 && !saved;turn++) {
       const searchBudget=MAX_SEARCHES-usage.searches;
       const tools=searchBudget>0?[{type:'web_search_20260209',name:'web_search',max_uses:searchBudget,allowed_callers:['direct']},SAVE_TOOL]:[SAVE_TOOL];
-      const msg=await client.messages.stream({model:result.model,max_tokens:8000,system:'Explain event-market moves with dated evidence and honest uncertainty. Keep causal inference separate from reported facts.',
+      // Sonnet and Opus take the server-side refusal fallback (beta); Haiku has none.
+      const api=!/haiku/i.test(result.model) && client.beta && client.beta.messages ? client.beta.messages : client.messages;
+      const extra=api===client.messages ? {} : {betas:['server-side-fallback-2026-07-01'],fallbacks:'default'};
+      const msg=await api.stream({...extra,model:result.model,max_tokens:8000,system:'Explain event-market moves with dated evidence and honest uncertainty. Keep causal inference separate from reported facts.',
         output_config:{effort:'medium'},tools,messages},{signal:deadline.signal}).finalMessage();
       const u=msg.usage || {};
       usage.calls++;usage.input+=u.input_tokens || 0;usage.output+=u.output_tokens || 0;usage.cacheRead+=u.cache_read_input_tokens || 0;usage.cacheWrite+=u.cache_creation_input_tokens || 0;
