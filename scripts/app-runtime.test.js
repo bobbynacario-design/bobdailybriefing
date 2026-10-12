@@ -146,6 +146,27 @@ test('Markets shows when each panel read was made, the fact sheet it read, and h
   assert.equal(context.miroGroundingHtml({meta:{model:'none',panelGrounding:'weekly-factsheet',llmPaused:true,panelWebSearch:false}}),'','paused: no note');
   assert.match(context.miroGroundingHtml({meta:{panelWebSearch:false,llmPaused:false}}),/without web grounding/,'older docs keep the old note');
 });
+
+test('Markets accuracy stays cautious below 30 resolved forecasts',()=>{
+  const {context}=environment(['miroHealthHtml'],{esc:String});
+  for(const nResolved of [0,1,7,29])for(const skill of [-.1,.1]){
+    const out=context.miroHealthHtml({stats:{nResolved,skill}},{meta:{}});
+    assert.match(out,/Too few outcomes to assess/);assert.doesNotMatch(out,/Beating market baseline|Not beating market baseline/);
+  }
+  assert.match(context.miroHealthHtml({stats:{nResolved:30,skill:.1}},{meta:{}}),/Beating market baseline/);
+  assert.match(context.miroHealthHtml({stats:{nResolved:30,skill:-.1}},{meta:{}}),/Not beating market baseline/);
+  assert.match(context.miroHealthHtml({stats:{nResolved:30,skill:null}},{meta:{}}),/Assessment unavailable/);
+});
+
+test('Markets never presents a missing-quote legacy GO as a research flag',()=>{
+  const {context}=environment(['miroCard','miroVerdict','miroPct','miroNum'],{esc:String,miroProbabilityRead:()=>'',miroMoveExplanationHtml:()=>'',miroPanelReadHtml:()=>''});
+  const m={slug:'rates',label:'Rates',gate:'GO',haircutProb:.7,panelProb:.8,impliedYes:.2,noBook:true,edge:.25,priceCheckedAt:'2026-10-12T06:15:00Z'};
+  const out=context.miroCard(m);
+  assert.doesNotMatch(out,/RESEARCH FLAG|est\. edge after costs/);
+  assert.match(out,/Price comparison only — quotes unavailable/);assert.match(out,/Price checked 2026-10-12T06:15:00Z/);
+  assert.match(out,/price comparison after assumed costs/);
+  assert.equal(context.miroVerdict({...m,noBook:false,yesBid:.19,yesAsk:.21}).label,'RESEARCH FLAG');
+});
 test('Daily Boost account writes merge against the transaction snapshot', async()=>{
   let written;
   const day='2026-09-25';

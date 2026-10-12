@@ -123,6 +123,7 @@ function aggregateOne(m, config) {
   // Gate — first failed check wins the reason.
   var pass = true, reason = null;
   if (m.closed) { pass = false; reason = 'closed'; }
+  else if (!hasBook) { pass = false; reason = 'no-book'; }
   else if (m.liquidityNum != null && m.liquidityNum < gate.minLiquidityNum) { pass = false; reason = 'thin'; }
   else if (hasBook && m.spread != null && m.spread > gate.maxSpread) { pass = false; reason = 'wide-spread'; }
   else if (hasBook && m.depthTop != null && m.depthTop < gate.minDepthShares) { pass = false; reason = 'thin'; }

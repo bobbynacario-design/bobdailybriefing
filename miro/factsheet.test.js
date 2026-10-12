@@ -1,5 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+
+test('weekly factual research uses the exact resolution rules and source without odds',()=>{
+  const out=factPrompt([{slug:'trial',question:'Convicted?',resolutionRules:'Only a final Senate conviction by 31 December counts.',resolutionSource:'Senate',impliedYes:.61}],'2026-10-12T00:00:00Z');
+  assert.match(out,/Only a final Senate conviction by 31 December counts\./);
+  assert.match(out,/"resolutionSource":"Senate"/);assert.doesNotMatch(out,/impliedYes|0\.61/);
+});
 import {buildFactSheet, factEvidence, factPrompt, FACTSHEET_DEFAULT_MODEL} from './factsheet.js';
 
 const markets = [{slug:'duterte', question:'Will the Philippine Senate convict Sara Duterte?', endDate:'2026-12-31'}, {slug:'recession', question:'US recession by end of 2026?'}];

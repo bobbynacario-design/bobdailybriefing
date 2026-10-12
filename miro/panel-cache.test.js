@@ -2,6 +2,14 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {planReads, newsEvidence} from './panel-cache.js';
 
+test('changed contract rules or resolution sources invalidate a cached read',()=>{
+  const previous={markets:[{slug:'m',panelRead:{reads:[.4,.4,.4],readAt:'2026-10-19T00:00:00Z',model:'x',provider:'anthropic',resolutionRules:'Rule A',resolutionSource:'Source A'}}]};
+  const options={model:'x',provider:'anthropic',now:'2026-10-20T00:00:00Z'};
+  const same={slug:'m',resolutionRules:'Rule A',resolutionSource:'Source A'};
+  assert.deepEqual(planReads([same],previous,options).read,[]);
+  for(const patch of [{resolutionRules:'Rule B'},{resolutionSource:'Source B'}])assert.equal(planReads([{...same,...patch}],previous,options).reasons.m,'rules');
+});
+
 const now = Date.parse('2026-10-20T00:00:00Z');
 const opts = {model:'claude-haiku-5-5', provider:'anthropic', now, rereadDays:7};
 const read = (daysAgo, extra = {}) => ({reads:[.1, .12, .09], readAt:new Date(now - daysAgo * 86400000).toISOString(), model:'claude-haiku-5-5', provider:'anthropic', evidence:[], ...extra});

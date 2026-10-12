@@ -241,6 +241,22 @@ logged out is that gate, not a bug.
 
 ## Status
 
+Markets trust checks: a forecast settles only when Gamma reports the market
+closed with `umaResolutionStatus: resolved` and an exact YES outcome price of
+0 or 1. Proposed, disputed, unknown and fractional outcomes remain pending.
+Existing journal history is preserved. Missing order-book quotes always block
+a research flag; the UI labels the remaining calculation as a price comparison
+and shows when the price was checked. A legacy stored GO with missing quotes
+is also suppressed by the UI before the next scheduled refresh.
+
+Evidence Check uses “Too few outcomes to assess” below 30 resolved forecasts;
+the Brier figures remain visible without a performance claim. The panel and
+weekly fact-sheet prompts receive the exact market description/resolution rules
+and named resolution source, treated as untrusted contract metadata rather than
+price evidence. A change to either invalidates the cached read and requests a
+new fact sheet; a failed refresh does not reuse facts for the previous rules.
+The number and schedule of model calls remain governed by the existing cache.
+
 Lanes 1–3 shipped: data + render, scenario panel + edge, and the Brier resolution
 journal. No alerts, no execution. Possible later work: a scheduled Cloud Function
 (the pure modules port unchanged) and a curated list with more near-50% markets

@@ -10054,6 +10054,7 @@ function miroNum(n) {
 // Research-framed verdict (deliberately NOT betting language). The internal gate
 // is GO/NO-GO; here it is shown as a research flag vs the reason it is not one.
 function miroVerdict(m) {
+  if (!m.closed && (m.noBook || m.gate && (m.yesBid == null || m.yesAsk == null))) return { label: 'QUOTES UNAVAILABLE', cls: 'rel-low' };
   if (!m.gate) return null;
   if (m.gate === 'GO') return { label: 'RESEARCH FLAG', cls: 'rel-high' };
   var reasons = {
@@ -10066,6 +10067,7 @@ function miroCard(m) {
   var imp = m.impliedYes;
   var barW = imp == null ? 0 : Math.max(2, Math.min(100, imp * 100));
   var hasPanel = m.haircutProb != null;
+  var noQuotes = m.noBook || m.yesBid == null || m.yesAsk == null;
   var html = '<div class="card radar-card" data-command-id="market-' + esc(m.slug || m.label) + '" style="position:relative">';
   html += '<div class="card-accent" style="background:var(--blue)"></div>';
   // header: theme chip + research verdict badge (only once the gate exists)
@@ -10091,6 +10093,8 @@ function miroCard(m) {
     'mkt ' + miroPct(imp) + ' YES</div>';
   html += '</div>';
   html += '<div class="miro-signal-read">' + esc(m.probabilityRead || miroProbabilityRead(imp)) + '</div>';
+  html += '<div class="src">Price checked ' + esc(m.priceCheckedAt || 'time unavailable') + '</div>';
+  if (noQuotes && !m.closed) html += '<div class="src">Price comparison only — quotes unavailable</div>';
   html += miroMoveExplanationHtml(m);
   // panel read (Lane 2): only shown when present. Framed as a research estimate.
   if (hasPanel) {
@@ -10102,7 +10106,7 @@ function miroCard(m) {
       'Panel ' + miroPct(m.panelProb) + ' raw → ' + miroPct(m.haircutProb) + ' haircut (vs price)' +
       (m.panelN != null ? ' · ' + m.panelN + ' reads' : '') +
       (m.panelDispersion != null ? ' · spread ±' + (m.panelDispersion * 100).toFixed(1) + ' pts' : '') +
-      ' · <span style="color:' + edgeCol + '">est. edge after costs ' + edgeTxt + '</span>' + sideTxt +
+      ' · <span style="color:' + edgeCol + '">' + (noQuotes ? 'price comparison after assumed costs ' : 'est. edge after costs ') + edgeTxt + '</span>' + sideTxt +
       '</div>' + miroPanelReadHtml(m);
     // Executable order book (Lane B): the prices edge is actually computed against.
     if (m.spread != null) {
@@ -10110,11 +10114,11 @@ function miroCard(m) {
       html += '<div class="src" style="margin-top:.2rem">book ' + (m.yesBid * 100).toFixed(1) + '/' +
         (m.yesAsk * 100).toFixed(1) + '¢ · spread ' + (m.spread * 100).toFixed(1) + '¢ · top depth ' + dep + '</div>';
     } else if (m.noBook) {
-      html += '<div class="src" style="margin-top:.2rem;color:var(--txt3)">no live quote — edge vs last price (less reliable)</div>';
+      html += '<div class="src" style="margin-top:.2rem;color:var(--txt3)">Last available price used; spread and depth cannot be checked.</div>';
     }
     // Posture line — keep it unmistakably research, never actionable.
     if (verdict) {
-      var posture = m.gate === 'GO'
+      var posture = noQuotes && !m.closed ? 'Price comparison only — quotes unavailable.' : m.gate === 'GO'
         ? 'Watch only — research flag, not advice. No execution.'
         : 'No research edge — ' + esc((m.gateReason || '').replace(/-/g, ' ')) + '. Not advice.';
       html += '<div class="src" style="margin-top:.2rem;color:var(--txt3)">' + posture + '</div>';
@@ -10301,7 +10305,9 @@ function miroSignalHtml(market) {
   return '<div class="miro-signal"><div><div class="miro-signal-theme">' + esc(market.theme || 'Signal') + '</div>' +
     '<div class="miro-signal-name">' + esc(market.label || market.slug) + '</div>' +
     '<div class="miro-signal-why">' + esc(market.why || market.question || '') + '</div>' +
-    '<div class="miro-signal-read">' + esc(market.probabilityRead || miroProbabilityRead(market.impliedYes)) + '</div></div>' +
+    '<div class="miro-signal-read">' + esc(market.probabilityRead || miroProbabilityRead(market.impliedYes)) + '</div>' +
+    '<div class="src">Price checked ' + esc(market.priceCheckedAt || 'time unavailable') +
+    (!market.closed && (market.noBook || market.yesBid == null || market.yesAsk == null) ? ' · Price comparison only — quotes unavailable' : '') + '</div></div>' +
     '<div class="miro-prob">' + miroPct(market.impliedYes) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + miroMoveExplanationHtml(market) + '</div>';
 }
 function miroChangesHtml(d, followed) {
@@ -10318,10 +10324,12 @@ function miroChangesHtml(d, followed) {
 function miroHealthHtml(j, d) {
   var stats = j && j.stats || {};
   var resolved = stats.nResolved || 0;
-  var state = resolved ? (stats.skill > 0 ? 'Beating market baseline' : 'Not beating market baseline') : 'Unproven';
+  var state = resolved < 30 ? 'Too few outcomes to assess' : stats.skill == null ? 'Assessment unavailable' :
+    (stats.skill > 0 ? 'Beating market baseline' : 'Not beating market baseline');
   var detail = resolved
     ? resolved + ' forecasts resolved; Brier skill ' + (stats.skill == null ? 'not available' : stats.skill) + '.'
     : 'No forecasts have resolved, so the model has no demonstrated forecasting edge.';
+  if (resolved < 30) detail += ' At least 30 resolved forecasts are needed before assessing performance against the market baseline.';
   if (stats.meanClvTowardPanel != null && stats.nClv) {
     detail += ' Early price drift toward the panel is ' + (stats.meanClvTowardPanel > 0 ? '+' : '') +
       (stats.meanClvTowardPanel * 100).toFixed(1) + ' points across ' + stats.nClv + ' observations.';
@@ -10344,7 +10352,7 @@ function miroModelName(id) {
 function miroPanelReadHtml(market) {
   var r = market && market.panelRead;
   if (!r || !r.readAt || market.haircutProb == null) return '';
-  var reasons = { 'new': 'first read', weekly: 'weekly refresh', news: 're-read on new reporting', model: 'model changed' };
+  var reasons = { 'new': 'first read', weekly: 'weekly refresh', news: 're-read on new reporting', model: 'model changed', rules: 'resolution rules changed' };
   var day = String(r.readAt).slice(0, 10), f = r.facts;
   var html = '<div class="src" style="margin-top:.2rem">Panel read ' + esc(day) + (reasons[r.reason] ? ' · ' + esc(reasons[r.reason]) : '') + '</div>';
   if (!f || !f.summary) return html;
