@@ -33,6 +33,7 @@ import { aggregatePanel } from './scenario.js';
 import { buildMiroJournal } from './journal-miro.js';
 import { enrichMarketChanges, marketResearchPaused } from './briefing.js';
 import { explainMarketMoves, ledgerUsage } from './catalysts.js';
+import { runClaudePanel, CLAUDE_PANEL_DEFAULT_MODEL } from './panel-claude.js';
 import { extractUsage, addUsage, recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -76,8 +77,12 @@ var OPENAI_MODEL = process.env.OPENAI_MODEL || CONFIG.panel.model || 'gpt-5.5';
 // GLM, Kimi, OpenRouter). Only 'openai' has a hosted web_search tool, and that
 // costs nothing to give up because webSearch is already off on cost grounds.
 var PANEL_PROVIDER = (process.env.MIRO_PANEL_PROVIDER || CONFIG.panel.provider || 'openai').toLowerCase();
-var IS_COMPATIBLE = PANEL_PROVIDER !== 'openai';
-var PANEL_MODEL = process.env.MIRO_PANEL_MODEL || OPENAI_MODEL;
+// 'anthropic' runs the personas on Claude through the Anthropic SDK (panel-claude.js),
+// with ANTHROPIC_API_KEY, the key the radar and the move explanations already use.
+var IS_ANTHROPIC = PANEL_PROVIDER === 'anthropic';
+var IS_COMPATIBLE = PANEL_PROVIDER !== 'openai' && !IS_ANTHROPIC;
+var PANEL_MODEL = process.env.MIRO_PANEL_MODEL ||
+  (IS_ANTHROPIC ? (CONFIG.panel.claudeModel || CLAUDE_PANEL_DEFAULT_MODEL) : OPENAI_MODEL);
 var PANEL_BASE_URL = (process.env.MIRO_PANEL_BASE_URL || CONFIG.panel.baseUrl ||
   (IS_COMPATIBLE ? (CONFIG.panel.compatibleDefaultBaseUrl || 'http://localhost:11434/v1')
                  : 'https://api.openai.com/v1')).replace(/\/+$/, '');
@@ -85,7 +90,8 @@ var PANEL_BASE_URL = (process.env.MIRO_PANEL_BASE_URL || CONFIG.panel.baseUrl ||
 // Deliberately NO fallback from a compatible provider to OPENAI_API_KEY: that
 // would send an OpenAI credential to whatever third-party host MIRO_PANEL_BASE_URL
 // points at. A remote compatible provider must be given its own key explicitly.
-var PANEL_KEY = process.env.MIRO_PANEL_API_KEY || (IS_COMPATIBLE ? '' : OPENAI_KEY);
+var PANEL_KEY = process.env.MIRO_PANEL_API_KEY ||
+  (IS_ANTHROPIC ? (process.env.ANTHROPIC_API_KEY || '') : IS_COMPATIBLE ? '' : OPENAI_KEY);
 function isLocalEndpoint(u) { return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(u); }
 // Opt-in only — see panelRequest for why a default value is unsafe.
 var PANEL_TEMPERATURE = process.env.MIRO_PANEL_TEMPERATURE != null && process.env.MIRO_PANEL_TEMPERATURE !== ''
@@ -121,6 +127,12 @@ var ARGV = process.argv.slice(2);
 var DRY_RUN = ARGV.indexOf('--dry-run') !== -1;
 var NO_OPENAI = ARGV.indexOf('--no-openai') !== -1;
 var NO_PANEL = ARGV.indexOf('--no-panel') !== -1;
+// Comparison runs only: --force-panel runs the panel even while miro-control has
+// it paused, and is refused without --dry-run, so it can never write a doc.
+// --no-explain skips the paid move explanations.
+var FORCE_PANEL = ARGV.indexOf('--force-panel') !== -1;
+var NO_EXPLAIN = ARGV.indexOf('--no-explain') !== -1;
+if (FORCE_PANEL && !DRY_RUN) { console.error('--force-panel is for --dry-run comparisons only.'); process.exit(1); }
 
 // ── helpers ──
 
@@ -326,7 +338,12 @@ function parseLooseJson(raw) {
 // personas are deliberately diverse and BLIND to the market price, so their reads
 // are less correlated than asking one model the same way N times. Returns a map
 // slug -> [prob, prob, ...] across personas. Never throws.
-async function runPanel(markets, config) {
+async function runPanel(markets, config, opts) {
+  if (IS_ANTHROPIC) {
+    console.log('Running scenario panel: ' + config.panel.personas.length + ' personas x ' + markets.length + ' markets via ' + PANEL_MODEL_LABEL + '...');
+    return runClaudePanel(markets, config.panel.personas, {apiKey:PANEL_KEY, model:PANEL_MODEL, verbose:DRY_RUN,
+      evidence:opts && opts.evidence, log:function (line) { console.log(line); }});
+  }
   var readsBySlug = {};
   markets.forEach(function (m) { readsBySlug[m.slug] = []; });
   var usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
@@ -499,7 +516,7 @@ async function main() {
   var db = initAdmin();
   var previousDoc = await loadPreviousMiro(db);
   var control = await loadMiroControl(db);
-  var controlPaused = control.llmPaused === true;
+  var controlPaused = control.llmPaused === true && !FORCE_PANEL;
   var researchPaused = marketResearchPaused(control);
 
   // Lane 2: run the persona panel (independent of price), attach the reads, and
@@ -525,7 +542,7 @@ async function main() {
   STAGE.set('explain-moves');
   var moveRun = await explainMarketMoves({markets:marketsData,since:briefing.changes.since,
     apiKey:process.env.ANTHROPIC_API_KEY || '',model:process.env.MIRO_CATALYST_MODEL || undefined,
-    paused:NO_OPENAI || researchPaused});
+    paused:NO_OPENAI || NO_EXPLAIN || researchPaused});
   var moveBySlug = new Map(marketsData.map(function (m) { return [m.slug,m]; }));
   briefing.changes.items.forEach(function (item) {
     var explanation = moveBySlug.get(item.slug).moveExplanation;
@@ -654,7 +671,7 @@ async function main() {
     panel: Object.assign({}, CONFIG.panel, {
       model: PANEL_MODEL_LABEL,
       provider: PANEL_PROVIDER,
-      webSearch: !IS_COMPATIBLE && CONFIG.panel.webSearch
+      webSearch: PANEL_PROVIDER === 'openai' && !!CONFIG.panel.webSearch
     })
   });
   var journalBody = buildMiroJournal(priorJournal, todaySnapshots, todayPrices, resolutions, effectiveConfig);

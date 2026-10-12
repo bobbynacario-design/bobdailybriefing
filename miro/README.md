@@ -144,6 +144,16 @@ model, which is what the provider adapter is for.
 |---|---|---|
 | `openai` (default) | `/v1/responses` | yes |
 | `compatible` | `/v1/chat/completions` | no |
+| `anthropic` | Anthropic SDK (`panel-claude.js`) | no |
+
+`anthropic` runs each persona on Claude (default `claude-haiku-5-5`; set
+`MIRO_PANEL_MODEL` or `config.panel.claudeModel`) with `ANTHROPIC_API_KEY`, the
+key the radar and the move explanations already use. Reads come back through a
+strict `save_reads` tool; a skipped market is a missing read, never a guess.
+Sonnet and Opus get the server-side refusal fallback; Haiku has none.
+Comparison runs: `node refresh-miro.js --dry-run --force-panel --no-explain`
+runs the panel even while miro-control pauses it, writes nothing and skips the
+paid move explanations (`--force-panel` is refused without `--dry-run`).
 
 `compatible` covers local **Ollama**, DeepSeek, Qwen/DashScope, GLM/Zhipu, Kimi
 and OpenRouter. Env: `MIRO_PANEL_PROVIDER`, `MIRO_PANEL_BASE_URL`,
