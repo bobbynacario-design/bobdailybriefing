@@ -213,7 +213,7 @@
       byName[c.city.toLowerCase()]=c;
     });
     return {byAirport:byAirport,byName:byName,currency:/^[A-Z]{3}$/.test(doc && doc.currency || '') ? doc.currency : 'USD',
-      adults:Number(doc && doc.adults) || 2,generatedAt:doc && doc.generatedAt || ''};
+      rooms:Number(doc && doc.rooms) || 1,adults:Number(doc && doc.adults) || 2,generatedAt:doc && doc.generatedAt || ''};
   }
   // A city by name first (a poker venue city such as Incheon), then airport.
   function hotelCity(index,name,airports) {
@@ -239,6 +239,8 @@
   function stayQuotes(city,checkIn,checkOut,index,fx,now) {
     var stay=(city && Array.isArray(city.stays) ? city.stays : []).filter(function(s){return s && s.checkIn===checkIn && s.checkOut===checkOut;})[0];
     if(!stay || !index) return null;
+    var age=(now==null ? Date.now() : new Date(now).getTime())-Date.parse(stay.pricedAt || '');
+    var stale=!(age>=-300000 && age<=26*3600000);
     var peso=function(v){var p=hotelPeso(v,index,fx,now);return p ? Math.round(p.amount) : null;};
     var rows=city.hotels.map(function(h) {
       var q=(Array.isArray(stay.quotes) ? stay.quotes : []).filter(function(q){return q && q.key===h.key;})[0];
@@ -248,13 +250,23 @@
       // typical top rate, a figure is left out rather than read as nightly.
       var rates=valid.filter(function(r){return !(h.typicalMax>0 && r.rate>h.typicalMax*2.5);}).sort(function(a,b){return a.rate-b.rate;});
       var best=rates[0] || null, lone=!!(best && rates[1] && best.rate<rates[1].rate*0.6);
-      var below=best && h.typicalMin>0 && best.rate<h.typicalMin ? Math.round((1-best.rate/h.typicalMin)*100) : 0;
+      var discount=best && h.typicalMin>0 && best.rate<h.typicalMin ? (1-best.rate/h.typicalMin)*100 : 0;
+      var below=Math.round(discount);
       return {hotel:h,rates:rates.map(function(r){return {site:r.site,rate:r.rate,php:peso(r.rate)};}),best:best,php:best ? peso(best.rate) : null,
-        checked:!!(q && q.checked),lone:lone,below:below,deal:below>=10 && !lone,typical:{min:peso(h.typicalMin),max:peso(h.typicalMax)},leftOut:valid.length-rates.length};
+        checked:!!(q && q.checked),stale:stale,lone:lone,below:below,deal:!!(best && best.rate<=h.typicalMin*0.9 && !lone && !stale),typical:{min:peso(h.typicalMin),max:peso(h.typicalMax)},leftOut:valid.length-rates.length};
     });
     rows.sort(function(a,b){return (!a.best)-(!b.best) || (a.best && b.best ? a.best.rate-b.best.rate : 0);});
     var nights=Math.round((Date.parse(checkOut)-Date.parse(checkIn))/86400000);
-    return {stay:stay,nights:nights,rows:rows,cheapest:rows[0] && rows[0].best ? rows[0] : null,deals:rows.filter(function(r){return r.deal;})};
+    return {stay:stay,stale:stale,nights:nights,rows:rows,cheapest:!stale && rows[0] && rows[0].best ? rows[0] : null,deals:rows.filter(function(r){return r.deal;})};
+  }
+  // Validate actual calendar dates and occupancy before requesting a new quote.
+  function hotelStaySettings(value) {
+    var date=function(s){return /^\d{4}-\d{2}-\d{2}$/.test(s || '') && Number.isFinite(Date.parse(s+'T00:00:00Z')) && new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;};
+    if(!value || !date(value.checkIn) || !date(value.checkOut)) return null;
+    var nights=(Date.parse(value.checkOut)-Date.parse(value.checkIn))/86400000;
+    var rooms=value.rooms==null ? 1 : Number(value.rooms),adults=value.adults==null ? 2 : Number(value.adults);
+    if(nights<1 || nights>30 || !Number.isInteger(rooms) || rooms<1 || rooms>4 || !Number.isInteger(adults) || adults<rooms || adults>8) return null;
+    return {checkIn:value.checkIn,checkOut:value.checkOut,rooms:rooms,adults:adults,nights:nights};
   }
   // Tripadvisor's typical lowest nightly rates across a city's hotels, in PHP.
   function typicalNightly(city,index,fx,now) {
@@ -268,12 +280,13 @@
   }
   // A Google Hotels search for exact dates in PHP; it compares the booking
   // sites (Agoda included) for one hotel or a whole place.
-  function hotelSearchLink(place,checkIn,checkOut) {
+  function hotelSearchLink(place,checkIn,checkOut,occupancy) {
     if(!/^\d{4}-\d{2}-\d{2}$/.test(checkIn || '') || !/^\d{4}-\d{2}-\d{2}$/.test(checkOut || '') || checkOut<=checkIn || !String(place || '').trim()) return '';
-    return 'https://www.google.com/travel/search?hl=en&gl=ph&curr=PHP&q='+encodeURIComponent(String(place).trim().slice(0,120)+' from '+checkIn+' to '+checkOut);
+    var settings=occupancy && hotelStaySettings({checkIn:checkIn,checkOut:checkOut,rooms:occupancy.rooms,adults:occupancy.adults});
+    return 'https://www.google.com/travel/search?hl=en&gl=ph&curr=PHP&q='+encodeURIComponent(String(place).trim().slice(0,120)+' from '+checkIn+' to '+checkOut+(settings ? ' for '+settings.adults+' adults in '+settings.rooms+' rooms' : ''));
   }
   root.FlightsCore={searchLink:searchLink,select:select,officialUrl:url,evidenceUrl:evidenceUrl,origins:ORIGINS,domestic:DOMESTIC,phpEstimate:phpEstimate,shortlist:shortlist,deadlineLabel:deadlineLabel,
     region:region,economy:economy,dayLabel:dayLabel,tripLabel:tripLabel,board:board,memoryIndex:memoryIndex,priceMemory:priceMemory,
-    hotelIndex:hotelIndex,hotelCity:hotelCity,stayQuotes:stayQuotes,typicalNightly:typicalNightly,tripTotal:tripTotal,hotelSearchLink:hotelSearchLink,hotelUrl:tripadvisorUrl};
+    hotelIndex:hotelIndex,hotelCity:hotelCity,stayQuotes:stayQuotes,typicalNightly:typicalNightly,tripTotal:tripTotal,hotelStaySettings:hotelStaySettings,hotelSearchLink:hotelSearchLink,hotelUrl:tripadvisorUrl};
   if(typeof module!=='undefined' && module.exports)module.exports=root.FlightsCore;
 })(typeof globalThis!=='undefined' ? globalThis : this);

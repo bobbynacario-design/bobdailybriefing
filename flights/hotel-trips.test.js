@@ -47,3 +47,17 @@ test('a trip to a city without hotels is kept unpriced; the shared call budget s
   assert.equal(stats.calls,2);assert.equal(stats.budgetHit,true);
   assert.deepEqual(doc.trips[1].quotes.map(q=>q.checked).sort(),[false,true,true]);
 });
+
+test('edited hotel dates and guests invalidate cached quotes and reach the rate request',async()=>{
+  const urls=[], cities=[{city:'Incheon',hotels:[{key:'g2-d1',name:'Hotel'}]}];
+  const api=caller(async url=>{urls.push(url);const u=new URL(url);return {result:{chk_in:u.searchParams.get('chk_in'),chk_out:u.searchParams.get('chk_out'),rates:[{name:'Site',rate:100}]}};});
+  const original=trip({kind:'custom',venue:'',rooms:1,adults:2});
+  const prior=await priceTrips({uid:'u1',trips:[original],prior:null,cities,now,today,call:api.call,gapMs:0});
+  const edited={...original,checkIn:'2026-11-05',rooms:2,adults:4};
+  const next=await priceTrips({uid:'u1',trips:[edited],prior,cities,now:now+3600000,today,call:api.call,gapMs:0});
+  assert.equal(next.summary.reused,0);assert.equal(next.trips[0].rooms,2);assert.equal(next.trips[0].adults,4);assert.equal(next.trips[0].nights,3);
+  assert.match(urls[1],/chk_in=2026-11-05.*rooms=2&adults=4/);
+  const occupancyOnly=await priceTrips({uid:'u1',trips:[{...edited,adults:3}],prior:next,cities,now:now+7200000,today,call:api.call,gapMs:0});
+  assert.equal(occupancyOnly.summary.reused,0);assert.match(urls[2],/rooms=2&adults=3/);
+  for(const change of [{rooms:0},{rooms:5},{adults:1},{adults:9},{checkIn:'2026-02-30'}])assert.equal(validTrips([{...edited,...change}],today).length,0);
+});

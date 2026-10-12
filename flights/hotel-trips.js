@@ -32,14 +32,17 @@ function cityNamed(name,airports) {
 export function validTrips(trips,today) {
   const seen=new Set();
   return (Array.isArray(trips) ? trips : []).filter(t=>{
-    if(!t || typeof t.id!=='string' || t.id.length>160 || seen.has(t.id) || !['leave','leave-fare','poker'].includes(t.kind)) return false;
+    if(!t || typeof t.id!=='string' || t.id.length>160 || seen.has(t.id) || !['leave','leave-fare','poker','custom'].includes(t.kind)) return false;
     if(!ISO.test(t.checkIn || '') || !ISO.test(t.checkOut || '') || t.checkIn<=today) return false;
     const n=nights(t.checkIn,t.checkOut);
-    if(!(n>=1 && n<=30) || !cityNamed(t.city,t.airports)) return false;
+    const rooms=t.rooms==null ? STAY.rooms : Number(t.rooms),adults=t.adults==null ? STAY.adults : Number(t.adults);
+    const realDate=s=>Number.isFinite(Date.parse(s+'T00:00:00Z')) && new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;
+    if(!realDate(t.checkIn) || !realDate(t.checkOut) || !(n>=1 && n<=30) || !cityNamed(t.city,t.airports) || !Number.isInteger(rooms) || rooms<1 || rooms>4 || !Number.isInteger(adults) || adults<rooms || adults>8) return false;
     seen.add(t.id);return true;
   }).slice(0,MAX_TRIPS).map(t=>{
     const c=cityNamed(t.city,t.airports);
     return {id:t.id,kind:t.kind,label:String(t.label || '').slice(0,120),city:c.city,location:c.location,checkIn:t.checkIn,checkOut:t.checkOut,nights:nights(t.checkIn,t.checkOut),
+      rooms:t.rooms==null ? STAY.rooms : Number(t.rooms),adults:t.adults==null ? STAY.adults : Number(t.adults),
       venue:t.kind==='poker' ? String(t.venue || '').slice(0,120) : ''};
   });
 }
@@ -73,13 +76,13 @@ export async function priceTrips({uid,trips,prior,cities,now,today,call,gapMs=25
     const hotels=venue ? [venue,...base.filter(h=>h.key!==venue.key)] : base;
     if(!hotels.length) { out.push({...t,pricedAt:null,hotels:[],quotes:[],hotelKeys:'',venueFound:!!venue});continue; }
     const keys=hotels.map(h=>h.key).join(','), old=priorTrips.get(t.id);
-    if(old && old.checkIn===t.checkIn && old.checkOut===t.checkOut && old.hotelKeys===keys && now-Date.parse(old.pricedAt || '')<STAY_TTL_HOURS*3600000) {
+    if(old && old.checkIn===t.checkIn && old.checkOut===t.checkOut && (old.rooms || STAY.rooms)===t.rooms && (old.adults || STAY.adults)===t.adults && old.venue===t.venue && old.hotelKeys===keys && now-Date.parse(old.pricedAt || '')>=0 && now-Date.parse(old.pricedAt || '')<STAY_TTL_HOURS*3600000) {
       reused++;out.push({...old,label:t.label,kind:t.kind});continue;
     }
     const trip={...t,pricedAt:generatedAt,hotelKeys:keys,hotels,quotes:[],venueFound:!!venue};
     out.push(trip);
     hotels.forEach(h=>tasks.push(async()=>{
-      const result=await call('/rates?hotel_key='+h.key+'&chk_in='+t.checkIn+'&chk_out='+t.checkOut+'&rooms='+STAY.rooms+'&adults='+STAY.adults+'&currency='+STAY.currency);
+      const result=await call('/rates?hotel_key='+h.key+'&chk_in='+t.checkIn+'&chk_out='+t.checkOut+'&rooms='+t.rooms+'&adults='+t.adults+'&currency='+STAY.currency);
       const rates=result && result.chk_in===t.checkIn && result.chk_out===t.checkOut ? quoteRates(result.rates) : [];
       trip.quotes.push({key:h.key,rates,checked:!!result});
     }));
