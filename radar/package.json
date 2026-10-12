@@ -6,6 +6,7 @@
   "main": "refresh-radar.js",
   "scripts": {
     "refresh": "node refresh-radar.js",
+    "refresh:ph": "node refresh-ph.js",
     "test": "node --test *.test.js"
   },
   "engines": {

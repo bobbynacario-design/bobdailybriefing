@@ -11,6 +11,7 @@ on:
     - cron: "15 22 * * *"    # Markets 06:15 PHT daily
     - cron: "45 0 * * *"     # News catch-up 08:45 PHT daily
     - cron: "30 0 * * 1-5"   # Radar catch-up 08:30 PHT Monday-Friday
+    - cron: "30 8 * * 1-5"   # PSE board 16:30 PHT Monday-Friday (after the 15:30 PSE close)
   workflow_dispatch:
     inputs:
       feed:
@@ -18,7 +19,7 @@ on:
         required: true
         default: radar
         type: choice
-        options: [radar, markets, news, grounding, flights]
+        options: [radar, markets, news, grounding, flights, pse]
       force:
         # Radar and Flights: bypass the saved-feed freshness check.
         # A radar run normally no-ops once today's radar doc exists;
@@ -173,6 +174,28 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  # PSE tab (briefings-bob/radar-ph): the PSEi stocks from PSE Edge plus the
+  # PSEi level and FX from Yahoo. No model calls, about 60 small requests.
+  pse:
+    if: github.event.schedule == '30 8 * * 1-5' || github.event.inputs.feed == 'pse'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: refresh-pse
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radar/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix radar ci
+      - run: npm --prefix radar run refresh:ph
 
   flights:
     if: github.event.schedule == '0 0,12 * * *' || github.event.inputs.feed == 'flights'

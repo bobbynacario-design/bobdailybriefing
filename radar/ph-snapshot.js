@@ -1,18 +1,22 @@
 // radar/ph-snapshot.js
 //
-// Builds the Philippine-market snapshot written to briefings-bob/radar-ph. The
-// only robust FREE source with history is the PSEi index itself (Yahoo PSEI.PS,
-// PHP); company rows are US-listed ADR/OTC proxies (USD, indicative only); plus
-// the USD/PHP (and AUD/PHP) FX cross. There is NO free per-stock PSE feed, so
-// this stays a NOT-scored "market health" read, heavily caveated.
+// Builds the Philippine-market snapshot written to briefings-bob/radar-ph:
+//   - the PSEi index read. Yahoo PSEI.PS stopped returning history around
+//     17 Sep 2026 (it sends only the latest bar), so the doc keeps its own daily
+//     closes (indexHistory) and the averages fill in as days accumulate;
+//   - one row per PSEi stock from PSE Edge, in pesos (pse-edge.js), and the
+//     breadth of those stocks (ph-metrics.js);
+//   - the USD/PHP and AUD/PHP rates.
+// A market-health read: not scored, not advice.
 //
-// Shared by radar/refresh-radar.js (the 06:00 run) and radar/refresh-ph.js (the
-// after-close ~16:00 run). All I/O is the Yahoo fetch; never throws fatally for
-// proxies/FX (only a missing PSEi index is fatal).
+// Written by radar/refresh-ph.js after the PSE close (GitHub Actions 16:30 PHT).
+// Nothing here is fatal on its own: a run fails only when neither the PSEi nor
+// any PSE Edge stock came back.
 //
-//   buildPhSnapshot(config) -> { index, fx, proxies, caveat }
+//   buildPhSnapshot(config, previousDoc) -> { asOf, index, indexHistory, fx, board, breadth, ... }
 
-function r2(v) { return (v == null || isNaN(v)) ? null : Math.round(v * 100) / 100; }
+import { r2, dayPct, retN, mergeHistory, indexMetrics, stockMetrics, buildBreadth } from './ph-metrics.js';
+import { fetchEdgeStock } from './pse-edge.js';
 
 // fetch with retry + backoff (this box's network intermittently ECONNRESETs).
 async function fetchRetry(url, opts, label) {
@@ -49,83 +53,20 @@ async function fetchYahooChart(symbol, range) {
   return bars;
 }
 
-// ── pure metric helpers (operate on a closes[] array, ascending) ──
-function sma(a, n) { if (a.length < n) return null; var s = 0; for (var i = a.length - n; i < a.length; i++) s += a[i]; return s / n; }
-function dayPct(bars) { if (bars.length < 2) return null; var l = bars[bars.length - 1].close, p = bars[bars.length - 2].close; return p ? (l / p - 1) * 100 : null; }
-// return over the last n trading bars (n bars ago -> last).
-function retN(closes, n) { if (closes.length <= n) return null; var b = closes[closes.length - 1 - n], l = closes[closes.length - 1]; return b ? (l / b - 1) * 100 : null; }
-function maxOf(a) { return a.length ? a.reduce(function (m, v) { return v > m ? v : m; }, a[0]) : null; }
-function minOf(a) { return a.length ? a.reduce(function (m, v) { return v < m ? v : m; }, a[0]) : null; }
-
-// Year-to-date return: baseline = the close of the last bar BEFORE Jan 1 of the
-// latest bar's year (i.e. prior-year close), else the first bar of the year.
-function ytdPct(bars) {
-  if (!bars.length) return null;
-  var year = bars[bars.length - 1].date.slice(0, 4);
-  var base = null;
-  for (var i = 0; i < bars.length; i++) {
-    if (bars[i].date.slice(0, 4) < year) base = bars[i].close;
-    else { if (base == null) base = bars[i].close; break; }
-  }
-  var last = bars[bars.length - 1].close;
-  return base ? (last / base - 1) * 100 : null;
+function phtToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
-// Wilder-style RSI(14) on closes.
-function rsi(closes, n) {
-  n = n || 14;
-  if (closes.length <= n) return null;
-  var gain = 0, loss = 0, i;
-  for (i = closes.length - n; i < closes.length; i++) {
-    var ch = closes[i] - closes[i - 1];
-    if (ch >= 0) gain += ch; else loss -= ch;
-  }
-  if (loss === 0) return 100;
-  var rs = (gain / n) / (loss / n);
-  return 100 - 100 / (1 + rs);
-}
-
-// Annualized realized volatility (%) from the last n daily returns.
-function vol(closes, n) {
-  n = n || 20;
-  if (closes.length <= n) return null;
-  var rets = [];
-  for (var i = closes.length - n; i < closes.length; i++) rets.push(closes[i] / closes[i - 1] - 1);
-  var m = rets.reduce(function (a, b) { return a + b; }, 0) / rets.length;
-  var v = rets.reduce(function (a, b) { return a + (b - m) * (b - m); }, 0) / rets.length;
-  return Math.sqrt(v) * Math.sqrt(252) * 100;
-}
-
-function indexMetrics(bars) {
-  var closes = bars.map(function (b) { return b.close; });
-  var last = bars[bars.length - 1];
-  var s20 = sma(closes, 20), s50 = sma(closes, 50), s200 = sma(closes, 200);
-  var hi = maxOf(closes), lo = minOf(closes);
-  return {
-    symbol: 'PSEI.PS', name: 'PSEi', currency: last.currency || 'PHP',
-    asOf: last.date, close: r2(last.close), dayChangePct: r2(dayPct(bars)),
-    sma20: r2(s20), sma50: r2(s50), sma200: r2(s200),
-    aboveSma20: s20 != null ? last.close > s20 : null,
-    aboveSma50: s50 != null ? last.close > s50 : null,
-    aboveSma200: s200 != null ? last.close > s200 : null,
-    ret1w: r2(retN(closes, 5)), ret1m: r2(retN(closes, 21)),
-    ret3m: r2(retN(closes, 63)), retYtd: r2(ytdPct(bars)),
-    high52: r2(hi), low52: r2(lo),
-    pctFromHigh: hi ? r2((last.close / hi - 1) * 100) : null,
-    pctFromLow: lo ? r2((last.close / lo - 1) * 100) : null,
-    rsi14: r2(rsi(closes, 14)), vol20: r2(vol(closes, 20)),
-    // ~60 most recent closes for a front-end sparkline.
-    spark: closes.slice(-60).map(function (c) { return r2(c); })
-  };
-}
-
-async function buildPhSnapshot(config) {
+async function buildPhSnapshot(config, prev) {
   var ph = config.ph;
-  console.log('Fetching PH snapshot (PSEi 1y + proxies + FX) from Yahoo...');
+  prev = prev || {};
+  console.log('Fetching PH snapshot (PSEi from Yahoo, ' + ph.board.stocks.length + ' PSEi stocks from PSE Edge, FX)...');
 
-  var idxBars = await fetchYahooChart(ph.index.symbol, '1y');
-  if (!idxBars.length) throw new Error('no PSEi data');
-  var index = indexMetrics(idxBars);
+  var idxBars = [];
+  try { idxBars = await fetchYahooChart(ph.index.symbol, '1y'); }
+  catch (e) { console.log('  PSEi (Yahoo) skipped: ' + (e.message || e)); }
+  var indexHistory = mergeHistory(prev.indexHistory, idxBars, 400);
+  var index = indexHistory.length ? indexMetrics(indexHistory) : null;
 
   // FX context — peso strength matters for a PHP/AUD BI consultant. USDPHP has
   // good history; AUDPHP is sparse on Yahoo (level only, caveated).
@@ -142,30 +83,44 @@ async function buildPhSnapshot(config) {
     if (aud.length) fx.audphp = { level: r2(aud[aud.length - 1].close) };
   } catch (e) { console.log('  FX AUDPHP skipped: ' + (e.message || e)); }
 
-  var proxies = [];
-  for (var i = 0; i < ph.proxies.length; i++) {
-    var p = ph.proxies[i];
+  // PSEi stocks from PSE Edge. Company and security ids are reused from the
+  // last doc, so a normal run is two requests per stock.
+  var known = {};
+  (prev.board || []).forEach(function (s) { if (s && s.symbol) known[s.symbol] = s; });
+  var today = phtToday(), board = [], failed = [];
+  for (var i = 0; i < ph.board.stocks.length; i++) {
+    var item = ph.board.stocks[i];
     try {
-      var b = await fetchYahooChart(p.symbol, '6mo');
-      if (b.length) {
-        var l = b[b.length - 1];
-        var pc = b.map(function (x) { return x.close; });
-        proxies.push({
-          symbol: p.symbol, name: p.name, listing: p.listing,
-          currency: l.currency || 'USD', asOf: l.date,
-          close: r2(l.close), dayChangePct: r2(dayPct(b)),
-          ret1w: r2(retN(pc, 5)), ret1m: r2(retN(pc, 21))
-        });
-      }
-    } catch (e) { console.log('  PH proxy ' + p.symbol + ' skipped: ' + (e.message || e)); }
-    await new Promise(function (r) { setTimeout(r, 400); });
+      var got = await fetchEdgeStock(item.symbol, known[item.symbol], today, 400);
+      var metrics = stockMetrics(got.bars);
+      if (!metrics) throw new Error('no daily bars');
+      board.push(Object.assign({
+        symbol: item.symbol, name: item.name, cmpyId: got.cmpyId, securityId: got.securityId,
+        marketCap: got.page.marketCap,
+        // PSE Edge's own figures, to check the computed ones against
+        edge: { lastPrice: got.page.lastPrice, high52: got.page.high52, low52: got.page.low52 }
+      }, metrics));
+    } catch (e) {
+      failed.push(item.symbol);
+      console.log('  PSE Edge ' + item.symbol + ' skipped: ' + (e.message || e));
+    }
   }
+  board.sort(function (a, b) { return (b.marketCap || 0) - (a.marketCap || 0); });
+  var breadth = buildBreadth(board);
+  if (!index && !board.length) throw new Error('no PSEi data and no PSE Edge prices');
 
+  var dates = [index && index.asOf, breadth.asOf].filter(Boolean).sort();
   return {
+    asOf: dates[dates.length - 1],
     index: index,
+    indexHistory: indexHistory,
     fx: fx,
-    proxies: proxies,
-    caveat: 'Market-health read only — not scored, not backtested, not advice. PSEi is the live Philippine index (PHP, full history). Company rows are US-listed proxies (ADR/OTC, USD) that track their PSE-local shares only loosely and trade thinly; treat as indicative, not exact PSE prices. There is no free per-stock PSE feed.'
+    board: board,
+    boardFailed: failed,
+    boardList: ph.board.source,
+    breadth: breadth,
+    caveat: 'A market-health read, not advice. Stock prices are end-of-day from PSE Edge, the exchange’s own site, checked after the 15:30 close. ' +
+      'PSEi averages and returns come from Daybook’s own record of daily closes, so they appear once enough days are stored.'
   };
 }
 
@@ -187,4 +142,9 @@ async function writePhSnapshot(db, coll, phDoc) {
   return true;
 }
 
-export { buildPhSnapshot, fetchYahooChart, writePhSnapshot };
+async function loadPhSnapshot(db, coll) {
+  var snap = await db.collection(coll).doc('radar-ph').get();
+  return snap.exists ? (snap.data() || null) : null;
+}
+
+export { buildPhSnapshot, fetchYahooChart, writePhSnapshot, loadPhSnapshot };

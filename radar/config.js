@@ -210,19 +210,48 @@ var JOURNAL = {
   scoringModelMeasured: MODEL.label     // label: which scoring model the journal measured
 };
 
-// PH market snapshot (NOT scored — there is no free historical per-stock PSE
-// feed). The PSEi index has clean Yahoo history (PHP); company rows are
-// US-listed proxies (ADR/OTC, USD) that only track the local shares loosely.
-// Snapshot only, heavily caveated. See buildPhSnapshot() in refresh-radar.js.
+// PH market snapshot (NOT scored). The PSEi level comes from Yahoo; the stock
+// rows come from PSE Edge in pesos (pse-edge.js). See radar/ph-snapshot.js.
+// `board` is the 30 PSEi members from PSE circular CN-2026-0035 (27 Jul 2026,
+// effective 3 Aug 2026). The PSE reviews the index twice a year; the next
+// changes are expected in Feb 2027, so update this list from that circular.
 var PH = {
   index: { symbol: 'PSEI.PS', name: 'PSEi' },
-  proxies: [
-    { symbol: 'PHI',   name: 'PLDT',           listing: 'NYSE ADR' },
-    { symbol: 'SVTMF', name: 'SM Investments', listing: 'US OTC' },
-    { symbol: 'BDOUY', name: 'BDO Unibank',    listing: 'US OTC ADR' },
-    { symbol: 'JBFCY', name: 'Jollibee',       listing: 'US OTC ADR' },
-    { symbol: 'AYYLF', name: 'Ayala Corp',     listing: 'US OTC' }
-  ]
+  board: {
+    source: 'PSEi members per PSE circular CN-2026-0035, effective 3 Aug 2026',
+    stocks: [
+      { symbol: 'AC',    name: 'Ayala Corporation' },
+      { symbol: 'ACEN',  name: 'ACEN' },
+      { symbol: 'AEV',   name: 'Aboitiz Equity Ventures' },
+      { symbol: 'ALI',   name: 'Ayala Land' },
+      { symbol: 'AREIT', name: 'AREIT' },
+      { symbol: 'BDO',   name: 'BDO Unibank' },
+      { symbol: 'BPI',   name: 'Bank of the Philippine Islands' },
+      { symbol: 'CBC',   name: 'China Banking Corporation' },
+      { symbol: 'CNPF',  name: 'Century Pacific Food' },
+      { symbol: 'DMC',   name: 'DMCI Holdings' },
+      { symbol: 'EMI',   name: 'Emperador' },
+      { symbol: 'GLO',   name: 'Globe Telecom' },
+      { symbol: 'GTCAP', name: 'GT Capital Holdings' },
+      { symbol: 'ICT',   name: 'International Container Terminal Services' },
+      { symbol: 'JFC',   name: 'Jollibee Foods' },
+      { symbol: 'JGS',   name: 'JG Summit Holdings' },
+      { symbol: 'LTG',   name: 'LT Group' },
+      { symbol: 'MBT',   name: 'Metropolitan Bank & Trust' },
+      { symbol: 'MER',   name: 'Manila Electric (Meralco)' },
+      { symbol: 'MONDE', name: 'Monde Nissin' },
+      { symbol: 'MYNLD', name: 'Maynilad Water Services' },
+      { symbol: 'PGOLD', name: 'Puregold Price Club' },
+      { symbol: 'PLUS',  name: 'DigiPlus Interactive' },
+      { symbol: 'RCR',   name: 'RL Commercial REIT' },
+      { symbol: 'SCC',   name: 'Semirara Mining and Power' },
+      { symbol: 'SM',    name: 'SM Investments' },
+      { symbol: 'SMC',   name: 'San Miguel Corporation' },
+      { symbol: 'SMPH',  name: 'SM Prime Holdings' },
+      { symbol: 'TEL',   name: 'PLDT' },
+      { symbol: 'URC',   name: 'Universal Robina' }
+    ]
+  }
 };
 
 var CONFIG = {

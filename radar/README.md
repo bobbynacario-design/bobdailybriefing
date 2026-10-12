@@ -518,15 +518,22 @@ and rely on the catch-up.
 **Data providers:** Alpaca (equities/ETFs, free IEX daily bars), CoinGecko (free,
 no key, crypto), Claude (catalysts and focus reads, via `@anthropic-ai/sdk`).
 
-**PH market-health (🇵🇭 PSE tab, `radar-ph`):** NOT scored — there is no free
-per-stock PSE feed. `radar/ph-snapshot.js` builds a PSEi health read from free
-Yahoo data (1y bars → SMA20/50/200, 1w/1m/3m/YTD returns, 52-wk range, RSI, vol,
-sparkline) plus USD/PHP + AUD/PHP FX and US-listed ADR proxies. The 06:00 radar
-run builds it pre-open (prior close); a separate Task Scheduler job
-`BobDailyBriefing-PhRefresh` runs `node refresh-ph.js` at **16:30 PHT** (after the
-15:30 close) so the tab shows today's close — standalone, no US re-fetch, no LLM
-cost. A real *scored* per-stock PH radar would need a paid feed (e.g. EOD
-Historical Data) reusing `scoring.js`/`journal.js`.
+**PH market-health (🇵🇭 PSE tab, `radar-ph`):** NOT scored. `refresh-ph.js` is
+the only writer: GitHub Actions feed `pse`, **16:30 PHT weekdays** (after the 15:30
+close), no model calls. `--dry-run` builds without writing.
+- **PSEi stocks** (`config.js` `ph.board`, the 30 members per PSE circular
+  CN-2026-0035): daily bars in pesos from **PSE Edge** (`pse-edge.js`), the
+  exchange's own site, free and keyless. Company/security ids are cached on the
+  doc. Per stock: close, day/1W/1M/3M/YTD, 52-week range (364-day window, matches
+  PSE Edge's own figures), 50/200-day averages, RSI, 20-day traded value.
+  `buildBreadth` adds how many are above their 200-day (the mood), advancers and
+  decliners, and which are near a 52-week low or high. Pure maths in `ph-metrics.js`.
+- **PSEi level** from Yahoo `PSEI.PS`, which has returned only its latest bar
+  since ~17 Sep 2026. The doc keeps its own daily closes (`indexHistory`), so the
+  index averages and returns fill in as days accumulate (seeded 13 Oct from the
+  laptop task's log). Returns are date-based so a missed day can't stretch "1M".
+- USD/PHP + AUD/PHP from Yahoo.
+- Update the stock list after each index review (Feb and Aug circulars).
 
 ---
 

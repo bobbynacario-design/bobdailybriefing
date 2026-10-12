@@ -33,7 +33,6 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
-import { buildPhSnapshot, writePhSnapshot } from './ph-snapshot.js';
 import { tagCatalysts, focusPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
 import { runForecastPanel } from './forecast.js';
 import { stageForecastJournal, JOURNAL_DOC } from './forecast-journal.js';
@@ -268,10 +267,6 @@ async function fetchAll() {
   Object.keys(crypto).forEach(function (s) { barsByAsset[s] = crypto[s]; });
   return barsByAsset;
 }
-
-// ── PH market snapshot (NOT scored — no free historical per-stock PSE feed) ──
-// Moved to radar/ph-snapshot.js so the after-close run (radar/refresh-ph.js) can
-// reuse it without re-running the whole US radar. buildPhSnapshot is imported.
 
 // ── Firestore (Admin SDK) ──
 
@@ -631,25 +626,8 @@ async function main() {
   } catch (e) {
     console.log('decision drift skipped: ' + (e.message || e));
   }
-
-  // PH snapshot (non-fatal — never blocks the radar write).
-  STAGE.set('ph');
-  try {
-    var ph = await buildPhSnapshot(CONFIG);
-    var phDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: ph.index.asOf }, ph);
-    var wrote = await writePhSnapshot(db, COLL, phDoc);
-    if (wrote) console.log('Wrote radar-ph snapshot (PSEi ' + ph.index.close + ' ' + ph.index.currency +
-      ', ' + ph.proxies.length + ' proxies).');
-    await recordRunHealth(db, 'ph', {
-      status: wrote ? 'ok' : 'skipped', asOf: ph.index.asOf,
-      message: wrote ? '' : 'stored snapshot is newer'
-    });
-  } catch (e) {
-    console.log('PH snapshot skipped: ' + (e.message || e));
-    await recordRunHealth(db, 'ph', {
-      status: 'failed', stage: 'build-snapshot', message: e.message || String(e)
-    });
-  }
+  // The PSE snapshot (radar-ph) is no longer built here: radar/refresh-ph.js
+  // writes it after the PSE close (GitHub feed "pse", 16:30 PHT weekdays).
 }
 
 main().then(function () {
