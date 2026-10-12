@@ -2212,6 +2212,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .miro-signal-name{font-size:13px;font-weight:700;color:var(--txt);line-height:1.4}
 .miro-signal-why{font-size:10.5px;color:var(--txt3);line-height:1.45;margin-top:.2rem}
 .miro-signal-read{font-family:var(--mono);font-size:9px;color:var(--blue);line-height:1.4;margin-top:.3rem;text-transform:uppercase;letter-spacing:.04em}
+.miro-price-src{white-space:normal;line-height:1.5;margin-top:.3rem;background:none;border:0;padding:0}
 .miro-prob{font-family:var(--mono);font-size:19px;color:var(--txt);text-align:right;font-variant-numeric:tabular-nums}
 .miro-delta{font-family:var(--mono);font-size:10px;text-align:right;white-space:nowrap}
 .miro-delta.up{color:var(--green)}.miro-delta.down{color:var(--red)}.miro-delta.flat{color:var(--txt3)}
@@ -10045,10 +10046,24 @@ function renderPh() {
 // probability only; once the scenario panel (Lane 2) populates haircutProb/edge/
 // gate, those fields render automatically (GO/NO-GO). Framing only — never a bet.
 function miroPct(p) { return (p == null) ? '—' : (p * 100).toFixed(1) + '%'; }
+// Local time, not the raw UTC ISO (the 06:15 PHT run reads as the previous day in UTC).
+function miroCheckedAt(iso) {
+  if (!iso) return 'time unavailable';
+  var at = new Date(iso);
+  return isNaN(at) ? String(iso) : at.toLocaleString('en-AU', {day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'});
+}
+// Polymarket's site can be blocked on Bob's connection while its data feed (which
+// Daybook reads) still answers, so the link carries a caveat and always sits next
+// to the time Daybook last checked the price.
 function miroPriceLink(m) {
   var slug = String(m && m.slug || '');
   if (!/^[a-z0-9][a-z0-9-]*$/i.test(slug)) return '';
-  return '<a href="https://polymarket.com/market/' + encodeURIComponent(slug) + '" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--gold)">View on Polymarket ↗</a>';
+  return ' · <a href="https://polymarket.com/market/' + encodeURIComponent(slug) + '" target="_blank" rel="noopener noreferrer" ' +
+    'title="Polymarket may block access from your connection. Daybook reads its prices from Polymarket\'s data feed, checked at the time shown." ' +
+    'style="color:var(--gold)">Polymarket ↗</a> — access may be restricted';
+}
+function miroPriceSourceHtml(m) {
+  return 'Price checked ' + esc(miroCheckedAt(m && m.priceCheckedAt)) + miroPriceLink(m);
 }
 function miroNum(n) {
   if (n == null) return '—';
@@ -10098,7 +10113,7 @@ function miroCard(m) {
     'mkt ' + miroPct(imp) + ' YES</div>';
   html += '</div>';
   html += '<div class="miro-signal-read">' + esc(m.probabilityRead || miroProbabilityRead(imp)) + '</div>';
-  html += '<div class="src">Price checked ' + esc(m.priceCheckedAt || 'time unavailable') + ' · ' + miroPriceLink(m) + '</div>';
+  html += '<div class="src miro-price-src">' + miroPriceSourceHtml(m) + '</div>';
   if (noQuotes && !m.closed) html += '<div class="src">Price comparison only — quotes unavailable</div>';
   html += miroMoveExplanationHtml(m);
   // panel read (Lane 2): only shown when present. Framed as a research estimate.
@@ -10311,19 +10326,23 @@ function miroSignalHtml(market) {
     '<div class="miro-signal-name">' + esc(market.label || market.slug) + '</div>' +
     '<div class="miro-signal-why">' + esc(market.why || market.question || '') + '</div>' +
     '<div class="miro-signal-read">' + esc(market.probabilityRead || miroProbabilityRead(market.impliedYes)) + '</div>' +
-    '<div class="src">Price checked ' + esc(market.priceCheckedAt || 'time unavailable') +
+    '<div class="src miro-price-src">' + miroPriceSourceHtml(market) +
     (!market.closed && (market.noBook || market.yesBid == null || market.yesAsk == null) ? ' · Price comparison only — quotes unavailable' : '') + '</div></div>' +
-    '<div class="miro-prob">' + miroPct(market.impliedYes) + '<br>' + miroPriceLink(market) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + miroMoveExplanationHtml(market) + '</div>';
+    '<div class="miro-prob">' + miroPct(market.impliedYes) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + miroMoveExplanationHtml(market) + '</div>';
 }
 function miroChangesHtml(d, followed) {
   var items = ((d.changes && d.changes.items) || []).filter(function (item) {
     return followed.indexOf(item.theme || 'Other') >= 0;
   }).slice(0, 6);
   if (!items.length) return '<div class="miro-empty">No material probability move since the previous refresh. New signals need one more scheduled run to establish a baseline.</div>';
+  var checked = {};
+  (d.markets || []).forEach(function (market) { if (market && market.slug) checked[market.slug] = market.priceCheckedAt; });
   return '<div class="miro-change-list">' + items.map(function (item) {
     return '<div class="miro-change"><div class="miro-change-theme">' + esc(item.theme || 'Signal') + '</div>' +
       '<div class="miro-change-name">' + esc(item.label || item.slug) + '</div>' + miroDeltaHtml(item.change, false) +
-      '<div class="miro-signal-read" style="grid-column:1/-1">YES ' + miroPct(item.from) + ' → ' + miroPct(item.to) + ' · ' + miroPriceLink(item) + '</div>' + miroMoveExplanationHtml(item) + '</div>';
+      '<div class="miro-signal-read" style="grid-column:1/-1">YES ' + miroPct(item.from) + ' → ' + miroPct(item.to) + '</div>' +
+      '<div class="src miro-price-src" style="grid-column:1/-1">' + miroPriceSourceHtml({slug: item.slug, priceCheckedAt: checked[item.slug]}) + '</div>' +
+      miroMoveExplanationHtml(item) + '</div>';
   }).join('') + '</div>';
 }
 function miroHealthHtml(j, d) {

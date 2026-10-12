@@ -121,10 +121,10 @@ test('Markets setting writes merge only their own switch and return both current
   assert.equal(writes.every(w=>w.options.merge),true);
 });
 test('Markets shows sourced drivers, direction, reversal and explicit uncertainty with escaped content',()=>{
-  const {context}=environment(['miroMoveExplanationHtml','miroChangesHtml','miroDeltaHtml','miroPct','miroMoveRunHtml','miroPriceLink'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),URL});
+  const {context}=environment(['miroMoveExplanationHtml','miroChangesHtml','miroDeltaHtml','miroPct','miroMoveRunHtml','miroPriceLink','miroPriceSourceHtml','miroCheckedAt'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),URL});
   const explanation={status:'plausible',driver:'Inflation <cooled>',mechanism:'This reduces the chance of a hike.',wouldReverse:'A rebound could reverse the move.',eventDate:'2026-10-08',sources:[{url:'https://central-bank.example/release',title:'Official release'}]};
-  const out=context.miroChangesHtml({changes:{items:[{slug:'rates',label:'No rate hikes',theme:'Macro',from:.6,to:.7,change:.1,moveExplanation:explanation}]}},['Macro']);
-  assert.match(out,/60\.0% → 70\.0%/);assert.match(out,/Possible driver · inference/);assert.match(out,/Inflation &lt;cooled>/);
+  const out=context.miroChangesHtml({markets:[{slug:'rates',priceCheckedAt:'2026-10-12T06:15:00Z'}],changes:{items:[{slug:'rates',label:'No rate hikes',theme:'Macro',from:.6,to:.7,change:.1,moveExplanation:explanation}]}},['Macro']);
+  assert.match(out,/60\.0% → 70\.0%/);assert.match(out,/Price checked 12 Oct, \d{1,2}:15 [ap]m · <a href="https:\/\/polymarket\.com\/market\/rates"[^>]*>Polymarket ↗<\/a> — access may be restricted/);assert.match(out,/Possible driver · inference/);assert.match(out,/Inflation &lt;cooled>/);
   assert.match(out,/What could reverse it/);assert.match(out,/central-bank\.example/);
   assert.doesNotMatch(out,/<cooled>/);
   assert.match(context.miroMoveExplanationHtml({moveExplanation:{status:'unknown'}}),/No supported driver/);
@@ -159,11 +159,12 @@ test('Markets accuracy stays cautious below 30 resolved forecasts',()=>{
 });
 
 test('Markets never presents a missing-quote legacy GO as a research flag',()=>{
-  const {context}=environment(['miroCard','miroVerdict','miroPct','miroNum','miroPriceLink'],{esc:String,miroProbabilityRead:()=>'',miroMoveExplanationHtml:()=>'',miroPanelReadHtml:()=>''});
+  const {context}=environment(['miroCard','miroVerdict','miroPct','miroNum','miroPriceLink','miroPriceSourceHtml','miroCheckedAt'],{esc:String,miroProbabilityRead:()=>'',miroMoveExplanationHtml:()=>'',miroPanelReadHtml:()=>''});
   const m={slug:'rates',label:'Rates',gate:'GO',haircutProb:.7,panelProb:.8,impliedYes:.2,noBook:true,edge:.25,priceCheckedAt:'2026-10-12T06:15:00Z'};
   const out=context.miroCard(m);
   assert.doesNotMatch(out,/RESEARCH FLAG|est\. edge after costs/);
-  assert.match(out,/Price comparison only — quotes unavailable/);assert.match(out,/Price checked 2026-10-12T06:15:00Z/);
+  assert.match(out,/Price comparison only — quotes unavailable/);assert.match(out,/Price checked 12 Oct, \d{1,2}:15 [ap]m · <a [^>]*>Polymarket ↗<\/a> — access may be restricted/);
+  assert.match(context.miroCard({...m,slug:'bad slug',priceCheckedAt:''}),/Price checked time unavailable<\/div>/);
   assert.match(out,/price comparison after assumed costs/);
   assert.equal(context.miroVerdict({...m,noBook:false,yesBid:.19,yesAsk:.21}).label,'RESEARCH FLAG');
 });
