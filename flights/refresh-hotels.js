@@ -5,6 +5,7 @@ import {initializeApp,cert,applicationDefault} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {USER_AGENT} from './config.js';
 import {scoutHotels} from './hotels.js';
+import {priceTrips,caller} from './hotel-trips.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 
 // Runs after the flight scout: prices hotels for the dates of each city's
@@ -33,12 +34,39 @@ async function main() {
   console.log(JSON.stringify({bytes:Buffer.byteLength(JSON.stringify(doc)),summary:doc.summary}));
   for(const c of doc.cities.filter(c=>c.stays.length)) for(const s of c.stays)
     console.log(c.city+' '+s.checkIn+'→'+s.checkOut+' ('+s.fare.origin+'): '+s.quotes.map(q=>{const h=c.hotels.find(h=>h.key===q.key);return h.name.slice(0,28)+' '+(q.rates[0] ? q.rates[0].site+' '+q.rates[0].rate : q.checked ? 'no rates' : 'unchecked');}).join(' | '));
+  if(!dryRun) {
+    // A run that read no hotel list at all keeps the previous document.
+    if(!doc.summary.cities || doc.summary.calls && doc.summary.failedCalls===doc.summary.calls) throw Error('Hotel rates could not be read; previous hotel scout preserved.');
+    await db.collection('briefings-bob').doc('hotels-latest').set(doc);
+  }
+  // The owner's own trips, saved by the Flights page. A failure here never
+  // undoes the shared document above.
+  let trips='no trip requests';
+  try { trips=await priceOwnerTrips(doc); }
+  catch(error) { trips='trip pricing failed: '+error.message;console.error(trips); }
   if(dryRun) return;
-  // A run that read no hotel list at all keeps the previous document.
-  if(!doc.summary.cities || doc.summary.calls && doc.summary.failedCalls===doc.summary.calls) throw Error('Hotel rates could not be read; previous hotel scout preserved.');
-  await db.collection('briefings-bob').doc('hotels-latest').set(doc);
   await recordRunHealth(db,'hotels',{status:'ok',asOf:today,durationMs:Date.now()-started,
-    message:doc.summary.pricedStays+'/'+doc.summary.stays+' stays priced; '+doc.summary.calls+' calls ('+doc.summary.failedCalls+' failed); no model calls.'});
+    message:doc.summary.pricedStays+'/'+doc.summary.stays+' stays priced; '+doc.summary.calls+' calls ('+doc.summary.failedCalls+' failed); '+trips+'; no model calls.'});
+}
+// --trips-file=<json> stands in for the saved requests in a dry run:
+// {"uid":"dry-run","trips":[{id,kind,label,city,airports,checkIn,checkOut,venue}]}.
+async function priceOwnerTrips(doc) {
+  const file=(process.argv.find(a=>a.startsWith('--trips-file='))||'').slice(13);
+  if(file && !dryRun) throw Error('--trips-file is for dry runs.');
+  const requests=file ? [JSON.parse(readFileSync(file,'utf8'))] :
+    (await db.collection('briefings-bob').where('kind','==','hotel-trips').get()).docs.filter(d=>d.data().uid && d.id==='hotel-trips-'+d.data().uid).map(d=>d.data());
+  if(!requests.length) return 'no trip requests';
+  const {call,stats}=caller(fetchJson), lines=[];
+  for(const req of requests) {
+    const ref=db.collection('briefings-bob').doc('hotel-stays-'+req.uid), prior=file ? null : await ref.get();
+    const stays=await priceTrips({uid:req.uid,trips:req.trips,prior:prior && prior.exists ? prior.data() : null,cities:doc.cities,now:Date.now(),today,call});
+    stays.requestedAt=req.updatedAt || null;
+    for(const t of stays.trips) console.log('trip '+t.kind+' '+t.city+' '+t.checkIn+'→'+t.checkOut+(t.venue ? ' venue '+t.venue+(t.venueFound ? ' (found)' : ' (not a listed hotel)') : '')+': '+
+      (t.quotes.map(q=>{const h=t.hotels.find(h=>h.key===q.key);return h.name.slice(0,28)+' '+(q.rates[0] ? q.rates[0].site+' '+q.rates[0].rate : q.checked ? 'no rates' : 'unchecked');}).join(' | ') || 'no hotels for this city'));
+    lines.push(stays.summary.priced+'/'+stays.summary.valid+' trips priced');
+    if(!dryRun) await ref.set(stays);
+  }
+  return lines.join(', ')+' ('+stats.calls+' trip calls, '+stats.failedCalls+' failed'+(stats.budgetHit ? ', budget reached' : '')+')';
 }
 main().catch(async error=>{
   console.error('Hotel scout failed:',error.message);

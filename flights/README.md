@@ -43,6 +43,17 @@ availability or a final total, and taxes may be extra. Destinations without a
 Tripadvisor key get search links only. `npm run hotels:dry-run -- --only=Tokyo,Taipei`
 reads the live flight scout and prints the stays without writing.
 
+Your own trips: the Flights page saves the owner's leave windows and poker
+trips to `hotel-trips-<uid>` (kind `hotel-trips`, uid-scoped). After the shared
+document, the same step prices each trip (at most 12 per account, 1 to 30
+nights, a city in `hotel-cities.js`) against its city's hotels and writes
+`hotel-stays-<uid>`, which only that account can read. A poker trip whose venue
+is a listed hotel (INSPIRE Entertainment Resort, Incheon) adds the venue first;
+the venue lookup is one 100-hotel list call, kept for 7 days. Trip quotes are
+reused for 20 hours; all accounts share a 150-call budget per run. Shared
+documents never hold anyone's dates. `--trips-file=<json>` replaces the saved
+requests in a dry run.
+
 The Flights section scouts airline pages and labelled sale announcements for international travel from
 Manila (MNL), Cebu (CEB) and Clark (CRK), with flexible dates and worldwide
 destinations. It uses no model calls, fare API subscription, affiliate feed or
