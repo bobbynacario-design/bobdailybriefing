@@ -177,7 +177,7 @@ jobs:
   flights:
     if: github.event.schedule == '0 0,12 * * *' || github.event.inputs.feed == 'flights'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     concurrency:
       group: refresh-flights
       cancel-in-progress: false
@@ -195,3 +195,6 @@ jobs:
       - run: npm --prefix flights run refresh
         env:
           FLIGHTS_FORCE: ${{ github.event.inputs.force == 'true' && '1' || '' }}
+      # Hotel rates for the dates of each city's cheapest fare. Quotes for
+      # unchanged dates are reused for 20 hours, so most runs make few calls.
+      - run: npm --prefix flights run hotels

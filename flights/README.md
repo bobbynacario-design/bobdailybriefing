@@ -26,6 +26,23 @@ with earlier days of the same route only: below every earlier day is a
 began on 10 Oct 2026, so the first comparison appears after the next day's
 scout.
 
+Hotels: after each scout, `npm run hotels` (refresh-hotels.js) writes
+`briefings-bob/hotels-latest` (no uid). For every city in `hotel-cities.js`
+it keeps three well-reviewed hotels (Tripadvisor rating 4+, 150+ reviews,
+best-value order) plus a cheaper budget pick, each with Tripadvisor's typical
+nightly range. Then it prices one room for two adults for the exact dates of
+the city's cheapest fresh economy return fare, and of the cheapest from a
+second departure airport when those dates differ. The source is Xotelo's free,
+keyless API, which relays the booking sites Tripadvisor lists (Booking.com,
+Agoda, Trip.com and others), per room per night in USD; the app converts to
+PHP with its dated PH market rate. Quotes for unchanged dates are reused for 20
+hours, and the hotel list for 7 days. A run makes at most 420 calls, three at a
+time. A failed call leaves that hotel unpriced, and a run that reads nothing
+keeps the previous document. These are site rates for those dates, not
+availability or a final total, and taxes may be extra. Destinations without a
+Tripadvisor key get search links only. `npm run hotels:dry-run -- --only=Tokyo,Taipei`
+reads the live flight scout and prints the stays without writing.
+
 The Flights section scouts airline pages and labelled sale announcements for international travel from
 Manila (MNL), Cebu (CEB) and Clark (CRK), with flexible dates and worldwide
 destinations. It uses no model calls, fare API subscription, affiliate feed or

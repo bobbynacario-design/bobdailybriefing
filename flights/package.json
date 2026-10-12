@@ -2,10 +2,12 @@
   "name": "bobdailybriefing-flights",
   "private": true,
   "type": "module",
-  "description": "Official airline promo and advertised fare scout for Philippine departures",
+  "description": "Official airline promo and advertised fare scout for Philippine departures, with hotel rates for the scouted dates",
   "scripts": {
     "refresh": "node refresh-flights.js",
     "dry-run": "node refresh-flights.js --dry-run",
+    "hotels": "node refresh-hotels.js",
+    "hotels:dry-run": "node refresh-hotels.js --dry-run",
     "test": "node --test *.test.js"
   },
   "engines": {
