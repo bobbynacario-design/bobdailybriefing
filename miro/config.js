@@ -98,7 +98,24 @@ var PANEL = {
   //   Ollama    MIRO_PANEL_PROVIDER=compatible MIRO_PANEL_MODEL=qwen2.5:14b
   //   DeepSeek  MIRO_PANEL_PROVIDER=compatible MIRO_PANEL_BASE_URL=https://api.deepseek.com/v1
   //             MIRO_PANEL_MODEL=deepseek-chat MIRO_PANEL_API_KEY=sk-...
-  provider: 'openai',
+  //   'anthropic'  — Claude through the Anthropic SDK (panel-claude.js).
+  //
+  // Claude since 2026-10-12. A dry-run comparison that day on the 7 live markets:
+  // Haiku 5.5 and Sonnet 5.5 both returned 35/35 reads; Haiku's two runs agreed
+  // within ~1 pt, at ~$0.003 a run vs ~$0.026 for Sonnet. Both read
+  // "Senate convicts Sara Duterte" at 3-10% against a 60% market: without search
+  // the personas do not know where fast-moving stories stand. Hence the weekly
+  // fact sheet below, which they all read.
+  provider: 'anthropic',
+  claudeModel: 'claude-haiku-5-5',
+  // One searched Sonnet call writes where each market's story stands now
+  // (factsheet.js, price-blind). Built for a market when its read is new, a
+  // week old, or the model changed; a news-triggered re-read reuses it.
+  factSheet: true,
+  factSheetModel: 'claude-sonnet-5-5',
+  factSheetMaxSearches: 10,
+  // A stored read is kept this many days unless sourced news arrives (panel-cache.js).
+  rereadDays: 7,
   baseUrl: '',                              // blank = the provider's default
   compatibleDefaultBaseUrl: 'http://localhost:11434/v1',   // Ollama on this box
   // web_search OFF (2026-07-28). The panel was paused on 2026-06-30 purely on

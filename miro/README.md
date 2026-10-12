@@ -146,6 +146,26 @@ model, which is what the provider adapter is for.
 | `compatible` | `/v1/chat/completions` | no |
 | `anthropic` | Anthropic SDK (`panel-claude.js`) | no |
 
+**Current setup (12 Oct 2026): `anthropic`, Haiku personas, weekly fact sheet.**
+A dry-run comparison that day: Haiku 5.5 and Sonnet 5.5 both returned 35/35
+reads (~$0.003 vs ~$0.026 a run), but without search both put "Senate convicts
+Sara Duterte" at 3-10% against a 60% market. So:
+- `panel-cache.js` keeps a market's read (stored on the market as `panelRead`)
+  for `rereadDays` (7). It re-reads when the market is new, the read is a week
+  old, the model changed, or the move explanations found dated, sourced news
+  after the read (the driver only; the mechanism is inferred from the price).
+- `factsheet.js` runs for new, weekly and model re-reads: one Sonnet call with
+  `web_search_20260209` (at most 10 searches) writes where each story stands,
+  price-blind. A summary that mentions prediction markets or odds is dropped,
+  and only URLs from that run's own search are kept. News-only re-reads reuse
+  the last fact sheet (up to 14 days old).
+- The run now explains moves BEFORE the panel, so news can trigger a re-read
+  the same day. Today's edge is always recomputed from today's price.
+- `meta.panelGrounding` is 'weekly-factsheet', `meta.panelPlan` says what was
+  read and kept, and the journal stamp gains `grounding`. Ledger lines:
+  `miro-panel|claude-haiku-5-5`, `miro-factsheet|claude-sonnet-5-5`,
+  `miro-factsheet-search|web-search`.
+
 `anthropic` runs each persona on Claude (default `claude-haiku-5-5`; set
 `MIRO_PANEL_MODEL` or `config.panel.claudeModel`) with `ANTHROPIC_API_KEY`, the
 key the radar and the move explanations already use. Reads come back through a

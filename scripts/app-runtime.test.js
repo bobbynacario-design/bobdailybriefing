@@ -132,6 +132,20 @@ test('Markets shows sourced drivers, direction, reversal and explicit uncertaint
   assert.equal(context.miroMoveExplanationHtml({moveExplanation:{...explanation,sources:[{url:'javascript:alert(1)'}]}}),'');
   assert.match(context.miroMoveRunHtml({moveRun:{reason:'paused'}}),/research is paused/);
 });
+test('Markets shows when each panel read was made, the fact sheet it read, and how the panel is grounded',()=>{
+  const {context}=environment(['miroPanelReadHtml','miroGroundingHtml','miroModelName'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),URL});
+  const facts={asOf:'2026-10-12',summary:'The trial <opened> on 6 October.',nextDates:'Vote 3 November',sources:[{url:'https://www.rappler.com/trial',title:'Trial'},{url:'javascript:alert(1)'}]};
+  const out=context.miroPanelReadHtml({haircutProb:.4,panelRead:{readAt:'2026-10-12T22:15:00Z',reason:'weekly',facts}});
+  assert.match(out,/Panel read 2026-10-12 · weekly refresh/);assert.match(out,/What the panel read · facts as of 2026-10-12/);
+  assert.match(out,/The trial &lt;opened> on 6 October\./);assert.match(out,/<b>Next:<\/b> Vote 3 November/);
+  assert.match(out,/href="https:\/\/www\.rappler\.com\/trial"[^>]*>rappler\.com ↗/);assert.doesNotMatch(out,/javascript:/);
+  assert.equal(context.miroPanelReadHtml({haircutProb:null,panelRead:{readAt:'2026-10-12T00:00:00Z'}}),'','no panel figure, no read line');
+  assert.doesNotMatch(context.miroPanelReadHtml({haircutProb:.4,panelRead:{readAt:'2026-10-12T00:00:00Z',reason:'new'}}),/details/);
+  const note=context.miroGroundingHtml({meta:{model:'claude-haiku-5-5',panelGrounding:'weekly-factsheet',llmPaused:false,panelPlan:{read:2,kept:5,rereadDays:7,factSheet:{status:'failed'}}}});
+  assert.match(note,/Panel: Claude Haiku 5\.5 personas reading a weekly fact sheet/);assert.match(note,/this refresh: 2 read, 5 kept/);assert.match(note,/fact sheet failed this time/);
+  assert.equal(context.miroGroundingHtml({meta:{model:'none',panelGrounding:'weekly-factsheet',llmPaused:true,panelWebSearch:false}}),'','paused: no note');
+  assert.match(context.miroGroundingHtml({meta:{panelWebSearch:false,llmPaused:false}}),/without web grounding/,'older docs keep the old note');
+});
 test('Daily Boost account writes merge against the transaction snapshot', async()=>{
   let written;
   const day='2026-09-25';

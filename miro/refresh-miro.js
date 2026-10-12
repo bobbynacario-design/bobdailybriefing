@@ -34,6 +34,8 @@ import { buildMiroJournal } from './journal-miro.js';
 import { enrichMarketChanges, marketResearchPaused } from './briefing.js';
 import { explainMarketMoves, ledgerUsage } from './catalysts.js';
 import { runClaudePanel, CLAUDE_PANEL_DEFAULT_MODEL } from './panel-claude.js';
+import { planReads } from './panel-cache.js';
+import { buildFactSheet, factEvidence } from './factsheet.js';
 import { extractUsage, addUsage, recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -519,22 +521,8 @@ async function main() {
   var controlPaused = control.llmPaused === true && !FORCE_PANEL;
   var researchPaused = marketResearchPaused(control);
 
-  // Lane 2: run the persona panel (independent of price), attach the reads, and
-  // let the PURE engine compute haircut prob, executable edge, and the gate.
-  var panel;
-  if (NO_OPENAI || NO_PANEL || controlPaused) {
-    console.log((NO_OPENAI ? '--no-openai' : NO_PANEL ? '--no-panel' : 'miro-control llmPaused=true') + ': skipping panel (implied-only).');
-    var emptyReads = {};
-    marketsData.forEach(function (m) { emptyReads[m.slug] = []; });
-    panel = { reads: emptyReads, usage: null, calls: 0 };
-  } else {
-    panel = await runPanel(marketsData, CONFIG);
-  }
-  var readsBySlug = panel.reads;
-  marketsData.forEach(function (m) { m.panelReads = readsBySlug[m.slug] || []; });
-  marketsData = aggregatePanel(marketsData, CONFIG);
-  // Drop the raw reads from the persisted doc (keep panelN as the count).
-  marketsData.forEach(function (m) { delete m.panelReads; });
+  // The day's price changes and their sourced explanations come first, so a
+  // market with new reporting can be re-read by the panel in the same run.
   var briefing = enrichMarketChanges(marketsData, previousDoc);
   marketsData = briefing.markets;
 
@@ -543,29 +531,94 @@ async function main() {
   var moveRun = await explainMarketMoves({markets:marketsData,since:briefing.changes.since,
     apiKey:process.env.ANTHROPIC_API_KEY || '',model:process.env.MIRO_CATALYST_MODEL || undefined,
     paused:NO_OPENAI || NO_EXPLAIN || researchPaused});
-  var moveBySlug = new Map(marketsData.map(function (m) { return [m.slug,m]; }));
-  briefing.changes.items.forEach(function (item) {
-    var explanation = moveBySlug.get(item.slug).moveExplanation;
-    if (explanation) item.moveExplanation = explanation;
-  });
   console.log('Markets explanations: ' + moveRun.status + ' / ' + (moveRun.stats ? moveRun.stats.explained + '/' + moveRun.stats.selected + ' sourced' : moveRun.reason) + (moveRun.error ? ' / ' + moveRun.error : ''));
   // Bill completed search/model turns even if a later write fails. Dry runs never alter the ledger.
   if (!DRY_RUN && moveRun.usage && moveRun.usage.calls) {
     await recordUsage(db,'miro-explanations',moveRun.model,ledgerUsage(moveRun.usage),dateKey,moveRun.usage.calls);
     if (moveRun.usage.searches) await recordUsage(db,'miro-search','web-search',null,dateKey,moveRun.usage.searches,{perDay:false});
   }
+
+  // Lane 2: the persona panel (price-blind), then the PURE engine computes the
+  // haircut prob, executable edge and gate against TODAY's price. A stored read
+  // is kept for a week (panel-cache.js); a market is re-read when it is new, a
+  // week old, the model changed, or it has new sourced news. New, weekly and
+  // model re-reads first get a fresh fact sheet (factsheet.js).
+  STAGE.set('panel');
+  var nowIso = new Date().toISOString();
+  var panel = { reads: {}, usage: null, calls: 0 };
+  var factRun = null, panelPlan = null;
+  var panelActive = !(NO_OPENAI || NO_PANEL || controlPaused) && (!PANEL_KEY_REQUIRED || !!PANEL_KEY);
+  if (!panelActive) {
+    console.log((NO_OPENAI ? '--no-openai' : NO_PANEL ? '--no-panel' : controlPaused ? 'miro-control llmPaused=true' : 'no panel key') + ': skipping panel (implied-only).');
+    marketsData.forEach(function (m) { m.panelReads = []; delete m.panelRead; });
+  } else {
+    var plan = planReads(marketsData, previousDoc, { model: PANEL_MODEL_LABEL, provider: PANEL_PROVIDER, now: nowIso, rereadDays: CONFIG.panel.rereadDays });
+    var toRead = marketsData.filter(function (m) { return plan.read.indexOf(m.slug) !== -1; });
+    var needFacts = toRead.filter(function (m) { return plan.reasons[m.slug] !== 'news'; });
+    console.log('Panel plan: ' + toRead.length + ' to read (' + toRead.map(function (m) { return m.slug.slice(0, 24) + ':' + plan.reasons[m.slug]; }).join(', ') + '), ' + Object.keys(plan.keep).length + ' kept.');
+    if (CONFIG.panel.factSheet && needFacts.length) {
+      factRun = await buildFactSheet(needFacts, { apiKey: process.env.ANTHROPIC_API_KEY || '', now: nowIso,
+        model: process.env.MIRO_FACTSHEET_MODEL || CONFIG.panel.factSheetModel, maxSearches: CONFIG.panel.factSheetMaxSearches });
+      console.log('Fact sheet: ' + factRun.status + ' · ' + Object.keys(factRun.facts).length + '/' + needFacts.length + ' markets · ' +
+        factRun.usage.searches + ' searches · in ' + factRun.usage.input + ' out ' + factRun.usage.output + (factRun.error ? ' · ' + factRun.error : factRun.reason ? ' · ' + factRun.reason : ''));
+      if (DRY_RUN) Object.keys(factRun.facts).forEach(function (s) { console.log('  facts ' + s.slice(0, 40) + ': ' + factRun.facts[s].summary.slice(0, 220)); });
+      if (!DRY_RUN && factRun.usage.calls) {
+        await recordUsage(db, 'miro-factsheet', factRun.model, ledgerUsage(factRun.usage), dateKey, factRun.usage.calls);
+        if (factRun.usage.searches) await recordUsage(db, 'miro-factsheet-search', 'web-search', null, dateKey, factRun.usage.searches, { perDay: false });
+      }
+    }
+    // A fresh fact sheet wins; otherwise the last one (dated, under a fortnight).
+    var priorRead = {};
+    ((previousDoc && previousDoc.markets) || []).forEach(function (m) { if (m && m.slug && m.panelRead) priorRead[m.slug] = m.panelRead; });
+    var factsBySlug = {}, evidence = {};
+    toRead.forEach(function (m) {
+      var old = priorRead[m.slug] && priorRead[m.slug].facts;
+      var fresh = factRun && factRun.facts[m.slug];
+      factsBySlug[m.slug] = fresh || (old && Date.parse(nowIso) - Date.parse(old.asOf + 'T00:00:00Z') <= 14 * 86400000 ? old : null);
+      evidence[m.slug] = [factEvidence(factsBySlug[m.slug])].filter(Boolean).concat(plan.evidence[m.slug] || []).slice(0, 4);
+    });
+    if (toRead.length) panel = await runPanel(toRead, CONFIG, { evidence: evidence });
+    if (panel.calls) console.log('Panel usage: ' + panel.calls + ' calls, input ' + panel.usage.inputTokens + ', output ' + panel.usage.outputTokens + (panel.missing ? ', missing reads ' + panel.missing.length : ''));
+    marketsData.forEach(function (m) {
+      var kept = plan.keep[m.slug];
+      if (kept) { m.panelReads = kept.reads; m.panelRead = kept; return; }
+      var reads = (panel.reads && panel.reads[m.slug]) || [];
+      m.panelReads = reads;
+      if (reads.length) {
+        m.panelRead = { reads: reads, readAt: nowIso, model: PANEL_MODEL_LABEL, provider: PANEL_PROVIDER, reason: plan.reasons[m.slug] || 'new',
+          evidence: plan.evidence[m.slug] || [], facts: factsBySlug[m.slug] || null };
+      } else delete m.panelRead;
+    });
+    panelPlan = { read: toRead.length, kept: Object.keys(plan.keep).length, reasons: plan.reasons, rereadDays: CONFIG.panel.rereadDays || 7,
+      factSheet: factRun ? { status: factRun.status, model: factRun.model, markets: Object.keys(factRun.facts).length, requested: needFacts.length,
+        searches: factRun.usage.searches, error: factRun.error || '' } : null };
+  }
+  marketsData = aggregatePanel(marketsData, CONFIG);
+  // The doc keeps each market's stored read (panelRead) for reuse; the working list goes.
+  marketsData.forEach(function (m) { delete m.panelReads; });
+  var moveBySlug = new Map(marketsData.map(function (m) { return [m.slug,m]; }));
+  briefing.changes.items.forEach(function (item) {
+    var explanation = moveBySlug.get(item.slug).moveExplanation;
+    if (explanation) item.moveExplanation = explanation;
+  });
   var meta = {
     scenarioVersion: SCENARIO_VERSION,
     journalVersion: JOURNAL_VERSION,
-    model: ((!PANEL_KEY_REQUIRED || PANEL_KEY) && !NO_OPENAI && !NO_PANEL && !controlPaused) ? PANEL_MODEL_LABEL : 'none',
+    model: panelActive ? PANEL_MODEL_LABEL : 'none',
     panelProvider: PANEL_PROVIDER,
     llmPaused: controlPaused,
     llmPausedSource: controlPaused ? 'briefings-bob/miro-control' : '',
     priceSource: 'polymarket-clob-book (mid); gamma outcomePrices fallback',
-    panelWebSearch: !!CONFIG.panel.webSearch,
-    priceBlindSourcePolicy: CONFIG.panel.webSearch
+    panelWebSearch: PANEL_PROVIDER === 'openai' && !!CONFIG.panel.webSearch,
+    // How the personas know current events: their own search, a shared weekly
+    // fact sheet, or neither (training knowledge only).
+    panelGrounding: PANEL_PROVIDER === 'openai' && CONFIG.panel.webSearch ? 'persona-search' : (CONFIG.panel.factSheet && IS_ANTHROPIC ? 'weekly-factsheet' : 'none'),
+    panelPlan: panelPlan,
+    priceBlindSourcePolicy: PANEL_PROVIDER === 'openai' && CONFIG.panel.webSearch
       ? 'panel price-blind; web_search instructed to exclude prediction-market/odds sources'
-      : 'panel price-blind; web_search OFF — personas run on training knowledge and base rates, so reads are weaker on fast-moving events',
+      : CONFIG.panel.factSheet && IS_ANTHROPIC
+        ? 'panel price-blind; personas do not search but read a weekly fact sheet (one searched call, prediction-market and odds sources excluded) plus sourced move news'
+        : 'panel price-blind; web_search OFF — personas run on training knowledge and base rates, so reads are weaker on fast-moving events',
     costAssumption: 'spread paid implicitly + slippage ' + CONFIG.fees.slippage,
     gates: CONFIG.edgeGate,
     warnings: [
@@ -671,7 +724,8 @@ async function main() {
     panel: Object.assign({}, CONFIG.panel, {
       model: PANEL_MODEL_LABEL,
       provider: PANEL_PROVIDER,
-      webSearch: PANEL_PROVIDER === 'openai' && !!CONFIG.panel.webSearch
+      webSearch: PANEL_PROVIDER === 'openai' && !!CONFIG.panel.webSearch,
+      grounding: meta.panelGrounding
     })
   });
   var journalBody = buildMiroJournal(priorJournal, todaySnapshots, todayPrices, resolutions, effectiveConfig);

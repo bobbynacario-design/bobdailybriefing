@@ -2222,6 +2222,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .miro-move-read b{color:var(--txt);font-size:11px}
 .miro-move-read .miro-move-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;color:var(--gold);margin-bottom:.3rem}
 .miro-move-read .miro-move-sources{font-size:10px;margin-top:.35rem;display:flex;gap:.55rem;flex-wrap:wrap}
+.miro-facts{margin-top:.3rem;font-size:12px;line-height:1.6;color:var(--txt2)}.miro-facts>summary{cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--gold)}
+.miro-facts p{margin:.3rem 0}.miro-facts .miro-move-sources{font-size:10px;display:flex;gap:.55rem;flex-wrap:wrap}
 .miro-health{border-left:3px solid var(--gold);background:var(--gold-dim);padding:.75rem .85rem;font-size:11px;color:var(--txt2);line-height:1.6}
 .miro-health strong{color:var(--txt)}
 .miro-empty{font-size:11px;color:var(--txt3);line-height:1.6;padding:.55rem 0}
@@ -4107,6 +4109,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li><b>What Changed</b> — isolates moves of at least 0.5 percentage points so unchanged markets do not demand attention.</li>
         <li><b>Followed themes</b> — choose which topics belong in the priority brief. The complete market data remains available below.</li>
         <li><b>Evidence Check</b> — states whether the optional forecasting panel has actually demonstrated an edge. "Unproven" means exactly that.</li>
+        <li><b>Forecasting panel</b> — five Claude Haiku personas, never shown the price, each give a probability; the haircut pulls their average toward the price by how much they disagree. They do not search. When a market is new or its read is a week old, one searched Sonnet call writes a short fact sheet of where the story stands (prediction-market and odds sources excluded), and the personas read that plus any sourced move news. A read is kept for a week unless new reporting arrives; each card says when it was read and opens the facts it used. Each prediction is stamped with the model and grounding that made it, and closed markets are scored against the price.</li>
       </ul>
       <p class="help-key">Best use: scan meaningful probability changes, ask what new information could explain them, then verify against primary reporting. The tab surfaces research prompts; it does not recommend bets or execute trades.</p>
     </div>
@@ -10100,7 +10103,7 @@ function miroCard(m) {
       (m.panelN != null ? ' · ' + m.panelN + ' reads' : '') +
       (m.panelDispersion != null ? ' · spread ±' + (m.panelDispersion * 100).toFixed(1) + ' pts' : '') +
       ' · <span style="color:' + edgeCol + '">est. edge after costs ' + edgeTxt + '</span>' + sideTxt +
-      '</div>';
+      '</div>' + miroPanelReadHtml(m);
     // Executable order book (Lane B): the prices edge is actually computed against.
     if (m.spread != null) {
       var dep = m.depthTop == null ? '—' : (m.depthTop >= 1000 ? Math.round(m.depthTop / 1000) + 'k' : Math.round(m.depthTop)) + ' sh';
@@ -10332,8 +10335,41 @@ function miroHealthHtml(j, d) {
 // fast-moving story is weaker than the same read a month ago. Cost is the reason
 // (search was ~98% of the input tokens), and that trade belongs on the tab
 // rather than buried in the stored doc's meta.
+// The panel's stored read for one market: when it was made and why, and the
+// fact sheet it read (miro/factsheet.js), with links from that search only.
+function miroModelName(id) {
+  var m = String(id || '').match(/^claude-(haiku|sonnet|opus)-(\d+)-(\d+)$/);
+  return m ? 'Claude ' + m[1].charAt(0).toUpperCase() + m[1].slice(1) + ' ' + m[2] + '.' + m[3] : String(id || '');
+}
+function miroPanelReadHtml(market) {
+  var r = market && market.panelRead;
+  if (!r || !r.readAt || market.haircutProb == null) return '';
+  var reasons = { 'new': 'first read', weekly: 'weekly refresh', news: 're-read on new reporting', model: 'model changed' };
+  var day = String(r.readAt).slice(0, 10), f = r.facts;
+  var html = '<div class="src" style="margin-top:.2rem">Panel read ' + esc(day) + (reasons[r.reason] ? ' · ' + esc(reasons[r.reason]) : '') + '</div>';
+  if (!f || !f.summary) return html;
+  var links = (f.sources || []).filter(function (s) { return /^https?:\/\//i.test(String(s && s.url || '')); }).slice(0, 3).map(function (s) {
+    var host; try { host = new URL(s.url).hostname.replace(/^www\./, ''); } catch (err) { return ''; }
+    return '<a href="' + esc(s.url) + '" title="' + esc(s.title || '') + '" target="_blank" rel="noopener noreferrer">' + esc(host) + ' ↗</a>';
+  }).join('');
+  if (!links) return html;
+  return html + '<details class="miro-facts"><summary>What the panel read · facts as of ' + esc(f.asOf || '') + '</summary>' +
+    '<p>' + esc(f.summary) + '</p>' + (f.nextDates ? '<p><b>Next:</b> ' + esc(f.nextDates) + '</p>' : '') +
+    '<div class="miro-move-sources">' + links + '</div></details>';
+}
+
 function miroGroundingHtml(d) {
   var m = d && d.meta;
+  if (m && !m.llmPaused && m.panelGrounding === 'weekly-factsheet' && m.model && m.model !== 'none') {
+    var p = m.panelPlan || {}, fs = p.factSheet;
+    return '<div class="miro-grounding"><b>Panel: ' + esc(miroModelName(m.model)) + ' personas reading a weekly fact sheet.</b> ' +
+      'The personas do not search. When a market is new or its read is a week old, one searched call writes where its story stands now, ' +
+      'with prediction-market and odds sources excluded; the personas read that and any sourced move news, never the price. ' +
+      'Reads are kept for ' + esc(p.rereadDays || 7) + ' days unless new reporting arrives' +
+      (p.read != null ? ' (this refresh: ' + esc(p.read) + ' read, ' + esc(p.kept || 0) + ' kept)' : '') + '.' +
+      (fs && fs.status !== 'ok' ? ' The fact sheet ' + (fs.status === 'failed' ? 'failed' : 'was skipped') + ' this time, so new reads used the last one, if any.' : '') +
+    '</div>';
+  }
   if (!m || m.panelWebSearch !== false || m.llmPaused) return '';
   return '<div class="miro-grounding">' +
     '<b>Panel is running without web grounding.</b> Personas answer from training knowledge and base rates, ' +

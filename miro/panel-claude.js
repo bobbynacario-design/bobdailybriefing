@@ -17,13 +17,13 @@ const SAVE_TOOL = {
   }}}}
 };
 
-// evidence: optional {slug: [{date, text, source}]}, dated news already found
-// by the move explanations. It never carries a market price, so the panel stays
-// price-blind.
+// evidence: optional {slug: [{kind, date, text, source}]}: the weekly fact sheet
+// (kind 'facts') and dated news the move explanations found. It never carries a
+// market price, so the panel stays price-blind.
 export function personaPrompt(persona, markets, evidence) {
   const list = markets.map(m => {
     const notes = (evidence && evidence[m.slug] || []).slice(0, 3)
-      .map(e => '\n    news ' + e.date + (e.source ? ' (' + e.source + ')' : '') + ': ' + e.text).join('');
+      .map(e => '\n    ' + (e.kind === 'facts' ? 'facts as of ' : 'news ') + e.date + (e.source ? ' (' + e.source + ')' : '') + ': ' + e.text).join('');
     return '- slug "' + m.slug + '": ' + m.question + (m.endDate ? ' (resolves ' + m.endDate + ')' : '') + notes;
   }).join('\n');
   return 'You are estimating the probability that each event below resolves YES. ' +

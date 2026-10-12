@@ -126,7 +126,9 @@ function buildMiroJournal(prior, todaySnapshots, todayPrices, resolutions, confi
       forecaster: {
         model: (config && config.panel && config.panel.model) || null,
         provider: (config && config.panel && config.panel.provider) || null,
-        webSearch: !!(config && config.panel && config.panel.webSearch)
+        webSearch: !!(config && config.panel && config.panel.webSearch),
+        // 'weekly-factsheet' | 'persona-search' | 'none'; absent before 2026-10-12.
+        grounding: (config && config.panel && config.panel.grounding) || null
       },
       priceTrail: [{ asOf: s.asOf, mid: round(first, 4) }],
       clvTowardPanel: 0
