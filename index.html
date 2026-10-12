@@ -2157,8 +2157,26 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .pse-idx-val{font-family:var(--mono);font-size:26px;color:var(--gold);font-weight:500;line-height:1}
 .pse-idx-meta{font-size:13px;color:var(--txt2);margin-top:.5rem}
 .pse-idx-sma{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;letter-spacing:.03em}
-.pse-name{flex:1;color:var(--txt2);font-size:12px;min-width:90px}
-.pse-px{font-family:var(--mono);font-size:11px;color:var(--txt);white-space:nowrap;min-width:96px;text-align:right}
+.pse-mood{border-left:3px solid var(--rim2);padding:.85rem 1rem;margin-bottom:.9rem}
+.pse-mood-k{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--txt3)}
+.pse-mood-top{display:flex;align-items:baseline;flex-wrap:wrap;gap:.35rem .8rem;margin:.25rem 0 .35rem}
+.pse-mood-label{font-family:var(--serif);font-size:26px;font-weight:600;line-height:1.1}
+.pse-mood-n{font-size:13px;color:var(--txt2)}.pse-mood-n b{color:var(--txt)}
+.pse-mood-line{font-size:13px;line-height:1.6;color:var(--txt2)}
+.pse-how{font-size:11.5px;line-height:1.55;color:var(--txt3);margin-top:.4rem}
+.pse-list{display:flex;flex-direction:column}
+.pse-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.15rem .8rem;padding:.55rem 0;border-bottom:1px solid var(--rim)}
+.pse-row:last-child{border-bottom:0}
+.pse-row-id{display:flex;align-items:baseline;gap:.5rem;min-width:0}
+.pse-sym{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--gold);text-decoration:none;flex-shrink:0}
+a.pse-sym:hover{text-decoration:underline}
+.pse-row-name{font-size:12.5px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pse-row-px{font-family:var(--mono);font-size:12.5px;color:var(--txt);text-align:right;white-space:nowrap}
+.pse-row-px span{font-size:11px;margin-left:.3rem}
+.pse-row-meta{grid-column:1/-1;font-family:var(--mono);font-size:10.5px;color:var(--txt3);line-height:1.6}
+.pse-mini{position:relative;display:inline-block;width:56px;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--red-dim),var(--bg4),var(--green-dim));vertical-align:middle}
+.pse-mini i{position:absolute;top:50%;width:7px;height:7px;border-radius:50%;background:var(--gold);transform:translate(-50%,-50%)}
+.pse-all{margin-top:1rem}.pse-all>summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);padding:.4rem 0}
 .ph-spark{display:block;width:100%;height:44px;margin:.6rem 0 .2rem}
 .ph-rets{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin:.5rem 0}
 .ph-rets>div{background:var(--bg3);border:1px solid var(--rim);border-radius:8px;padding:.4rem .5rem;text-align:center;font-family:var(--mono);font-size:13px}
@@ -2173,7 +2191,6 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .ph-chip b{color:var(--txt);font-weight:600}
 .radar-chips{margin-top:.5rem}
 .radar-chip-brk{color:var(--green);border-color:var(--green-dim)}
-.ph-prox-rets{font-family:var(--mono);font-size:10px;color:var(--txt3);white-space:nowrap;margin-left:auto}
 .ph-cat-h{font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:.05em;text-transform:uppercase;margin:.8rem 0 .45rem}
 .ph-news{background:var(--bg2);border:1px solid var(--rim);border-left:2px solid var(--rim2);border-radius:8px;padding:.6rem .8rem;margin-bottom:.5rem}
 .ph-news-h{font-size:14px;font-weight:600;color:var(--txt);line-height:1.5;display:flex;gap:.5rem;align-items:baseline}
@@ -9852,15 +9869,6 @@ function renderDecisions() {
   });
 }
 
-function phRow(p) {
-  return '<div class="jrow">' +
-    '<span class="jrow-sym">' + esc(p.symbol) + '</span>' +
-    '<span class="pse-name">' + esc(p.name) + '</span>' +
-    '<span class="help-pill" style="color:var(--txt3)">' + esc(p.listing) + '</span>' +
-    '<span class="pse-px">' + p.close + ' ' + esc(p.currency) + '</span>' +
-    '<span class="ph-prox-rets">D ' + phRet(p.dayChangePct) + ' · 1w ' + phRet(p.ret1w) + ' · 1m ' + phRet(p.ret1m) + '</span>' +
-  '</div>';
-}
 // Inline sparkline SVG from a closes[] array (uses theme colors).
 function phSparkline(closes) {
   if (!closes || closes.length < 2) return '';
@@ -9937,88 +9945,154 @@ function phDaysOld(asOf) {
   if (isNaN(a) || isNaN(t)) return null;
   return Math.round((t - a) / 86400000);
 }
+// ── PSE board (briefings-bob/radar-ph, written by radar/refresh-ph.js) ──
+// Prices are PSE Edge end-of-day in pesos; the PSEi read comes from Daybook's
+// own stored closes, so its averages appear only once there is history for them.
+function pesoPx(v) {
+  if (v == null) return '—';
+  return '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 });
+}
+function pesoShort(v) {
+  if (v == null) return '—';
+  if (v >= 1e9) return '₱' + (v / 1e9).toFixed(1) + 'B';
+  if (v >= 1e6) return '₱' + Math.round(v / 1e6) + 'M';
+  return '₱' + Math.round(v / 1e3) + 'k';
+}
+var PSE_MOOD = {
+  healthy: { label: 'Healthy', col: 'var(--green)' },
+  mixed: { label: 'Mixed', col: 'var(--amber)' },
+  weak: { label: 'Weak', col: 'var(--red)' }
+};
+function pseMoodHtml(b) {
+  if (!b || !b.count) return '';
+  var m = PSE_MOOD[b.mood];
+  var html = '<div class="card pse-mood" style="border-left-color:' + (m ? m.col : 'var(--rim2)') + '">' +
+    '<div class="pse-mood-k">PSEi stocks · market mood</div>' +
+    '<div class="pse-mood-top"><span class="pse-mood-label" style="color:' + (m ? m.col : 'var(--txt3)') + '">' + (m ? m.label : 'Not enough history') + '</span>' +
+    (b.with200 ? '<span class="pse-mood-n"><b>' + b.above200 + ' of ' + b.with200 + '</b> above their 200-day average</span>' : '') + '</div>' +
+    '<div class="pse-mood-line">Today ' + b.advancers + ' rose, ' + b.decliners + ' fell' + (b.unchanged ? ', ' + b.unchanged + ' unchanged' : '') +
+    '. The middle PSEi stock is ' + phRet(b.medianRet1m) + ' this month and ' + phRet(b.medianRetYtd) + ' this year.</div>' +
+    '<div class="pse-how">How to read it: a stock above its 200-day average (its average price over about the last ten months) is in a longer uptrend. ' +
+    'Healthy means 60% or more of the 30 are above it, mixed 40–59%, weak under 40%.</div>';
+  if (b.staleSymbols && b.staleSymbols.length) html += '<div class="pse-how">Older close for ' + esc(b.staleSymbols.join(', ')) + ' (no trade on ' + esc(b.asOf) + ').</div>';
+  return html + '</div>';
+}
+// What the PSEi's stored history supports, and nothing more: the old card read
+// missing averages as "below" and showed a false downtrend for four weeks.
+function pseIndexTrend(idx) {
+  if (idx.aboveSma200 != null) {
+    if (idx.aboveSma20 && idx.aboveSma50 && idx.aboveSma200) return { txt: 'Uptrend: above its 20, 50 and 200-day averages', col: 'var(--green)' };
+    if (idx.aboveSma20 === false && idx.aboveSma50 === false && idx.aboveSma200 === false) return { txt: 'Downtrend: below its 20, 50 and 200-day averages', col: 'var(--red)' };
+    return { txt: 'Mixed against its 20, 50 and 200-day averages', col: 'var(--txt3)' };
+  }
+  var known = [['20', idx.aboveSma20], ['50', idx.aboveSma50]].filter(function (k) { return k[1] != null; });
+  var wait = idx.historyDays != null ? Math.max(0, 200 - idx.historyDays) : null;
+  var later = '200-day average once ' + (wait != null ? wait + ' more trading days are stored' : 'enough days are stored');
+  if (!known.length) return { txt: 'Trend: not enough history yet. ' + later[0].toUpperCase() + later.slice(1), col: 'var(--txt3)' };
+  var above = known.filter(function (k) { return k[1]; }).map(function (k) { return k[0]; });
+  var below = known.filter(function (k) { return !k[1]; }).map(function (k) { return k[0]; });
+  var parts = [];
+  if (above.length) parts.push('above its ' + above.join(' and ') + '-day');
+  if (below.length) parts.push('below its ' + below.join(' and ') + '-day');
+  var txt = parts.join(', ') + ' average' + (known.length > 1 ? 's' : '');
+  return { txt: txt[0].toUpperCase() + txt.slice(1) + '. ' + later[0].toUpperCase() + later.slice(1), col: below.length && !above.length ? 'var(--red)' : above.length && !below.length ? 'var(--green)' : 'var(--txt3)' };
+}
+function pseIndexHtml(idx, fx) {
+  if (!idx) return '';
+  var t = pseIndexTrend(idx);
+  var html = '<div class="card radar-card pse-index"><div class="card-accent" style="background:' + t.col + '"></div>' +
+    '<div class="pse-idx-top"><span class="pse-idx-name">' + esc(idx.name || 'PSEi') + ' <span class="radar-theme">' + esc(idx.currency || 'PHP') + '</span></span>' +
+    '<span class="pse-idx-val">' + Number(idx.close).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span></div>' +
+    '<div class="pse-idx-meta">Day ' + phRet(idx.dayChangePct) + ' · <span style="color:' + t.col + '">' + esc(t.txt) + '</span></div>' +
+    phSparkline(idx.spark) +
+    '<div class="ph-rets"><div><span class="ph-k">1W</span>' + phRet(idx.ret1w) + '</div><div><span class="ph-k">1M</span>' + phRet(idx.ret1m) + '</div>' +
+    '<div><span class="ph-k">3M</span>' + phRet(idx.ret3m) + '</div><div><span class="ph-k">YTD</span>' + phRet(idx.retYtd) + '</div></div>';
+  if (idx.high52 != null && idx.low52 != null) {
+    var pos = Math.max(0, Math.min(100, (idx.close - idx.low52) / ((idx.high52 - idx.low52) || 1) * 100));
+    html += '<div class="ph-range"><div class="ph-range-bar"><div class="ph-range-dot" style="left:' + pos.toFixed(1) + '%"></div></div>' +
+      '<div class="ph-range-lab"><span>' + idx.low52 + '</span><span class="jmut">52-wk' + (idx.pctFromHigh != null ? ' · ' + idx.pctFromHigh + '% from high' : '') + '</span><span>' + idx.high52 + '</span></div></div>';
+  }
+  var rsiCol = idx.rsi14 == null ? 'var(--txt3)' : (idx.rsi14 >= 70 ? 'var(--red)' : (idx.rsi14 <= 30 ? 'var(--green)' : 'var(--txt2)'));
+  html += '<div class="ph-chips"><span class="ph-chip">RSI <b style="color:' + rsiCol + '">' + (idx.rsi14 == null ? '—' : idx.rsi14) + '</b></span>' +
+    (idx.historyDays != null ? '<span class="ph-chip">' + idx.historyDays + ' days of closes stored</span>' : '') + '</div>';
+  if (fx && (fx.usdphp || fx.audphp)) {
+    html += '<div class="ph-fx">';
+    if (fx.usdphp) {
+      var u = fx.usdphp;
+      html += '<span class="ph-chip">USD/PHP <b>' + u.level + '</b> ' + phRet(u.dayChangePct) +
+        '<span class="jmut">' + (u.ret1m == null ? '' : (u.ret1m < 0 ? ' · peso stronger 1m' : ' · peso weaker 1m')) + '</span></span>';
+    }
+    if (fx.audphp) html += '<span class="ph-chip">AUD/PHP <b>' + fx.audphp.level + '</b></span>';
+    html += '</div>';
+  }
+  return html + '</div>';
+}
+function pseStockRow(s) {
+  var pos = s.rangePos == null ? null : Math.max(0, Math.min(100, s.rangePos));
+  var trend = s.above200 == null ? '' : ' · <span style="white-space:nowrap;color:' + (s.above200 ? 'var(--green)' : 'var(--red)') + '">' + (s.above200 ? 'above' : 'below') + ' 200-day</span>';
+  var sym = /^\d+$/.test(String(s.cmpyId || ''))
+    ? '<a class="pse-sym" href="https://edge.pse.com.ph/companyPage/stockData.do?cmpy_id=' + s.cmpyId + '" target="_blank" rel="noopener noreferrer" title="Open on PSE Edge">' + esc(s.symbol) + '</a>'
+    : '<span class="pse-sym">' + esc(s.symbol) + '</span>';
+  return '<div class="pse-row">' +
+    '<div class="pse-row-id">' + sym + '<span class="pse-row-name">' + esc(s.name || '') + '</span></div>' +
+    '<div class="pse-row-px">' + pesoPx(s.close) + ' <span>' + phRet(s.dayChangePct) + '</span></div>' +
+    '<div class="pse-row-meta">1M ' + phRet(s.ret1m) + ' · YTD ' + phRet(s.retYtd) +
+      (pos == null ? '' : ' · <span class="pse-mini" title="Where the price sits in its 52-week range (' + esc(String(s.low52)) + ' to ' + esc(String(s.high52)) + ')"><i style="left:' + pos.toFixed(0) + '%"></i></span> 52-wk') +
+      trend + (s.avgValue20 != null ? ' · ' + pesoShort(s.avgValue20) + '/day traded' : '') + '</div>' +
+  '</div>';
+}
+function pseListHtml(title, note, rows) {
+  if (!rows.length) return '';
+  return '<div class="journal-section">' + esc(title) + '</div>' + (note ? '<div class="pse-how" style="margin:-.2rem 0 .5rem">' + esc(note) + '</div>' : '') +
+    '<div class="pse-list">' + rows.map(pseStockRow).join('') + '</div>';
+}
+function pseBoardHtml(d) {
+  var board = (d.board || []).filter(function (s) { return s && s.close != null; });
+  if (!board.length) return '<div class="rel-none-txt">No PSE stock prices in this snapshot.</div>';
+  var bySym = {};
+  board.forEach(function (s) { bySym[s.symbol] = s; });
+  var b = d.breadth || {};
+  var nearLow = (b.nearLow || []).map(function (k) { return bySym[k]; }).filter(Boolean)
+    .sort(function (x, y) { return (x.rangePos == null ? 999 : x.rangePos) - (y.rangePos == null ? 999 : y.rangePos); });
+  var nearHigh = (b.nearHigh || []).map(function (k) { return bySym[k]; }).filter(Boolean);
+  var today = board.filter(function (s) { return s.asOf === b.asOf && s.dayChangePct != null; });
+  var up = today.filter(function (s) { return s.dayChangePct > 0; }).sort(function (x, y) { return y.dayChangePct - x.dayChangePct; }).slice(0, 3);
+  var down = today.filter(function (s) { return s.dayChangePct < 0; }).sort(function (x, y) { return x.dayChangePct - y.dayChangePct; }).slice(0, 3);
+  return pseListHtml('Near a 52-week low', 'Within 5% of the lowest price of the past year. Cheaper than most of the year, often for a reason: a place to start reading, not a buy signal.', nearLow) +
+    pseListHtml('Today’s biggest moves', '', up.concat(down)) +
+    pseListHtml('Near a 52-week high', 'Within 3% of the year’s high: the stocks leading right now.', nearHigh) +
+    '<details class="pse-all"><summary>All ' + board.length + ' PSEi stocks, largest first</summary>' +
+      '<div class="pse-list">' + board.map(pseStockRow).join('') + '</div>' +
+      (d.boardList ? '<div class="pse-how">' + esc(d.boardList) + '.</div>' : '') + '</details>';
+}
 function renderPh() {
   var out = document.getElementById('pse-out');
   var sub = document.getElementById('pse-sub');
   if (!out) return;
-  if (!window.fbLoadPh) { out.innerHTML = '<div class="empty-state">PH SNAPSHOT UNAVAILABLE</div>'; return; }
-  out.innerHTML = '<div class="empty-state">LOADING PH SNAPSHOT…</div>';
+  if (!window.fbLoadPh) { out.innerHTML = '<div class="empty-state">PSE DATA UNAVAILABLE</div>'; return; }
+  out.innerHTML = '<div class="empty-state">LOADING PSE…</div>';
   window.fbLoadPh().then(function (d) {
-    if (!d || !d.index) {
-      if (sub) sub.textContent = 'No snapshot yet';
-      out.innerHTML = '<div class="empty-state">NO PH SNAPSHOT YET — RUN radar/refresh-ph.js</div>';
+    if (!d || (!d.index && !(d.board && d.board.length))) {
+      if (sub) sub.textContent = 'No PSE data yet';
+      out.innerHTML = '<div class="empty-state">NO PSE DATA YET — THE 16:30 WEEKDAY REFRESH WRITES IT</div>';
       return;
     }
-    var idx = d.index;
-    // Staleness: asOf is the last trading day. >=4 calendar days old clears a
-    // normal Fri->Mon weekend gap (3 days), so it flags a genuinely stuck feed
-    // (e.g. the PSEI.PS clobber) rather than a routine pre-open/weekend lag.
-    var ageDays = phDaysOld(idx.asOf);
+    var idx = d.index, asOf = d.asOf || (idx && idx.asOf);
+    // >=4 calendar days old clears a normal Fri->Mon weekend gap (3 days), so it
+    // flags a stuck feed rather than a routine weekend or pre-close lag.
+    var ageDays = phDaysOld(asOf);
     var stale = ageDays != null && ageDays >= 4;
     if (sub) {
-      sub.innerHTML = 'PSEi ' + esc(idx.close) + ' · as of ' + esc(idx.asOf) +
+      sub.innerHTML = (idx ? 'PSEi ' + esc(Number(idx.close).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + ' · ' : '') +
+        'close of ' + esc(asOf) + (d.board && d.board.length ? ' · ' + d.board.length + ' stocks from PSE Edge' : '') +
         (stale ? ' · <span class="pse-sub-stale">' + ageDays + ' days old</span>' : '');
     }
-
-    var a = idx.aboveSma20, b = idx.aboveSma50, c = idx.aboveSma200, trendTxt, trendCol;
-    if (a && b && c) { trendTxt = 'Uptrend — above 20/50/200-day'; trendCol = 'var(--green)'; }
-    else if (!a && !b && !c) { trendTxt = 'Downtrend — below 20/50/200-day'; trendCol = 'var(--red)'; }
-    else { trendTxt = 'Mixed vs moving averages'; trendCol = 'var(--txt3)'; }
-
     var html = '';
     if (stale) {
-      html += '<div class="pse-stale">' + uiIcon('alert') + ' Snapshot is ' + ageDays + ' days old (last close ' + esc(idx.asOf) +
-        '). The free PSEi feed is intermittently stale — re-run <b>radar/refresh-ph.js</b> to refresh.</div>';
+      html += '<div class="pse-stale">' + uiIcon('alert') + ' This is the close of ' + esc(asOf) + ', ' + ageDays +
+        ' days ago. The weekday 16:30 refresh has not updated it since.</div>';
     }
-    html += '<div class="pse-caveat">' + uiIcon('alert') + ' ' + esc(d.caveat) + '</div>';
-
-    html += '<div class="card radar-card pse-index">' +
-      '<div class="card-accent" style="background:' + trendCol + '"></div>' +
-      '<div class="pse-idx-top"><span class="pse-idx-name">' + esc(idx.name) +
-        ' <span class="radar-theme">' + esc(idx.currency) + '</span></span>' +
-        '<span class="pse-idx-val">' + idx.close + '</span></div>' +
-      '<div class="pse-idx-meta">Day ' + jSign(idx.dayChangePct) +
-        ' · <span style="color:' + trendCol + '">' + esc(trendTxt) + '</span></div>';
-
-    html += phSparkline(idx.spark);
-
-    html += '<div class="ph-rets">' +
-      '<div><span class="ph-k">1W</span>' + phRet(idx.ret1w) + '</div>' +
-      '<div><span class="ph-k">1M</span>' + phRet(idx.ret1m) + '</div>' +
-      '<div><span class="ph-k">3M</span>' + phRet(idx.ret3m) + '</div>' +
-      '<div><span class="ph-k">YTD</span>' + phRet(idx.retYtd) + '</div>' +
-    '</div>';
-
-    if (idx.high52 != null && idx.low52 != null) {
-      var pos = Math.max(0, Math.min(100, (idx.close - idx.low52) / ((idx.high52 - idx.low52) || 1) * 100));
-      html += '<div class="ph-range">' +
-        '<div class="ph-range-bar"><div class="ph-range-dot" style="left:' + pos.toFixed(1) + '%"></div></div>' +
-        '<div class="ph-range-lab"><span>' + idx.low52 + '</span>' +
-          '<span class="jmut">52-wk' + (idx.pctFromHigh != null ? ' · ' + idx.pctFromHigh + '% from high' : '') + '</span>' +
-          '<span>' + idx.high52 + '</span></div>' +
-      '</div>';
-    }
-
-    var rsiCol = idx.rsi14 == null ? 'var(--txt3)' : (idx.rsi14 >= 70 ? 'var(--red)' : (idx.rsi14 <= 30 ? 'var(--green)' : 'var(--txt2)'));
-    html += '<div class="ph-chips">' +
-      '<span class="ph-chip">RSI <b style="color:' + rsiCol + '">' + (idx.rsi14 == null ? '—' : idx.rsi14) + '</b></span>' +
-      '<span class="ph-chip">Volatility <b>' + (idx.vol20 == null ? '—' : idx.vol20 + '%') + '</b></span>' +
-      '<span class="ph-chip">SMA20 ' + idx.sma20 + '</span>' +
-      '<span class="ph-chip">SMA50 ' + idx.sma50 + '</span>' +
-      '<span class="ph-chip">SMA200 ' + (idx.sma200 == null ? '—' : idx.sma200) + '</span>' +
-    '</div>';
-    html += '</div>'; // /pse-index
-
-    if (d.fx && (d.fx.usdphp || d.fx.audphp)) {
-      var fxhtml = '';
-      if (d.fx.usdphp) {
-        var u = d.fx.usdphp;
-        var pesoDir = u.ret1m == null ? '' : (u.ret1m < 0 ? ' · peso stronger 1m' : ' · peso weaker 1m');
-        fxhtml += '<span class="ph-chip">USD/PHP <b>' + u.level + '</b> ' + phRet(u.dayChangePct) + '<span class="jmut">' + esc(pesoDir) + '</span></span>';
-      }
-      if (d.fx.audphp) fxhtml += '<span class="ph-chip">AUD/PHP <b>' + d.fx.audphp.level + '</b></span>';
-      html += '<div class="ph-fx">' + fxhtml + '</div>';
-    }
+    html += pseMoodHtml(d.breadth) + pseIndexHtml(idx, d.fx) + pseBoardHtml(d);
 
     // PH market briefer — pulled from today's loaded briefing, tagged macro/specific.
     var phb = phMarketStories(_currentData);
@@ -10029,13 +10103,7 @@ function renderPh() {
     } else {
       html += '<div class="rel-none-txt">No PH market items in today’s briefing — generate or open today’s briefing on the Today tab.</div>';
     }
-
-    html += '<div class="journal-section">Large-cap proxies — US-listed (USD), indicative only</div>';
-    if (d.proxies && d.proxies.length) {
-      html += '<div class="jlist">' + d.proxies.map(phRow).join('') + '</div>';
-    } else {
-      html += '<div class="rel-none-txt">No proxy data available.</div>';
-    }
+    if (d.caveat) html += '<div class="pse-caveat" style="margin-top:1.1rem">' + uiIcon('alert') + ' ' + esc(d.caveat) + '</div>';
     out.innerHTML = html;
   });
 }

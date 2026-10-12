@@ -1744,3 +1744,41 @@ test('Ask Daybook: figures not found in the cited records are shown under the an
   assert.ok(!context.askAnswerHtml({question:'q',answer:'Fine [S1].',sources:[{ref:'S1',source:'Poker',title:'x'}]}).includes('ask-unverified'),'nothing to list, no line');
   assert.equal(context.askUnverifiedText({unverified:['31 Oct']}),'Not in the records it cited: 31 Oct. Check before relying on it.');
 });
+// The PSE tab: PSEi stocks from PSE Edge, breadth mood, and an index card that
+// says only what its stored history supports.
+const pseEnv=()=>{
+  const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const {context}=environment(['jSign','phRet','phSparkline','pesoPx','pesoShort','pseMoodHtml','pseIndexTrend','pseIndexHtml','pseStockRow','pseListHtml','pseBoardHtml'],{esc});
+  const s=html.indexOf('var PSE_MOOD = {');vm.runInContext(html.slice(s,html.indexOf('\n};',s)+3),context);
+  return context;
+};
+test('PSE index card never calls missing averages a downtrend, and counts the days still needed',()=>{
+  const c=pseEnv();
+  const one=c.pseIndexTrend({historyDays:1,aboveSma20:null,aboveSma50:null,aboveSma200:null});
+  assert.match(one.txt,/^Trend: not enough history yet\. 200-day average once 199 more trading days are stored$/);
+  const sixty=c.pseIndexTrend({historyDays:60,aboveSma20:false,aboveSma50:false,aboveSma200:null});
+  assert.equal(sixty.txt,'Below its 20 and 50-day averages. 200-day average once 140 more trading days are stored');
+  assert.doesNotMatch(sixty.txt,/Downtrend/);
+  assert.match(c.pseIndexTrend({aboveSma20:false,aboveSma50:false,aboveSma200:false}).txt,/^Downtrend/);
+  const card=c.pseIndexHtml({name:'PSEi',currency:'PHP',close:5743.18,dayChangePct:0.74,historyDays:60,aboveSma20:false,aboveSma50:false,aboveSma200:null,ret1w:0,ret1m:-5.26,ret3m:-8.34,retYtd:null,high52:null,low52:null,rsi14:38.05,spark:[1,2]},{usdphp:{level:62.88,dayChangePct:0.1,ret1m:0.66}});
+  assert.match(card,/5,743\.18/);assert.match(card,/60 days of closes stored/);assert.match(card,/peso weaker 1m/);
+  assert.doesNotMatch(card,/52-wk/,'no 52-week range without a year of history');
+});
+test('PSE mood, lists and board: weak breadth, lows nearest first, links only for numeric ids, escaped',()=>{
+  const c=pseEnv();
+  const mood=c.pseMoodHtml({count:30,asOf:'2026-10-12',above200:4,with200:30,advancers:10,decliners:19,unchanged:1,medianRet1m:-5.35,medianRetYtd:-15.98,mood:'weak',staleSymbols:[]});
+  assert.match(mood,/>Weak</);assert.match(mood,/<b>4 of 30<\/b> above their 200-day average/);assert.match(mood,/Today 10 rose, 19 fell, 1 unchanged/);
+  const row=(symbol,o)=>Object.assign({symbol,name:symbol+' Corp',cmpyId:'260',asOf:'2026-10-12',close:100,dayChangePct:0,ret1m:-1,retYtd:-2,rangePos:50,low52:90,high52:120,above200:false,avgValue20:254085476},o);
+  const d={boardList:'PSEi members per PSE circular CN-2026-0035',breadth:{asOf:'2026-10-12',nearLow:['BDO','SMPH'],nearHigh:['AEV']},board:[
+    row('ICT',{dayChangePct:2.91,rangePos:71,above200:true}),row('BDO',{rangePos:6,dayChangePct:-0.88,close:112}),row('SMPH',{rangePos:2,dayChangePct:-1.5}),
+    row('AEV',{rangePos:98,dayChangePct:0.4}),row('X<Y',{cmpyId:'1" onclick="x',name:'<b>bad</b>',asOf:'2026-10-09',dayChangePct:9})]};
+  const out=c.pseBoardHtml(d);
+  assert.ok(out.indexOf('>SMPH<')<out.indexOf('>BDO<'),'nearest the low first');
+  assert.match(out,/Near a 52-week low/);assert.match(out,/Near a 52-week high/);assert.match(out,/All 5 PSEi stocks, largest first/);
+  assert.match(out,/href="https:\/\/edge\.pse\.com\.ph\/companyPage\/stockData\.do\?cmpy_id=260"/);
+  assert.match(out,/₱112\.00/);assert.match(out,/₱254M\/day traded/);assert.match(out,/below 200-day/);
+  assert.doesNotMatch(out,/onclick|<b>bad/,'a bad id gets no link and names are escaped');
+  const moves=out.slice(out.indexOf('Today’s biggest moves'),out.indexOf('Near a 52-week high'));
+  assert.doesNotMatch(moves,/X&lt;Y/,'an older close is not one of today’s moves');
+  assert.ok(moves.indexOf('>ICT<')<moves.indexOf('>SMPH<'),'risers before fallers');
+});
