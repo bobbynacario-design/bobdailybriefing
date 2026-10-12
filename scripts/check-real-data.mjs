@@ -178,6 +178,42 @@ if (fl && flights && Array.isArray(flights.offers)) {
     quoted.length + ' quoted' + (unknown.length ? '; not found: ' + unknown.join(', ') : ''));
 }
 
+// Hotels: the shared document holds only scouted fare dates; your trips and
+// their prices live in your own documents; the cheapest room the app shows
+// is recomputed from the raw site rates (whole-stay totals left out).
+const [hotelsShared, hotelTrips, hotelStays] = await Promise.all([get(COLL, 'hotels-latest'), get(COLL, 'hotel-trips-' + uid), get(COLL, 'hotel-stays-' + uid)]);
+if (hotelsShared && flights) {
+  const fareDates = new Set((flights.offers || []).map((o) => o.departureDate + '|' + o.returnDate));
+  const stray = (hotelsShared.cities || []).flatMap((c) => (c.stays || []).filter((s) => !fareDates.has(s.checkIn + '|' + s.checkOut)).map((s) => c.city + ' ' + s.checkIn));
+  check('Hotels: the shared document holds only scouted fare dates', !('uid' in hotelsShared) && !stray.length, stray.length ? 'not a fare: ' + stray.join(', ') : (hotelsShared.cities || []).length + ' cities');
+}
+if (hotelTrips) check('Hotels: your saved trips are scoped to you', hotelTrips.uid === uid && hotelTrips.kind === 'hotel-trips', (hotelTrips.trips || []).length + ' trips saved ' + hotelTrips.updatedAt);
+if (hotelStays) {
+  check('Hotels: your trip prices are scoped to you', hotelStays.uid === uid, 'priced ' + hotelStays.generatedAt);
+  const asked = new Set(((hotelTrips && hotelTrips.trips) || []).map((t) => t.id));
+  const extra = (hotelStays.trips || []).filter((t) => !asked.has(t.id)).map((t) => t.id);
+  if (extra.length) warn('Hotels: priced trips no longer on the page', extra.join(', ') + ' (replaced at the next scout)');
+  // The app shows no peso figure from a rate four or more days old.
+  const fresh = fx && /^\d{4}-\d{2}-\d{2}$/.test(fx.asOf || '') && (Date.parse(today) - Date.parse(fx.asOf)) / 86400000 < 4;
+  const rate = fresh ? Number(fx.fx && fx.fx.usdphp && fx.fx.usdphp.level) : 0;
+  (hotelStays.trips || []).filter((t) => t.pricedAt).forEach((t) => {
+    const nights = Math.round((Date.parse(t.checkOut) - Date.parse(t.checkIn)) / 86400000);
+    // By hand: each hotel's lowest site rate, ignoring figures over 2.5x its
+    // usual top rate, then the lowest of those, in pesos at the snapshot rate.
+    const lows = (t.quotes || []).map((q) => {
+      const h = (t.hotels || []).find((x) => x.key === q.key) || {};
+      const ok = (q.rates || []).map((r) => r.rate).filter((r) => r > 0 && !(h.typicalMax > 0 && r > h.typicalMax * 2.5));
+      return ok.length ? Math.min(...ok) : null;
+    }).filter((n) => n != null);
+    const mine = lows.length && rate > 0 ? Math.round(Math.min(...lows) * rate) : null;
+    const index = {currency: hotelStays.currency || 'USD', adults: hotelStays.adults || 2};
+    const q = Flights.stayQuotes({city: t.city, hotels: t.hotels, stays: [t]}, t.checkIn, t.checkOut, index, fx, now);
+    const app = q && q.cheapest ? q.cheapest.php : null;
+    check('Hotels: ' + t.kind + ' ' + t.city + ' ' + t.checkIn + ' — nights and cheapest room', nights === t.nights && mine === app,
+      nights + ' nights; by hand ' + (mine == null ? 'none' : 'PHP ' + mine) + ', app ' + (app == null ? 'none' : 'PHP ' + app));
+  });
+}
+
 // Ask answers from the last day: their figures against the records they cite.
 const answers = Object.values((askDoc && askDoc.items) || {}).filter((a) => a && Date.parse(a.generatedAt) > now - 86400000);
 const todayLine = new Intl.DateTimeFormat('en-AU', {timeZone: 'Asia/Manila', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'}).format(new Date()) + ' (' + today + ')';
