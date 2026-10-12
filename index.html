@@ -10045,6 +10045,11 @@ function renderPh() {
 // probability only; once the scenario panel (Lane 2) populates haircutProb/edge/
 // gate, those fields render automatically (GO/NO-GO). Framing only — never a bet.
 function miroPct(p) { return (p == null) ? '—' : (p * 100).toFixed(1) + '%'; }
+function miroPriceLink(m) {
+  var slug = String(m && m.slug || '');
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(slug)) return '';
+  return '<a href="https://polymarket.com/market/' + encodeURIComponent(slug) + '" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--gold)">View on Polymarket ↗</a>';
+}
 function miroNum(n) {
   if (n == null) return '—';
   if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
@@ -10093,7 +10098,7 @@ function miroCard(m) {
     'mkt ' + miroPct(imp) + ' YES</div>';
   html += '</div>';
   html += '<div class="miro-signal-read">' + esc(m.probabilityRead || miroProbabilityRead(imp)) + '</div>';
-  html += '<div class="src">Price checked ' + esc(m.priceCheckedAt || 'time unavailable') + '</div>';
+  html += '<div class="src">Price checked ' + esc(m.priceCheckedAt || 'time unavailable') + ' · ' + miroPriceLink(m) + '</div>';
   if (noQuotes && !m.closed) html += '<div class="src">Price comparison only — quotes unavailable</div>';
   html += miroMoveExplanationHtml(m);
   // panel read (Lane 2): only shown when present. Framed as a research estimate.
@@ -10308,7 +10313,7 @@ function miroSignalHtml(market) {
     '<div class="miro-signal-read">' + esc(market.probabilityRead || miroProbabilityRead(market.impliedYes)) + '</div>' +
     '<div class="src">Price checked ' + esc(market.priceCheckedAt || 'time unavailable') +
     (!market.closed && (market.noBook || market.yesBid == null || market.yesAsk == null) ? ' · Price comparison only — quotes unavailable' : '') + '</div></div>' +
-    '<div class="miro-prob">' + miroPct(market.impliedYes) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + miroMoveExplanationHtml(market) + '</div>';
+    '<div class="miro-prob">' + miroPct(market.impliedYes) + '<br>' + miroPriceLink(market) + '</div>' + miroDeltaHtml(market.priceChange, market.previousImpliedYes == null) + miroMoveExplanationHtml(market) + '</div>';
 }
 function miroChangesHtml(d, followed) {
   var items = ((d.changes && d.changes.items) || []).filter(function (item) {
@@ -10318,7 +10323,7 @@ function miroChangesHtml(d, followed) {
   return '<div class="miro-change-list">' + items.map(function (item) {
     return '<div class="miro-change"><div class="miro-change-theme">' + esc(item.theme || 'Signal') + '</div>' +
       '<div class="miro-change-name">' + esc(item.label || item.slug) + '</div>' + miroDeltaHtml(item.change, false) +
-      '<div class="miro-signal-read" style="grid-column:1/-1">YES ' + miroPct(item.from) + ' → ' + miroPct(item.to) + '</div>' + miroMoveExplanationHtml(item) + '</div>';
+      '<div class="miro-signal-read" style="grid-column:1/-1">YES ' + miroPct(item.from) + ' → ' + miroPct(item.to) + ' · ' + miroPriceLink(item) + '</div>' + miroMoveExplanationHtml(item) + '</div>';
   }).join('') + '</div>';
 }
 function miroHealthHtml(j, d) {

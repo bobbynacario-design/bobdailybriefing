@@ -121,7 +121,7 @@ test('Markets setting writes merge only their own switch and return both current
   assert.equal(writes.every(w=>w.options.merge),true);
 });
 test('Markets shows sourced drivers, direction, reversal and explicit uncertainty with escaped content',()=>{
-  const {context}=environment(['miroMoveExplanationHtml','miroChangesHtml','miroDeltaHtml','miroPct','miroMoveRunHtml'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),URL});
+  const {context}=environment(['miroMoveExplanationHtml','miroChangesHtml','miroDeltaHtml','miroPct','miroMoveRunHtml','miroPriceLink'],{esc:v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),URL});
   const explanation={status:'plausible',driver:'Inflation <cooled>',mechanism:'This reduces the chance of a hike.',wouldReverse:'A rebound could reverse the move.',eventDate:'2026-10-08',sources:[{url:'https://central-bank.example/release',title:'Official release'}]};
   const out=context.miroChangesHtml({changes:{items:[{slug:'rates',label:'No rate hikes',theme:'Macro',from:.6,to:.7,change:.1,moveExplanation:explanation}]}},['Macro']);
   assert.match(out,/60\.0% → 70\.0%/);assert.match(out,/Possible driver · inference/);assert.match(out,/Inflation &lt;cooled>/);
@@ -159,7 +159,7 @@ test('Markets accuracy stays cautious below 30 resolved forecasts',()=>{
 });
 
 test('Markets never presents a missing-quote legacy GO as a research flag',()=>{
-  const {context}=environment(['miroCard','miroVerdict','miroPct','miroNum'],{esc:String,miroProbabilityRead:()=>'',miroMoveExplanationHtml:()=>'',miroPanelReadHtml:()=>''});
+  const {context}=environment(['miroCard','miroVerdict','miroPct','miroNum','miroPriceLink'],{esc:String,miroProbabilityRead:()=>'',miroMoveExplanationHtml:()=>'',miroPanelReadHtml:()=>''});
   const m={slug:'rates',label:'Rates',gate:'GO',haircutProb:.7,panelProb:.8,impliedYes:.2,noBook:true,edge:.25,priceCheckedAt:'2026-10-12T06:15:00Z'};
   const out=context.miroCard(m);
   assert.doesNotMatch(out,/RESEARCH FLAG|est\. edge after costs/);
