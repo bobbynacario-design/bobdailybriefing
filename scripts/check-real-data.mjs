@@ -205,7 +205,9 @@ if (hotelStays) {
       const ok = (q.rates || []).map((r) => r.rate).filter((r) => r > 0 && !(h.typicalMax > 0 && r > h.typicalMax * 2.5));
       return ok.length ? Math.min(...ok) : null;
     }).filter((n) => n != null);
-    const mine = lows.length && rate > 0 ? Math.round(Math.min(...lows) * rate) : null;
+    // A quote over 40 hours old is not shown as current at all.
+    const old = !(now - Date.parse(t.pricedAt) <= 40 * 3600000);
+    const mine = lows.length && rate > 0 && !old ? Math.round(Math.min(...lows) * rate) : null;
     const index = {currency: hotelStays.currency || 'USD', adults: hotelStays.adults || 2};
     const q = Flights.stayQuotes({city: t.city, hotels: t.hotels, stays: [t]}, t.checkIn, t.checkOut, index, fx, now);
     const app = q && q.cheapest ? q.cheapest.php : null;

@@ -129,20 +129,26 @@ or disappears and are clearly labelled historical/expired where applicable.
 
 Domestic selector: International remains the default. Domestic choices are limited to Boracay (Caticlan/MPH), El Nido (ENI), and Siargao (IAO), with individual destination choices. PAL destination pages are scouted for Boracay and Siargao; only departures from Manila, Cebu and Clark are accepted. Other Philippine destinations and broad international campaigns are excluded from domestic results. El Nido provides a labelled Cebu Pacific booking fallback when no readable quote is available, without claiming a confirmed route, fare or seat. Domestic shortlist checks omit Philippine international travel tax.
 
-Hotel recommendation safeguards: quotes expire in the UI after 26 hours (missing
-or invalid timestamps are also old). Old rates never feature as deals or enter
+Hotel recommendation safeguards: quotes are old in the UI after 40 hours (missing
+or invalid timestamps are also old). The scout reuses a quote for up to 20
+hours and its twice-daily runs can start hours late, so a current quote can
+reach about 36 hours; 40 marks only a quote the scout has really missed. Old rates never feature as deals or enter
 current totals. The 10% threshold uses the raw price, and the label explicitly
 compares with Tripadvisor's typical minimum, not a verified same-room saving.
 Featured deals prefer matches with planned trip dates, then estimated flight
 plus stay cost; unconverted totals sort last. The source does not provide room
-type, cancellation, breakfast or tax inclusion, so these remain unconfirmed.
+type, cancellation, breakfast or tax inclusion; one note per list says so.
 
 Signed-in owners can edit a stay's dates, 1–4 rooms and 1–8 adults (at least one
 adult per room). Dates must be real calendar dates and a future stay of 1–30
 nights. Edits are saved with the private trip requests, survive reloads, and
 are priced by the next scout. Cache reuse requires identical dates and guests;
 new settings never display old occupancy quotes. Rates are per room per night,
-so stay totals multiply by the requested room count. Search links include the
-requested guests in their text; users should verify Google's selected settings.
-Reset hotel settings removes an override. Shared quotes remain one room/two
+so stay totals multiply by the requested room count (Xotelo returned the same
+per-room figure for 1 and 2 rooms on 12 Oct 2026). Google Hotels ignores guests
+in the search text, so links carry dates only and an edited stay says what to
+set there ("set 2 rooms, 4 adults there").
+Reset hotel settings removes an override. Edits whose check-in has come, or
+edited fare stays whose fare has left the scout, are dropped from the saved
+requests (never when the scout failed to load). Shared quotes remain one room/two
 adults. Use arrival, rather than departure, as the hotel check-in date.
