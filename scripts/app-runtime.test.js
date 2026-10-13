@@ -201,6 +201,7 @@ function environment(names, extra={}) {
   const context={console,Date,Promise,document:{getElementById:element},setText:(id,value)=>{element(id).textContent=value;},...extra};
   context.window=context; vm.createContext(context);
   names.forEach(name=>vm.runInContext(handler(name),context));
+  vm.runInContext(readFileSync(new URL('../lib/sports-trust-core.js',import.meta.url),'utf8'),context);
   return {context,element};
 }
 
@@ -1713,6 +1714,7 @@ test('sports hides retired PBA even in legacy data and renders NBA probability s
   const elements=new Map();const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:''});return elements.get(id);};
   const publicContext={Date,URLSearchParams,location:{search:'?module=pba'},localStorage:{getItem:()=>null},document:{getElementById:element},console};
   vm.createContext(publicContext);
+  vm.runInContext(readFileSync(new URL('../lib/sports-trust-core.js',import.meta.url),'utf8'),publicContext);
   vm.runInContext(script.slice(0,script.lastIndexOf("fetch('./sports-public.json")),publicContext);
   publicContext.renderSports({title:'Sports',modules:{nba:{title:'NBA',upcoming:[game]},pba:{title:'PBA',upcoming:[game]}}});
   assert.equal(element('page-title').textContent,'NBA');
@@ -1966,11 +1968,11 @@ test('NBA cards show the bookmaker line, the move since open and a 5+ point mode
   const g={home:'Orlando Magic',away:'Atlanta Hawks',market:{provider:'Draft Kings',details:'ORL -2.5',total:233.5,pHome:0.551,pHomeOpen:0.5},edge:{gap:11,side:'Orlando Magic',size:11}};
   const h=context.sportsMarketHtml(g);
   assert.ok(h.includes('Draft Kings: ORL -2.5 · O/U 233.5 · Magic 55% · Hawks 45% · moved Magic +5 since open'));
-  assert.ok(h.includes('Model rates Orlando Magic 11 pts higher than the bookmaker'));
-  assert.doesNotMatch(context.sportsMarketHtml({...g,edge:{gap:3,side:'Orlando Magic',size:3}}),/Model rates/);
+  assert.ok(h.includes('Difference from bookmaker: model +11 pts for Orlando Magic'));
+  assert.doesNotMatch(context.sportsMarketHtml({...g,edge:{gap:3,side:'Orlando Magic',size:3}}),/Difference from bookmaker/);
   assert.equal(context.sportsMarketHtml({home:'A',away:'B'}),'');
   const j=context.nbaJournalHtml({resolved:3,pending:1,accuracy:67,decisiveAccuracy:50,brier:0.2,brierSkill:0.05,market:{n:3,modelBrier:0.24,marketBrier:0.2}});
-  assert.ok(j.includes('model Brier 0.24, closing line 0.2 (lower is better). The bookmaker is ahead; under 50 games this is still noise.'));
+  assert.ok(j.includes('model Brier 0.24, last observed pre-tip quote 0.2 (lower is better). Too few matched games to assess reliability.'));
 });
 
 test('Boxing & UFC: cards with prelims folded, Filipino fighters first, upsets named with their pre-fight chance',()=>{
@@ -1978,7 +1980,7 @@ test('Boxing & UFC: cards with prelims folded, Filipino fighters first, upsets n
   const f=(id,a,b,pa,seg,extra)=>Object.assign({id,sport:'ufc',bout:a+' vs. '+b,card:'UFC 333',weightClass:'Bantamweight',segment:seg,date:'2026-10-24T14:00:00Z',fighters:[{name:a,pct:pa},{name:b,pct:pa==null?null:100-pa}],status:'upcoming',url:'https://polymarket.com/event/x'},extra||{});
   const html=context.sportsCombatHtml({title:'Boxing & UFC',phase:'fights ahead',cards:[{name:'UFC 333',date:'2026-10-24T14:00:00Z',fights:[f('1','Merab Dvalishvili','Petr <Yan>',39,'Main Card'),f('2','A','B',null,'Prelims')]}],
     boxing:[f('3','Jerwin Ancajas','Someone',62,'',{sport:'boxing',filipino:true,card:''})],
-    results:[{winner:'Payton Talbott',loser:'Deiveson Figueiredo',winnerPct:30,card:'UFC 332',date:'2026-10-04T02:00:00Z'},{winner:'X',loser:'Y',winnerPct:null}],record:{scored:5,favouritesWon:3,brier:0.21}});
+    results:[{settlementConfirmed:true,winner:'Payton Talbott',loser:'Deiveson Figueiredo',winnerPct:30,card:'UFC 332',date:'2026-10-04T02:00:00Z'},{settlementConfirmed:true,winner:'X',loser:'Y',winnerPct:null}],record:{scored:5,favouritesWon:3,brier:0.21}});
   assert.ok(html.indexOf('Filipino fighters')<html.indexOf('UFC 333 · '));
   assert.ok(html.includes('39% · 61%'));assert.doesNotMatch(html,/<Yan>/);
   assert.ok(html.includes('<details><summary class="sports-change-detail">Prelims · 1 fight</summary>'));assert.ok(html.includes('no real market yet'));
@@ -2001,7 +2003,8 @@ test('sports digest: next 24 hours for followed teams, players and fight cards; 
         {status:'FINISHED',date:'2026-10-12T10:00:00Z',players:[{name:'Zizou Bergs',winner:true,rank:39},{name:'Carlos Alcaraz',rank:3}]},
         {status:'FINISHED',date:'2026-10-12T11:00:00Z',players:[{name:'Botic',winner:true,rank:41},{name:'Fils',rank:11}]}]}]}}}]}}},
     combat:{cards:[{name:'UFC Fight Night',date:'2026-10-13T21:00:00Z',fights:[{fighters:[{name:'Malott',pct:53},{name:'Buckley',pct:47}]}]}],boxing:[],
-      results:[{winner:'Talbott',loser:'Figueiredo',winnerPct:30,date:'2026-10-12T02:00:00Z',card:'UFC 332'}]}}};
+      results:[{settlementConfirmed:true,winner:'Talbott',loser:'Figueiredo',winnerPct:30,date:'2026-10-12T02:00:00Z',card:'UFC 332'}]}}};
+  Object.values(d.modules).forEach(function(m){m.generatedAt='2026-10-13T05:00:00Z';m.refreshStatus='ok';m.staleAfterHours=12;});
   const h=context.sportsDigestHtml(d,now);
   assert.ok(h.includes('Golden State Warriors at Los Angeles Lakers'));assert.ok(h.includes('Lakers 55% · Warriors 45% (LAL -2.5)'));
   assert.ok(h.includes('UFC Fight Night: Malott 53% vs Buckley 47%'));
@@ -2009,7 +2012,26 @@ test('sports digest: next 24 hours for followed teams, players and fight cards; 
   assert.ok(h.indexOf('Alexandra Eala lost to Shi Han')<h.indexOf('Zizou Bergs beat Carlos Alcaraz'));
   assert.ok(h.indexOf('Zizou Bergs')<h.indexOf('Botic beat Fils'));
   assert.ok(h.includes('Talbott beat Figueiredo as a 30% underdog'));
-  assert.ok(h.includes('Model rates Golden State Warriors 7 pts above the bookmaker'));assert.doesNotMatch(h,/Miami Heat 4 pts/);
+  assert.ok(h.includes('Difference from bookmaker: model +7 pts for Golden State Warriors'));assert.doesNotMatch(h,/Miami Heat 4 pts/);
   assert.doesNotMatch(h,/Boston Celtics/);
   assert.ok(context.sportsDigestHtml({modules:{}},now).includes('Nothing on for your teams'));
+});
+
+test('digest dates every source and never promotes retained scores or probabilities as current',()=>{
+  const names=['sportsDigestHtml','sportsFollowed','sportsFollowKey','sportsIsFollowedMatch','sportsTeamKey','sportsShortTeam','sportsDate','tennisRankTxt','tennisNotable'];
+  const {context:c}=environment(names,{esc:escHtml,localStorage:{getItem:()=>null,setItem:()=>{}}});
+  const now=Date.parse('2026-10-13T06:00:00Z'),checked='2026-10-13T05:55:00Z';
+  const nba={generatedAt:checked,watchlist:[{team:'H'}],projectionJournal:{resolved:12},matches:[{home:'H',away:'A',status:'SCHEDULED',utcDate:'2026-10-14T01:00:00Z',market:{pHome:.7},edge:{size:8,side:'H'}}]};
+  const tennis={generatedAt:checked,followed:[{name:'Player',live:{date:'2026-10-13T05:00:00Z',opponent:'Opponent',score:'6-4',event:'Open',round:'R1'}}]};
+  const d={modules:{nba,tennis}};
+  const fresh=c.sportsDigestHtml(d,now);assert.match(fresh,/>LIVE</);assert.match(fresh,/checked/);assert.match(fresh,/12 projections scored/);
+  const old=c.sportsDigestHtml({modules:{nba:{...nba,fallback:true},tennis:{...tennis,generatedAt:'2026-10-12T00:00:00Z'}}},now);
+  assert.doesNotMatch(old,/>LIVE<|70%|Difference from bookmaker/);assert.match(old,/LAST SEEN/);assert.match(old,/last reported score 6-4/);assert.match(old,/retained snapshot/);assert.match(old,/stale or unverified/);
+  const aged=c.sportsDigestHtml({modules:{tennis:{...tennis,generatedAt:'2026-10-13T05:00:00Z'}}},now);assert.doesNotMatch(aged,/>LIVE</);assert.match(aged,/not a live update/);
+});
+test('combat unresolved and no-winner outcomes never appear as wins or accuracy hits',()=>{
+  const {context:c}=environment(['combatResultHtml'],{esc:escHtml});
+  assert.match(c.combatResultHtml({bout:'A vs B',winner:'A'}),/Settlement unverified/);
+  assert.doesNotMatch(c.combatResultHtml({bout:'A vs B',winner:'A'}),/beat/);
+  assert.match(c.combatResultHtml({bout:'A vs B',void:true,settlementConfirmed:true}),/not scored/);
 });

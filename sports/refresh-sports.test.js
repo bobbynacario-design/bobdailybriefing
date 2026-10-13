@@ -15,6 +15,7 @@ import {
   buildNbaBracket,
   nbaSeasonYear,
   buildNbaJournal,
+  updateTennisJournal,
   buildTeamProfiles,
   buildModuleChanges,
   scheduleReadiness,
@@ -328,10 +329,10 @@ test('tennis win-probability model favours ranking points, is symmetric, and is 
 test('enrichTennisDraw sets ranks and projects only unfinished matches', function () {
   var map = { 'Jannik Sinner': { rank: 1, points: 13000 }, 'Novak Djokovic': { rank: 5, points: 3800 } };
   var draw = { rounds: [{ id: 6, name: 'Semifinal', matches: [
-    { id: 'sf1', status: 'SCHEDULED', players: [{ name: 'Jannik Sinner' }, { name: 'Novak Djokovic' }] },
+    { id: 'sf1', status: 'SCHEDULED',date:'2026-07-30T12:00:00Z', players: [{ name: 'Jannik Sinner' }, { name: 'Novak Djokovic' }] },
     { id: 'sf2', status: 'FINISHED', players: [{ name: 'Jannik Sinner', winner: true }, { name: 'Novak Djokovic', winner: false }] }
   ] }] };
-  enrichTennisDraw(draw, map);
+  enrichTennisDraw(draw, map,'2026-07-30T00:00:00Z');
   var sched = draw.rounds[0].matches[0], fin = draw.rounds[0].matches[1];
   assert.equal(sched.players[0].rank, 1);
   assert.ok(sched.proj && sched.proj.favorite === 'Jannik Sinner' && sched.proj.favPct > 50);
@@ -339,7 +340,7 @@ test('enrichTennisDraw sets ranks and projects only unfinished matches', functio
 });
 
 test('tennis projection journal locks a scheduled pick and scores it when finished', function () {
-  var sched = [{ id: 'x1', tournament: 'DC Open', tier: 'tour500', tour: 'women', round: 'Round 2', status: 'SCHEDULED',
+  var sched = [{ id: 'x1', tournament: 'DC Open', tier: 'tour500', tour: 'women', round: 'Round 2', status: 'SCHEDULED',date:'2026-07-30T12:00:00Z',
     players: [{ name: 'Jessica Pegula' }, { name: 'Diana Shnaider' }],
     proj: { a: 0.70, favorite: 'Jessica Pegula', favPct: 70, tag: 'Moderate' } }];
   var j1 = buildTennisJournal(null, sched, '2026-07-30T00:00:00Z');
@@ -347,7 +348,7 @@ test('tennis projection journal locks a scheduled pick and scores it when finish
   assert.equal(j1.stats.pending, 1);
   assert.equal(j1.preds['x1'].resolved, false);
 
-  var finished = [{ id: 'x1', tournament: 'DC Open', tier: 'tour500', tour: 'women', round: 'Round 2', status: 'FINISHED',
+  var finished = [{ id: 'x1', tournament: 'DC Open', tier: 'tour500', tour: 'women', round: 'Round 2', status: 'FINISHED',date:'2026-07-30T12:00:00Z',
     players: [{ name: 'Jessica Pegula', winner: true }, { name: 'Diana Shnaider', winner: false }] }];
   var j2 = buildTennisJournal(j1, finished, '2026-07-31T00:00:00Z');
   assert.equal(j2.stats.resolved, 1);
@@ -456,7 +457,7 @@ test('NBA estimates require recent form on both sides and skip preseason, live a
   assert.equal(next.projection.favorite,'Home');
   assert.equal(next.projection.probs.home + next.projection.probs.away,1);
   assert.ok(next.projection.probs.home <= .85);
-  assert.equal(next.projection.tag,'Moderate edge','a sub-75% estimate is not labelled a strong edge');
+  assert.equal(next.projection.tag,'Moderate lean','a sub-75% estimate is not labelled a strong lean');
   assert.ok(matches.slice(0,-1).every(m=>!m.projection));
   for(const [field,value] of [['stage','pre-season'],['status','IN_PLAY'],['status','POSTPONED'],['utcDate','2026-10-08T12:00:00Z']]) {
     const changed={...next,[field]:value};buildNbaProjections([...matches.slice(0,-1),changed],momentum,now);assert.equal(changed.projection,undefined);
@@ -586,4 +587,33 @@ test('bookmaker odds become margin-free chances; the model gap and the closing l
   var j3 = buildNbaJournal(j2, [done], '2026-11-01T05:00:00Z');
   assert.equal(j3.preds.g.brier, 0.4356); assert.equal(j3.preds.g.mktBrier, 0.36);
   assert.deepEqual(j3.stats.market, { n: 1, modelBrier: 0.4356, marketBrier: 0.36 });
+});
+
+test('NBA freezes bookmaker observations at tip-off and excludes unverified legacy quote timing',()=>{
+  const g={id:'g',status:'SCHEDULED',home:'H',away:'A',utcDate:'2026-10-13T10:00:00Z',market:{pHome:0.6},projection:{favorite:'H',tag:'Moderate lean',probs:{home:0.7,away:0.3}}};
+  const pre=buildNbaJournal(null,[g],'2026-10-13T09:00:00Z');
+  for(const now of ['2026-10-13T10:00:00Z','2026-10-13T11:00:00Z']){
+    const after=buildNbaJournal(pre,[{...g,market:{pHome:0.99}}],now);assert.equal(after.preds.g.mktHome,0.6);assert.equal(after.preds.g.mktSeenAt,'2026-10-13T09:00:00Z');
+    attachNbaEdges([g],now);assert.equal(g.edge,undefined);
+  }
+  const done={...g,status:'FINISHED',score:{home:110,away:90}};
+  const legacy={preds:{g:{...pre.preds.g,mktBrier:0.01,resolved:true,brier:0.09,correct:true}}};delete legacy.preds.g.mktSeenAt;
+  const scored=buildNbaJournal(legacy,[done],'2026-10-13T12:00:00Z');assert.equal(scored.stats.resolved,1);assert.equal(scored.stats.market,null);
+});
+test('tennis locks only scheduled future matches and rejects unknown times, live locks and replacement opponents',()=>{
+  const g={id:'g',status:'SCHEDULED',date:'2026-10-13T10:00:00Z',players:[{name:'A'},{name:'B'}],proj:{a:0.7,favorite:'A',favPct:70,tag:'Moderate'}};
+  const now='2026-10-13T09:00:00Z',pre=buildTennisJournal(null,[g],now),original=JSON.stringify(pre);
+  for(const changed of [{...g,status:'LIVE'},{...g,date:null},{...g,date:now}])assert.equal(buildTennisJournal(null,[changed],now).stats.pending,0);
+  const wrong={...g,status:'FINISHED',players:[{name:'A',winner:true},{name:'C'}]};assert.equal(buildTennisJournal(pre,[wrong],'2026-10-13T12:00:00Z').stats.resolved,0);
+  const draw={rounds:[{matches:[{...g,status:'LIVE',proj:g.proj}]}]};enrichTennisDraw(draw,{A:{rank:1,points:1000},B:{rank:2,points:900}},now);assert.equal(draw.rounds[0].matches[0].proj,undefined);
+  const legacy={preds:{g:{...pre.preds.g,resolved:true,brier:0.09,correct:true}}};delete legacy.preds.g.utcDate;
+  const audited=buildTennisJournal(legacy,[],now);assert.equal(audited.stats.resolved,0);assert.equal(audited.stats.timingExcluded,1);assert.ok(audited.preds.g);assert.equal(JSON.stringify(pre),original);
+});
+
+test('tennis journal failures cannot reset the saved history or publish unpersisted accuracy',async()=>{
+  let writes=0;
+  const db={collection:()=>({doc:()=>({get:async()=>{throw Error('offline');},set:async()=>{writes++;}})})};
+  await assert.rejects(()=>updateTennisJournal(db,{tiers:{}},false),/retaining prior snapshot/);assert.equal(writes,0);
+  const module={tiers:{}},failedWrite={collection:()=>({doc:()=>({get:async()=>({exists:true,data:()=>({preds:{}})}),set:async()=>{throw Error('write failed');}})})};
+  await assert.rejects(()=>updateTennisJournal(failedWrite,module,false),/retaining prior snapshot/);assert.equal(module.projectionJournal,undefined);
 });

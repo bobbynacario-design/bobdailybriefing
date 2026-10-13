@@ -1,4 +1,5 @@
 // Transparent form heuristic, not a calibrated betting model. No AI API calls.
+import '../lib/sports-trust-core.js';
 const MODEL_VERSION = 'nba-form-v1';
 const DAY = 86400000;
 export function buildNbaProjections(matches, momentum, now = new Date()) {
@@ -24,7 +25,7 @@ export function buildNbaProjections(matches, momentum, now = new Date()) {
     const pHome = Math.max(0.15, Math.min(0.85, 1 / (1 + Math.exp(-0.017 * gap))));
     const favoriteProbability = Math.max(pHome, 1 - pHome);
     game.projection = { modelVersion: MODEL_VERSION, favorite: favoriteProbability < 0.55 ? null : gap > 0 ? game.home : game.away,
-      tag: favoriteProbability < 0.55 ? 'Toss-up' : favoriteProbability < 0.65 ? 'Watch only' : favoriteProbability < 0.75 ? 'Moderate edge' : 'Strong edge',
+      tag: favoriteProbability < 0.55 ? 'Toss-up' : favoriteProbability < 0.65 ? 'Watch only' : favoriteProbability < 0.75 ? 'Moderate lean' : 'Strong lean',
       gap: Math.round(gap * 10) / 10, homePower, awayPower,
       probs: { home: Math.round(pHome * 1000) / 1000, draw: 0, away: Math.round((1 - pHome) * 1000) / 1000 } };
     projected++;

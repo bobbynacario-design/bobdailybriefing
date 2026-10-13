@@ -23,6 +23,8 @@ import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { buildNbaProjections } from './nba-projections.js';
+import '../lib/sports-trust-core.js';
+const Trust=globalThis.SportsTrust;
 import { fetchCombatFights, buildCombatJournal, buildCombatView } from './combat.js';
 import { fetchRetry } from '../lib/http.js';
 import { recordRunHealth } from '../lib/feed-health.js';
@@ -247,18 +249,19 @@ function nbaMarket(comp) {
     total: o.overUnder == null || !isFinite(Number(o.overUnder)) ? null : Number(o.overUnder),
     mlHome: side('home', 'close'), mlAway: side('away', 'close'),
     pHome: noVig(side('home', 'close'), side('away', 'close')),
-    pHomeOpen: noVig(side('home', 'open'), side('away', 'open'))
+    pHomeOpen: noVig(side('home', 'open'), side('away', 'open')),
+    observedAt:new Date().toISOString()
   };
   return market.pHome == null && market.spreadHome == null ? null : market;
 }
 
 // Model minus market, in points, from the home side. Shown only when both
 // exist; the journal says whether the model has earned the right to differ.
-function attachNbaEdges(matches) {
+function attachNbaEdges(matches,nowIso=new Date().toISOString()) {
   (matches || []).forEach(function (m) {
     delete m.edge;
     var p = m.projection && m.projection.probs, k = m.market && m.market.pHome;
-    if (!p || p.home == null || k == null || m.status !== 'SCHEDULED') return;
+    if (!p || !Trust.probability(p.home) || !Trust.probability(k) || m.status !== 'SCHEDULED' || !Trust.before(nowIso,m.utcDate)) return;
     var gap = Math.round((p.home - k) * 100);
     m.edge = { gap: gap, side: gap >= 0 ? m.home : m.away, size: Math.abs(gap) };
   });
@@ -1428,7 +1431,7 @@ function buildNbaJournal(prior, matches, nowIso) {
     // Toss-ups (favorite:null) are never locked — grading "no pick" as a miss
     // would silently deflate accuracy for exactly the games the model is
     // honestly unsure about.
-    if (!preds[m.id] && m.status === 'SCHEDULED' && Date.parse(m.utcDate) > Date.parse(nowIso) && m.projection && m.projection.favorite) {
+    if (!preds[m.id] && m.status === 'SCHEDULED' && Trust.before(nowIso,m.utcDate) && m.projection && m.projection.favorite && Trust.probability(m.projection.probs?.home) && Trust.probability(m.projection.probs?.away)) {
       preds[m.id] = {
         id: m.id, home: m.home, away: m.away,
         pHome: m.projection.probs.home, favorite: m.projection.favorite,
@@ -1438,10 +1441,13 @@ function buildNbaJournal(prior, matches, nowIso) {
     }
     // The market's chance is refreshed until tip-off, so it ends as the
     // closing line; the model's lock never moves.
-    if (preds[m.id] && !preds[m.id].resolved && m.status === 'SCHEDULED' && m.market && m.market.pHome != null) preds[m.id].mktHome = m.market.pHome;
+    var pr=preds[m.id];
+    if(pr && !pr.resolved && m.status==='SCHEDULED' && Trust.before(nowIso,m.utcDate) && m.home===pr.home && m.away===pr.away && m.market && Trust.probability(m.market.pHome)){
+      pr.mktHome=m.market.pHome;pr.mktSeenAt=nowIso;pr.marketTimingVerified=true;
+    }
     if (finished && preds[m.id] && !preds[m.id].resolved) {
       var winner = nbaMatchWinner(m);
-      if (winner) {
+      if (winner && Trust.before(preds[m.id].firstSeen,m.utcDate) && m.home===preds[m.id].home && m.away===preds[m.id].away) {
         var pr = preds[m.id];
         var outcomeHome = (winner === pr.home) ? 1 : 0;
         var pHome = Math.max(0.01, Math.min(0.99, pr.pHome));
@@ -1451,7 +1457,7 @@ function buildNbaJournal(prior, matches, nowIso) {
         pr.brier = Math.round(Math.pow(pHome - outcomeHome, 2) * 1e4) / 1e4;
         pr.logLoss = Math.round((-(outcomeHome * Math.log(pHome) + (1 - outcomeHome) * Math.log(1 - pHome))) * 1e4) / 1e4;
         pr.resolvedAt = nowIso;
-        if (pr.mktHome != null) {
+        if (Trust.probability(pr.mktHome) && Trust.before(pr.mktSeenAt,m.utcDate)) {
           var q = Math.max(0.01, Math.min(0.99, pr.mktHome));
           pr.mktBrier = Math.round(Math.pow(q - outcomeHome, 2) * 1e4) / 1e4;
         }
@@ -1459,21 +1465,22 @@ function buildNbaJournal(prior, matches, nowIso) {
     }
   });
   var all = Object.keys(preds).map(function (k) { return preds[k]; });
-  var resolved = all.filter(function (p) { return p.resolved; });
-  var decisive = resolved.filter(function (p) { return p.tag === 'Moderate edge' || p.tag === 'Strong edge'; });
+  var resolved = all.filter(function (p) { return p.resolved && Trust.before(p.firstSeen,p.utcDate); });
+  var decisive = resolved.filter(function (p) { return Trust.decisive(p.tag); });
   function acc(list) { return list.length ? Math.round(list.filter(function (p) { return p.correct; }).length / list.length * 100) : null; }
   function mean(list, f) { return list.length ? list.reduce(function (a, p) { return a + f(p); }, 0) / list.length : null; }
   var brier = mean(resolved, function (p) { return p.brier; });
   var logLoss = mean(resolved, function (p) { return p.logLoss; });
-  var byTag = ['Toss-up', 'Watch only', 'Moderate edge', 'Strong edge'].map(function (tag) {
-    var l = resolved.filter(function (p) { return p.tag === tag; });
+  var byTag = ['Toss-up', 'Watch only', 'Moderate lean', 'Strong lean'].map(function (tag) {
+    var l = resolved.filter(function (p) { return Trust.tag(p.tag) === tag; });
     return { tag: tag, n: l.length, accuracy: acc(l) };
   }).filter(function (r) { return r.n > 0; });
   var recent = resolved.slice().sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 8)
     .map(function (p) { return { home: p.home, away: p.away, favorite: p.favorite, favPct: p.favPct, tag: p.tag, winner: p.winner, correct: p.correct }; });
   var stats = {
     resolved: resolved.length,
-    pending: all.length - resolved.length,
+    pending: all.filter(function(p){return !p.resolved && Trust.before(p.firstSeen,p.utcDate);}).length,
+    timingExcluded:all.filter(function(p){return p.resolved && !Trust.before(p.firstSeen,p.utcDate);}).length,
     accuracy: acc(resolved),
     decisive: decisive.length,
     decisiveAccuracy: acc(decisive),
@@ -1485,7 +1492,7 @@ function buildNbaJournal(prior, matches, nowIso) {
     recent: recent,
     // Like for like: both scored on the same games that had odds.
     market: (function () {
-      var both = resolved.filter(function (p) { return p.mktBrier != null; });
+      var both = resolved.filter(function (p) { return p.mktBrier != null && Trust.before(p.mktSeenAt,p.utcDate); });
       if (!both.length) return null;
       return { n: both.length, modelBrier: Math.round(mean(both, function (p) { return p.brier; }) * 1e4) / 1e4,
         marketBrier: Math.round(mean(both, function (p) { return p.mktBrier; }) * 1e4) / 1e4 };
@@ -1494,7 +1501,7 @@ function buildNbaJournal(prior, matches, nowIso) {
   // Bound the persisted doc: keep every unresolved lock + the 500 newest resolved.
   var keep = {};
   all.forEach(function (p) { if (!p.resolved) keep[p.id] = p; });
-  resolved.sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 500).forEach(function (p) { keep[p.id] = p; });
+  all.filter(function(p){return p.resolved;}).sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 500).forEach(function (p) { keep[p.id] = p; });
   return { preds: keep, stats: stats, updatedAt: nowIso };
 }
 async function updateNbaJournal(db, module, dryRun) {
@@ -1975,7 +1982,7 @@ function tennisProjTag(edge) {
   return 'Strong';
 }
 
-function enrichTennisDraw(draw, map) {
+function enrichTennisDraw(draw, map,nowIso=new Date().toISOString()) {
   if (!draw || !map) return;
   (draw.rounds || []).forEach(function (r) {
     r.matches.forEach(function (m) {
@@ -1983,7 +1990,8 @@ function enrichTennisDraw(draw, map) {
         var info = map[p.name];
         if (info) { p.rank = info.rank; p.points = info.points; }
       });
-      if (m.status === 'FINISHED') return; // never project a known result
+      delete m.proj;
+      if (m.status !== 'SCHEDULED' || !Trust.before(nowIso,m.date)) return;
       var a = (m.players || [])[0], b = (m.players || [])[1];
       if (!a || !b || !a.points || !b.points) return;
       var pa = tennisWinProb(a.points, b.points);
@@ -2165,7 +2173,7 @@ function collectTennisMatches(mod) {
         (draw.rounds || []).forEach(function (r) {
           r.matches.forEach(function (m) {
             if (!m.id || out[m.id]) return;
-            out[m.id] = { id: m.id, tournament: t.name, tier: tk, tour: tour, round: m.round, status: m.status, players: m.players || [], proj: m.proj || null };
+            out[m.id] = { id: m.id, tournament: t.name, tier: tk, tour: tour, round: m.round, status: m.status, date:m.date, players: m.players || [], proj: m.proj || null };
             order.push(m.id);
           });
         });
@@ -2183,20 +2191,23 @@ function tennisMatchWinner(players) {
 function buildTennisJournal(prior, matches, nowIso) {
   var preds = {};
   var priorPreds = (prior && prior.preds) || {};
-  Object.keys(priorPreds).forEach(function (k) { preds[k] = priorPreds[k]; });
+  Object.keys(priorPreds).forEach(function (k) { preds[k] = Object.assign({},priorPreds[k]); });
   (matches || []).forEach(function (m) {
     var finished = m.status === 'FINISHED';
-    if (!preds[m.id] && !finished && m.proj) {
+    if (!preds[m.id] && m.status==='SCHEDULED' && Trust.before(nowIso,m.date) && m.proj && Trust.probability(m.proj.a)) {
       preds[m.id] = {
         id: m.id, tournament: m.tournament, tier: m.tier, tour: m.tour, round: m.round,
         playerA: (m.players[0] || {}).name, playerB: (m.players[1] || {}).name,
         pA: m.proj.a, favorite: m.proj.favorite, favPct: m.proj.favPct, tag: m.proj.tag,
-        firstSeen: nowIso, resolved: false
+        firstSeen: nowIso, utcDate:m.date, resolved: false
       };
     }
-    if (finished && preds[m.id] && !preds[m.id].resolved) {
+    var existing=preds[m.id];
+    if(existing && !existing.utcDate && m.date)existing.utcDate=m.date;
+    if (finished && existing && !existing.resolved && Trust.before(existing.firstSeen,m.date) &&
+      m.players.length===2 && m.players.some(function(p){return p.name===existing.playerA;}) && m.players.some(function(p){return p.name===existing.playerB;})) {
       var winner = tennisMatchWinner(m.players);
-      if (winner) {
+      if (winner && [existing.playerA,existing.playerB].includes(winner)) {
         var pr = preds[m.id];
         var outcomeA = (winner === pr.playerA) ? 1 : 0;
         var pA = Math.max(0.01, Math.min(0.99, pr.pA));
@@ -2210,7 +2221,7 @@ function buildTennisJournal(prior, matches, nowIso) {
     }
   });
   var all = Object.keys(preds).map(function (k) { return preds[k]; });
-  var resolved = all.filter(function (p) { return p.resolved; });
+  var resolved = all.filter(function (p) { return p.resolved && Trust.before(p.firstSeen,p.utcDate); });
   var decisive = resolved.filter(function (p) { return p.tag === 'Moderate' || p.tag === 'Strong'; });
   function acc(list) { return list.length ? Math.round(list.filter(function (p) { return p.correct; }).length / list.length * 100) : null; }
   function mean(list, f) { return list.length ? list.reduce(function (a, p) { return a + f(p); }, 0) / list.length : null; }
@@ -2224,7 +2235,8 @@ function buildTennisJournal(prior, matches, nowIso) {
     .map(function (p) { return { tournament: p.tournament, round: p.round, favorite: p.favorite, favPct: p.favPct, tag: p.tag, winner: p.winner, correct: p.correct }; });
   var stats = {
     resolved: resolved.length,
-    pending: all.length - resolved.length,
+    pending: all.filter(function(p){return !p.resolved && Trust.before(p.firstSeen,p.utcDate);}).length,
+    timingExcluded:all.filter(function(p){return !Trust.before(p.firstSeen,p.utcDate);}).length,
     accuracy: acc(resolved),
     decisive: decisive.length,
     decisiveAccuracy: acc(decisive),
@@ -2238,7 +2250,7 @@ function buildTennisJournal(prior, matches, nowIso) {
   // Bound the persisted doc: keep every unresolved lock + the 500 newest resolved.
   var keep = {};
   all.forEach(function (p) { if (!p.resolved) keep[p.id] = p; });
-  resolved.sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 500).forEach(function (p) { keep[p.id] = p; });
+  all.filter(function(p){return p.resolved;}).sort(function (a, b) { return String(b.resolvedAt).localeCompare(String(a.resolvedAt)); }).slice(0, 500).forEach(function (p) { keep[p.id] = p; });
   return { preds: keep, stats: stats, updatedAt: nowIso };
 }
 
@@ -2250,12 +2262,12 @@ async function updateTennisJournal(db, module, dryRun) {
     try {
       var snap = await db.collection(COLL).doc('sports-tennis-journal').get();
       if (snap.exists) prior = snap.data() || null;
-    } catch (e) { console.warn('tennis journal read failed:', e.message || e); }
+    } catch (e) { throw new Error('Tennis journal unavailable; retaining prior snapshot: '+(e.message || e)); }
   }
   var journal = buildTennisJournal(prior, matches, nowIso);
   if (db && !dryRun) {
     try { await db.collection(COLL).doc('sports-tennis-journal').set(journal); }
-    catch (e) { console.warn('tennis journal write failed:', e.message || e); }
+    catch (e) { throw new Error('Tennis journal write failed; retaining prior snapshot: '+(e.message || e)); }
   }
   module.projectionJournal = journal.stats; // compact stats only in the daily doc
   console.log('Tennis journal: ' + journal.stats.resolved + ' scored, ' + journal.stats.pending + ' pending' +
@@ -2840,6 +2852,7 @@ export {
   enrichTennisDraw,
   collectTennisMatches,
   buildTennisJournal,
+  updateTennisJournal,
   moduleHasData,
   lanesMissing,
   laneValue,

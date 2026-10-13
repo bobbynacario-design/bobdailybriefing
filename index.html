@@ -33,6 +33,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/entity-timeline-core.js"></script>
 <script src="./lib/radar-assistant-core.js"></script>
 <script src="./lib/flights-core.js"></script>
+<script src="./lib/sports-trust-core.js"></script>
 <script src="./lib/pse-research-core.js"></script>
 <script src="./lib/pse-research-ui.js"></script>
 <script src="./lib/flights-ui.js"></script>
@@ -11244,7 +11245,7 @@ function sportsProjectionHtml(m) {
   if (!p || !p.probs) return '';
   var pr = p.probs;
   var h = sportsProb(pr.home), dr = sportsProb(pr.draw), a = sportsProb(pr.away);
-  var decisive = p.tag === 'Strong edge' || p.tag === 'Moderate edge';
+  var decisive = SportsTrust.decisive(p.tag);
   var cls = !p.favorite ? 'close' : (decisive ? '' : 'watch');
   var favPct = p.favorite === m.home ? h : (p.favorite === m.away ? a : Math.max(h, a));
   var eloBit = (p.homeElo != null && p.awayElo != null) ? ' <span class="sports-elo">Elo ' + p.homeElo + '–' + p.awayElo + '</span>' : '';
@@ -11265,7 +11266,7 @@ function sportsProjectionHtml(m) {
   return '<div class="sports-projection' + (decisive ? '' : ' low') + '">' +
     '<div class="sports-projection-row">' +
       '<div class="sports-projection-main">' + main + '</div>' +
-      '<div class="sports-projection-tag ' + cls + '">' + esc(p.tag) + '</div>' +
+      '<div class="sports-projection-tag ' + cls + '">' + esc(SportsTrust.tag(p.tag)) + '</div>' +
     '</div>' + bar +
   '</div>';
 }
@@ -11288,14 +11289,15 @@ function sportsMarketHtml(m) {
     bits.push('moved ' + (mv > 0 ? sportsShortTeam(m.home) : sportsShortTeam(m.away)) + ' +' + Math.abs(mv) + ' since open');
   }
   var html = '<div class="sports-market">' + esc((k.provider || 'Bookmaker') + ': ' + bits.join(' · ')) + '</div>';
-  if (m.edge && m.edge.size >= 5) html += '<div class="sports-market edge">' + esc('Model rates ' + m.edge.side + ' ' + m.edge.size + ' pts higher than the bookmaker') + '</div>';
+  if(k.observedAt)html += '<div class="sports-market">Quote checked '+esc(sportsDate(k.observedAt))+'</div>';
+  if (m.edge && m.edge.size >= 5) html += '<div class="sports-market edge">' + esc('Difference from bookmaker: model +' + m.edge.size + ' pts for ' + m.edge.side + ' · uncalibrated') + '</div>';
   return html;
 }
 function sportsWinProbHtml(m) {
   var p = m && m.projection;
   if (!p || !p.probs) return '';
   var h = sportsProb(p.probs.home), a = sportsProb(p.probs.away);
-  var decisive = p.tag === 'Strong edge' || p.tag === 'Moderate edge';
+  var decisive = SportsTrust.decisive(p.tag);
   var cls = !p.favorite ? 'close' : (decisive ? '' : 'watch');
   var favPct = p.favorite === m.home ? h : (p.favorite === m.away ? a : Math.max(h, a));
   var splitText = (m.home || '') + ' ' + h + '% · ' + (m.away || '') + ' ' + a + '%';
@@ -11314,7 +11316,7 @@ function sportsWinProbHtml(m) {
   return '<div class="sports-projection' + (decisive ? '' : ' low') + '">' +
     '<div class="sports-projection-row">' +
       '<div class="sports-projection-main">' + main + '</div>' +
-      '<div class="sports-projection-tag ' + cls + '">' + esc(p.tag) + '</div>' +
+      '<div class="sports-projection-tag ' + cls + '">' + esc(SportsTrust.tag(p.tag)) + '</div>' +
     '</div>' + bar +
   '</div>';
 }
@@ -11322,14 +11324,14 @@ function sportsWinProbHtml(m) {
 function sportsConfidentCalls(upcoming) {
   var calls = (upcoming || []).filter(function (m) {
     var p = m.projection;
-    return p && p.favorite && (p.tag === 'Strong edge' || p.tag === 'Moderate edge');
+    return p && p.favorite && (SportsTrust.decisive(p.tag));
   }).map(function (m) {
     var p = m.projection;
     var pct = sportsProb(p.favorite === m.home ? p.probs.home : p.probs.away);
     return '<b>' + esc(p.favorite) + '</b> ' + pct + '%';
   });
   if (!calls.length) return '';
-  return '<div class="sports-confcalls">' + uiIcon('command') + ' Confident calls: ' + calls.slice(0, 8).join(' · ') + '</div>';
+  return '<div class="sports-confcalls">' + uiIcon('command') + ' Model leans (uncalibrated): ' + calls.slice(0, 8).join(' · ') + '</div>';
 }
 function sportsMatchCard(m) {
   return '<div class="sports-match ' + sportsStatusClass(m) + '">' +
@@ -11578,7 +11580,7 @@ function sportsKoMatchCard(m) {
   var p = m.projection;
   if (!sportsKoFinished(m) && p && p.favorite && p.probs && sportsRealTeam(m.home) && sportsRealTeam(m.away)) {
     var pct = sportsProb(p.favorite === m.home ? p.probs.home : (p.favorite === m.away ? p.probs.away : Math.max(p.probs.home, p.probs.away)));
-    var decisive = p.tag === 'Strong edge' || p.tag === 'Moderate edge';
+    var decisive = SportsTrust.decisive(p.tag);
     pick = '<div class="sports-bm-pick' + (decisive ? '' : ' low') + '">' + (decisive ? 'Pick ' : 'Lean ') + esc(p.favorite) + ' ' + pct + '%</div>';
   }
   return '<div class="sports-bm ' + sportsStatusClass(m) + '">' +
@@ -11804,8 +11806,9 @@ function tennisTierView(tier, isSlam) {
 function tennisJournalHtml(j) {
   if (!j) return '';
   var head = '<div class="journal-section">Projection accuracy — grading the model</div>';
+  if(j.timingExcluded)head += '<div class="decision-stat-note">'+j.timingExcluded+' predictions excluded: pre-start timing unverified. Original records are retained.</div>';
   if (!j.resolved) {
-    return head + '<div class="sports-empty">Accrues as scheduled matches resolve. Each projection is locked when first shown and scored when the match finishes — nothing is graded with hindsight.</div>';
+    return head + '<div class="sports-empty">Accrues as scheduled matches resolve. Only verified pre-start projections are scored when the match finishes — nothing is graded with hindsight.</div>';
   }
   var skill = j.brierSkill == null ? '—' : ((j.brierSkill > 0 ? '+' : '') + j.brierSkill);
   var html = head + '<div class="archive-summary">' +
@@ -11814,10 +11817,10 @@ function tennisJournalHtml(j) {
     jTile(j.accuracy == null ? 'n/a' : j.accuracy + '%', 'All-pick hit rate') +
     jTile(j.brier == null ? 'n/a' : j.brier, 'Brier (vs 0.25)') +
   '</div>';
-  html += '<div class="decision-stat-note">Forward journal: a projection is locked when first shown and scored when the match resolves. Brier is measured against a 50/50 baseline (0.25); skill ' + skill + ' (higher is better). Model framing, not advice.</div>';
+  html += '<div class="decision-stat-note">Forward journal: only verified pre-start projections are scored when the match resolves. Brier is measured against a 50/50 baseline (0.25); skill ' + skill + ' (higher is better). Model framing, not advice.</div>';
   if (j.byTag && j.byTag.length) {
     html += '<div class="journal-section">By confidence</div><div class="jlist">' + j.byTag.map(function (r) {
-      return '<div class="jrow"><span class="jrow-sym">' + esc(r.tag) + '</span><span class="decision-mini">n=' + r.n + '</span><span class="jrow-date">' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</span></div>';
+      return '<div class="jrow"><span class="jrow-sym">' + esc(SportsTrust.tag(r.tag)) + '</span><span class="decision-mini">n=' + r.n + '</span><span class="jrow-date">' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</span></div>';
     }).join('') + '</div>';
   }
   if (j.recent && j.recent.length) {
@@ -11836,8 +11839,9 @@ function tennisJournalHtml(j) {
 function nbaJournalHtml(j) {
   if (!j) return '';
   var head = '<div class="journal-section">Projection accuracy — grading the model</div>';
+  if(j.timingExcluded)head += '<div class="decision-stat-note">'+j.timingExcluded+' predictions excluded: pre-start timing unverified. Original records are retained.</div>';
   if (!j.resolved) {
-    return head + '<div class="sports-empty">Accrues as scheduled matches resolve. Each projection is locked when first shown and scored when the match finishes — nothing is graded with hindsight.</div>';
+    return head + '<div class="sports-empty">Accrues as scheduled matches resolve. Only verified pre-start projections are scored when the match finishes — nothing is graded with hindsight.</div>';
   }
   var skill = j.brierSkill == null ? '—' : ((j.brierSkill > 0 ? '+' : '') + j.brierSkill);
   var html = head + '<div class="archive-summary">' +
@@ -11846,14 +11850,14 @@ function nbaJournalHtml(j) {
     jTile(j.accuracy == null ? 'n/a' : j.accuracy + '%', 'All-pick hit rate') +
     jTile(j.brier == null ? 'n/a' : j.brier, 'Brier (vs 0.25)') +
   '</div>';
-  html += '<div class="decision-stat-note">Forward journal: a projection is locked when first shown and scored when the match resolves. Brier is measured against a 50/50 baseline (0.25); skill ' + skill + ' (higher is better). Model framing, not advice.</div>';
+  html += '<div class="decision-stat-note">Forward journal: only verified pre-start projections are scored when the match resolves. Brier is measured against a 50/50 baseline (0.25); skill ' + skill + ' (higher is better). Model framing, not advice.</div>';
   if (j.market && j.market.n) {
     var beat = j.market.modelBrier < j.market.marketBrier;
-    html += '<div class="decision-stat-note"><b>Model vs bookmaker</b> on the same ' + j.market.n + ' game' + (j.market.n === 1 ? '' : 's') + ': model Brier ' + j.market.modelBrier + ', closing line ' + j.market.marketBrier + ' (lower is better). ' + (beat ? 'The model is ahead so far' : 'The bookmaker is ahead') + (j.market.n < 50 ? '; under 50 games this is still noise.' : '.') + '</div>';
+    html += '<div class="decision-stat-note"><b>Model vs bookmaker</b> · ' + j.market.n + ' matched games: model Brier ' + j.market.modelBrier + ', last observed pre-tip quote ' + j.market.marketBrier + ' (lower is better). ' + (j.market.n < 50 ? 'Too few matched games to assess reliability.' : 'Lower recorded Brier in this sample: ' + (beat ? 'model' : 'bookmaker') + '. This does not establish a reliable edge.') + '</div>';
   }
   if (j.byTag && j.byTag.length) {
     html += '<div class="journal-section">By confidence</div><div class="jlist">' + j.byTag.map(function (r) {
-      return '<div class="jrow"><span class="jrow-sym">' + esc(r.tag) + '</span><span class="decision-mini">n=' + r.n + '</span><span class="jrow-date">' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</span></div>';
+      return '<div class="jrow"><span class="jrow-sym">' + esc(SportsTrust.tag(r.tag)) + '</span><span class="decision-mini">n=' + r.n + '</span><span class="jrow-date">' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</span></div>';
     }).join('') + '</div>';
   }
   if (j.recent && j.recent.length) {
@@ -11895,7 +11899,7 @@ function combatFightHtml(f) {
   var priced = a.pct != null && b.pct != null;
   var name = function (p, other) { return '<span class="' + (priced && p.pct > other.pct ? 'fav' : '') + '">' + esc(p.name) + '</span>'; };
   var line = '<div>' + ph + name(a, b) + ' vs ' + name(b, a) + '</div>' +
-    '<div class="pct">' + (priced ? a.pct + '% · ' + b.pct + '%' : (f.status === 'awaiting result' ? 'awaiting result' : 'no real market yet')) + '</div>';
+    '<div class="pct">' + (priced ? a.pct + '% · ' + b.pct + '%' : (f.status === 'awaiting result' ? 'awaiting result' : f.status==='start unconfirmed' ? 'start time unconfirmed' : 'no real market yet')) + '</div>';
   var bar = priced ? '<div class="cb-bar" title="' + esc(a.name + ' ' + a.pct + '% / ' + b.name + ' ' + b.pct + '%') + '"><i style="width:' + a.pct + '%"></i><b style="width:' + b.pct + '%"></b></div>' : '';
   // A UFC card header already carries the date.
   var meta = [f.weightClass, f.segment, f.sport === 'boxing' ? f.card : '', f.sport === 'boxing' ? sportsDate(f.date) : ''].filter(Boolean).join(' · ');
@@ -11903,6 +11907,8 @@ function combatFightHtml(f) {
   return '<div class="cb-fight">' + line + bar + '<div class="meta">' + esc(meta) + link + '</div></div>';
 }
 function combatResultHtml(r) {
+  if(r.settlementConfirmed!==true)return '<div class="cb-res">Settlement unverified · '+esc(r.bout || '')+'</div>';
+  if(r.void)return '<div class="cb-res">'+esc(r.bout || '')+' · resolved without a winner; not scored</div>';
   var chance = r.winnerPct == null ? 'pre-fight chance not recorded'
     : (r.winnerPct < 50 ? '<span class="up">upset: won as a ' + r.winnerPct + '% underdog</span>' : 'won as the ' + r.winnerPct + '% favourite');
   return '<div class="cb-res"><b>' + esc(r.winner) + '</b> beat ' + esc(r.loser) + ' · ' + chance + '<div class="sports-change-detail">' + esc([r.card, sportsDateOnly(r.date)].filter(Boolean).join(' · ')) + '</div></div>';
@@ -11922,9 +11928,10 @@ function sportsCombatHtml(mod) {
   var boxUp = boxing.filter(function (f) { return f.status === 'upcoming'; }), boxWait = boxing.filter(function (f) { return f.status !== 'upcoming'; });
   html += '<div class="sports-panel"><div class="sports-panel-title">Boxing · next 3 weeks</div>' + (boxUp.length ? boxUp.map(combatFightHtml).join('') : '<div class="sports-empty">No boxing fights listed on Polymarket for the next three weeks.</div>') +
     (boxWait.length ? '<details><summary class="sports-change-detail">Awaiting a result · ' + boxWait.length + '</summary>' + boxWait.map(combatFightHtml).join('') + '</details>' : '') + '</div>';
-  var res = mod.results || [], rec = mod.record || {};
+  var res = (mod.results || []).filter(function(r){return r.settlementConfirmed===true;}), rec = mod.record || {};
   html += '<div class="sports-panel"><div class="sports-panel-title">Recent results</div>' + (rec.scored ? '<div class="decision-stat-note">Favourites won ' + rec.favouritesWon + ' of ' + rec.scored + ' fights with a recorded pre-fight price' + (rec.brier != null ? ' (Brier ' + rec.brier + ', 0.25 = coin flip)' : '') + '.</div>' : '') +
-    (res.length ? res.slice(0, 8).map(combatResultHtml).join('') : '<div class="sports-empty">Results appear here after fights settle. Pre-fight chances are recorded from the first refresh before each fight.</div>') + '</div>';
+    (res.length ? res.slice(0, 8).map(combatResultHtml).join('') : '<div class="sports-empty">Results appear after confirmed settlement. Chances use the last verified observation before the scheduled start.</div>') + '</div>';
+  if(rec.unverifiedResults || rec.timingExcluded)html += '<div class="decision-stat-note">Excluded from accuracy: '+(rec.unverifiedResults || 0)+' results without confirmed settlement; '+(rec.timingExcluded || 0)+' results without a verified pre-start price.</div>';
   if (mod.providerNote) html += '<div class="sports-empty" style="margin-top:.6rem">' + esc(mod.providerNote) + '</div>';
   return html;
 }
@@ -12243,32 +12250,34 @@ function sportsGenericModuleHtml(mod, key) {
 function sportsDigestHtml(d, nowMs) {
   d = d || {};
   var mods = d.modules || {}, nba = mods.nba || {}, tennis = mods.tennis || {}, combat = mods.combat || {};
+  var nf=SportsTrust.freshness(nba,nowMs),tf=SportsTrust.freshness(tennis,nowMs),cf=SportsTrust.freshness(combat,nowMs);
+  function checked(f){return ' · '+f.label+' '+(f.checkedAt ? sportsDate(f.checkedAt) : '(time unavailable)');}
   var ahead = 24 * 3600000, back = 36 * 3600000;
   var within = function (iso, from, to) { var t = Date.parse(iso); return isFinite(t) && t >= from && t <= to; };
-  var today = [], overnight = [], edges = [];
+  var today = [], overnight = [], edges = [],lastReported=[];
   var followed = sportsFollowed(nba, 'nba', 'teams');
   (nba.matches || []).forEach(function (m) {
     if (!sportsIsFollowedMatch(m, followed)) return;
     if (m.status === 'SCHEDULED' && within(m.utcDate, nowMs, nowMs + ahead)) {
-      var k = m.market, line = k && k.pHome != null ? sportsShortTeam(m.home) + ' ' + Math.round(k.pHome * 100) + '% · ' + sportsShortTeam(m.away) + ' ' + (100 - Math.round(k.pHome * 100)) + '% (' + (k.details || 'bookmaker') + ')' : '';
-      today.push({ at: m.utcDate, tag: 'NBA', text: m.away + ' at ' + m.home + (m.stage === 'preseason' ? ' (preseason)' : ''), sub: sportsDate(m.utcDate) + (line ? ' · ' + line : '') });
+      var k = m.market, line = nf.current && k && k.pHome != null ? sportsShortTeam(m.home) + ' ' + Math.round(k.pHome * 100) + '% · ' + sportsShortTeam(m.away) + ' ' + (100 - Math.round(k.pHome * 100)) + '% (' + (k.details || 'bookmaker') + ')' : '';
+      today.push({ at: m.utcDate, tag: 'NBA', text: m.away + ' at ' + m.home + (m.stage === 'preseason' ? ' (preseason)' : ''), sub: sportsDate(m.utcDate) + (line ? ' · ' + line : '')+checked(nf) });
     }
     if (m.status === 'FINISHED' && within(m.utcDate, nowMs - back, nowMs) && m.score && m.score.home != null) {
       var homeWon = m.score.home > m.score.away, hi = Math.max(m.score.home, m.score.away), lo = Math.min(m.score.home, m.score.away);
-      overnight.push({ at: m.utcDate, tag: 'NBA', text: (homeWon ? m.home + ' beat ' + m.away : m.away + ' beat ' + m.home) + ' ' + hi + '-' + lo + (m.stage === 'preseason' ? ' (preseason)' : ''), sub: sportsDate(m.utcDate) });
+      overnight.push({ at: m.utcDate, tag: 'NBA', text: (homeWon ? m.home + ' beat ' + m.away : m.away + ' beat ' + m.home) + ' ' + hi + '-' + lo + (m.stage === 'preseason' ? ' (preseason)' : ''), sub: sportsDate(m.utcDate)+checked(nf) });
     }
   });
   (nba.matches || []).forEach(function (m) {
-    if (m.edge && m.edge.size >= 5 && m.status === 'SCHEDULED' && within(m.utcDate, nowMs, nowMs + 3 * 86400000)) {
-      edges.push({ at: m.utcDate, size: m.edge.size, tag: 'NBA', text: 'Model rates ' + m.edge.side + ' ' + m.edge.size + ' pts above the bookmaker', sub: m.away + ' at ' + m.home + ' · ' + sportsDate(m.utcDate) });
+    if (nf.current && m.edge && m.edge.size >= 5 && m.status === 'SCHEDULED' && within(m.utcDate, nowMs, nowMs + 3 * 86400000)) {
+      edges.push({ at: m.utcDate, size: m.edge.size, tag: 'NBA', text: 'Difference from bookmaker: model +' + m.edge.size + ' pts for ' + m.edge.side, sub: m.away + ' at ' + m.home + ' · ' + sportsDate(m.utcDate)+checked(nf)+' · uncalibrated; '+((nba.projectionJournal || {}).resolved || 0)+' projections scored' });
     }
   });
   (tennis.followed || []).forEach(function (p) {
     var who = (p.filipino ? '🇵🇭 ' : '') + p.name;
-    if (p.live) today.unshift({ at: p.live.date, tag: 'LIVE', text: who + ' vs ' + p.live.opponent + (p.live.score ? ' · ' + p.live.score : ''), sub: p.live.event + ', ' + p.live.round });
-    else if (p.next && within(p.next.date, nowMs - 3600000, nowMs + 36 * 3600000)) today.push({ at: p.next.date, tag: 'TENNIS', text: who + ' vs ' + p.next.opponent + tennisRankTxt(p.next.oppRank), sub: sportsDate(p.next.date) + ' · ' + p.next.event + ', ' + p.next.round + (p.next.proj ? ' · model ' + (p.next.proj.pct >= 50 ? 'favours ' + p.name.split(' ').pop() + ' ' + p.next.proj.pct : 'favours opponent ' + (100 - p.next.proj.pct)) + '%' : '') });
+    if (p.live) (tf.live ? today : lastReported).push({ at: p.live.date, tag: tf.live ? 'LIVE' : 'LAST SEEN', text: who + ' vs ' + p.live.opponent + (p.live.score ? ' · '+(tf.live ? '' : 'last reported score ')+p.live.score : ''), sub: p.live.event + ', ' + p.live.round+checked(tf) });
+    else if (p.next && within(p.next.date, nowMs, nowMs + 36 * 3600000)) today.push({ at: p.next.date, tag: 'TENNIS', text: who + ' vs ' + p.next.opponent + tennisRankTxt(p.next.oppRank), sub: sportsDate(p.next.date) + ' · ' + p.next.event + ', ' + p.next.round + (tf.current && p.next.proj ? ' · model ' + (p.next.proj.pct >= 50 ? 'favours ' + p.name.split(' ').pop() + ' ' + p.next.proj.pct : 'favours opponent ' + (100 - p.next.proj.pct)) + '%' : '')+checked(tf) });
     var last = (p.recent || [])[0];
-    if (last && within(last.date, nowMs - 48 * 3600000, nowMs)) overnight.push({ at: last.date, tag: 'TENNIS', text: who + (last.won ? ' beat ' : ' lost to ') + last.opponent + tennisRankTxt(last.oppRank) + ' ' + (last.score || ''), sub: last.event + ', ' + last.round });
+    if (last && within(last.date, nowMs - 48 * 3600000, nowMs)) overnight.push({ at: last.date, tag: 'TENNIS', text: who + (last.won ? ' beat ' : ' lost to ') + last.opponent + tennisRankTxt(last.oppRank) + ' ' + (last.score || ''), sub: last.event + ', ' + last.round+checked(tf) });
   });
   var upsets = [];
   ['slam', 'masters', 'tour500'].forEach(function (k) {
@@ -12282,7 +12291,7 @@ function sportsDigestHtml(d, nowMs) {
             var n = tennisNotable(m, 3);
             if (!n || n.kind !== 'upset') return;
             var w = m.players.filter(function (p) { return p.winner; })[0], l = m.players.filter(function (p) { return !p.winner; })[0];
-            upsets.push({ at: m.date, rank: n.loserRank || 999, tag: 'UPSET', text: w.name + ' beat ' + l.name + ' (' + n.txt.replace('Upset · ', '') + ')', sub: t.name + ', ' + r.name });
+            upsets.push({ at: m.date, rank: n.loserRank || 999, tag: 'UPSET', text: w.name + ' beat ' + l.name + ' (' + n.txt.replace('Upset · ', '') + ')', sub: t.name + ', ' + r.name+checked(tf) });
           });
         });
       });
@@ -12292,15 +12301,15 @@ function sportsDigestHtml(d, nowMs) {
   (combat.cards || []).forEach(function (c) {
     if (!within(c.date, nowMs, nowMs + 48 * 3600000)) return;
     var top = c.fights[0];
-    if (top) today.push({ at: c.date, tag: 'FIGHT', text: c.name + ': ' + top.fighters.map(function (f) { return f.name + (f.pct != null ? ' ' + f.pct + '%' : ''); }).join(' vs '), sub: sportsDate(c.date) + ' · ' + c.fights.length + ' fights' });
+    if (top) today.push({ at: c.date, tag: 'FIGHT', text: c.name + ': ' + top.fighters.map(function (f) { return f.name + (cf.current && f.pct != null ? ' ' + f.pct + '%' : ''); }).join(' vs '), sub: sportsDate(c.date) + ' · ' + c.fights.length + ' fights'+checked(cf) });
   });
   (combat.boxing || []).forEach(function (f) {
     if (f.status !== 'upcoming' || !within(f.date, nowMs, nowMs + 48 * 3600000) || (!f.filipino && f.volume < 5000 && f.liquidity < 5000)) return;
-    today.push({ at: f.date, tag: 'FIGHT', text: (f.filipino ? '🇵🇭 ' : '') + f.fighters.map(function (x) { return x.name + (x.pct != null ? ' ' + x.pct + '%' : ''); }).join(' vs '), sub: sportsDate(f.date) + ' · boxing' });
+    today.push({ at: f.date, tag: 'FIGHT', text: (f.filipino ? '🇵🇭 ' : '') + f.fighters.map(function (x) { return x.name + (cf.current && x.pct != null ? ' ' + x.pct + '%' : ''); }).join(' vs '), sub: sportsDate(f.date) + ' · boxing'+checked(cf) });
   });
   (combat.results || []).forEach(function (r) {
-    if (!within(r.date, nowMs - 48 * 3600000, nowMs) || r.winnerPct == null || r.winnerPct >= 50) return;
-    overnight.push({ at: r.date, tag: 'UPSET', text: r.winner + ' beat ' + r.loser + ' as a ' + r.winnerPct + '% underdog', sub: r.card || 'boxing' });
+    if (r.settlementConfirmed!==true || !within(r.date, nowMs - 48 * 3600000, nowMs) || r.winnerPct == null || r.winnerPct >= 50) return;
+    overnight.push({ at: r.date, tag: 'UPSET', text: r.winner + ' beat ' + r.loser + ' as a ' + r.winnerPct + '% underdog', sub: (r.card || 'boxing')+checked(cf) });
   });
   function rows(list) { return list.map(function (x) { return '<div class="sd-row"><span class="tag">' + esc(x.tag) + '</span><span>' + esc(x.text) + (x.sub ? '<span class="sub">' + esc(x.sub) + '</span>' : '') + '</span></div>'; }).join(''); }
   today.sort(function (a, b) { return a.tag === 'LIVE' ? -1 : b.tag === 'LIVE' ? 1 : String(a.at).localeCompare(String(b.at)); });
@@ -12310,7 +12319,8 @@ function sportsDigestHtml(d, nowMs) {
   var html = '';
   if (today.length) html += '<div class="sd-group">Next 24 hours</div>' + rows(today.slice(0, 6));
   if (overnight.length) html += '<div class="sd-group">Since yesterday</div>' + rows(overnight.slice(0, 6));
-  if (edges.length) html += '<div class="sd-group">Model vs bookmaker</div>' + rows(edges.slice(0, 3));
+  if(lastReported.length)html += '<div class="sd-group">Last reported activity — not a live update</div>'+rows(lastReported.slice(0,3));
+  if (edges.length) html += '<div class="sd-group">Difference from bookmaker</div>' + rows(edges.slice(0, 3));
   if (!html) html = '<div class="sports-empty">Nothing on for your teams, players or the fight cards in the next day.</div>';
   return '<div class="sports-panel sports-digest"><div class="sports-panel-title">Your sports today</div>' + html + '</div>';
 }
