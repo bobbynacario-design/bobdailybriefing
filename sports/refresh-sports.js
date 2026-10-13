@@ -2285,6 +2285,10 @@ function buildCombatModule() {
 function combatModuleHasData(mod) {
   return !!mod && ((mod.cards || []).length > 0 || (mod.boxing || []).length > 0 || (mod.results || []).length > 0);
 }
+function combatRecord(stats){
+  return {scored:stats.scored,favouritesWon:stats.favouritesWon,brier:stats.brier,
+    unverifiedResults:stats.unverifiedResults,timingExcluded:stats.timingExcluded,noWinner:stats.noWinner};
+}
 async function fetchCombatModule(db, dryRun) {
   var now = new Date(), nowIso = now.toISOString();
   var fights = await fetchCombatFights(fetch, now);
@@ -2309,7 +2313,7 @@ async function fetchCombatModule(db, dryRun) {
     asOf: phtDateKey(), generatedAt: nowIso, refreshAttemptedAt: nowIso, lastSuccessfulAt: nowIso,
     refreshStatus: 'ok', fallback: false, staleAfterHours: 36,
     cards: view.cards, boxing: view.boxing, results: journal.stats.recent,
-    record: { scored: journal.stats.scored, favouritesWon: journal.stats.favouritesWon, brier: journal.stats.brier }
+    record:combatRecord(journal.stats)
   };
 }
 
@@ -2853,6 +2857,7 @@ export {
   collectTennisMatches,
   buildTennisJournal,
   updateTennisJournal,
+  combatRecord,
   moduleHasData,
   lanesMissing,
   laneValue,

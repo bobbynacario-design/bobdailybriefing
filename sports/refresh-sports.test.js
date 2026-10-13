@@ -16,6 +16,7 @@ import {
   nbaSeasonYear,
   buildNbaJournal,
   updateTennisJournal,
+  combatRecord,
   buildTeamProfiles,
   buildModuleChanges,
   scheduleReadiness,
@@ -616,4 +617,8 @@ test('tennis journal failures cannot reset the saved history or publish unpersis
   await assert.rejects(()=>updateTennisJournal(db,{tiers:{}},false),/retaining prior snapshot/);assert.equal(writes,0);
   const module={tiers:{}},failedWrite={collection:()=>({doc:()=>({get:async()=>({exists:true,data:()=>({preds:{}})}),set:async()=>{throw Error('write failed');}})})};
   await assert.rejects(()=>updateTennisJournal(failedWrite,module,false),/retaining prior snapshot/);assert.equal(module.projectionJournal,undefined);
+});
+test('combat audit exclusions survive the shared/public module summary',()=>{
+  const stats={scored:4,favouritesWon:3,brier:0.2,unverifiedResults:7,timingExcluded:2,noWinner:1,recent:[]};
+  assert.deepEqual(combatRecord(stats),{scored:4,favouritesWon:3,brier:0.2,unverifiedResults:7,timingExcluded:2,noWinner:1});
 });
