@@ -2374,6 +2374,7 @@ a.pse-sym:hover{text-decoration:underline}
 .miro-health{border-left:3px solid var(--gold);background:var(--gold-dim);padding:.75rem .85rem;font-size:11px;color:var(--txt2);line-height:1.6}
 .miro-health strong{color:var(--txt)}
 .miro-empty{font-size:11px;color:var(--txt3);line-height:1.6;padding:.55rem 0}
+.miro-plain .miro-shadow{display:block;margin-top:.3rem;font-size:12px;color:var(--txt2)}
 .miro-plain{font-size:13px;line-height:1.55;color:var(--txt);background:var(--bg2);border-radius:8px;padding:.5rem .7rem;margin-top:.4rem}.miro-plain b{color:var(--gold);font-weight:600}
 .miro-howto{font-size:13px;line-height:1.6;color:var(--txt);margin:.2rem 0 1rem}.miro-howto summary{cursor:pointer;color:var(--gold);font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase}.miro-howto dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:.35rem .9rem;margin:.6rem 0 0}.miro-howto dt{font-family:var(--mono);font-size:12px;color:var(--txt2)}.miro-howto dd{margin:0}
 @media (max-width:560px){.miro-howto dl{grid-template-columns:1fr}.miro-howto dd{margin-bottom:.4rem}}
@@ -10755,6 +10756,14 @@ function miroPanelPlain(m) {
   } else {
     s += 'After costs that is no meaningful gap from the price.';
   }
+  // Shadow models (lane: model contest) read the same facts; shown, never used.
+  var sh = m.panelRead && m.panelRead.shadow;
+  if (sh && Object.keys(sh).length) {
+    s += ' <span class="miro-shadow">Other models on the same facts, not used for this card: ' + Object.keys(sh).map(function (k) {
+      var r = sh[k] || [], avg = r.length ? r.reduce(function (a, b) { return a + b; }, 0) / r.length : null;
+      return esc(miroModelName(k)) + ' ' + (avg == null ? 'n/a' : miroPct(avg));
+    }).join(', ') + '.</span>';
+  }
   return '<div class="miro-plain">' + s + '</div>';
 }
 // One glossary for every card's numbers.
@@ -11045,7 +11054,21 @@ function miroHealthHtml(j, d) {
       (stats.meanClvTowardPanel * 100).toFixed(1) + ' points across ' + stats.nClv + ' observations.';
   }
   if (d.meta && d.meta.llmPaused) detail += ' The LLM panel is paused.';
-  return '<div class="miro-health"><strong>Model calibration: ' + esc(state) + '.</strong> ' + esc(detail) + '</div>';
+  return '<div class="miro-health"><strong>Model calibration: ' + esc(state) + '.</strong> ' + esc(detail) + '</div>' + miroContestHtml(j && j.shadow);
+}
+// The model contest (miro/shadow-journal.js): every model locked at the same
+// read and price, scored after the card's haircut beside the price.
+function miroContestHtml(s) {
+  if (!s) return '';
+  var live = miroModelName(s.live || '');
+  var names = (s.models || []).map(function (x) { return x.model; });
+  if (!s.nResolved) {
+    return '<div class="miro-health"><strong>Model contest:</strong> ' + esc(s.nOpen + ' market' + (s.nOpen === 1 ? '' : 's') + ' locked for ' + live + ' (live) and the shadow models on the same facts. Each is scored when its market resolves; the switch waits for results.') + '</div>';
+  }
+  var rows = (s.models || []).slice().sort(function (a, b) { return (a.brierCut == null ? 9 : a.brierCut) - (b.brierCut == null ? 9 : b.brierCut); }).map(function (x) {
+    return esc(miroModelName(x.model)) + (x.model === s.live ? ' (live)' : '') + ' ' + (x.brierCut == null ? 'n/a' : x.brierCut) + ' vs price ' + (x.brierPrice == null ? 'n/a' : x.brierPrice) + ' on ' + x.n;
+  }).join(' · ');
+  return '<div class="miro-health"><strong>Model contest</strong> (Brier after the haircut, lower is better): ' + rows + '. ' + esc(s.nOpen + ' still open.' + (s.nResolved < 20 ? ' Under 20 resolved, this is not yet a basis for switching.' : '')) + '</div>';
 }
 // How the panel's reads were produced. The LLM control says the panel is
 // "running", which is true but not the whole story: with web_search off the
@@ -11056,13 +11079,13 @@ function miroHealthHtml(j, d) {
 // The panel's stored read for one market: when it was made and why, and the
 // fact sheet it read (miro/factsheet.js), with links from that search only.
 function miroModelName(id) {
-  var m = String(id || '').match(/^claude-(haiku|sonnet|opus)-(\d+)-(\d+)$/);
+  var m = String(id || '').match(/^claude-(haiku|sonnet|opus|fable)-(\d+)-(\d+)$/);
   return m ? 'Claude ' + m[1].charAt(0).toUpperCase() + m[1].slice(1) + ' ' + m[2] + '.' + m[3] : String(id || '');
 }
 function miroPanelReadHtml(market) {
   var r = market && market.panelRead;
   if (!r || !r.readAt || market.haircutProb == null) return '';
-  var reasons = { 'new': 'first read', weekly: 'weekly refresh', news: 're-read on new reporting', model: 'model changed', rules: 'resolution rules changed' };
+  var reasons = { 'new': 'first read', weekly: 'weekly refresh', news: 're-read on new reporting', model: 'model changed', rules: 'resolution rules changed', facts: 'new fact sheet' };
   var day = String(r.readAt).slice(0, 10), f = r.facts;
   var html = '<div class="src" style="margin-top:.2rem">Panel read ' + esc(day) + (reasons[r.reason] ? ' · ' + esc(reasons[r.reason]) : '') + '</div>';
   if (!f || !f.summary) return html;
@@ -12423,6 +12446,7 @@ function renderSports() {
 // 1,000 searches, recorded with calls = searches.
 var LLM_PRICING_USD_PER_1K = {
   'gpt-5.5': { input: 0.005, output: 0.030, cacheRead: 0.0005 },
+  'claude-fable-5-1': { input: 0.010, output: 0.050, cacheRead: 0.00025, cacheWrite: 0.0125 },
   'claude-opus-5-5': { input: 0.004, output: 0.020, cacheRead: 0.0002, cacheWrite: 0.005 },
   'claude-sonnet-5-5': { input: 0.002, output: 0.010, cacheRead: 0.0002, cacheWrite: 0.0025 },
   'claude-haiku-5-5': { input: 0.0001, output: 0.0005, cacheRead: 0.00001, cacheWrite: 0.000125 },
@@ -12432,7 +12456,7 @@ var LLM_PRICING_USD_PER_1K = {
   'o4-mini-deep-research': null,
   'o3-deep-research': null
 };
-var LLM_RATES_AS_OF = 'gpt-5.5 2026-06-23, Opus 2026-10-03, Haiku 2026-10-08, Sonnet 2026-10-09';
+var LLM_RATES_AS_OF = 'gpt-5.5 2026-06-23, Opus 2026-10-03, Haiku 2026-10-08, Sonnet 2026-10-09, Fable 2026-10-13';
 // Cached tokens (and Claude's cache writes) are subsets of input tokens, so
 // charge the rest of the input at the input rate, cached at the cache-read
 // rate, and cache writes at their own (higher) rate.
@@ -12516,7 +12540,7 @@ function renderLlmUsage() {
     html += '<div class="src" style="margin-top:.35rem">' +
       (since ? 'Since ' + esc(String(since).slice(0, 10)) + ' · ' : '') +
       'rates as of ' + LLM_RATES_AS_OF + ' (gpt-5.5 $5/$30 per 1M in/out, $0.50 cached; ' +
-      'Claude Opus 5.5 $4/$20, $0.20 cached, $5 cache writes; Haiku 5.5 $0.10/$0.50 up to 100k input tokens, $0.50/$2.50 above; web search 1¢ each)' +
+      'Claude Fable 5.1 $10/$50, $0.25 cached; Opus 5.5 $4/$20, $0.20 cached, $5 cache writes; Sonnet 5.5 $2/$10; Haiku 5.5 $0.10/$0.50 up to 100k input tokens, $0.50/$2.50 above; web search 1¢ each)' +
       (anyUnpriced ? ' · deep-research shown unpriced (rates unconfirmed — never guessed)' : '') +
       (rows.some(function (r) { return String(r.model || '').indexOf(LLM_LOCAL_PREFIX) === 0; })
         ? ' · local/* models run on your own machine and cost $0 in API terms (electricity is not modelled here)' : '') +

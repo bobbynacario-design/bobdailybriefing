@@ -29,7 +29,8 @@ import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
-import { aggregatePanel } from './scenario.js';
+import { aggregatePanel, readSummary } from './scenario.js';
+import { buildShadowJournal } from './shadow-journal.js';
 import { buildMiroJournal } from './journal-miro.js';
 import { enrichMarketChanges, marketResearchPaused } from './briefing.js';
 import { explainMarketMoves, ledgerUsage } from './catalysts.js';
@@ -126,6 +127,11 @@ var JOURNAL_VERSION = '1.2.0';
 
 // CLI flags: --dry-run (compute + log, skip Firestore writes), --no-openai (skip
 // all paid calls — free price-only smoke test), --no-panel (skip forecasting only).
+// Shadow panels: other Claude models on the same personas and facts, scored in
+// miro-shadow-journal, never shown as the read. MIRO_SHADOW_MODELS overrides
+// (blank = off).
+var SHADOW_MODELS = (process.env.MIRO_SHADOW_MODELS != null ? process.env.MIRO_SHADOW_MODELS.split(',') : (CONFIG.panel.shadowModels || []))
+  .map(function (s) { return s.trim(); }).filter(Boolean);
 var ARGV = process.argv.slice(2);
 var DRY_RUN = ARGV.indexOf('--dry-run') !== -1;
 var NO_OPENAI = ARGV.indexOf('--no-openai') !== -1;
@@ -550,6 +556,7 @@ async function main() {
   STAGE.set('panel');
   var nowIso = new Date().toISOString();
   var panel = { reads: {}, usage: null, calls: 0 };
+  var shadowReads = {}, shadowUsage = [];
   var factRun = null, panelPlan = null;
   var panelActive = !(NO_OPENAI || NO_PANEL || controlPaused) && (!PANEL_KEY_REQUIRED || !!PANEL_KEY);
   if (!panelActive) {
@@ -583,12 +590,25 @@ async function main() {
       evidence[m.slug] = [factEvidence(factsBySlug[m.slug])].filter(Boolean).concat(plan.evidence[m.slug] || []).slice(0, 4);
     });
     if (toRead.length) panel = await runPanel(toRead, CONFIG, { evidence: evidence });
+    // Shadows read exactly what the live panel read, only when it read.
+    if (IS_ANTHROPIC && panel.calls && SHADOW_MODELS.length) {
+      for (var si = 0; si < SHADOW_MODELS.length; si++) {
+        var sm = SHADOW_MODELS[si];
+        if (sm === PANEL_MODEL) continue;
+        var sr = await runClaudePanel(toRead, CONFIG.panel.personas, { apiKey: PANEL_KEY, model: sm, evidence: evidence, log: function () {} });
+        shadowReads[sm] = sr.reads;
+        shadowUsage.push({ model: sm, usage: sr.usage, calls: sr.calls });
+        console.log('Shadow ' + sm + ': ' + sr.calls + ' calls, input ' + sr.usage.inputTokens + ', output ' + sr.usage.outputTokens + ', missing ' + sr.missing.length);
+      }
+    }
     if (panel.calls) console.log('Panel usage: ' + panel.calls + ' calls, input ' + panel.usage.inputTokens + ', output ' + panel.usage.outputTokens + (panel.missing ? ', missing reads ' + panel.missing.length : ''));
     marketsData.forEach(function (m) {
       var kept = plan.keep[m.slug];
       if (kept) { m.panelReads = kept.reads; m.panelRead = kept; return; }
       var reads = (panel.reads && panel.reads[m.slug]) || [];
       m.panelReads = reads;
+      var shadow = {};
+      Object.keys(shadowReads).forEach(function (sm) { var r = shadowReads[sm][m.slug] || []; if (r.length) shadow[sm] = r; });
       if (reads.length) {
         m.panelRead = { reads: reads, readAt: nowIso, model: PANEL_MODEL_LABEL, provider: PANEL_PROVIDER, reason: plan.reasons[m.slug] || 'new',
           resolutionRules:m.resolutionRules || '', resolutionSource:m.resolutionSource || '',
@@ -598,6 +618,7 @@ async function main() {
           // news re-read keeps the stamp of the sheet it reused.
           factsVersion: factRun && factRun.status === 'ok' && needFacts.some(function (x) { return x.slug === m.slug; }) ? FACTSHEET_VERSION
             : (priorRead[m.slug] && priorRead[m.slug].factsVersion) || null };
+        if (Object.keys(shadow).length) m.panelRead.shadow = shadow;
       } else delete m.panelRead;
     });
     panelPlan = { read: toRead.length, kept: Object.keys(plan.keep).length, reasons: plan.reasons, rereadDays: CONFIG.panel.rereadDays || 7,
@@ -670,6 +691,9 @@ async function main() {
     console.log('\nWrote briefings-bob/miro-' + dateKey + ' and miro-latest = ' + dateKey + '.');
     // Record the panel's token usage to the shared LLM cost ledger (no-throw).
     if (panel.calls > 0) await recordUsage(db, 'miro-panel', PANEL_MODEL_LABEL, panel.usage, dateKey, panel.calls);
+    for (var su = 0; su < shadowUsage.length; su++) {
+      if (shadowUsage[su].calls) await recordUsage(db, 'miro-panel-shadow', shadowUsage[su].model, shadowUsage[su].usage, dateKey, shadowUsage[su].calls);
+    }
   }
 
   // ── Lane 3: resolution journal (Brier ours vs market price) ──
@@ -730,6 +754,15 @@ async function main() {
     })
   });
   var journalBody = buildMiroJournal(priorJournal, todaySnapshots, todayPrices, resolutions, effectiveConfig);
+  // The model contest (shadow-journal.js). A failed read never rewrites it.
+  var shadowJournal = null;
+  try {
+    var shadowSnap = await db.collection(COLL).doc('miro-shadow-journal').get();
+    shadowJournal = buildShadowJournal(shadowSnap.exists ? shadowSnap.data() : null, marketsData, resolutions, dateKey, PANEL_MODEL_LABEL, CONFIG.haircut, readSummary);
+    if (!DRY_RUN) await db.collection(COLL).doc('miro-shadow-journal').set(shadowJournal);
+    console.log('Shadow journal: ' + shadowJournal.stats.nOpen + ' open, ' + shadowJournal.stats.nResolved + ' resolved' + (DRY_RUN ? ' (dry run, not written)' : '') + '.');
+  } catch (e) { console.warn('Shadow journal skipped: ' + (e.message || e)); }
+  if (shadowJournal) journalBody.shadow = shadowJournal.stats;
   var journalDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: dateKey, meta: meta }, journalBody);
   if (DRY_RUN) {
     console.log('--dry-run: NOT writing miro-journal.');

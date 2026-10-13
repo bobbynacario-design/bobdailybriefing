@@ -145,9 +145,19 @@ function aggregateOne(m, config) {
   });
 }
 
+// One model's reads as the card would show them: the raw mean, how split the
+// readers are, and the same price-anchored haircut. Used to score shadow
+// models exactly as the live one is scored. Null below MIN_READS.
+function readSummary(reads, anchor, hc) {
+  var r = cleanReads(reads);
+  if (r.length < MIN_READS || anchor == null || !isFinite(anchor)) return null;
+  var raw = mean(r), sd = stdev(r, raw);
+  return { n: r.length, raw: round(raw, 4), sd: round(sd, 4), cut: round(clamp(haircut(raw, anchor, sd, hc).prob, 0, 1), 4) };
+}
+
 // Enrich every market. Pure: returns a new array, mutates nothing.
 function aggregatePanel(markets, config) {
   return (markets || []).map(function (m) { return aggregateOne(m, config); });
 }
 
-export { aggregatePanel };
+export { aggregatePanel, readSummary };

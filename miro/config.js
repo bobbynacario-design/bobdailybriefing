@@ -111,6 +111,11 @@ var PANEL = {
   // One searched Sonnet call writes where each market's story stands now
   // (factsheet.js, price-blind). Built for a market when its read is new, a
   // week old, or the model changed; a news-triggered re-read reuses it.
+  // Shadow panels (13 Oct 2026): the same personas and fact sheet on other
+  // models, run whenever the live panel re-reads. Never shown as the card's
+  // read; miro-shadow-journal scores them against Haiku and the price so a
+  // switch is decided by results. Blank MIRO_SHADOW_MODELS turns them off.
+  shadowModels: ['claude-sonnet-5-5', 'claude-fable-5-1'],
   factSheet: true,
   factSheetModel: 'claude-sonnet-5-5',
   factSheetMaxSearches: 10,

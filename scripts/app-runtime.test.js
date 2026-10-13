@@ -148,7 +148,7 @@ test('Markets shows when each panel read was made, the fact sheet it read, and h
 });
 
 test('Markets accuracy stays cautious below 30 resolved forecasts',()=>{
-  const {context}=environment(['miroHealthHtml'],{esc:String});
+  const {context}=environment(['miroHealthHtml','miroContestHtml','miroModelName'],{esc:String});
   for(const nResolved of [0,1,7,29])for(const skill of [-.1,.1]){
     const out=context.miroHealthHtml({stats:{nResolved,skill}},{meta:{}});
     assert.match(out,/Too few outcomes to assess/);assert.doesNotMatch(out,/Beating market baseline|Not beating market baseline/);
@@ -2049,4 +2049,20 @@ test('Markets: each panel card says its numbers in plain words, and one glossary
   assert.ok(context.miroPanelPlain({...m,edge:0.01,gate:'NO-GO',gateReason:'no-edge'}).includes('a gap of only 1.0 pts, too small to matter.'));
   assert.equal(context.miroPanelPlain({impliedYes:0.5}),'');
   const g=context.miroHowToHtml();assert.match(g,/How to read a market card/);assert.match(g,/haircut/);assert.match(g,/est. edge after costs/);
+});
+
+test('Markets model contest: shadow reads shown but never used, and the contest scored after the haircut beside the price',()=>{
+  const {context}=environment(['miroPanelPlain','miroPct','miroVerdict','miroModelName','miroContestHtml'],{esc:escHtml});
+  const m={impliedYes:0.625,panelProb:0.104,haircutProb:0.33,panelN:5,edge:0.28,edgeSide:'NO',gate:'GO',yesBid:0.62,yesAsk:0.63,spread:0.01,
+    panelRead:{shadow:{'claude-sonnet-5-5':[0.2,0.2,0.2],'claude-fable-5-1':[0.18,0.25,0.2]}}};
+  const h=context.miroPanelPlain(m);
+  assert.ok(h.includes('Other models on the same facts, not used for this card: Claude Sonnet 5.5 20.0%, Claude Fable 5.1 21.0%.'));
+  assert.equal(context.miroModelName('claude-fable-5-1'),'Claude Fable 5.1');
+  const open=context.miroContestHtml({nOpen:7,nResolved:0,live:'claude-haiku-5-5',models:[]});
+  assert.ok(open.includes('7 markets locked for Claude Haiku 5.5 (live)'));
+  const done=context.miroContestHtml({nOpen:5,nResolved:2,live:'claude-haiku-5-5',models:[
+    {model:'claude-haiku-5-5',n:2,brierCut:0.3,brierPrice:0.2},{model:'claude-fable-5-1',n:2,brierCut:0.18,brierPrice:0.2}]});
+  assert.ok(done.indexOf('Claude Fable 5.1 0.18 vs price 0.2 on 2')<done.indexOf('Claude Haiku 5.5 (live) 0.3'));
+  assert.ok(done.includes('Under 20 resolved, this is not yet a basis for switching.'));
+  assert.equal(context.miroContestHtml(null),'');
 });
