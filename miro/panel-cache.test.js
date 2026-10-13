@@ -45,3 +45,12 @@ test('unsourced, undated or unknown explanations are not news; older news is car
   const plan = planReads([{slug:'m'}], prev, opts);
   assert.deepEqual(plan.reasons, {m:'weekly'});assert.deepEqual(plan.evidence.m.map(e => e.text), ['Old but recent.']);
 });
+
+test('a read built on an older fact sheet is re-read once for the new sheet, then kept', () => {
+  const now = '2026-10-13T06:00:00Z';
+  const read = v => ({markets:[{slug:'duterte', panelRead:{reads:[0.1], readAt:'2026-10-12T22:00:00Z', model:'h', provider:'anthropic', factsVersion:v}}]});
+  const opts = {model:'h', provider:'anthropic', now, rereadDays:7, factsVersion:'deciders-v2'};
+  assert.equal(planReads([{slug:'duterte'}], read(undefined), opts).reasons.duterte, 'facts');
+  assert.deepEqual(planReads([{slug:'duterte'}], read('deciders-v2'), opts).read, []);
+  assert.deepEqual(planReads([{slug:'duterte'}], read(undefined), {...opts, factsVersion:null}).read, [], 'no fact sheet configured: no forced re-read');
+});

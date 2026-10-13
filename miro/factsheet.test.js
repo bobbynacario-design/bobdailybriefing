@@ -48,3 +48,12 @@ test('fact evidence is a dated, labelled line; the prompt asks for facts, not fo
   assert.equal(factEvidence(null), null);
   assert.match(factPrompt(markets, '2026-10-12'), /no forecast, no probability/);
 });
+
+test('the fact sheet asks for the threshold, how the deciders lean and whether a decision fits the deadline', () => {
+  const p = factPrompt([{slug:'trial', question:'Convicted?'}], '2026-10-13');
+  assert.match(p, /report the threshold and the number of voters/);
+  assert.match(p, /declared positions, named blocs or parties, and any published tallies/);
+  assert.match(p, /If no positions or tallies are reported, say so plainly/);
+  assert.match(p, /before the contract deadline/);
+  assert.match(p, /never use or mention prediction markets/i);
+});

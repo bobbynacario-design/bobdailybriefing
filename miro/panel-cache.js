@@ -41,6 +41,7 @@ function planReads(markets, previousDoc, opts) {
     var reason = !p || !Array.isArray(p.reads) || !p.reads.length || !isFinite(readAt) ? 'new'
       : p.model !== opts.model || p.provider !== opts.provider ? 'model'
       : (p.resolutionRules || '') !== (m.resolutionRules || '') || (p.resolutionSource || '') !== (m.resolutionSource || '') ? 'rules'
+      : opts.factsVersion && p.factsVersion !== opts.factsVersion ? 'facts'
       : now - readAt >= maxAge || readAt > now + 300000 ? 'weekly'
       : news.some(function (e) { return !olderNews.some(function (o) { return o.text === e.text; }); }) ? 'news'
       : '';

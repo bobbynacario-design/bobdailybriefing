@@ -35,7 +35,7 @@ import { enrichMarketChanges, marketResearchPaused } from './briefing.js';
 import { explainMarketMoves, ledgerUsage } from './catalysts.js';
 import { runClaudePanel, CLAUDE_PANEL_DEFAULT_MODEL } from './panel-claude.js';
 import { planReads } from './panel-cache.js';
-import { buildFactSheet, factEvidence } from './factsheet.js';
+import { buildFactSheet, factEvidence, FACTSHEET_VERSION } from './factsheet.js';
 import { confirmedResolutions, resolutionContext } from './market-contract.js';
 import { extractUsage, addUsage, recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
@@ -556,7 +556,8 @@ async function main() {
     console.log((NO_OPENAI ? '--no-openai' : NO_PANEL ? '--no-panel' : controlPaused ? 'miro-control llmPaused=true' : 'no panel key') + ': skipping panel (implied-only).');
     marketsData.forEach(function (m) { m.panelReads = []; delete m.panelRead; });
   } else {
-    var plan = planReads(marketsData, previousDoc, { model: PANEL_MODEL_LABEL, provider: PANEL_PROVIDER, now: nowIso, rereadDays: CONFIG.panel.rereadDays });
+    var plan = planReads(marketsData, previousDoc, { model: PANEL_MODEL_LABEL, provider: PANEL_PROVIDER, now: nowIso, rereadDays: CONFIG.panel.rereadDays,
+      factsVersion: CONFIG.panel.factSheet ? FACTSHEET_VERSION : null });
     var toRead = marketsData.filter(function (m) { return plan.read.indexOf(m.slug) !== -1; });
     var needFacts = toRead.filter(function (m) { return plan.reasons[m.slug] !== 'news'; });
     console.log('Panel plan: ' + toRead.length + ' to read (' + toRead.map(function (m) { return m.slug.slice(0, 24) + ':' + plan.reasons[m.slug]; }).join(', ') + '), ' + Object.keys(plan.keep).length + ' kept.');
@@ -591,7 +592,12 @@ async function main() {
       if (reads.length) {
         m.panelRead = { reads: reads, readAt: nowIso, model: PANEL_MODEL_LABEL, provider: PANEL_PROVIDER, reason: plan.reasons[m.slug] || 'new',
           resolutionRules:m.resolutionRules || '', resolutionSource:m.resolutionSource || '',
-          evidence: plan.evidence[m.slug] || [], facts: factsBySlug[m.slug] || null };
+          evidence: plan.evidence[m.slug] || [], facts: factsBySlug[m.slug] || null,
+          // A completed sheet for this market stamps its version even where it
+          // found nothing, so a story with no reporting is not re-read daily; a
+          // news re-read keeps the stamp of the sheet it reused.
+          factsVersion: factRun && factRun.status === 'ok' && needFacts.some(function (x) { return x.slug === m.slug; }) ? FACTSHEET_VERSION
+            : (priorRead[m.slug] && priorRead[m.slug].factsVersion) || null };
       } else delete m.panelRead;
     });
     panelPlan = { read: toRead.length, kept: Object.keys(plan.keep).length, reasons: plan.reasons, rereadDays: CONFIG.panel.rereadDays || 7,
