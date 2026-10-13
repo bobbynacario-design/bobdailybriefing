@@ -1748,7 +1748,7 @@ test('Ask Daybook: figures not found in the cited records are shown under the an
 // says only what its stored history supports.
 const pseEnv=()=>{
   const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const {context}=environment(['jSign','phRet','phSparkline','pesoPx','pesoShort','pseMoodHtml','pseIndexTrend','pseIndexHtml','pseStar','pseStockRow','pseListHtml','pseBoardHtml'],{esc});
+  const {context}=environment(['jSign','phRet','phSparkline','pesoPx','pesoShort','pseMoodHtml','pseIndexTrend','pseIndexHtml','pseDay','pseStar','pseStockRow','pseListHtml','pseBoardHtml'],{esc});
   const s=html.indexOf('var PSE_MOOD = {');vm.runInContext(html.slice(s,html.indexOf('\n};',s)+3),context);
   return context;
 };
@@ -1784,7 +1784,7 @@ test('PSE mood, lists and board: weak breadth, lows nearest first, links only fo
 });
 test('PSE watchlist: rows from the board or the list, a buy-below line, missing codes named, alerts only for the latest close',()=>{
   const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const {context:c}=environment(['jSign','phRet','pesoPx','pesoShort','pseStar','pseStockRow','pseWatchHtml'],{esc});
+  const {context:c}=environment(['jSign','phRet','pesoPx','pesoShort','pseDay','pseDocLink','pseNewsHtml','pseStar','pseStockRow','pseWatchHtml'],{esc});
   vm.runInContext('var PSE_CODE = /^[A-Z0-9]{1,8}$/;',c);
   const d={breadth:{asOf:'2026-10-12'},board:[{symbol:'BDO',name:'BDO Unibank',cmpyId:'260',asOf:'2026-10-12',close:112,dayChangePct:-0.88}]};
   const w={items:{BDO:{target:115},MREIT:{},NOPE:{},'bad code':{}},rows:{MREIT:{symbol:'MREIT',name:'MREIT, Inc.',asOf:'2026-10-12',close:14.2}},missing:['NOPE'],
@@ -1815,4 +1815,29 @@ test('PSE watchlist saves only clean codes and replaces items whole, leaving the
   assert.deepEqual(JSON.parse(JSON.stringify(writes[0].body.items)),{BDO:{addedAt:'2026-10-13T00:00:00Z',target:115.5},JGS:{addedAt:writes[0].body.items.JGS.addedAt},MREIT:{addedAt:writes[0].body.items.MREIT.addedAt}});
   assert.equal(writes[0].body.uid,'u1');assert.equal(writes[0].body.kind,'pse-watch');
   assert.deepEqual(JSON.parse(JSON.stringify(writes[0].opts)),{mergeFields:['uid','kind','items','updatedAt']});
+});
+test('PSE dividends, IPOs and company news: linked documents, honest empty states, yields on rows',()=>{
+  const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const {context:c}=environment(['jSign','phRet','pesoPx','pesoShort','pseDay','pseDocLink','pseNewsHtml','pseIposHtml','pseDividendsHtml','pseStar','pseStockRow','pseListHtml'],{esc});
+  const edge='a'.repeat(32);
+  const board=[{symbol:'BDO',name:'BDO Unibank',close:112,yield12m:3.93,div12mPartial:false,nextEx:null},
+    {symbol:'PLUS',name:'DigiPlus',close:7.44,yield12m:11.16},{symbol:'RCR',name:'RL Commercial REIT',close:6.22,yield12m:7.08,div12mPartial:true,nextEx:{exDate:'2026-10-20'}}];
+  const d={board,events:{dividends:[{symbol:'RCR',exDate:'2026-10-20',payDate:'2026-11-03',type:'Cash',amount:0.1117,rate:'0.1117/share',edgeNo:edge}],
+    ipos:[{company:'Mynt, Inc.',latestAt:'2026-10-05T17:41',notices:[{title:'Final Prospectus',at:'2026-10-05T17:37',edgeNo:edge},
+      {title:'Application and Settlement Procedures for Local Small Investors',at:'2026-10-05T17:40',edgeNo:'b'.repeat(32)}]}],
+    news:[{symbol:'SMC',label:'Material information',at:'2026-10-12T06:37',edgeNo:'c'.repeat(32)},{symbol:'X<',label:'Press <release>',at:'2026-10-11T09:00',edgeNo:'bad id'}]}};
+  const div=c.pseDividendsHtml(d,null);
+  assert.match(div,/>RCR<.*₱0\.1117 a share · Cash<\/a> · paid 3 Nov.*ex 20 Oct/s);
+  assert.ok(div.indexOf('>PLUS<')<div.indexOf('>BDO<'),'highest yield first');
+  assert.match(div,/a high yield after a price drop can mean the market expects a cut/);
+  assert.match(c.pseDividendsHtml({board,events:{dividends:[]}},null),/No PSEi stock goes ex-dividend in the next 45 days/);
+  assert.match(c.pseStockRow(board[2]),/yield ≥7\.1%.*ex-div 20 Oct/s,'a partly read year shows as at least');
+  const ipo=c.pseIposHtml(d.events.ipos);
+  assert.match(ipo,/<b>Mynt, Inc\.<\/b>/);assert.match(ipo,/latest notice 5 Oct/);
+  assert.match(ipo,/openDiscViewer\.do\?edge_no=b{32}" target="_blank" rel="noopener noreferrer">How small investors apply ↗/);
+  assert.equal(c.pseIposHtml([]),'');
+  const news=c.pseNewsHtml(d.events.news,10);
+  assert.match(news,/edge_no=c{32}[^>]*>Material information<\/a>/);assert.match(news,/12 Oct/);
+  assert.doesNotMatch(news,/edge_no=bad|<release>|>X<</,'bad ids get no link, text is escaped');
+  assert.match(c.pseNewsHtml(d.events.news,1),/<summary>1 more<\/summary>/);
 });
