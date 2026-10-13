@@ -16,7 +16,8 @@ export function campaignFromArticle({title,html,publishedAt,evidenceUrl,publishe
   const body=$.text().replace(/\s+/g,' ').trim();
   const published=Date.parse(publishedAt),checked=Date.parse(checkedAt);
   if(!Number.isFinite(published)||published>checked||checked-published>45*86400000||!/Cebu Pacific/i.test(title+' '+body)||!/seat sale/i.test(title+' '+body))return null;
-  if(!/international/i.test(body))return null;
+  const markets=[...(/international/i.test(body)?['international']:[]),...(/domestic/i.test(body)?['domestic']:[])];
+  if(!markets.length)return null;
   const quote=body.match(/(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)\s+one[ -]way\s+base fare/i) || body.match(/one[ -]way\s+base fares?\s+(?:starting at|from|as low as)\s+(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)/i);
   const booking=body.match(new RegExp('(?:From|runs? from)\\s+'+monthPattern+'\\s+(\\d{1,2})\\s*(?:through|to|[-–])\\s*(?:'+monthPattern+'\\s+)?(\\d{1,2})(?:,?\\s+(20\\d{2}))?','i'));
   const travel=body.match(new RegExp('(?:travel period|travel dates)[^.]{0,70}?'+monthPattern+'\\s+(\\d{1,2})\\s*(?:through|to|[-–])\\s*'+monthPattern+'\\s+(\\d{1,2}),?\\s+(20\\d{2})','i'));
@@ -27,9 +28,9 @@ export function campaignFromArticle({title,html,publishedAt,evidenceUrl,publishe
   const baseFareAmount=Number(quote[1].replace(/,/g,''));
   if(!bookingStart||!bookingEnd||!travelStart||!travelEnd||bookingEnd<bookingStart||travelEnd<travelStart||bookingEnd<todayPHT(checkedAt)||!Number.isFinite(baseFareAmount)||baseFareAmount<=0||Math.abs(Date.parse(bookingStart)-published)>60*86400000)return null;
   const bookingUrl='https://www.cebupacificair.com/en-PH/seat-sale';
-  return {id:createHash('sha256').update(['Cebu Pacific',bookingStart,bookingEnd,travelStart,travelEnd,baseFareAmount].join('|')).digest('hex').slice(0,20),
+  return {id:createHash('sha256').update(['Cebu Pacific',bookingStart,bookingEnd,travelStart,travelEnd,baseFareAmount,markets.join(',')].join('|')).digest('hex').slice(0,20),
     kind:'promo',campaign:true,airline:'Cebu Pacific',origin:'ANY',destination:'ANY',origins:['MNL','CEB','CRK'],
-    originName:'Check Manila, Cebu & Clark',destinationName:'Selected international destinations',title,
+    originName:'Check Manila, Cebu & Clark',destinationName:'Selected '+markets.join(' and ')+' destinations',markets,title,
     destinationKeywords:body.match(/(?:Japan|Vietnam|Hong Kong|Bangkok|Hanoi|Shanghai|Nagoya|Singapore|Taipei|Macao|Macau|Da Nang|Sapporo|Narita|Fukuoka|Ho Chi Minh|Osaka)/gi)?.join(' ')||'',
     amount:null,currency:'PHP',baseFareAmount,tripType:'one-way',cabin:'Not stated',departureDate:'',returnDate:'',
     discount:'PHP '+baseFareAmount.toLocaleString('en-PH')+' one-way base fare',bookingStart,bookingEnd,travelStart,travelEnd,

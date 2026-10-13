@@ -1,5 +1,23 @@
 # Flights scout
 
+Budget-airline coverage now uses Scoot's current `www.flyscoot.com/flights/`
+pages and visible AirAsia MOVE route cards for Manila to Cebu, Boracay,
+Puerto Princesa and Bangkok. MOVE fares require a dated, single-adult,
+economy one-way flight search link, matching visible route/date/currency/price,
+and a recognised operating airline. Flight+hotel packages are excluded.
+Cebu Pacific announcements can cover domestic, international or both markets;
+their starting base fare never enters ticket-price rankings. Cebu's interactive
+booking inventory still requires a user check when no dated fare can be read.
+
+The shortlist ranks exact-date flight + room estimates where fresh converted
+hotel prices exist, then airfare-only options labelled with missing hotel costs.
+Budgets apply to known costs plus the user's allowance, not a verified final
+total. Unknown taxes, bags and transfers remain explicit. Every shortlisted
+trip identifies budget airlines lacking fresh same-route, same-date and
+same-journey economy samples. One-way budget fares have a separate lane and
+are never doubled into invented return-ticket prices. Comparison searches
+carry the route and dates; official airline links require setting dates there.
+
 The trip assistant ranks up to three distinct destinations from fresh economy
 return samples using PHP fare equivalents, trip nights, optional budget and a
 user-provided extra-cost allowance. It explains its choice, offers alternate

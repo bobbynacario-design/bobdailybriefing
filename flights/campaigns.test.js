@@ -12,13 +12,17 @@ test('extracts a dated base-fare campaign without inventing a route quote',()=>{
   assert.equal(d.origin,'ANY');assert.equal(d.destination,'ANY');assert.equal(d.departureDate,'');
   assert.match(d.fees,/excluded/);assert.equal(d.evidenceUrl,article.evidenceUrl);assert.match(d.bookingUrl,/cebupacificair.com/);
 });
-test('rejects expired, old, incomplete, invalid and domestic-only announcements',()=>{
+test('rejects expired, old, incomplete and invalid announcements',()=>{
   assert.equal(campaignFromArticle(article,'2026-10-11T16:00:00Z'),null,'expires at Philippine midnight after booking end');
   assert.ok(campaignFromArticle(article,'2026-10-11T15:59:59Z'));
   for(const change of [{publishedAt:'2025-10-08'},{publishedAt:'2026-10-12'},
-    {html:article.html.replace('international','domestic')},{html:article.html.replace('PHP 10','PHP 0')},
+    {html:article.html.replace('international','unspecified')},{html:article.html.replace('PHP 10','PHP 0')},
     {html:article.html.replace('June 30','February 30')},{html:article.html.replace('exclusive of fees and surcharges','')},
     {html:article.html.replace('February 1 to June 30, 2027','flexible dates')}]) assert.equal(campaignFromArticle({...article,...change},checked),null);
+});
+test('domestic and mixed campaigns carry explicit markets without becoming route quotes',()=>{
+  assert.deepEqual(campaignFromArticle({...article,html:article.html.replace('international','domestic')},checked).markets,['domestic']);
+  assert.deepEqual(campaignFromArticle({...article,html:article.html.replace('international','domestic and international')},checked).markets,['international','domestic']);
 });
 test('reads feed content and ignores unsafe article links and unrelated items',()=>{
   const source={airline:'Cebu Pacific',type:'campaign-feed',url:article.discoveryUrl,publisher:article.publisher};

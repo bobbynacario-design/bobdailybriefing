@@ -1,5 +1,5 @@
 export const ORIGINS = ['MNL','CEB','CRK'];
-export const DOMESTIC = {MPH:'Boracay (Caticlan)',ENI:'El Nido',IAO:'Siargao'};
+export const DOMESTIC = {MPH:'Boracay (Caticlan)',ENI:'El Nido',IAO:'Siargao',CEB:'Cebu',TAG:'Bohol',PPS:'Puerto Princesa'};
 // Airline pages plus a labelled public press-release fallback. No paid APIs.
 // Country pages list different sample fares from the airport pages, so they
 // widen route coverage (Australia, Japan, North America) with the same reader.
@@ -23,12 +23,16 @@ export const SOURCES = [
   {id:'cathay-canada',airline:'Cathay Pacific',label:'Philippines → Canada',type:'fares',url:'https://flights.cathaypacific.com/destinations/en_PH/flights-from-philippines-to-canada'},
   {id:'cathay-uk',airline:'Cathay Pacific',label:'Philippines → United Kingdom',type:'fares',url:'https://flights.cathaypacific.com/destinations/en_PH/flights-from-philippines-to-united-kingdom'},
   {id:'airasia-ph',airline:'AirAsia',label:'Philippine promotions',type:'promos',url:'https://www.airasia.com/promotions/ph/'},
+  {id:'airasia-manila-cebu',airline:'AirAsia',label:'Manila → Cebu',type:'airasia-fares',url:'https://www.airasia.com/flights/en/gb/from-manila-mnl-to-cebu-ceb/'},
+  {id:'airasia-manila-boracay',airline:'AirAsia',label:'Manila → Boracay',type:'airasia-fares',url:'https://www.airasia.com/flights/en/gb/from-manila-mnl-to-caticlan-boracay-mph/'},
+  {id:'airasia-manila-palawan',airline:'AirAsia',label:'Manila → Puerto Princesa',type:'airasia-fares',url:'https://www.airasia.com/flights/from-manila-mnl-to-puerto-princesa-pps/'},
+  {id:'airasia-manila-bangkok',airline:'AirAsia',label:'Manila → Bangkok',type:'airasia-fares',url:'https://www.airasia.com/flights/from-manila-mnl-to-bangkok-suvarnabhumi-bkk/'},
   {id:'cebu-promo',airline:'Cebu Pacific',label:'Seat-sale page',type:'promos',url:'https://www.cebupacificair.com/en-PH/seat-sale'},
   {id:'cebu-announcements',airline:'Cebu Pacific',label:'Sale announcements',publisher:'Hello Mnl · press-release fallback',type:'campaign-feed',url:'https://hellomnl.com/tag/cebu-pacific/feed/'},
   {id:'cebu-announcements-backup',airline:'Cebu Pacific',label:'Sale announcements',publisher:'Logistics News PH · announcement fallback',type:'campaign-feed',url:'https://logisticsnews.ph/tag/cebu-pacific/feed/'},
-  {id:'scoot-manila',airline:'Scoot',label:'From Manila',type:'fares',url:'https://flights.flyscoot.com/en-ph/flights-from-manila'},
-  {id:'scoot-cebu',airline:'Scoot',label:'From Cebu',type:'fares',url:'https://flights.flyscoot.com/en-ph/flights-from-cebu'},
-  {id:'scoot-clark',airline:'Scoot',label:'From Clark',type:'fares',url:'https://flights.flyscoot.com/en-ph/flights-from-clark'}
+  {id:'scoot-manila',airline:'Scoot',label:'From Manila',type:'fares',url:'https://www.flyscoot.com/flights/en-ph/flights-from-manila'},
+  {id:'scoot-cebu',airline:'Scoot',label:'From Cebu',type:'fares',url:'https://www.flyscoot.com/flights/en-ph/flights-from-cebu'},
+  {id:'scoot-clark',airline:'Scoot',label:'From Clark',type:'fares',url:'https://www.flyscoot.com/flights/en-ph/flights-from-clark'}
 ];
 export const USER_AGENT = 'DaybookFlightScout/1.0 (+https://github.com/bobbynacario-design/bobdailybriefing)';
 // Firestore rejects documents over 1 MiB; the scout trims fares well before that.
