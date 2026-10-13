@@ -291,3 +291,24 @@ test("meetings from his calendar can go out in the morning push, at the usual th
   const {normalizeDelivery} = require("./delivery-core");
   assert.equal(normalizeDelivery({}).sourceThresholds.Meetings, 80);
 });
+
+test("PSE watchlist alerts ride the morning push once, after the Due lines, and never when stale", () => {
+  const {pseLine} = require("./delivery-core");
+  const watch = {items: {BDO: {target: 115}, JGS: {}, AEV: {}}, alertsAsOf: "2026-10-12",
+    alerts: [{symbol: "BDO", text: "BDO ₱112.00, at or below your ₱115.00"}, {symbol: "JGS", text: "JGS −4.1% today"},
+      {symbol: "AEV", text: "AEV made a new 52-week high (₱40.00)"}, {symbol: "GONE", text: "GONE −9.0% today"}]};
+  const got = pseLine(watch, null, "2026-10-13");
+  assert.deepEqual(got, {asOf: "2026-10-12", line: "PSE: BDO ₱112.00, at or below your ₱115.00 · JGS −4.1% today · +1 more"});
+  assert.equal(pseLine(watch, "2026-10-12", "2026-10-13"), null, "already pushed");
+  assert.equal(pseLine(watch, "2026-10-09", "2026-10-13").asOf, "2026-10-12", "a newer close goes out");
+  assert.equal(pseLine(watch, null, "2026-10-17"), null, "five days on it is stale");
+  assert.equal(pseLine({...watch, alerts: []}, null, "2026-10-13"), null);
+  assert.equal(pseLine({...watch, alerts: [{symbol: "GONE", text: "x"}]}, null, "2026-10-13"), null, "only stocks still on the list");
+  assert.equal(pseLine(null, null, "2026-10-13"), null);
+
+  const lead = [{source: "News", title: "Insurer lifts BI reserves"}];
+  assert.equal(notificationCopy(lead, false, {asks: [{title: "Review due: ETH"}], pse: got.line, reminders: [{metric: "APRA claims data"}]}).body,
+    ["News: Insurer lifts BI reserves", "Due: review your ETH call today.", got.line, "⏰ To check: APRA claims data"].join("\n"));
+  assert.equal(notificationCopy([], false, {pse: got.line}).body, got.line);
+  assert.equal(pushKind({}, "2026-10-13", {items: [], pse: got.line}, []), "morning", "an alert alone is worth the morning push");
+});

@@ -23,7 +23,7 @@ const {
 } = require("./market-facts");
 const {authorize, daybookRole, guardedGeneration} = require("./generation-guard");
 const {
-  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
+  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, pseLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
   notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, newReminders, weeklyReadDue,
   commitmentLine, weeklyReviewDue,
 } = require("./delivery-core");
@@ -1458,6 +1458,18 @@ async function todayFor(db, uid, meetings, dayKey, owner) {
   }
 }
 
+// His PSE watchlist alerts from the last close (pse-watch-<uid>), once.
+// Best effort: a failed read leaves the line off.
+async function pseFor(db, uid, lastAsOf, dayKey) {
+  try {
+    const snap = await db.collection(BRIEFINGS_COLL).doc("pse-watch-" + uid).get();
+    return pseLine(snap.exists ? snap.data() : null, lastAsOf, dayKey);
+  } catch (error) {
+    logger.warn("PSE line failed", {message: error.message});
+    return null;
+  }
+}
+
 async function deliverMorningFiveForUser(db, prefDoc, options) {
   options = options || {};
   const prefs = prefDoc.data();
@@ -1486,21 +1498,23 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const asks = decisionAsks(command.items, state.asked);
   const boost = await dailyBoostFor(db, prefs.uid, now, state.lastWeeklyNudge, role === "owner");
   const today = await todayFor(db, prefs.uid, inputs.meetings, dayKey, role === "owner");
+  // A test push shows the latest alerts even if a morning push already carried them.
+  const pse = await pseFor(db, prefs.uid, options.test ? null : state.lastPseAlertsAsOf, dayKey);
   // Only reminders no push has carried yet.
   const reminders = newReminders(boost.reminders, state.lastReminderIds);
   // One morning push a day; after it, only a meeting about to start.
   const urgent = urgentItems(items, state.pushed, dayKey);
-  const kind = options.test ? "test" : pushKind(state, dayKey, {items, asks, today, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment}, urgent);
+  const kind = options.test ? "test" : pushKind(state, dayKey, {items, asks, today, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment, pse: pse && pse.line}, urgent);
   if (!kind) return {status: state.morningDay === dayKey ? "already-sent" : "nothing-to-send"};
   const sentItems = kind === "urgent" ? urgent : items;
-  const alone = kind !== "urgent" && !items.length && !asks.length && !today;
+  const alone = kind !== "urgent" && !items.length && !asks.length && !today && !pse;
   const remindersOnly = alone && reminders.length > 0;
   const weeklyOnly = alone && !reminders.length && !!boost.weekly;
 
   // No spark line since 11 Oct: Daily Boost was done on 0 of 13 days, and the
   // push he chose reads lead, today, this week.
   const copy = kind === "urgent" ? notificationCopy(urgent, false, {urgent: true}) :
-    notificationCopy(items, kind === "test", {today, asks, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
+    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
@@ -1529,6 +1543,8 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
         // Every reminder now due counts as announced, so only new ones ride the next push.
         next.lastReminderIds = reminderIds(boost.reminders);
         if (boost.weekly) next.lastWeeklyNudge = dayKey;
+        // These PSE alerts are announced; the next close's alerts ride the next push.
+        if (pse) next.lastPseAlertsAsOf = pse.asOf;
       }
       next.asked = askedAfter(next.asked, kind === "morning" ? asks : [], dayKey);
       next.pushed = pushedAfter(next.pushed, sentItems, dayKey);
@@ -1542,6 +1558,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
       failureCount: response.failureCount,
       lead: remindersOnly ? "To check: " + reminders[0].metric : weeklyOnly ? "Weekly read" : (sentItems[0] ? sentItems[0].source + ": " + sentItems[0].title : "No items above threshold"),
       reminders: reminders.length,
+      pse: pse ? pse.asOf : null,
       // What the phone showed, so a push can be checked without the phone.
       title: copy.title,
       body: String(copy.body || "").slice(0, 500),

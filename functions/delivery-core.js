@@ -128,6 +128,21 @@ function todayLine(core, input, dayKey) {
   return "Today: " + unique.slice(0, 3).join(" · ") + (unique.length > 3 ? " · +" + (unique.length - 3) + " more" : "");
 }
 
+// His PSE watchlist alerts (pse-watch-<uid>, written by radar/pse-watch.js after
+// the 16:30 close) for the morning push: the latest close's alerts once, never
+// again, and none older than four days (a long weekend is three). Only stocks
+// still on his list. {line, asOf}, or null when there is nothing new.
+function pseLine(watch, lastAsOf, dayKey) {
+  if (!watch || !/^\d{4}-\d{2}-\d{2}$/.test(String(watch.alertsAsOf || "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return null;
+  const asOf = watch.alertsAsOf;
+  if (lastAsOf && asOf <= String(lastAsOf)) return null;
+  if (Date.parse(dayKey + "T00:00:00Z") - Date.parse(asOf + "T00:00:00Z") > 4 * 86400000) return null;
+  const items = watch.items && typeof watch.items === "object" ? watch.items : {};
+  const alerts = (Array.isArray(watch.alerts) ? watch.alerts : []).filter((a) => a && a.text && items[a.symbol]);
+  if (!alerts.length) return null;
+  return {asOf, line: "PSE: " + alerts.slice(0, 2).map((a) => String(a.text)).join(" · ") + (alerts.length > 2 ? " · +" + (alerts.length - 2) + " more" : "")};
+}
+
 // The calls a push just asked about, added to those asked before; a key is
 // forgotten after 60 days, so a call still open two months on is asked again.
 function askedAfter(asked, items, dayKey) {
@@ -156,7 +171,7 @@ function pushKind(state, dayKey, content, urgent) {
   content = content || {};
   if (state.morningDay !== dayKey) {
     const any = (content.items || []).length || (content.reminders || []).length || (content.asks || []).length ||
-      content.today || content.weekly || content.experiment || content.commitment;
+      content.today || content.weekly || content.experiment || content.commitment || content.pse;
     return any ? "morning" : "";
   }
   return (urgent || []).length ? "urgent" : "";
@@ -206,8 +221,9 @@ function notificationCopy(items, test, extra) {
   const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
   const todayLine = extra.today ? "\n" + extra.today : "";
   const askLines = (Array.isArray(extra.asks) ? extra.asks : []).map((item) => "\n" + askLine(item)).join("");
-  // The lead, then today's plan and this week, then what is due.
-  const lines = todayLine + commitmentLine + askLines + reminderLine + experimentLine + weeklyLine + sparkLine;
+  const watchLine = extra.pse ? "\n" + extra.pse : "";
+  // The lead, then today's plan and this week, then what is due, then his PSE watchlist.
+  const lines = todayLine + commitmentLine + askLines + watchLine + reminderLine + experimentLine + weeklyLine + sparkLine;
   if (!lead) return {title, body: lines ? lines.slice(1) : "No priority items currently clear your delivery thresholds."};
   const remaining = Math.max(0, items.length - 1);
   return {
@@ -311,6 +327,7 @@ module.exports = {
   selectDeliverable,
   decisionAsks,
   todayLine,
+  pseLine,
   askedAfter,
   urgentItems,
   pushKind,
