@@ -1,6 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeHistory, finishedBars, indexMetrics, stockMetrics, buildBreadth, retDays } from './ph-metrics.js';
+import { mergeHistory, finishedBars, completedSnapshotDate, indexMetrics, stockMetrics, buildBreadth, retDays } from './ph-metrics.js';
+
+test('stored pre-close dates do not prevent repairing a partial snapshot',()=>{
+  const partial={generatedAt:'2026-10-13T01:56:13Z',asOf:'2026-10-13',index:{asOf:'2026-10-13'},breadth:{asOf:'2026-10-12'}};
+  assert.equal(completedSnapshotDate(partial),'2026-10-12');
+  assert.equal(completedSnapshotDate({...partial,generatedAt:'2026-10-13T08:30:00Z'}),'2026-10-13');
+  assert.equal(completedSnapshotDate({asOf:'2026-10-12'}),'2026-10-12','legacy timestamp unavailable: preserve the write guard');
+  assert.equal(finishedBars([{date:'2026-10-14'}],'2026-10-13',1000).length,0,'future dates never become closes');
+});
+
+test('current breadth cannot be improved by older bullish rows, even when most rows are old',()=>{
+  const rows=[{symbol:'A',asOf:'2026-10-12',close:100,above200:true},
+    {symbol:'B',asOf:'2026-10-12',close:100,above200:false},
+    ...['C','D','E'].map(symbol=>({symbol,asOf:'2026-10-09',close:100,above200:true,ret1m:99}))];
+  const b=buildBreadth(rows);
+  assert.equal(b.asOf,'2026-10-12');assert.equal(b.currentCount,2);assert.equal(b.with200,2);assert.equal(b.above200,1);assert.equal(b.mood,'mixed');assert.equal(b.medianRet1m,null);
+});
 import { parseEdgeChart, parseEdgeStockPage, edgeDate, edgeQueryDate } from './pse-edge.js';
 
 // n weekday bars ending on `end`, closes from fn(i).
@@ -73,10 +89,10 @@ test('breadth counts the board and labels the mood by the share above the 200-da
     row('E', { above200: null, above50: null })
   ]);
   assert.equal(b.asOf, '2026-10-12'); assert.deepEqual(b.staleSymbols, ['D']);
-  assert.equal(b.above200, 2); assert.equal(b.with200, 4);
+  assert.equal(b.above200, 1); assert.equal(b.with200, 3);assert.equal(b.currentCount,4);
   assert.equal(b.advancers, 1); assert.equal(b.decliners, 2); assert.equal(b.unchanged, 1);  // D's close is older, so not counted today
-  assert.deepEqual(b.nearHigh, ['A']); assert.deepEqual(b.nearLow, ['B', 'C', 'D', 'E']);
-  assert.equal(b.mood, 'mixed');                                   // 2 of 4 = 50%
+  assert.deepEqual(b.nearHigh, ['A']); assert.deepEqual(b.nearLow, ['B', 'C', 'E']);
+  assert.equal(b.mood, 'weak');                                   // 1 of 3 current known averages
   assert.equal(buildBreadth([row('X', { above200: true })]).mood, 'healthy');
   assert.equal(buildBreadth([row('X')]).mood, 'weak');
   assert.equal(buildBreadth([row('X', { above200: null })]).mood, null);

@@ -2215,6 +2215,9 @@ a.pse-sym:hover{text-decoration:underline}
 .pse-row-px{font-family:var(--mono);font-size:12.5px;color:var(--txt);text-align:right;white-space:nowrap}
 .pse-row-px span{font-size:11px;margin-left:.3rem}
 .pse-row-meta{grid-column:1/-1;font-family:var(--mono);font-size:10.5px;color:var(--txt3);line-height:1.6}
+.pse-yield-details{grid-column:1/-1;font-size:12px;color:var(--txt2);line-height:1.6}
+.pse-yield-details summary{cursor:pointer;color:var(--txt3)}
+.pse-yield-details ul{padding-left:1.2rem;margin:.3rem 0}
 .pse-mini{position:relative;display:inline-block;width:56px;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--red-dim),var(--bg4),var(--green-dim));vertical-align:middle}
 .pse-mini i{position:absolute;top:50%;width:7px;height:7px;border-radius:50%;background:var(--gold);transform:translate(-50%,-50%)}
 .pse-watch{border-left:3px solid var(--gold);padding:.85rem 1rem;margin-bottom:.9rem;overflow:visible;z-index:5}
@@ -10050,14 +10053,15 @@ function pseMoodHtml(b) {
   if (!b || !b.count) return '';
   var m = PSE_MOOD[b.mood];
   var html = '<div class="card pse-mood" style="border-left-color:' + (m ? m.col : 'var(--rim2)') + '">' +
-    '<div class="pse-mood-k">PSEi stocks · market mood</div>' +
+    '<div class="pse-mood-k">PSEi stocks · market mood · close of ' + esc(b.asOf || 'unknown') + '</div>' +
     '<div class="pse-mood-top"><span class="pse-mood-label" style="color:' + (m ? m.col : 'var(--txt3)') + '">' + (m ? m.label : 'Not enough history') + '</span>' +
     (b.with200 ? '<span class="pse-mood-n"><b>' + b.above200 + ' of ' + b.with200 + '</b> above their 200-day average</span>' : '') + '</div>' +
     '<div class="pse-mood-line">Today ' + b.advancers + ' rose, ' + b.decliners + ' fell' + (b.unchanged ? ', ' + b.unchanged + ' unchanged' : '') +
     '. The middle PSEi stock is ' + phRet(b.medianRet1m) + ' this month and ' + phRet(b.medianRetYtd) + ' this year.</div>' +
     '<div class="pse-how">How to read it: a stock above its 200-day average (its average price over about the last ten months) is in a longer uptrend. ' +
     'Healthy means 60% or more of the 30 are above it, mixed 40–59%, weak under 40%.</div>';
-  if (b.staleSymbols && b.staleSymbols.length) html += '<div class="pse-how">Older close for ' + esc(b.staleSymbols.join(', ')) + ' (no trade on ' + esc(b.asOf) + ').</div>';
+  html += '<div class="pse-how">Coverage: ' + (b.currentCount == null ? b.count-(b.staleSymbols || []).length : b.currentCount) + ' current closes / 30 PSEi stocks. Only this session enters market mood.</div>';
+  if (b.staleSymbols && b.staleSymbols.length) html += '<div class="pse-how">Older close for ' + esc(b.staleSymbols.join(', ')) + '; excluded from current breadth. The reason for the older data is unconfirmed.</div>';
   return html + '</div>';
 }
 // What the PSEi's stored history supports, and nothing more: the old card read
@@ -10086,7 +10090,7 @@ function pseIndexHtml(idx, fx) {
   var html = '<div class="card radar-card pse-index"><div class="card-accent" style="background:' + t.col + '"></div>' +
     '<div class="pse-idx-top"><span class="pse-idx-name">' + esc(idx.name || 'PSEi') + ' <span class="radar-theme">' + esc(idx.currency || 'PHP') + '</span></span>' +
     '<span class="pse-idx-val">' + Number(idx.close).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span></div>' +
-    '<div class="pse-idx-meta">Day ' + phRet(idx.dayChangePct) + ' · <span style="color:' + t.col + '">' + esc(t.txt) + '</span></div>' +
+    '<div class="pse-idx-meta">Close of ' + esc(idx.asOf || 'unknown') + ' · Day ' + phRet(idx.dayChangePct) + ' · <span style="color:' + t.col + '">' + esc(t.txt) + '</span></div>' +
     phSparkline(idx.spark) +
     '<div class="ph-rets"><div><span class="ph-k">1W</span>' + phRet(idx.ret1w) + '</div><div><span class="ph-k">1M</span>' + phRet(idx.ret1m) + '</div>' +
     '<div><span class="ph-k">3M</span>' + phRet(idx.ret3m) + '</div><div><span class="ph-k">YTD</span>' + phRet(idx.retYtd) + '</div></div>';
@@ -10203,7 +10207,7 @@ function pseRadarCard(s, rank, watch, bySym) {
   return '<div class="card pse-rcard" style="border-left-color:' + st.col + '">' +
     '<div class="pse-rcard-top"><span class="pse-rank">#' + rank + '</span>' + pseStar(s.symbol, watch) + sym + '<span class="pse-row-name">' + esc(s.name || '') + '</span>' +
       '<span class="pse-status" style="color:' + st.col + '">' + esc(st.label) + '</span><span class="pse-score">' + s.score + '</span></div>' +
-    '<div class="pse-rcard-sub">' + esc(s.sector || s.theme || '') + (s.regimeScore != null ? ' · sector breadth ' + s.regimeScore : '') +
+    '<div class="pse-rcard-sub">' + esc(s.sector || s.theme || '') + ' · close ' + esc(s.dataAsOf || row.asOf || 'unconfirmed') + (s.regimeScore != null ? ' · sector breadth ' + s.regimeScore : '') +
       (s.relStrength20d != null ? ' · ' + (s.relStrength20d >= 0 ? '+' : '') + s.relStrength20d + ' pts vs PSE30 (20 days)' : '') + (s.early ? ' · <b style="color:var(--gold)">early</b>' : '') + '</div>' +
     '<div class="pse-why">' + esc(s.why || '') + '</div>' +
     (plan ? '<div class="pse-plan">' + plan + '</div>' : '') +
@@ -10226,7 +10230,7 @@ function pseRadarHtml(pr, watch, board) {
   html += '<details class="pse-all"><summary>All ' + r.signals.length + ' ranked</summary><div class="pse-list">' + r.signals.map(function (s, i) {
     var st = PSE_STATUS[s.status] || {label: s.status, col: 'var(--txt3)'};
     return '<div class="pse-news"><span class="pse-sym">' + (i + 1) + '. ' + esc(s.symbol) + '</span><span class="pse-news-what">' + esc(s.name || '') +
-      ' · <span style="color:' + st.col + '">' + esc(st.label.toLowerCase()) + '</span></span><span class="pse-news-when">' + s.score + '</span></div>';
+      ' · <span style="color:' + st.col + '">' + esc(st.label.toLowerCase()) + '</span> · close ' + esc(s.dataAsOf || (bySym[s.symbol] || {}).asOf || 'unconfirmed') + '</span><span class="pse-news-when">' + s.score + '</span></div>';
   }).join('') + '</div></details>';
   return html;
 }
@@ -10241,16 +10245,27 @@ function pseDividendsHtml(d, watch) {
       ? '<div class="pse-how" style="margin:-.2rem 0 .5rem">Own the stock before its ex-date to receive the dividend.</div>' + ev.dividends.map(function (x) {
           return '<div class="pse-news"><span class="pse-sym">' + esc(x.symbol) + '</span><span class="pse-news-what">' +
             pseDocLink(x.edgeNo, esc(x.amount != null ? pesoPx(x.amount) + ' a share' : x.rate || 'Dividend') + ' · ' + esc(x.type || '')) +
-            (x.payDate ? ' · paid ' + esc(pseDay(x.payDate)) : '') + '</span><span class="pse-news-when">ex ' + esc(pseDay(x.exDate)) + '</span></div>';
+            (x.payDate ? ' · payment ' + esc(pseDay(x.payDate)) : ' · payment date unconfirmed') + '</span><span class="pse-news-when">ex ' + esc(pseDay(x.exDate)) + '</span></div>';
         }).join('')
       : '<div class="rel-none-txt">No PSEi stock goes ex-dividend in the next 45 days.</div>';
   }
   var top = withYield.slice().sort(function (a, b) { return b.yield12m - a.yield12m; }).slice(0, 5);
   if (top.length) {
-    html += pseListHtml('Highest dividend yields, last 12 months', 'Cash paid per share over the past year, divided by today’s price. ' +
+    html += pseListHtml('Highest gross trailing dividend yields', 'Declared cash per share with ex-dates in the last 365 days, divided by the displayed closing price, before tax. Includes special dividends where declared. ' +
       'Past payouts, not a promise: a high yield after a price drop can mean the market expects a cut.', top, watch);
   }
+  if(ev.failed && ev.failed.indexOf('calendar')!==-1 || !ev.calendar) html += '<div class="pse-how">Trading calendar unverified: last-session dividend deadline alerts are suppressed. Ex-dates above remain the declared dates.</div>';
   return html;
+}
+function pseYieldDetails(s) {
+  if(s.yield12m==null) return '';
+  var payouts=s.div12mPayouts || [],names={regular:'Regular',special:'Special',mixed:'Regular + special (split unconfirmed)',unspecified:'Cash (regular/special unconfirmed)'};
+  var rows=payouts.map(function(p){return '<li>'+esc(names[p.kind] || names.unspecified)+' · '+esc(p.amount==null ? 'Amount unconfirmed: '+p.rate : pesoPx(p.amount)+' per share')+
+    ' · ex '+esc(p.exDate)+' · payment '+esc(p.payDate || 'unconfirmed')+' · '+pseDocLink(p.edgeNo,'Declaration ↗')+'</li>';}).join('');
+  return '<details class="pse-yield-details"><summary>Gross trailing yield details</summary><div class="pse-how">Ex-dates in the 365 days through '+esc(s.div12mAsOf || s.asOf || 'unknown')+
+    '; not a forecast of future income. '+(s.div12mCoverage==='complete' ? 'History coverage complete.' : s.div12mCoverage==='incomplete' ? 'History coverage incomplete; this yield is a lower bound.' : 'History coverage unverified.')+
+    (s.div12mPartial ? ' Some amounts or history are missing; the displayed yield is a lower bound.' : '')+'</div>'+
+    (rows ? '<ul>'+rows+'</ul>' : '<div class="pse-how">Declaration breakdown arrives with the next refresh.</div>')+'</details>';
 }
 function pseStockRow(s, watch) {
   var pos = s.rangePos == null ? null : Math.max(0, Math.min(100, s.rangePos));
@@ -10263,9 +10278,9 @@ function pseStockRow(s, watch) {
     '<div class="pse-row-px">' + pesoPx(s.close) + ' <span>' + phRet(s.dayChangePct) + '</span></div>' +
     '<div class="pse-row-meta">1M ' + phRet(s.ret1m) + ' · YTD ' + phRet(s.retYtd) +
       (pos == null ? '' : ' · <span class="pse-mini" title="Where the price sits in its 52-week range (' + esc(String(s.low52)) + ' to ' + esc(String(s.high52)) + ')"><i style="left:' + pos.toFixed(0) + '%"></i></span> 52-wk') +
-      trend + (s.yield12m != null ? ' · <span style="white-space:nowrap">yield ' + (s.div12mPartial ? '≥' : '') + s.yield12m.toFixed(1) + '%</span>' : '') +
+      trend + (s.yield12m != null ? ' · <span style="white-space:nowrap">gross trailing yield ' + (s.div12mPartial ? '≥' : '') + s.yield12m.toFixed(1) + '%</span>' : '') +
       (s.nextEx && s.nextEx.exDate ? ' · <span style="white-space:nowrap;color:var(--gold)">ex-div ' + pseDay(s.nextEx.exDate) + '</span>' : '') +
-      (s.avgValue20 != null ? ' · ' + pesoShort(s.avgValue20) + '/day traded' : '') + '</div>' +
+      (s.avgValue20 != null ? ' · ' + pesoShort(s.avgValue20) + '/day traded' : '') + ' · close '+esc(s.asOf || 'unknown')+'</div>' + pseYieldDetails(s) +
   '</div>';
 }
 function pseListHtml(title, note, rows, watch) {
@@ -10285,9 +10300,11 @@ function pseBoardHtml(d, watch) {
   var today = board.filter(function (s) { return s.asOf === b.asOf && s.dayChangePct != null; });
   var up = today.filter(function (s) { return s.dayChangePct > 0; }).sort(function (x, y) { return y.dayChangePct - x.dayChangePct; }).slice(0, 3);
   var down = today.filter(function (s) { return s.dayChangePct < 0; }).sort(function (x, y) { return x.dayChangePct - y.dayChangePct; }).slice(0, 3);
+  var older=board.filter(function(s){return s.asOf!==b.asOf;});
   return pseListHtml('Near a 52-week low', 'Within 5% of the lowest price of the past year. Cheaper than most of the year, often for a reason: a place to start reading, not a buy signal.', nearLow, watch) +
     pseListHtml('Today’s biggest moves', '', up.concat(down), watch) +
     pseListHtml('Near a 52-week high', 'Within 3% of the year’s high: the stocks leading right now.', nearHigh, watch) +
+    pseListHtml('Older closes', 'These rows are excluded from current breadth and daily movers. Each shows its own last closing date.', older, watch) +
     '<details class="pse-all"><summary>All ' + board.length + ' PSEi stocks, largest first</summary>' +
       '<div class="pse-list">' + board.map(function (s) { return pseStockRow(s, watch); }).join('') + '</div>' +
       (d.boardList ? '<div class="pse-how">' + esc(d.boardList) + '.</div>' : '') + '</details>';
@@ -10306,7 +10323,7 @@ function pseWatchHtml(d, w, editing) {
   var missing = w.missing || [];
   var asOf = d && d.breadth && d.breadth.asOf;
   var html = '<div class="card pse-watch"><div class="pse-mood-k">Your watchlist' + (codes.length ? ' · ' + codes.length : '') + '</div>';
-  var alerts = (w.alertsAsOf && w.alertsAsOf === asOf ? w.alerts || [] : []).filter(function (a) { return items[a.symbol]; });
+  var alerts = (w.alertsAsOf && w.alertsAsOf === asOf ? w.alerts || [] : []).filter(function (a) { return items[a.symbol] && (a.kind !== 'exdiv' || w.alertsCalendarVerified === true); });
   if (alerts.length) {
     html += '<div class="pse-alerts"><b>After the ' + esc(asOf) + ' close:</b> ' + alerts.map(function (a) { return esc(a.text); }).join(' · ') + '</div>';
   }
@@ -10334,7 +10351,7 @@ function pseWatchHtml(d, w, editing) {
         line = 'Buy-below ' + pesoPx(it.target);
         if (row && row.close != null) {
           var gap = (row.close / it.target - 1) * 100;
-          line += row.close <= it.target ? ' · <span style="color:var(--green)">at or below it now</span>' : ' · ' + gap.toFixed(1) + '% above it';
+          line += row.asOf!==asOf ? ' · comparison pending a current close' : row.close <= it.target ? ' · <span style="color:var(--green)">at or below it at this close</span>' : ' · ' + gap.toFixed(1) + '% above it';
         }
       }
       html += '<div class="pse-watch-ctl">' + (line ? '<span>' + line + '</span>' : '') +
@@ -10366,7 +10383,7 @@ function pseRender() {
   var stale = ageDays != null && ageDays >= 4;
   if (sub) {
     sub.innerHTML = (idx ? 'PSEi ' + esc(Number(idx.close).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + ' · ' : '') +
-      'close of ' + esc(asOf) + (d.board && d.board.length ? ' · ' + d.board.length + ' stocks from PSE Edge' : '') +
+      (idx ? 'index close '+esc(idx.asOf || 'unknown')+' · ' : '')+'stocks close '+esc(d.breadth && d.breadth.asOf || 'unknown') + (d.board && d.board.length ? ' · ' + d.board.length + ' stocks from PSE Edge' : '') +
       (stale ? ' · <span class="pse-sub-stale">' + ageDays + ' days old</span>' : '');
   }
   var watch = _pseWatch ? (_pseWatch.items || {}) : null;

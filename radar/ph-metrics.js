@@ -93,8 +93,17 @@ function mergeHistory(prev, bars, max) {
 // Manila minutes since midnight.
 var SESSION_DONE = 15 * 60 + 45;
 function finishedBars(bars, today, minutesNow) {
-  if (minutesNow >= SESSION_DONE) return bars || [];
-  return (bars || []).filter(function (b) { return b && b.date < today; });
+  return (bars || []).filter(function (b) { return b && (b.date < today || b.date === today && minutesNow >= SESSION_DONE); });
+}
+// A pre-close snapshot must not lock a partial session into the monotonic-write guard.
+function completedSnapshotDate(doc) {
+  if(!doc) return null;
+  var at=Date.parse(doc.generatedAt || '');
+  if(!Number.isFinite(at)) return doc.asOf || null;
+  var local=new Date(at+8*3600000).toISOString(),today=local.slice(0,10);
+  var minutes=Number(local.slice(11,13))*60+Number(local.slice(14,16));
+  var dates=[doc.index && doc.index.asOf,doc.breadth && doc.breadth.asOf,doc.asOf].filter(Boolean).map(function(date){return {date:date};});
+  return finishedBars(dates,today,minutes).map(function(b){return b.date;}).sort().pop() || null;
 }
 
 // The PSEi read. Every average, return and range is null until enough history
@@ -195,24 +204,24 @@ function buildBreadth(stocks) {
   var rows = (stocks || []).filter(function (s) { return s && s.close != null; });
   var dates = {};
   rows.forEach(function (s) { dates[s.asOf] = (dates[s.asOf] || 0) + 1; });
-  var asOf = Object.keys(dates).sort(function (a, b) { return dates[b] - dates[a] || (a < b ? 1 : -1); })[0] || null;
+  var asOf = Object.keys(dates).sort().pop() || null;
   var current = rows.filter(function (s) { return s.asOf === asOf; });
-  var with200 = rows.filter(function (s) { return s.above200 != null; });
-  var with50 = rows.filter(function (s) { return s.above50 != null; });
+  var with200 = current.filter(function (s) { return s.above200 != null; });
+  var with50 = current.filter(function (s) { return s.above50 != null; });
   var above200 = with200.filter(function (s) { return s.above200; }).length;
   var share = with200.length ? above200 / with200.length : null;
   return {
-    asOf: asOf, count: rows.length,
+    asOf: asOf, count: rows.length, currentCount: current.length,
     staleSymbols: rows.filter(function (s) { return s.asOf !== asOf; }).map(function (s) { return s.symbol; }),
     above200: above200, with200: with200.length,
     above50: with50.filter(function (s) { return s.above50; }).length, with50: with50.length,
     advancers: current.filter(function (s) { return s.dayChangePct > 0; }).length,
     decliners: current.filter(function (s) { return s.dayChangePct < 0; }).length,
     unchanged: current.filter(function (s) { return s.dayChangePct === 0; }).length,
-    nearLow: rows.filter(function (s) { return s.low52 != null && s.close <= s.low52 * 1.05; }).map(function (s) { return s.symbol; }),
-    nearHigh: rows.filter(function (s) { return s.high52 != null && s.close >= s.high52 * 0.97; }).map(function (s) { return s.symbol; }),
-    medianRet1m: r2(median(rows.map(function (s) { return s.ret1m; }))),
-    medianRetYtd: r2(median(rows.map(function (s) { return s.retYtd; }))),
+    nearLow: current.filter(function (s) { return s.low52 != null && s.close <= s.low52 * 1.05; }).map(function (s) { return s.symbol; }),
+    nearHigh: current.filter(function (s) { return s.high52 != null && s.close >= s.high52 * 0.97; }).map(function (s) { return s.symbol; }),
+    medianRet1m: r2(median(current.map(function (s) { return s.ret1m; }))),
+    medianRetYtd: r2(median(current.map(function (s) { return s.retYtd; }))),
     mood: share == null ? null : share >= 0.6 ? 'healthy' : share >= 0.4 ? 'mixed' : 'weak'
   };
 }
@@ -242,4 +251,4 @@ function watchAlerts(items, rows, asOf) {
   return out.sort(function (x, y) { return rank[x.kind] - rank[y.kind]; });
 }
 
-export { r2, sma, dayPct, retN, retDays, maxOf, minOf, ytdPct, rsi, vol, median, mergeHistory, finishedBars, indexMetrics, stockMetrics, buildBreadth, watchAlerts };
+export { r2, sma, dayPct, retN, retDays, maxOf, minOf, ytdPct, rsi, vol, median, mergeHistory, finishedBars, completedSnapshotDate, indexMetrics, stockMetrics, buildBreadth, watchAlerts };

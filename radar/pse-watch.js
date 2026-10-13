@@ -17,9 +17,9 @@
 // The repo is public and so are its Actions logs: log counts only, never a
 // watched code, a target price or an alert's text.
 
-import { stockMetrics, watchAlerts } from './ph-metrics.js';
+import { stockMetrics, watchAlerts, finishedBars } from './ph-metrics.js';
 import { fetchEdgeStock } from './pse-edge.js';
-import { dividendStats, newsFor, watchEventAlerts } from './pse-events.js';
+import { dividendStats, newsFor, watchEventAlerts, addSessions } from './pse-events.js';
 
 // PSE Edge stamps filings in Manila time; rowsAt is UTC.
 function manila(iso) { return new Date(Date.parse(iso) + 8 * 3600000).toISOString().slice(0, 16); }
@@ -37,6 +37,8 @@ async function refreshWatchlists(db, coll, ph, today, opts) {
   opts = opts || {};
   var fetchStock = opts.fetchStock || fetchEdgeStock;
   var events = opts.events || null;   // fetchEvents() output, when it came back
+  var phtTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+  var minutes=opts.minutesNow==null ? Number(phtTime.slice(0,2))%24*60+Number(phtTime.slice(3,5)) : opts.minutesNow;
   var snap = await db.collection(coll).where('kind', '==', 'pse-watch').get();
   var docs = snap.docs.filter(function (d) { return d.data() && d.data().uid; });
   var board = {};
@@ -55,10 +57,10 @@ async function refreshWatchlists(db, coll, ph, today, opts) {
     var sym = codes[i];
     try {
       var got = await fetchStock(sym, known[sym], today, 400);
-      var m = stockMetrics(got.bars);
+      var m = stockMetrics(finishedBars(got.bars,today,minutes));
       if (!m) throw new Error('no daily bars');
       fetched[sym] = Object.assign({ symbol: sym, name: got.name, cmpyId: got.cmpyId, securityId: got.securityId, marketCap: got.page.marketCap }, m,
-        events && events.dividends ? dividendStats(events.dividends, got.cmpyId, m.asOf, m.close) : {});
+        events && events.dividends ? dividendStats(events.dividends, got.cmpyId, m.asOf, m.close,events.dividendCoverage) : {});
     } catch (e) {
       missing[sym] = e.message || String(e);
     }
@@ -77,7 +79,8 @@ async function refreshWatchlists(db, coll, ph, today, opts) {
     syms.forEach(function (s) { items[s] = data.items[s] || {}; });
     var all = Object.assign({}, board, rows);
     var alerts = watchAlerts(items, all, asOf);
-    var update = { rows: rows, missing: gone, alertsAsOf: asOf || null, rowsAt: new Date().toISOString() };
+    var update = { rows: rows, missing: gone, alertsAsOf: asOf || null, rowsAt: new Date().toISOString(),
+      alertsCalendarVerified: !!(events && addSessions(asOf,2,events.calendar)) };
     if (events && asOf) {
       // News since this list was last refreshed (the first time: since the
       // afternoon before this session).

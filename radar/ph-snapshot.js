@@ -17,7 +17,7 @@
 //   barSink (optional {}) receives each stock's raw bars by symbol, for the PSE
 //   radar; the doc itself keeps only the computed figures.
 
-import { r2, dayPct, retN, mergeHistory, finishedBars, indexMetrics, stockMetrics, buildBreadth } from './ph-metrics.js';
+import { r2, dayPct, retN, mergeHistory, finishedBars, completedSnapshotDate, indexMetrics, stockMetrics, buildBreadth } from './ph-metrics.js';
 import { fetchEdgeStock } from './pse-edge.js';
 
 // fetch with retry + backoff (this box's network intermittently ECONNRESETs).
@@ -146,7 +146,7 @@ async function buildPhSnapshot(config, prev, barSink) {
 async function writePhSnapshot(db, coll, phDoc) {
   var ref = db.collection(coll).doc('radar-ph');
   var snap = await ref.get();
-  var prev = snap.exists ? (snap.data() || {}).asOf : null;
+  var prev = snap.exists ? completedSnapshotDate(snap.data()) : null;
   if (prev && phDoc.asOf && String(phDoc.asOf) < String(prev)) {
     console.log('radar-ph NOT written: new asOf ' + phDoc.asOf + ' is older than stored ' + prev + ' — kept the fresher snapshot.');
     return false;

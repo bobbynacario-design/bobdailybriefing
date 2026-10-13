@@ -1748,7 +1748,7 @@ test('Ask Daybook: figures not found in the cited records are shown under the an
 // says only what its stored history supports.
 const pseEnv=()=>{
   const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const {context}=environment(['jSign','phRet','phSparkline','pesoPx','pesoShort','pseMoodHtml','pseIndexTrend','pseIndexHtml','pseDay','pseStar','pseStockRow','pseListHtml','pseBoardHtml'],{esc});
+  const {context}=environment(['jSign','phRet','phSparkline','pesoPx','pesoShort','pseMoodHtml','pseIndexTrend','pseIndexHtml','pseDay','pseStar','pseStockRow','pseYieldDetails','pseDocLink','pseListHtml','pseBoardHtml'],{esc});
   const s=html.indexOf('var PSE_MOOD = {');vm.runInContext(html.slice(s,html.indexOf('\n};',s)+3),context);
   return context;
 };
@@ -1784,7 +1784,7 @@ test('PSE mood, lists and board: weak breadth, lows nearest first, links only fo
 });
 test('PSE watchlist: rows from the board or the list, a buy-below line, missing codes named, alerts only for the latest close',()=>{
   const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const {context:c}=environment(['jSign','phRet','pesoPx','pesoShort','pseDay','pseDocLink','pseNewsHtml','pseStar','pseStockRow','pseWatchHtml'],{esc});
+  const {context:c}=environment(['jSign','phRet','pesoPx','pesoShort','pseDay','pseDocLink','pseNewsHtml','pseStar','pseStockRow','pseYieldDetails','pseWatchHtml'],{esc});
   vm.runInContext('var PSE_CODE = /^[A-Z0-9]{1,8}$/;',c);
   const d={breadth:{asOf:'2026-10-12'},board:[{symbol:'BDO',name:'BDO Unibank',cmpyId:'260',asOf:'2026-10-12',close:112,dayChangePct:-0.88}]};
   const w={items:{BDO:{target:115},MREIT:{},NOPE:{},'bad code':{}},rows:{MREIT:{symbol:'MREIT',name:'MREIT, Inc.',asOf:'2026-10-12',close:14.2}},missing:['NOPE'],
@@ -1792,11 +1792,15 @@ test('PSE watchlist: rows from the board or the list, a buy-below line, missing 
   const out=c.pseWatchHtml(d,w,null);
   assert.match(out,/Your watchlist · 3/);
   assert.match(out,/After the 2026-10-12 close:<\/b> BDO ₱112\.00, at or below your ₱115\.00/);
-  assert.match(out,/Buy-below ₱115\.00 · <span style="color:var\(--green\)">at or below it now/);
+  assert.match(out,/Buy-below ₱115\.00 · <span style="color:var\(--green\)">at or below it at this close/);
   assert.match(out,/MREIT, Inc\./);assert.match(out,/Not found on PSE Edge: check the code/);
   assert.equal((out.match(/class="pse-star on"/g)||[]).length,3,'each watched code has a filled star');
   assert.doesNotMatch(out,/bad code/,'an invalid code never renders or reaches a handler');
   assert.doesNotMatch(c.pseWatchHtml(d,{...w,alertsAsOf:'2026-10-09'},null),/After the/,'yesterday’s alerts are not shown as today’s');
+  const deadline={...w,alerts:[{symbol:'BDO',kind:'exdiv',text:'Dividend deadline'}]};
+  assert.doesNotMatch(c.pseWatchHtml(d,deadline,null),/Dividend deadline/);
+  assert.match(c.pseWatchHtml(d,{...deadline,alertsCalendarVerified:true},null),/Dividend deadline/);
+  assert.match(c.pseWatchHtml({...d,board:[{...d.board[0],asOf:'2026-10-09'}]},w,null),/comparison pending a current close/);
   const edit=c.pseWatchHtml(d,w,'BDO');
   assert.match(edit,/id="pse-target-input" type="number"[^>]*value="115"/);assert.match(edit,/pseSaveTarget\('BDO', true\)/);
   const empty=c.pseWatchHtml(d,{items:{}},null);
@@ -1818,7 +1822,7 @@ test('PSE watchlist saves only clean codes and replaces items whole, leaving the
 });
 test('PSE dividends, IPOs and company news: linked documents, honest empty states, yields on rows',()=>{
   const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const {context:c}=environment(['jSign','phRet','pesoPx','pesoShort','pseDay','pseDocLink','pseNewsHtml','pseIposHtml','pseDividendsHtml','pseStar','pseStockRow','pseListHtml'],{esc});
+  const {context:c}=environment(['jSign','phRet','pesoPx','pesoShort','pseDay','pseDocLink','pseNewsHtml','pseIposHtml','pseDividendsHtml','pseStar','pseStockRow','pseYieldDetails','pseListHtml'],{esc});
   const edge='a'.repeat(32);
   const board=[{symbol:'BDO',name:'BDO Unibank',close:112,yield12m:3.93,div12mPartial:false,nextEx:null},
     {symbol:'PLUS',name:'DigiPlus',close:7.44,yield12m:11.16},{symbol:'RCR',name:'RL Commercial REIT',close:6.22,yield12m:7.08,div12mPartial:true,nextEx:{exDate:'2026-10-20'}}];
@@ -1827,11 +1831,16 @@ test('PSE dividends, IPOs and company news: linked documents, honest empty state
       {title:'Application and Settlement Procedures for Local Small Investors',at:'2026-10-05T17:40',edgeNo:'b'.repeat(32)}]}],
     news:[{symbol:'SMC',label:'Material information',at:'2026-10-12T06:37',edgeNo:'c'.repeat(32)},{symbol:'X<',label:'Press <release>',at:'2026-10-11T09:00',edgeNo:'bad id'}]}};
   const div=c.pseDividendsHtml(d,null);
-  assert.match(div,/>RCR<.*₱0\.1117 a share · Cash<\/a> · paid 3 Nov.*ex 20 Oct/s);
+  assert.match(div,/>RCR<.*₱0\.1117 a share · Cash<\/a> · payment 3 Nov.*ex 20 Oct/s);
   assert.ok(div.indexOf('>PLUS<')<div.indexOf('>BDO<'),'highest yield first');
   assert.match(div,/a high yield after a price drop can mean the market expects a cut/);
   assert.match(c.pseDividendsHtml({board,events:{dividends:[]}},null),/No PSEi stock goes ex-dividend in the next 45 days/);
   assert.match(c.pseStockRow(board[2]),/yield ≥7\.1%.*ex-div 20 Oct/s,'a partly read year shows as at least');
+  const detail=c.pseStockRow({...board[0],asOf:'2026-10-12',div12mAsOf:'2026-10-12',div12mCoverage:'incomplete',div12mPartial:true,
+    div12mPayouts:[{kind:'special',amount:1,exDate:'2026-07-01',payDate:'2026-07-20',edgeNo:edge}]});
+  assert.match(detail,/gross trailing yield/);assert.match(detail,/History coverage incomplete/);
+  assert.match(detail,/Special · ₱1\.00 per share/);assert.match(detail,/ex 2026-07-01 · payment 2026-07-20/);
+  assert.match(detail,/close 2026-10-12/);assert.match(detail,/Declaration ↗/);
   const ipo=c.pseIposHtml(d.events.ipos);
   assert.match(ipo,/<b>Mynt, Inc\.<\/b>/);assert.match(ipo,/latest notice 5 Oct/);
   assert.match(ipo,/openDiscViewer\.do\?edge_no=b{32}" target="_blank" rel="noopener noreferrer">How small investors apply ↗/);
@@ -1860,11 +1869,12 @@ test('PSE radar: honest verdict from the walk-back, top five as cards, everythin
   assert.match(ev,/<td>80–100<\/td><td>542<\/td><td><span style="color:var\(--green\)">\+0\.62%<\/span><\/td><td>46\.9%<\/td>/);
   assert.match(ev,/were not fitted to PSE/);
   const sig=(sym,score,status,o)=>Object.assign({symbol:sym,name:sym+' Corp',sector:'Holding firms',score,status,regimeScore:72,relStrength20d:13,entry:40.8,stop:37.94,target:46.52,rr:2,why:'Why <'+sym+'>',invalidation:'Off below 37.94'},o);
-  const signals=[sig('AEV',95,'confirmed',{early:true}),sig('AC',79,'forming'),sig('LTG',68,'forming'),sig('SM',67,'forming'),sig('TEL',63,'forming'),sig('BDO',20,'invalidated',{entry:10,stop:12})];
+  const signals=[sig('AEV',95,'confirmed',{early:true,dataAsOf:'2026-10-09'}),sig('AC',79,'forming'),sig('LTG',68,'forming'),sig('SM',67,'forming'),sig('TEL',63,'forming'),sig('BDO',20,'invalidated',{entry:10,stop:12})];
   const pr={radar:{asOf:'2026-10-12',benchmark:{symbol:'PSE30',ret20:-4.73},regime:{score:25,pse30AboveSma20:false},
     sectors:[{sector:'Property',regimeScore:25},{sector:'Holding firms',regimeScore:72}],signals},journal:j};
   const out=c.pseRadarHtml(pr,{AEV:{}},[{symbol:'AEV',cmpyId:'188'}]);
   assert.match(out,/Scored after the 12 Oct close/);
+  assert.match(out,/close 2026-10-09/,'older radar inputs display their own date');
   assert.match(out,/PSE30 <b style="color:var\(--red\)">below<\/b> its 20-day/);
   assert.ok(out.indexOf('Holding firms <b>72')<out.indexOf('Property <b>25'),'strongest sector first');
   assert.equal((out.match(/class="card pse-rcard"/g)||[]).length,5,'top five as cards');

@@ -138,7 +138,7 @@ function pseLine(watch, lastAsOf, dayKey) {
   if (lastAsOf && asOf <= String(lastAsOf)) return null;
   if (Date.parse(dayKey + "T00:00:00Z") - Date.parse(asOf + "T00:00:00Z") > 4 * 86400000) return null;
   const items = watch.items && typeof watch.items === "object" ? watch.items : {};
-  const alerts = (Array.isArray(watch.alerts) ? watch.alerts : []).filter((a) => a && a.text && items[a.symbol]);
+  const alerts = (Array.isArray(watch.alerts) ? watch.alerts : []).filter((a) => a && a.text && items[a.symbol] && (a.kind !== "exdiv" || watch.alertsCalendarVerified === true));
   if (!alerts.length) return null;
   return {asOf, line: "PSE: " + alerts.slice(0, 2).map((a) => String(a.text)).join(" · ") + (alerts.length > 2 ? " · +" + (alerts.length - 2) + " more" : "")};
 }

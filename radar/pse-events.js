@@ -11,6 +11,7 @@
 //   documents   https://edge.pse.com.ph/openDiscViewer.do?edge_no=<id>
 // Parsers and the summaries are pure (tested in pse-events.test.js); the
 // fetches are below them.
+import {addSessions,fetchPseCalendar} from './pse-calendar.js';
 
 var EDGE = 'https://edge.pse.com.ph';
 var HEADERS = { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' };
@@ -154,18 +155,12 @@ function newsKind(template) {
 
 // ── summaries ──
 function isoAdd(iso, days) { return new Date(Date.parse(iso + 'T00:00:00Z') + days * 86400000).toISOString().slice(0, 10); }
-// The nth weekday after `iso` (PSE holidays aside).
-function addSessions(iso, n) {
-  var d = iso, k = 0;
-  while (k < n) { d = isoAdd(d, 1); var wd = new Date(d + 'T00:00:00Z').getUTCDay(); if (wd !== 0 && wd !== 6) k++; }
-  return d;
-}
 function isCommon(div) { return /common/i.test(div.security || ''); }
 
 // One company's dividend picture on `asOf`: cash paid per common share with
 // ex-dates in the last 365 days, the yield that is on `close`, and the next
 // ex-date. Duplicate circulars (re-posted rows) count once.
-function dividendStats(divs, cmpyId, asOf, close) {
+function dividendStats(divs, cmpyId, asOf, close, coverage) {
   var seen = {}, mine = (divs || []).filter(function (d) {
     if (d.cmpyId !== cmpyId || !isCommon(d) || !d.exDate) return false;
     var key = d.circular || (d.exDate + d.rate);
@@ -179,10 +174,19 @@ function dividendStats(divs, cmpyId, asOf, close) {
   var total = known.reduce(function (a, d) { return a + d.amount; }, 0);
   var upcoming = mine.filter(function (d) { return d.exDate > asOf; }).sort(function (a, b) { return a.exDate < b.exDate ? -1 : 1; });
   var next = upcoming[0] || null;
+  var incomplete=coverage ? !coverage.complete : null;
   return {
     div12m: known.length ? Math.round(total * 1e4) / 1e4 : null,
     div12mCount: paid.length,
-    div12mPartial: known.length < paid.length,        // a rate we could not read
+    div12mPartial: known.length < paid.length || incomplete===true,
+    div12mCoverage: incomplete==null ? 'unverified' : incomplete ? 'incomplete' : 'complete',
+    div12mAsOf: asOf,
+    div12mPayouts: paid.map(function(d){
+      var description=String(d.type || '')+' '+String(d.rate || '');
+      var special=/\bspecial\b/i.test(description),regular=/\bregular\b/i.test(description);
+      return {exDate:d.exDate,payDate:d.payDate || null,amount:d.amount==null ? null : d.amount,
+        kind:special && regular ? 'mixed' : special ? 'special' : regular ? 'regular' : 'unspecified',rate:d.rate || '',edgeNo:d.edgeNo || null};
+    }).sort(function(a,b){return b.exDate.localeCompare(a.exDate);}),
     yield12m: known.length && close ? Math.round(total / close * 1e4) / 100 : null,
     nextEx: next ? { exDate: next.exDate, payDate: next.payDate, type: next.type, rate: next.rate, amount: next.amount, edgeNo: next.edgeNo } : null
   };
@@ -233,7 +237,7 @@ function applyEvents(board, raw, asOf, today) {
   (board || []).forEach(function (s) {
     bySym[s.cmpyId] = s;
     cmpyIds.push(s.cmpyId);
-    if (raw.dividends) Object.assign(s, dividendStats(raw.dividends, s.cmpyId, asOf, s.close));
+    if (raw.dividends) Object.assign(s, dividendStats(raw.dividends, s.cmpyId, asOf, s.close,raw.dividendCoverage));
   });
   var horizon = isoAdd(asOf, 45);
   var upcoming = (board || []).filter(function (s) { return s.nextEx && s.nextEx.exDate <= horizon; })
@@ -247,6 +251,7 @@ function applyEvents(board, raw, asOf, today) {
     news: raw.filings ? news : null,
     ipos: raw.notices ? ipoGroups(raw.notices, today) : null,
     failed: raw.failed || [],
+    calendar: raw.calendar || null,
     checkedAt: new Date().toISOString()
   };
 }
@@ -258,12 +263,12 @@ function applyEvents(board, raw, asOf, today) {
 // One of each per stock at most.
 function watchEventAlerts(items, rows, raw, asOf, sinceIso) {
   raw = raw || {};
-  var out = [], lastBuy = addSessions(asOf, 1), exDay = addSessions(asOf, 2);
+  var out = [], lastBuy = addSessions(asOf, 1,raw.calendar), exDay = addSessions(asOf, 2,raw.calendar);
   Object.keys(items || {}).sort().forEach(function (sym) {
     var r = rows && rows[sym];
     if (!r || !r.cmpyId) return;
     var d = raw.dividends ? dividendStats(raw.dividends, r.cmpyId, asOf, r.close).nextEx : null;
-    if (d && d.exDate === exDay && /cash/i.test(d.type || '')) {
+    if (lastBuy && exDay && d && d.exDate === exDay && /cash/i.test(d.type || '')) {
       out.push({ symbol: sym, kind: 'exdiv', text: sym + ' goes ex-dividend ' + shortDay(exDay) + ': own it by the ' + shortDay(lastBuy) + ' close to get ' +
         (d.amount != null ? '₱' + d.amount + ' a share' : 'the ' + d.rate + ' dividend') });
     }
@@ -295,25 +300,30 @@ async function post(path, body, label) {
   throw lastErr;
 }
 // Pages until `enough(items)` says stop or `cap` pages, one at a time.
-async function pages(path, body, parse, label, cap, enough) {
+async function pages(path, body, parse, label, cap, enough, reportCoverage) {
   var all = [];
+  var complete=false;
   for (var p = 1; p <= cap; p++) {
     var got = parse(await post(path, Object.assign({}, body, { pageNo: String(p), pageNum: String(p) }), label));
     all = all.concat(got.items);
-    if (p >= got.pages || !got.items.length || (enough && enough(got.items))) break;
+    if (p >= got.pages || !got.items.length || (enough && enough(got.items))) {complete=true;break;}
     await pause(400);
   }
+  if(reportCoverage) reportCoverage({complete:complete});
   return all;
 }
 
 // Everything the summaries need. Each source can fail alone; `failed` names it.
 async function fetchEvents(today) {
   var raw = { failed: [] }, base = { sortType: '', dateSortType: 'DESC', cmpySortType: 'ASC', keyword: '', companyId: '', tmplNm: '' };
+  try {raw.calendar=await fetchPseCalendar();}
+  catch(e){raw.failed.push('calendar');raw.calendar=null;console.log('  PSE calendar unavailable: '+e.message);}
   try {
     var oldest = isoAdd(today, -380);
     raw.dividends = await pages('/disclosureData/dividends_and_rights_info_list.ax?DividendsOrRights=Dividends',
       { sortMode: 'date', dateSortType: 'DESC', cmpySortType: 'ASC' }, parseDividends, 'PSE Edge dividends', 12,
-      function (items) { var last = items[items.length - 1]; return last && last.exDate && last.exDate < oldest; });
+      function (items) { var last = items[items.length - 1]; return last && last.exDate && last.exDate < oldest; },
+      function (coverage) {raw.dividendCoverage=coverage;});
   } catch (e) { raw.failed.push('dividends'); }
   try {
     var win = Object.assign({}, base, { fromDate: q(isoAdd(today, -15)), toDate: q(today) });

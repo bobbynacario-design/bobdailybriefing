@@ -312,3 +312,11 @@ test("PSE watchlist alerts ride the morning push once, after the Due lines, and 
   assert.equal(notificationCopy([], false, {pse: got.line}).body, got.line);
   assert.equal(pushKind({}, "2026-10-13", {items: [], pse: got.line}, []), "morning", "an alert alone is worth the morning push");
 });
+
+test('unverified dividend deadlines never reach the morning push; other alerts survive',()=>{
+  const {pseLine}=require('./delivery-core');
+  const watch={items:{BDO:{}},alertsAsOf:'2026-10-12',alerts:[{symbol:'BDO',kind:'exdiv',text:'deadline'}]};
+  assert.equal(pseLine(watch,null,'2026-10-13'),null);
+  assert.equal(pseLine({...watch,alertsCalendarVerified:true},null,'2026-10-13').line,'PSE: deadline');
+  assert.equal(pseLine({...watch,alerts:[...watch.alerts,{symbol:'BDO',kind:'news',text:'report'}]},null,'2026-10-13').line,'PSE: report');
+});

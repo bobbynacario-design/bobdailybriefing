@@ -77,6 +77,7 @@ test('refreshWatchlists fetches codes beyond the PSEi once, writes each list its
   // With dividends and filings: the event alerts follow the price alerts, a
   // non-PSEi row gets its dividend year, and each list gets its own news.
   const events = {
+    calendar:{verified:true,years:['2026'],closedDays:[]},
     dividends: [{ cmpyId: '9', security: 'COMMON', type: 'Cash', rate: 'P0.25', amount: 0.25, exDate: '2026-10-14', circular: 'D1' },
       { cmpyId: '9', security: 'COMMON', type: 'Cash', rate: 'P0.25', amount: 0.25, exDate: '2026-07-14', circular: 'D2' }],
     filings: [{ cmpyId: '9', company: 'MREIT, Inc.', template: 'Press Release', at: '2026-10-12T15:00', circular: 'F1' }]
@@ -87,5 +88,17 @@ test('refreshWatchlists fetches codes beyond the PSEi once, writes each list its
   assert.deepEqual(a2.alerts.map(x => x.kind + ':' + x.symbol), ['target:BDO', 'exdiv:MREIT', 'news:MREIT']);
   assert.equal(a2.rows.MREIT.yield12m, 1.79, '0.25 paid in July on a 14.00 close');
   assert.equal(a2.rows.MREIT.nextEx.exDate, '2026-10-14');
+  assert.equal(a2.alertsCalendarVerified,true);
   assert.deepEqual(a2.news.map(n => n.symbol + ':' + n.kind), ['MREIT:press']);
+});
+
+test('non-index watch rows exclude intraday and future bars before the close',async()=>{
+  let update;
+  const data={uid:'a',items:{MREIT:{target:15}}};
+  const db={collection:()=>({where:()=>({get:async()=>({docs:[{data:()=>data,ref:{update:async(u)=>{update=u;}}}]})})})};
+  const bars=weekdays('2026-10-14',30,i=>i===29?1:i===28?2:14);
+  await refreshWatchlists(db,'briefings-bob',{board:[],breadth:{asOf:'2026-10-12'}},'2026-10-13',
+    {minutesNow:600,fetchStock:async()=>({bars,page:{marketCap:1},cmpyId:'9',securityId:'8',name:'MREIT'})});
+  assert.equal(update.rows.MREIT.asOf,'2026-10-12');assert.equal(update.rows.MREIT.close,14);
+  assert.equal(update.alertsCalendarVerified,false);
 });

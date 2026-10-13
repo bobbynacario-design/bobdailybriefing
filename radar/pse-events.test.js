@@ -61,7 +61,7 @@ test('a stock’s dividend year: common cash in the last 365 days, the yield, th
   assert.equal(s.div12mCount, 3); assert.equal(s.div12mPartial, true, 'one rate could not be read');
   assert.equal(s.yield12m, 1.79);
   assert.deepEqual(s.nextEx, { exDate: '2026-10-15', payDate: undefined, type: 'Cash', rate: 'P1', amount: 1, edgeNo: undefined });
-  assert.deepEqual(dividendStats([], '260', '2026-10-12', 112), { div12m: null, div12mCount: 0, div12mPartial: false, yield12m: null, nextEx: null });
+  assert.deepEqual(dividendStats([], '260', '2026-10-12', 112), { div12m: null, div12mCount: 0, div12mPartial: false, div12mCoverage:'unverified',div12mAsOf:'2026-10-12',div12mPayouts:[],yield12m: null, nextEx: null });
 });
 
 test('filings: the ones worth reading, labelled; director trades and share counts left out', () => {
@@ -115,9 +115,11 @@ test('applyEvents: board rows gain their dividend year; ex-dates within 45 days,
 });
 
 test('watchlist event alerts: the last day to buy before an ex-date, and news since the last refresh', () => {
-  assert.equal(addSessions('2026-10-09', 1), '2026-10-12', 'Friday to Monday'); assert.equal(addSessions('2026-10-12', 2), '2026-10-14');
+  const calendar={verified:true,years:['2026'],closedDays:[]};
+  assert.equal(addSessions('2026-10-09', 1,calendar), '2026-10-12', 'Friday to Monday'); assert.equal(addSessions('2026-10-12', 2,calendar), '2026-10-14');
   const rows = { BDO: { cmpyId: '260', close: 112 }, ICT: { cmpyId: '83', close: 884 } };
   const raw = {
+    calendar,
     dividends: [{ cmpyId: '260', security: 'COMMON', type: 'Cash', rate: 'P1.00', amount: 1, exDate: '2026-10-14', circular: 'C1' }],
     filings: [{ cmpyId: '83', company: 'ICTSI', template: 'Quarterly Report', at: '2026-10-12T16:10', circular: 'R1' },
       { cmpyId: '83', company: 'ICTSI', template: 'Press Release', at: '2026-10-11T09:00', circular: 'R2' }]
@@ -126,7 +128,19 @@ test('watchlist event alerts: the last day to buy before an ex-date, and news si
   assert.deepEqual(a.map(x => x.kind + ':' + x.symbol), ['exdiv:BDO', 'news:ICT']);
   assert.equal(a[0].text, 'BDO goes ex-dividend 14 Oct: own it by the 13 Oct close to get ₱1 a share');
   assert.equal(a[1].text, 'ICT: Quarterly or annual report (12 Oct)');
+  assert.deepEqual(watchEventAlerts({BDO:{},ICT:{}},rows,{...raw,calendar:null},'2026-10-12','2026-10-11T17:00').map(a=>a.kind),['news']);
   assert.equal(watchEventAlerts({ BDO: {} }, rows, raw, '2026-10-13', '2026-10-12T17:00').length, 0, 'a day later the ex-date alert does not repeat');
   const bbRaw = { filings: [{ cmpyId: '83', company: 'ICTSI', template: 'Share Buy-Back Transactions', at: '2026-10-12T16:10', circular: 'B1' }] };
   assert.equal(watchEventAlerts({ ICT: {} }, rows, bbRaw, '2026-10-12', '2026-10-11T17:00').length, 0, 'a buyback report is not pushed');
+});
+
+test('gross trailing yield exposes regular, special and unparsed declarations and history coverage',()=>{
+  const divs=[{cmpyId:'1',security:'COMMON',type:'Regular Cash',rate:'P1',amount:1,exDate:'2026-05-01',circular:'A'},
+    {cmpyId:'1',security:'COMMON',type:'Special Cash',rate:'P2',amount:2,exDate:'2026-06-01',circular:'B'},
+    {cmpyId:'1',security:'COMMON',type:'Cash',rate:'unparsed',amount:null,exDate:'2026-07-01',circular:'C'}];
+  const s=dividendStats([...divs,divs[0]],'1','2026-10-12',100,{complete:false});
+  assert.equal(s.yield12m,3);assert.equal(s.div12mCount,3);assert.equal(s.div12mPartial,true);
+  assert.equal(s.div12mCoverage,'incomplete');assert.equal(s.div12mAsOf,'2026-10-12');
+  assert.deepEqual(s.div12mPayouts.map(p=>p.kind),['unspecified','special','regular']);
+  assert.equal(dividendStats(divs.slice(0,2),'1','2026-10-12',100,{complete:true}).div12mPartial,false);
 });
