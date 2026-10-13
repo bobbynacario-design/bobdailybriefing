@@ -119,6 +119,22 @@ function parseNotices(html) {
   };
 }
 
+// Company directory: name | symbol | sector | subsector | listing date, each
+// row linking cmDetail('<company id>','<security id>'). Compact keys: the app
+// downloads the whole list for the watchlist box's suggestions.
+function parseDirectory(html) {
+  var pg = /\[\s*(\d+)\s*\/\s*(\d+)\s*\]/.exec(html || '');
+  var items = [], re = /<tr[^>]*>([\s\S]*?)<\/tr>/g, m;
+  while ((m = re.exec(html || ''))) {
+    var cells = [], c, cre = /<td[^>]*>([\s\S]*?)<\/td>/g;
+    while ((c = cre.exec(m[1]))) cells.push(text(c[1]));
+    var ids = /cmDetail\('(\d+)',\s*'(\d+)'\)/.exec(m[1]);
+    if (cells.length < 5 || !/^[A-Z0-9]{1,8}$/.test(cells[1])) continue;
+    items.push({ s: cells[1], n: cells[0], sec: cells[2], id: ids ? ids[1] : null, sid: ids ? ids[2] : null, listed: edgeDay(cells[4]) });
+  }
+  return { page: pg ? Number(pg[1]) : 1, pages: pg ? Number(pg[2]) : 1, items: items };
+}
+
 // The filings worth a beginner's attention, by template ("[Amend-2]" prefixes
 // ignored). Director share trades, share-count changes and the like are left out.
 var NEWS_KINDS = [
@@ -313,7 +329,18 @@ async function fetchEvents(today) {
   return raw;
 }
 
+// Every listed company (about 283, six pages). Throws if it comes back thin,
+// so a broken page can't replace a good list.
+async function fetchDirectory() {
+  var list = await pages('/companyDirectory/search.ax', { companyId: '', keyword: '', sector: 'ALL', subsector: 'ALL', sortType: '',
+    dateSortType: 'DESC', cmpySortType: 'ASC', symbolSortType: 'ASC' }, parseDirectory, 'PSE Edge directory', 10);
+  var seen = {}, out = list.filter(function (c) { if (seen[c.s]) return false; seen[c.s] = true; return true; });
+  if (out.length < 150) throw new Error('directory came back with ' + out.length + ' companies');
+  return out.sort(function (a, b) { return a.s < b.s ? -1 : 1; });
+}
+
 export {
+  parseDirectory, fetchDirectory,
   parseEdgeTable, edgeDay, edgeStamp, pesoAmount, parseDividends, parseFilings, parseNotices, newsKind,
   addSessions, dividendStats, ipoGroups, newsFor, applyEvents, watchEventAlerts, fetchEvents
 };

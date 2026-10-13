@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { edgeDay, edgeStamp, pesoAmount, parseDividends, parseFilings, parseNotices, newsKind, addSessions,
+import { parseDirectory, edgeDay, edgeStamp, pesoAmount, parseDividends, parseFilings, parseNotices, newsKind, addSessions,
   dividendStats, ipoGroups, newsFor, applyEvents, watchEventAlerts } from './pse-events.js';
 
 // Rows shaped like PSE Edge's own (13 Oct 2026).
@@ -11,6 +11,19 @@ const divRow = (cmpy, name, sec, type, rate, ex, rec, pay, circ, edge) =>
 const filingRow = (cmpy, name, tmpl, form, at, circ, edge) =>
   '<tr><td><a href="/companyInformation/form.do?cmpy_id=' + cmpy + '">' + name + '</a></td><td><a href="#viewer" onclick="openPopup(\'' + edge + '\');return false;">' + tmpl +
   '</a></td><td class="alignC">' + form + '</td><td class="alignC">' + at + '</td><td class="alignC">' + circ + '</td></tr>';
+
+test('company directory rows: code, name, sector, both ids and the listing date; header and junk rows skipped', () => {
+  const row = (name, sym, sec, sub, listed, id, sid) => '<tr><td><a href="#company" onclick="cmDetail(\'' + id + '\',\'' + sid + '\');return false;">' + name + '</a></td>' +
+    '<td class="alignC"><a href="#company" onclick="cmDetail(\'' + id + '\',\'' + sid + '\');return false;">' + sym + '</a></td><td>' + sec + '</td><td>' + sub + '</td><td class="alignC">' + listed + '</td></tr>';
+  const d = parseDirectory('[6 /\n6]<table><tr><th>Company Name</th><th>Stock Symbol</th></tr>' +
+    row('BDO Unibank, Inc.', 'BDO', 'Financials', 'Banks', 'May 21, 2002', '260', '468') +
+    row('Jollibee Foods Corporation', 'JFC', 'Industrial', 'Food, Beverage &amp; Tobacco', 'Jul 14, 1993', '86', '158') +
+    row('Not a code', 'bad code', 'X', 'X', 'Jan 01, 2000', '1', '1') + '</table>');
+  assert.equal(d.page, 6); assert.equal(d.pages, 6);
+  assert.deepEqual(d.items, [
+    { s: 'BDO', n: 'BDO Unibank, Inc.', sec: 'Financials', id: '260', sid: '468', listed: '2002-05-21' },
+    { s: 'JFC', n: 'Jollibee Foods Corporation', sec: 'Industrial', id: '86', sid: '158', listed: '1993-07-14' }]);
+});
 
 test('PSE Edge dates, times and free-text dividend rates', () => {
   assert.equal(edgeDay('Feb 08, 2027'), '2027-02-08'); assert.equal(edgeDay('Feb 9, 2027'), '2027-02-09'); assert.equal(edgeDay('TBA'), null);

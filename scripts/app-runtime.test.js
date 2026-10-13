@@ -1876,3 +1876,25 @@ test('PSE radar: honest verdict from the walk-back, top five as cards, everythin
   assert.doesNotMatch(c.pseRadarCard(signals[5],6,null,{}),/Plan:/,'no plan when the stop is above the entry');
   assert.equal(c.pseRadarHtml(null,null,[]),'');
 });
+test('PSE watchlist box suggests as you type: exact code, code prefix, company-name word, then contains',()=>{
+  const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const {context:c}=environment(['pseSuggestMatches','pseSuggestHtml'],{esc});
+  const dir=[{s:'AC',n:'Ayala Corporation',sec:'Holding Firms'},{s:'ACEN',n:'ACEN CORPORATION',sec:'Industrial'},{s:'ALI',n:'Ayala Land, Inc.',sec:'Property'},
+    {s:'ALLHC',n:'AyalaLand Logistics Holdings Corp.',sec:'Property'},{s:'BDO',n:'BDO Unibank, Inc.',sec:'Financials'},{s:'JFC',n:'Jollibee Foods Corporation',sec:'Industrial'},
+    {s:'MREIT',n:'MREIT, Inc.',sec:'Property'},{s:'RCR',n:'RL Commercial REIT, Inc.',sec:'Property'},{s:'X<',n:'<b>Bad</b>',sec:'?'}];
+  const syms=q=>Array.from(c.pseSuggestMatches(dir,q,null,8),m=>m.s);
+  assert.deepEqual(syms('ac'),['AC','ACEN'],'exact code first, then codes starting with it');
+  assert.deepEqual(syms('jol'),['JFC'],'a company-name word');
+  assert.deepEqual(syms('ayala'),['AC','ALI','ALLHC'],'every company with a word starting "ayala", shortest code first');
+  assert.deepEqual(syms('reit'),['RCR','MREIT'],'a name with the word REIT before a code that only contains it');
+  assert.deepEqual(syms('nibank'),['BDO'],'two or more letters can match inside a name');
+  assert.deepEqual(syms('  '),[]);assert.equal(c.pseSuggestMatches(null,'bdo',null,8).length,0);
+  assert.equal(c.pseSuggestMatches(dir,'a',null,2).length,2,'capped');
+  const m=c.pseSuggestMatches(dir,'bdo',{BDO:{}},8);
+  assert.equal(m[0].watching,true);
+  const h=c.pseSuggestHtml(m.concat([{s:'JFC',n:'Jollibee <Foods>',sec:'Industrial',watching:false}]),1);
+  assert.match(h,/id="pse-sug-0" class="pse-sug" aria-selected="false"[^>]*onclick="pseSuggestPick\('BDO'\)"><b>BDO<\/b>/);
+  assert.match(h,/★ following/);
+  assert.match(h,/class="pse-sug active" aria-selected="true"/);
+  assert.match(h,/Jollibee &lt;Foods>/);assert.doesNotMatch(h,/<Foods>/);
+});

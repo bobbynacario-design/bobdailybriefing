@@ -17,7 +17,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { buildPhSnapshot, writePhSnapshot, loadPhSnapshot, phtToday } from './ph-snapshot.js';
 import { refreshWatchlists } from './pse-watch.js';
-import { fetchEvents, applyEvents } from './pse-events.js';
+import { fetchEvents, applyEvents, fetchDirectory } from './pse-events.js';
 import { buildPseRadar } from './pse-radar.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 
@@ -117,6 +117,7 @@ async function main() {
     if (process.env.PSE_RADAR_DRY_OUT && pse) writeFileSync(process.env.PSE_RADAR_DRY_OUT, JSON.stringify(pse));
     if (process.env.PH_DRY_RUN_OUT) writeFileSync(process.env.PH_DRY_RUN_OUT, JSON.stringify(phDoc));
     var dryWatch = await watchlists(db, ph, true, events);
+    await directory(db, true);
     console.log('\n--dry-run: NOT writing briefings-bob/radar-ph' + (dryWatch ? ' or the ' + dryWatch.lists + ' watchlist(s)' : '') + '.');
     return;
   }
@@ -130,6 +131,7 @@ async function main() {
   // Watchlists only follow a written snapshot: a stale run must not turn old
   // prices into today's alerts.
   var watch = wrote ? await watchlists(db, ph, false, events) : null;
+  var dirFailed = await directory(db, false);
 
   // pse-radar (today's scores) and pse-radar-journal (the walk-back evidence).
   if (wrote && pse) {
@@ -152,8 +154,32 @@ async function main() {
     message: !wrote ? 'stored snapshot is newer'
       : [ph.boardFailed.length ? 'PSE Edge missing ' + ph.boardFailed.join(', ') : '',
         watch && watch.failed ? 'watchlists failed: ' + watch.failed : '',
-        pseFailed ? 'PSE radar failed: ' + pseFailed : ''].filter(Boolean).join('; ')
+        pseFailed ? 'PSE radar failed: ' + pseFailed : '',
+        dirFailed ? 'directory failed: ' + dirFailed : ''].filter(Boolean).join('; ')
   });
+}
+
+// The list of every listed company for the watchlist box's suggestions
+// (briefings-bob/pse-directory, no uid). Refreshed when over 6 days old, or
+// with PSE_DIRECTORY_FORCE=1. Non-fatal: returns the failure, if any.
+async function directory(db, dryRun) {
+  STAGE.set('directory');
+  try {
+    var ref = db.collection(COLL).doc('pse-directory');
+    var cur = await ref.get();
+    var at = cur.exists ? cur.data().updatedAt : null;
+    if (at && Date.now() - Date.parse(at) < 6 * 86400000 && !process.env.PSE_DIRECTORY_FORCE) {
+      console.log('  directory: fresh (' + String(at).slice(0, 10) + ')');
+      return '';
+    }
+    var list = await fetchDirectory();
+    if (!dryRun) await ref.set({ updatedAt: new Date().toISOString(), count: list.length, companies: list });
+    console.log('  directory: ' + list.length + ' companies' + (dryRun ? ' — not written' : ' — written'));
+    return '';
+  } catch (e) {
+    console.log('  directory failed: ' + (e.message || e));
+    return e.message || String(e);
+  }
 }
 
 // Non-fatal: the board is already written. Counts only in the log (public repo).
