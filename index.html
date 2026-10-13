@@ -1988,6 +1988,10 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .tf-line{font-size:13px;line-height:1.55;color:var(--txt);margin:.35rem 0}.tf-line b{color:var(--gold);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-right:.35rem}
 .tf-recent{list-style:none;padding:0;margin:.3rem 0 0;font-size:12.5px;color:var(--txt2);line-height:1.6}.tf-recent .w{color:var(--green);font-weight:600}.tf-recent .l{color:var(--red);font-weight:600}
 .sports-market{font-size:12px;color:var(--txt2);margin-top:.3rem;font-family:var(--mono)}.sports-market.edge{color:var(--gold)}
+.cb-fight{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.2rem .8rem;padding:.55rem 0;border-bottom:1px solid var(--rim);font-size:13.5px}.cb-fight:last-child{border-bottom:0}
+.cb-fight .meta{grid-column:1/-1;font-size:11.5px;color:var(--txt2)}.cb-fight .pct{font-family:var(--mono);font-size:12px;color:var(--txt2);text-align:right}.cb-fight .fav{color:var(--txt);font-weight:600}
+.cb-bar{grid-column:1/-1;display:flex;height:4px;border-radius:2px;overflow:hidden;background:var(--bg4)}.cb-bar i{background:var(--gold)}.cb-bar b{background:var(--bg4)}
+.cb-res{font-size:13px;line-height:1.6;padding:.3rem 0;border-bottom:1px solid var(--rim)}.cb-res .up{color:var(--gold);font-weight:600}
 .sports-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem}
 .sports-panel-title{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
 .sports-list{display:flex;flex-direction:column;gap:.7rem}
@@ -8245,6 +8249,7 @@ var FEED_SPEC = [
   // Sports pill stayed green for three weeks while every NBA refresh failed.
   { key: 'sports-nba',    label: 'NBA',    maxAgeH: 18, cadence: '09:00 + 15:00' },
   { key: 'sports-tennis', label: 'Tennis', maxAgeH: 18, cadence: '08:00 + 20:00' },
+  { key: 'sports-combat', label: 'Fights', maxAgeH: 18, cadence: '08:30 + 20:30' },
   { key: 'grounding', label: 'Numbers', maxAgeH: 30, cadence: 'daily; sources checked when due' }
 ];
 
@@ -11880,6 +11885,47 @@ function tennisFollowedHtml(list) {
   }).join('');
   return '<div class="sports-panel"><div class="sports-panel-title">Your players · every tournament</div>' + rows + '</div>';
 }
+// Boxing & UFC (lane 4): Polymarket chances per fight, UFC by card, results
+// with the chance each winner had before the fight.
+function combatFightHtml(f) {
+  var a = f.fighters[0] || {}, b = f.fighters[1] || {};
+  var ph = f.filipino ? '🇵🇭 ' : '';
+  var priced = a.pct != null && b.pct != null;
+  var name = function (p, other) { return '<span class="' + (priced && p.pct > other.pct ? 'fav' : '') + '">' + esc(p.name) + '</span>'; };
+  var line = '<div>' + ph + name(a, b) + ' vs ' + name(b, a) + '</div>' +
+    '<div class="pct">' + (priced ? a.pct + '% · ' + b.pct + '%' : (f.status === 'awaiting result' ? 'awaiting result' : 'no real market yet')) + '</div>';
+  var bar = priced ? '<div class="cb-bar" title="' + esc(a.name + ' ' + a.pct + '% / ' + b.name + ' ' + b.pct + '%') + '"><i style="width:' + a.pct + '%"></i><b style="width:' + b.pct + '%"></b></div>' : '';
+  // A UFC card header already carries the date.
+  var meta = [f.weightClass, f.segment, f.sport === 'boxing' ? f.card : '', f.sport === 'boxing' ? sportsDate(f.date) : ''].filter(Boolean).join(' · ');
+  var link = f.url ? ' · <a href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer">Polymarket ↗</a>' : '';
+  return '<div class="cb-fight">' + line + bar + '<div class="meta">' + esc(meta) + link + '</div></div>';
+}
+function combatResultHtml(r) {
+  var chance = r.winnerPct == null ? 'pre-fight chance not recorded'
+    : (r.winnerPct < 50 ? '<span class="up">upset: won as a ' + r.winnerPct + '% underdog</span>' : 'won as the ' + r.winnerPct + '% favourite');
+  return '<div class="cb-res"><b>' + esc(r.winner) + '</b> beat ' + esc(r.loser) + ' · ' + chance + '<div class="sports-change-detail">' + esc([r.card, sportsDateOnly(r.date)].filter(Boolean).join(' · ')) + '</div></div>';
+}
+function sportsCombatHtml(mod) {
+  mod = mod || {};
+  var html = '<div class="sports-brief-head"><div><div class="sports-brief-kicker">Personal briefing</div><h2>' + esc(mod.title || 'Boxing & UFC') + '</h2></div><div class="sports-brief-phase">' + esc(mod.phase || 'setup') + '<br>' + esc(mod.asOf || '') + '</div></div>';
+  html += sportsFreshnessHtml(mod);
+  var cards = mod.cards || [], boxing = mod.boxing || [];
+  var ph = cards.reduce(function (a, c) { return a.concat(c.fights.filter(function (f) { return f.filipino; })); }, []).concat(boxing.filter(function (f) { return f.filipino; }));
+  if (ph.length) html += '<div class="sports-panel"><div class="sports-panel-title">🇵🇭 Filipino fighters</div>' + ph.map(combatFightHtml).join('') + '</div>';
+  cards.forEach(function (c) {
+    var main = c.fights.filter(function (f) { return !/prelim/i.test(f.segment); }), pre = c.fights.filter(function (f) { return /prelim/i.test(f.segment); });
+    html += '<div class="sports-panel"><div class="sports-panel-title">' + esc(c.name) + ' · ' + esc(sportsDate(c.date)) + '</div>' + main.map(combatFightHtml).join('') +
+      (pre.length ? '<details><summary class="sports-change-detail">Prelims · ' + pre.length + ' fight' + (pre.length === 1 ? '' : 's') + '</summary>' + pre.map(combatFightHtml).join('') + '</details>' : '') + '</div>';
+  });
+  var boxUp = boxing.filter(function (f) { return f.status === 'upcoming'; }), boxWait = boxing.filter(function (f) { return f.status !== 'upcoming'; });
+  html += '<div class="sports-panel"><div class="sports-panel-title">Boxing · next 3 weeks</div>' + (boxUp.length ? boxUp.map(combatFightHtml).join('') : '<div class="sports-empty">No boxing fights listed on Polymarket for the next three weeks.</div>') +
+    (boxWait.length ? '<details><summary class="sports-change-detail">Awaiting a result · ' + boxWait.length + '</summary>' + boxWait.map(combatFightHtml).join('') + '</details>' : '') + '</div>';
+  var res = mod.results || [], rec = mod.record || {};
+  html += '<div class="sports-panel"><div class="sports-panel-title">Recent results</div>' + (rec.scored ? '<div class="decision-stat-note">Favourites won ' + rec.favouritesWon + ' of ' + rec.scored + ' fights with a recorded pre-fight price' + (rec.brier != null ? ' (Brier ' + rec.brier + ', 0.25 = coin flip)' : '') + '.</div>' : '') +
+    (res.length ? res.slice(0, 8).map(combatResultHtml).join('') : '<div class="sports-empty">Results appear here after fights settle. Pre-fight chances are recorded from the first refresh before each fight.</div>') + '</div>';
+  if (mod.providerNote) html += '<div class="sports-empty" style="margin-top:.6rem">' + esc(mod.providerNote) + '</div>';
+  return html;
+}
 function sportsTennisHtml(mod) {
   mod = mod || {};
   var tiers = mod.tiers || { slam: {}, masters: {}, tour500: {} };
@@ -11991,6 +12037,7 @@ function sportsAvailableModules(d) {
   var mods = d && d.modules || {};
   if (mods.nba && mods.nba.enabled !== false) out.push({ key:'nba', label:'NBA', module:mods.nba });
   if (mods.tennis && mods.tennis.enabled !== false) out.push({ key:'tennis', label:'Tennis', module:mods.tennis });
+  if (mods.combat && mods.combat.enabled !== false) out.push({ key:'combat', label:'Boxing & UFC', module:mods.combat });
   // The World Cup ended in July; its archive stays in the doc but off the tabs.
   if (!out.length && d && d.worldCup) out.push({ key:'worldcup', label:'FIFA Archive', module:d.worldCup });
   return out;
@@ -12203,6 +12250,10 @@ function sportsRenderActive() {
   }
   if (sportsActiveModule === 'tennis') {
     out.innerHTML = tabs + sportsTennisHtml(d.modules && d.modules.tennis);
+    return;
+  }
+  if (sportsActiveModule === 'combat') {
+    out.innerHTML = tabs + sportsCombatHtml(d.modules && d.modules.combat);
     return;
   }
   var mod = d.modules && d.modules[sportsActiveModule];

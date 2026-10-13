@@ -9,7 +9,7 @@
     "refresh:nba": "node refresh-sports.js --module nba",
     "dry-run": "node refresh-sports.js --dry-run",
     "dry-run:nba": "node refresh-sports.js --module nba --dry-run",
-    "test": "node --test refresh-sports.test.js"
+    "test": "node --test refresh-sports.test.js combat.test.js"
   },
   "engines": {
     "node": ">=20"

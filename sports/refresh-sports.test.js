@@ -88,7 +88,7 @@ test('each scheduled lane a run asked for gets its own health record; a kept sna
     tennis: { refreshStatus: 'error', setupNote: 'Tennis fetch failed: fetch failed' }
   } };
   var all = laneHealth(doc, function () { return true; });
-  assert.deepEqual(all.map(function (r) { return r.feed + '=' + r.status; }), ['sports-nba=failed', 'sports-tennis=failed'], 'the paused World Cup lane has no record');
+  assert.deepEqual(all.map(function (r) { return r.feed + '=' + r.status; }), ['sports-nba=failed', 'sports-tennis=failed', 'sports-combat=failed'], 'the paused World Cup lane has no record; an absent combat lane is not ok');
   assert.equal(all[0].message, 'ESPN NBA 400: {"code":400,"message":"Failed to get events endpoint."}');
   assert.equal(all[0].stage, 'fetch (kept last good data)');
   assert.equal(all[1].message, 'Tennis fetch failed: fetch failed'); assert.equal(all[1].stage, 'fetch');
@@ -381,14 +381,15 @@ function laneDoc() {
     worldCup: { matches: [{ id: 1, status: 'FINISHED' }] },
     modules: {
       nba: { matches: [{ id: 'a' }], standings: [{ team: 'BOS' }] },
-      tennis: { tiers: { slam: { current: { name: 'US Open' } }, masters: {}, tour500: {} } }
+      tennis: { tiers: { slam: { current: { name: 'US Open' } }, masters: {}, tour500: {} } },
+      combat: { cards: [{ name: 'UFC 333', fights: [] }], boxing: [], results: [] }
     }
   };
 }
 
 test('moduleHasData recognises real lane data and rejects empty scaffolding', function () {
   var d = laneDoc();
-  ['nba', 'tennis', 'worldcup'].forEach(function (k) {
+  ['nba', 'tennis', 'combat', 'worldcup'].forEach(function (k) {
     assert.equal(moduleHasData(k, laneValue(d, k)), true, k + ' should count as populated');
   });
   assert.equal(moduleHasData('nba', { matches: [], standings: [], upcoming: [] }), false);
@@ -400,7 +401,7 @@ test('moduleHasData recognises real lane data and rejects empty scaffolding', fu
 test('lanesMissing flags every lane a module-scoped run would erase', function () {
   var onlyTennis = { modules: { tennis: laneDoc().modules.tennis } };
   var wantsTennis = function (k) { return k === 'tennis'; };
-  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'worldcup']);
+  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'combat', 'worldcup']);
   // Lanes carried forward from the previous doc are not missing.
   assert.deepEqual(lanesMissing(laneDoc(), wantsTennis), []);
   // A lane this run is responsible for is never reported (its own fallback owns it).
@@ -412,6 +413,7 @@ test('setLane restores into the right slot for modules and the legacy worldCup k
   var source = laneDoc();
   setLane(target, 'nba', laneValue(source, 'nba'));
   setLane(target, 'worldcup', laneValue(source, 'worldcup'));
+  setLane(target, 'combat', laneValue(source, 'combat'));
   assert.equal(target.modules.nba.matches.length, 1);
   assert.equal(target.worldCup.matches.length, 1);
   assert.deepEqual(lanesMissing(target, function (k) { return k === 'tennis'; }), []);
@@ -431,7 +433,7 @@ test('concurrent module writes preserve lanes committed by another runner', func
   assert.equal(merged.modules.tennis.tiers.slam.current.name, 'New tennis snapshot');
   assert.equal(merged.modules.pba, undefined, 'the removed PBA lane is not carried forward from an older doc');
   assert.equal(merged.worldCup.matches.length, 1);
-  assert.deepEqual(merged.sports.sort(), ['nba', 'tennis', 'worldcup']);
+  assert.deepEqual(merged.sports.sort(), ['combat', 'nba', 'tennis', 'worldcup']);
 });
 
 test('shiftDateKey walks back across month boundaries', function () {

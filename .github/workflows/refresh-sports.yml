@@ -6,6 +6,8 @@ on:
     - cron: "0 1 * * *"      # NBA 09:00 PHT
     - cron: "0 7 * * *"      # NBA 15:00 PHT
     - cron: "0 12 * * *"     # Tennis 20:00 PHT
+    - cron: "30 0 * * *"     # Boxing & UFC 08:30 PHT
+    - cron: "30 12 * * *"    # Boxing & UFC 20:30 PHT
   workflow_dispatch:
     inputs:
       module:
@@ -13,7 +15,7 @@ on:
         required: true
         default: nba
         type: choice
-        options: [nba, tennis, all]
+        options: [nba, tennis, combat, all]
 
 permissions:
   contents: read
@@ -53,6 +55,7 @@ jobs:
           if [[ -z "$module" ]]; then
             case "$EVENT_SCHEDULE" in
               "0 0 * * *"|"0 12 * * *") module="tennis" ;;
+              "30 0 * * *"|"30 12 * * *") module="combat" ;;
               *) module="nba" ;;
             esac
           fi

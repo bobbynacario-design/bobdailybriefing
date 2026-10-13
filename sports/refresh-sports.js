@@ -23,6 +23,7 @@ import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { buildNbaProjections } from './nba-projections.js';
+import { fetchCombatFights, buildCombatJournal, buildCombatView } from './combat.js';
 import { fetchRetry } from '../lib/http.js';
 import { recordRunHealth } from '../lib/feed-health.js';
 
@@ -2262,6 +2263,44 @@ async function updateTennisJournal(db, module, dryRun) {
   return journal.stats;
 }
 
+// ── Boxing & UFC (lane 4) — Polymarket, see combat.js ─────────────────────────
+function buildCombatModule() {
+  var m = emptyModule('combat', 'Boxing & UFC', 'feed unavailable', 'Polymarket',
+    'Fight data is temporarily unavailable. The refresh job keeps the last good snapshot when one exists.');
+  m.cards = []; m.boxing = []; m.results = []; m.record = null;
+  return m;
+}
+function combatModuleHasData(mod) {
+  return !!mod && ((mod.cards || []).length > 0 || (mod.boxing || []).length > 0 || (mod.results || []).length > 0);
+}
+async function fetchCombatModule(db, dryRun) {
+  var now = new Date(), nowIso = now.toISOString();
+  var fights = await fetchCombatFights(fetch, now);
+  if (!fights.length) throw new Error('Polymarket returned no boxing or UFC fights.');
+  var prior = null, readOk = !db;
+  if (db) {
+    try { var snap = await db.collection(COLL).doc('sports-combat-journal').get(); prior = snap.exists ? snap.data() : null; readOk = true; }
+    catch (e) { console.warn('combat journal read failed (not rewriting it):', e.message || e); }
+  }
+  var journal = buildCombatJournal(prior, fights, nowIso);
+  // A failed read must not replace the journal with a fresh one.
+  if (db && !dryRun && readOk) {
+    try { await db.collection(COLL).doc('sports-combat-journal').set(journal); }
+    catch (e) { console.warn('combat journal write failed:', e.message || e); }
+  }
+  var view = buildCombatView(fights, now.getTime());
+  return {
+    enabled: true, kind: 'combat', title: 'Boxing & UFC',
+    phase: view.cards.length || view.boxing.length ? 'fights ahead' : 'quiet week',
+    provider: 'Polymarket',
+    providerNote: 'Fights and chances from Polymarket, one market per fight. A chance shows only when the market has traded or holds real orders; an empty book reads 50/50 and says nothing. Polymarket lists most UFC cards but only some boxing, so Filipino fights in Asia are often missing. Access to Polymarket may be restricted where you are; the figures here are read-only.',
+    asOf: phtDateKey(), generatedAt: nowIso, refreshAttemptedAt: nowIso, lastSuccessfulAt: nowIso,
+    refreshStatus: 'ok', fallback: false, staleAfterHours: 36,
+    cards: view.cards, boxing: view.boxing, results: journal.stats.recent,
+    record: { scored: journal.stats.scored, favouritesWon: journal.stats.favouritesWon, brier: journal.stats.brier }
+  };
+}
+
 // ── Lane preservation guards ─────────────────────────────────────────────────
 // All lanes share ONE Firestore doc, but a module-scoped run (--module tennis)
 // only builds its own lane — every other lane has to be carried forward from the
@@ -2269,7 +2308,7 @@ async function updateTennisJournal(db, module, dryRun) {
 // machine's network was up: the prev-doc read threw (DNS), nothing was carried
 // forward, and the write went ahead with a tennis-only doc. That silently erased
 // NBA, the then PBA lane and the FIFA archive, and every later run inherited the loss.
-var LANE_KEYS = ['nba', 'tennis', 'worldcup'];
+var LANE_KEYS = ['nba', 'tennis', 'combat', 'worldcup'];
 var LANE_LOOKBACK_DAYS = 21;
 
 // ── Per-lane feed health ─────────────────────────────────────────────────────
@@ -2280,7 +2319,7 @@ var LANE_LOOKBACK_DAYS = 21;
 // record (feeds sports-nba, sports-tennis): ok only when that lane
 // refreshed, failed with its error when it fell back. The paused World Cup lane
 // has no schedule, so it has no record.
-var HEALTH_LANES = ['nba', 'tennis'];
+var HEALTH_LANES = ['nba', 'tennis', 'combat'];
 function laneHealth(doc, wants) {
   return HEALTH_LANES.filter(function (key) { return wants(key); }).map(function (key) {
     var mod = (doc && doc.modules && doc.modules[key]) || {};
@@ -2317,6 +2356,7 @@ function setLane(docData, key, value) {
 function moduleHasData(key, mod) {
   if (!mod) return false;
   if (key === 'tennis') return tennisModuleHasData(mod);
+  if (key === 'combat') return combatModuleHasData(mod);
   if (key === 'worldcup') return (mod.matches || []).length > 0;
   return (mod.matches || []).length > 0 || (mod.standings || []).length > 0 || (mod.upcoming || []).length > 0;
 }
@@ -2359,9 +2399,11 @@ function buildForwardModules(reason) {
   var modules = {};
   if (wantsModule('nba')) modules.nba = buildNbaModule();
   if (wantsModule('tennis')) modules.tennis = buildTennisModule();
+  if (wantsModule('combat')) modules.combat = buildCombatModule();
   if (wantsModule('all')) {
     if (!modules.nba) modules.nba = buildNbaModule();
     if (!modules.tennis) modules.tennis = buildTennisModule();
+    if (!modules.combat) modules.combat = buildCombatModule();
   }
   Object.keys(modules).forEach(function (k) {
     modules[k].setupNote = reason || '';
@@ -2389,7 +2431,7 @@ function initAdmin() {
 
 function mergeConcurrentSportsDoc(incoming, existing, requestedLanes) {
   var merged = Object.assign({}, incoming, {
-    modules: Object.fromEntries(Object.entries((incoming && incoming.modules) || {}).filter(function (pair) { return pair[0] === 'nba' || pair[0] === 'tennis'; }))
+    modules: Object.fromEntries(Object.entries((incoming && incoming.modules) || {}).filter(function (pair) { return LANE_KEYS.indexOf(pair[0]) >= 0; })) // retired lanes (PBA) drop out
   });
   var requested = requestedLanes || [];
   LANE_KEYS.forEach(function (lane) {
@@ -2503,7 +2545,7 @@ async function loadPublicMiroSports(db) {
 }
 
 async function main() {
-  if (SELECTED_MODULES.some(function (key) { return !['all', 'nba', 'tennis', 'worldcup'].includes(key); })) throw new Error('Supported sports modules: nba, tennis, worldcup, all');
+  if (SELECTED_MODULES.some(function (key) { return !['all', 'nba', 'tennis', 'combat', 'worldcup'].includes(key); })) throw new Error('Supported sports modules: nba, tennis, combat, worldcup, all');
   var dateKey = phtDateKey();
 
   // Init Firestore up front (unless dry-run) so we can read the last-good doc
@@ -2601,6 +2643,27 @@ async function main() {
         doc.modules.tennis.setupNote = 'Tennis fetch failed: ' + (e.message || e);
       }
       doc.modules.tennis.refreshError = String(e.message || e);
+    }
+  }
+  if (wantsModule('combat')) {
+    try {
+      doc.modules.combat = await fetchCombatModule(db, DRY_RUN);
+      var cm = doc.modules.combat;
+      console.log('Combat: ' + cm.cards.length + ' UFC card(s), ' + cm.boxing.length + ' boxing fight(s), ' + cm.results.length + ' recent result(s); favourites won ' +
+        (cm.record.scored ? cm.record.favouritesWon + '/' + cm.record.scored : 'n/a') + '.');
+    } catch (e) {
+      console.warn('Combat fetch failed:', e.message || e);
+      var priorCombat = prevDocData && prevDocData.modules && prevDocData.modules.combat;
+      if (combatModuleHasData(priorCombat)) {
+        doc.modules.combat = priorCombat;
+        doc.modules.combat.refreshAttemptedAt = new Date().toISOString();
+        doc.modules.combat.refreshStatus = 'fallback';
+        doc.modules.combat.fallback = true;
+      } else {
+        doc.modules.combat = buildCombatModule();
+        doc.modules.combat.setupNote = 'Combat fetch failed: ' + (e.message || e);
+      }
+      doc.modules.combat.refreshError = String(e.message || e);
     }
   }
   ['nba'].forEach(function (key) {

@@ -1972,3 +1972,17 @@ test('NBA cards show the bookmaker line, the move since open and a 5+ point mode
   const j=context.nbaJournalHtml({resolved:3,pending:1,accuracy:67,decisiveAccuracy:50,brier:0.2,brierSkill:0.05,market:{n:3,modelBrier:0.24,marketBrier:0.2}});
   assert.ok(j.includes('model Brier 0.24, closing line 0.2 (lower is better). The bookmaker is ahead; under 50 games this is still noise.'));
 });
+
+test('Boxing & UFC: cards with prelims folded, Filipino fighters first, upsets named with their pre-fight chance',()=>{
+  const {context}=environment(['sportsCombatHtml','combatFightHtml','combatResultHtml','sportsFreshnessHtml','sportsDate','sportsDateOnly'],{esc:escHtml});
+  const f=(id,a,b,pa,seg,extra)=>Object.assign({id,sport:'ufc',bout:a+' vs. '+b,card:'UFC 333',weightClass:'Bantamweight',segment:seg,date:'2026-10-24T14:00:00Z',fighters:[{name:a,pct:pa},{name:b,pct:pa==null?null:100-pa}],status:'upcoming',url:'https://polymarket.com/event/x'},extra||{});
+  const html=context.sportsCombatHtml({title:'Boxing & UFC',phase:'fights ahead',cards:[{name:'UFC 333',date:'2026-10-24T14:00:00Z',fights:[f('1','Merab Dvalishvili','Petr <Yan>',39,'Main Card'),f('2','A','B',null,'Prelims')]}],
+    boxing:[f('3','Jerwin Ancajas','Someone',62,'',{sport:'boxing',filipino:true,card:''})],
+    results:[{winner:'Payton Talbott',loser:'Deiveson Figueiredo',winnerPct:30,card:'UFC 332',date:'2026-10-04T02:00:00Z'},{winner:'X',loser:'Y',winnerPct:null}],record:{scored:5,favouritesWon:3,brier:0.21}});
+  assert.ok(html.indexOf('Filipino fighters')<html.indexOf('UFC 333 · '));
+  assert.ok(html.includes('39% · 61%'));assert.doesNotMatch(html,/<Yan>/);
+  assert.ok(html.includes('<details><summary class="sports-change-detail">Prelims · 1 fight</summary>'));assert.ok(html.includes('no real market yet'));
+  assert.ok(html.includes('upset: won as a 30% underdog'));assert.ok(html.includes('pre-fight chance not recorded'));
+  assert.ok(html.includes('Favourites won 3 of 5 fights with a recorded pre-fight price (Brier 0.21, 0.25 = coin flip).'));
+  assert.ok(html.includes('rel="noopener noreferrer">Polymarket ↗</a>'));
+});
