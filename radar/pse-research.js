@@ -52,7 +52,7 @@ export async function buildResearch(board,previous,today,options={}){
         financials={...parseFinancials(await res.text()),checkedAt:now};
       }catch(e){error=String(e.message || e).slice(0,160);failed.push(symbol);}
     }
-    const company=Core.buildCompany(row,financials,today);
+    const company=Core.buildCompany(row,financials,today,options.fx);
     if(error){company.fetchError=error;company.brief.risks.unshift('Financial source refresh failed; retained figures keep their original dates.');}
     companies.push(company);
   }

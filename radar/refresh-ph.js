@@ -99,7 +99,7 @@ async function main() {
   var research=null;
   try {
     var previousResearch=await db.collection(COLL).doc('pse-research').get();
-    research=await buildResearch(ph.board,previousResearch.exists ? previousResearch.data() : null,phtToday());
+    research=await buildResearch(ph.board,previousResearch.exists ? previousResearch.data() : null,phtToday(),{fx:ph.fx});
     console.log('  PSE company research: '+research.companies.length+' covered; '+research.failed.length+' sources unavailable.');
   }catch(e){console.log('  PSE research unavailable: '+e.message);}
 

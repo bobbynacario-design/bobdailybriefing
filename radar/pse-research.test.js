@@ -52,3 +52,18 @@ test('paper outcomes leave completed records untouched and never log private the
   const db={collection:()=>({limit:()=>({get:async()=>({docs:[book],size:1})})})};
   assert.equal((await refreshPaperOutcomes(db,{BDO:[{date:'2026-10-14',close:100}]},[])).updated,0);assert.equal(writes.length,0);
 });
+test('a USD reporter gets a peso P/E at the snapshot rate, with the rounding range; P/B and ranges stay off',()=>{
+  const f={...parseFinancials(fixture('ict')),checkedAt:'2026-10-13T01:00:00Z'},fx={usdphp:{level:62.78}};
+  const ict=C.buildCompany(row('ICT',{close:884}),f,'2026-10-13',fx),eps=f.annual.fields.eps[0];
+  assert.equal(ict.metrics.priceToEarningsPhp,Math.round(884/(eps*62.78)*100)/100);assert.equal(ict.metrics.fxRate,62.78);
+  assert.ok(ict.metrics.priceToEarningsPhpRange[0]<ict.metrics.priceToEarningsPhp && ict.metrics.priceToEarningsPhp<ict.metrics.priceToEarningsPhpRange[1]);
+  assert.equal(ict.metrics.priceToEarnings,null);assert.equal(ict.metrics.priceToBook,null);assert.equal(C.scenario(ict,10,15),null);
+  assert.match(ict.brief.observations.join(' '),/about [\d.]+× last full-year basic EPS of US\$0\.51 converted at USD\/PHP 62\.78/);
+  assert.match(ict.brief.risks.join(' '),/converts last year’s EPS at today’s USD\/PHP rate/);
+  assert.equal(C.buildCompany(row('ICT',{close:884}),f,'2026-10-13').metrics.priceToEarningsPhp,null);
+  assert.equal(C.buildCompany(row('MER'),{...parseFinancials(fixture('bdo')),checkedAt:'x'},'2026-10-13',fx).metrics.priceToEarningsPhp,null);
+});
+test('buildResearch passes the snapshot rate through',async()=>{
+  const r=await buildResearch([row('ICT',{close:884})],null,'2026-10-13',{now:'2026-10-13T02:00:00Z',fx:{usdphp:{level:62.78}},fetcher:async()=>({ok:true,text:async()=>fixture('ict')})});
+  assert.ok(r.companies[0].metrics.priceToEarningsPhp>0);
+});
