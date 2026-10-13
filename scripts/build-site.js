@@ -29,7 +29,9 @@ for (const relative of dependencies) {
   cpSync(source,path.join(output,relative));
   // Ship critical application code with the document. A stale Pages artifact
   // must not strand the UI behind a missing shared-script request.
-  html = html.replace('<script src="'+relative+'"></script>','<script data-bundled="'+relative+'">\n'+code.replace(/<\/script/gi,'<\\/script')+'\n</script>');
+  // A function replacement: code containing "$'" or "$&" must go in literally.
+  var bundled='<script data-bundled="'+relative+'">\n'+code.replace(/<\/script/gi,'<\\/script')+'\n</script>';
+  html = html.replace('<script src="'+relative+'"></script>',function(){return bundled;});
 }
 const version = hash.digest('hex').slice(0,12);
 html = html.replace('</head>','<meta name="app-version" content="'+version+'">\n</head>');
