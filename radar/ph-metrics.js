@@ -86,6 +86,17 @@ function mergeHistory(prev, bars, max) {
   return Object.keys(byDate).sort().slice(-(max || 400)).map(function (d) { return { date: d, close: byDate[d] }; });
 }
 
+// Bars from finished sessions only. Before 15:45 Manila time today's session
+// is not over (the PSE closes at 15:00, then its closing auction), so a bar
+// dated today is a partial one: Yahoo handed one over on a 09:56 run on
+// 13 Oct 2026 and the PSEi card showed it as the close. `minutesNow` is
+// Manila minutes since midnight.
+var SESSION_DONE = 15 * 60 + 45;
+function finishedBars(bars, today, minutesNow) {
+  if (minutesNow >= SESSION_DONE) return bars || [];
+  return (bars || []).filter(function (b) { return b && b.date < today; });
+}
+
 // The PSEi read. Every average, return and range is null until enough history
 // exists for it; historyDays says how many daily closes it was computed from.
 function indexMetrics(bars) {
@@ -231,4 +242,4 @@ function watchAlerts(items, rows, asOf) {
   return out.sort(function (x, y) { return rank[x.kind] - rank[y.kind]; });
 }
 
-export { r2, sma, dayPct, retN, retDays, maxOf, minOf, ytdPct, rsi, vol, median, mergeHistory, indexMetrics, stockMetrics, buildBreadth, watchAlerts };
+export { r2, sma, dayPct, retN, retDays, maxOf, minOf, ytdPct, rsi, vol, median, mergeHistory, finishedBars, indexMetrics, stockMetrics, buildBreadth, watchAlerts };

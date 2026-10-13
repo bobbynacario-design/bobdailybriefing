@@ -17,7 +17,7 @@
 //   barSink (optional {}) receives each stock's raw bars by symbol, for the PSE
 //   radar; the doc itself keeps only the computed figures.
 
-import { r2, dayPct, retN, mergeHistory, indexMetrics, stockMetrics, buildBreadth } from './ph-metrics.js';
+import { r2, dayPct, retN, mergeHistory, finishedBars, indexMetrics, stockMetrics, buildBreadth } from './ph-metrics.js';
 import { fetchEdgeStock } from './pse-edge.js';
 
 // fetch with retry + backoff (this box's network intermittently ECONNRESETs).
@@ -55,6 +55,12 @@ async function fetchYahooChart(symbol, range) {
   return bars;
 }
 
+// Manila minutes since midnight, for finishedBars().
+function phtMinutes() {
+  var p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+  return Number(p.slice(0, 2)) % 24 * 60 + Number(p.slice(3, 5));
+}
+
 function phtToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
@@ -67,7 +73,10 @@ async function buildPhSnapshot(config, prev, barSink) {
   var idxBars = [];
   try { idxBars = await fetchYahooChart(ph.index.symbol, '1y'); }
   catch (e) { console.log('  PSEi (Yahoo) skipped: ' + (e.message || e)); }
-  var indexHistory = mergeHistory(prev.indexHistory, idxBars, 400);
+  // Finished sessions only, in the stored history too (a partial bar stored by
+  // an earlier daytime run is dropped until the real close replaces it).
+  var today = phtToday(), mins = phtMinutes();
+  var indexHistory = finishedBars(mergeHistory(prev.indexHistory, finishedBars(idxBars, today, mins), 400), today, mins);
   var index = indexHistory.length ? indexMetrics(indexHistory) : null;
 
   // FX context — peso strength matters for a PHP/AUD BI consultant. USDPHP has
@@ -89,11 +98,12 @@ async function buildPhSnapshot(config, prev, barSink) {
   // last doc, so a normal run is two requests per stock.
   var known = {};
   (prev.board || []).forEach(function (s) { if (s && s.symbol) known[s.symbol] = s; });
-  var today = phtToday(), board = [], failed = [];
+  var board = [], failed = [];
   for (var i = 0; i < ph.board.stocks.length; i++) {
     var item = ph.board.stocks[i];
     try {
       var got = await fetchEdgeStock(item.symbol, known[item.symbol], today, 400);
+      got.bars = finishedBars(got.bars, today, mins);
       if (barSink) barSink[item.symbol] = got.bars;
       var metrics = stockMetrics(got.bars);
       if (!metrics) throw new Error('no daily bars');

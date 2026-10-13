@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeHistory, indexMetrics, stockMetrics, buildBreadth, retDays } from './ph-metrics.js';
+import { mergeHistory, finishedBars, indexMetrics, stockMetrics, buildBreadth, retDays } from './ph-metrics.js';
 import { parseEdgeChart, parseEdgeStockPage, edgeDate, edgeQueryDate } from './pse-edge.js';
 
 // n weekday bars ending on `end`, closes from fn(i).
@@ -19,6 +19,15 @@ test('PSEi history keeps the newest close per date, ascending, capped, and drops
     [{ date: '2026-10-08', close: 5610.39 }, { date: '2026-10-09', close: 5700 }, { date: 'bad', close: 1 }, { date: '2026-10-07', close: null }],
     [{ date: '2026-10-09', close: 5700.99 }, { date: '2026-10-12', close: 5743.18 }], 2);
   assert.deepEqual(h, [{ date: '2026-10-09', close: 5700.99 }, { date: '2026-10-12', close: 5743.18 }]);
+});
+
+test('before 15:45 Manila time today’s bar is partial and left out; after it, kept', () => {
+  const bars = [{ date: '2026-10-12', close: 5743.18 }, { date: '2026-10-13', close: 5699.01 }];
+  assert.deepEqual(finishedBars(bars, '2026-10-13', 9 * 60 + 56).map(b => b.date), ['2026-10-12'], 'the 09:56 run on 13 Oct');
+  assert.deepEqual(finishedBars(bars, '2026-10-13', 15 * 60 + 44).map(b => b.date), ['2026-10-12']);
+  assert.deepEqual(finishedBars(bars, '2026-10-13', 16 * 60 + 30).map(b => b.date), ['2026-10-12', '2026-10-13'], 'the 16:30 run');
+  assert.deepEqual(finishedBars(bars, '2026-10-14', 60).map(b => b.date), ['2026-10-12', '2026-10-13'], 'after midnight, yesterday is finished');
+  assert.deepEqual(finishedBars(null, '2026-10-13', 600), []);
 });
 
 test('one stored PSEi close gives no trend, no returns and no range, never a false downtrend', () => {
