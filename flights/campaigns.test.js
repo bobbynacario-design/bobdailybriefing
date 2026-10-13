@@ -23,6 +23,7 @@ test('rejects expired, old, incomplete and invalid announcements',()=>{
 test('domestic and mixed campaigns carry explicit markets without becoming route quotes',()=>{
   assert.deepEqual(campaignFromArticle({...article,html:article.html.replace('international','domestic')},checked).markets,['domestic']);
   assert.deepEqual(campaignFromArticle({...article,html:article.html.replace('international','domestic and international')},checked).markets,['international','domestic']);
+  assert.equal(campaignFromArticle({...article,html:article.html+'<p>Domestic tickets from PHP 249 one-way base fare.</p>'},checked),null,'different market tiers cannot share one headline base fare');
 });
 test('reads feed content and ignores unsafe article links and unrelated items',()=>{
   const source={airline:'Cebu Pacific',type:'campaign-feed',url:article.discoveryUrl,publisher:article.publisher};

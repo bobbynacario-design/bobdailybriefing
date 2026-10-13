@@ -6,8 +6,14 @@ Puerto Princesa and Bangkok. MOVE fares require a dated, single-adult,
 economy one-way flight search link, matching visible route/date/currency/price,
 and a recognised operating airline. Flight+hotel packages are excluded.
 Cebu Pacific announcements can cover domestic, international or both markets;
+mixed-market articles with different base-fare tiers are excluded to avoid
+assigning a domestic starting fare to an international campaign.
 their starting base fare never enters ticket-price rankings. Cebu's interactive
 booking inventory still requires a user check when no dated fare can be read.
+Scoot's new public pages can still reject the scout with HTTP 403 despite
+being readable in other public-page checks; an updated URL does not establish
+successful fare coverage. Source status and matched-date warnings reflect
+the actual scout result.
 
 The shortlist ranks exact-date flight + room estimates where fresh converted
 hotel prices exist, then airfare-only options labelled with missing hotel costs.

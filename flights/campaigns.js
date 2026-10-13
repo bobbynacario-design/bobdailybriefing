@@ -19,6 +19,10 @@ export function campaignFromArticle({title,html,publishedAt,evidenceUrl,publishe
   const markets=[...(/international/i.test(body)?['international']:[]),...(/domestic/i.test(body)?['domestic']:[])];
   if(!markets.length)return null;
   const quote=body.match(/(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)\s+one[ -]way\s+base fare/i) || body.match(/one[ -]way\s+base fares?\s+(?:starting at|from|as low as)\s+(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)/i);
+  // A mixed-market article can advertise different domestic/international
+  // tiers. Without a per-tier parser, never assign its lowest fare to both.
+  const tiers=[...body.matchAll(/(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)\s+one[ -]way\s+base fares?|one[ -]way\s+base fares?\s+(?:starting at|from|as low as)\s+(?:PHP|₱|P)\s*([\d,]+(?:\.\d{1,2})?)/gi)].map(m=>Number((m[1]||m[2]).replace(/,/g,'')));
+  if(new Set(tiers).size>1)return null;
   const booking=body.match(new RegExp('(?:From|runs? from)\\s+'+monthPattern+'\\s+(\\d{1,2})\\s*(?:through|to|[-–])\\s*(?:'+monthPattern+'\\s+)?(\\d{1,2})(?:,?\\s+(20\\d{2}))?','i'));
   const travel=body.match(new RegExp('(?:travel period|travel dates)[^.]{0,70}?'+monthPattern+'\\s+(\\d{1,2})\\s*(?:through|to|[-–])\\s*'+monthPattern+'\\s+(\\d{1,2}),?\\s+(20\\d{2})','i'));
   if(!quote||!booking||!travel||!/(?:exclusive of fees and surcharges|do not include taxes,? fees,? and (?:additional )?surcharges)/i.test(body))return null;
