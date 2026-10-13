@@ -1,0 +1,28 @@
+# One-off: the full Markets flow with shadow panels, dry run (writes nothing).
+# Lives only on the miro-shadow-dryrun branch (never merged).
+name: Markets shadow dry run
+on:
+  push:
+    branches: [miro-shadow-dryrun]
+permissions:
+  contents: read
+jobs:
+  dryrun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: miro/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix miro ci
+      - name: Full flow with shadows, dry run
+        working-directory: miro
+        run: node refresh-miro.js --dry-run --force-panel --no-explain
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
