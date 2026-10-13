@@ -1,5 +1,10 @@
 # Sports forecast and digest checks
 
+App-only Pages releases export the latest shared Sports document before building.
+Missing pointers or invalid feeds fail the release instead of replacing current
+data with the older committed public snapshot. This reads existing data without
+running another forecast or changing the refresh schedule.
+
 NBA and tennis journal entries require SCHEDULED status, a known start time
 strictly after the observation, and valid probabilities. Tennis projections
 are removed for live, started and undated matches. Opponents must still match

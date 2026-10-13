@@ -2528,7 +2528,7 @@ function recordRunHistory(doc) {
   });
 }
 
-async function loadPublicMiroSports(db) {
+export async function loadPublicMiroSports(db) {
   try {
     var lat = await db.collection(COLL).doc('miro-latest').get();
     var key = lat.exists ? (lat.data() || {}).value : null;
