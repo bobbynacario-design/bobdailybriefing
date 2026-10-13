@@ -224,6 +224,45 @@ function nbaPlayoffRound(headline) {
   return null;
 }
 
+// Bookmaker odds ride on ESPN's scoreboard (DraftKings). American odds turn
+// into implied chances; dividing by their sum removes the bookmaker's margin.
+function americanToProb(odds) {
+  var n = Number(String(odds == null ? '' : odds).replace('+', ''));
+  if (!isFinite(n) || n === 0 || Math.abs(n) < 100) return null;
+  return n < 0 ? -n / (-n + 100) : 100 / (n + 100);
+}
+function noVig(home, away) {
+  var h = americanToProb(home), a = americanToProb(away);
+  return h && a ? Math.round(h / (h + a) * 1000) / 1000 : null;
+}
+function nbaMarket(comp) {
+  var o = ((comp && comp.odds) || [])[0];
+  if (!o) return null;
+  var ml = o.moneyline || {}, side = function (k, when) { return ml[k] && ml[k][when] && ml[k][when].odds || null; };
+  var market = {
+    provider: (o.provider && (o.provider.displayName || o.provider.name)) || '',
+    details: o.details || '',
+    spreadHome: o.spread == null || !isFinite(Number(o.spread)) ? null : Number(o.spread),
+    total: o.overUnder == null || !isFinite(Number(o.overUnder)) ? null : Number(o.overUnder),
+    mlHome: side('home', 'close'), mlAway: side('away', 'close'),
+    pHome: noVig(side('home', 'close'), side('away', 'close')),
+    pHomeOpen: noVig(side('home', 'open'), side('away', 'open'))
+  };
+  return market.pHome == null && market.spreadHome == null ? null : market;
+}
+
+// Model minus market, in points, from the home side. Shown only when both
+// exist; the journal says whether the model has earned the right to differ.
+function attachNbaEdges(matches) {
+  (matches || []).forEach(function (m) {
+    delete m.edge;
+    var p = m.projection && m.projection.probs, k = m.market && m.market.pHome;
+    if (!p || p.home == null || k == null || m.status !== 'SCHEDULED') return;
+    var gap = Math.round((p.home - k) * 100);
+    m.edge = { gap: gap, side: gap >= 0 ? m.home : m.away, size: Math.abs(gap) };
+  });
+}
+
 function normNbaGame(event) {
   var comp = ((event && event.competitions) || [])[0] || {};
   var home = nbaCompetitor(comp, 'home');
@@ -251,6 +290,7 @@ function normNbaGame(event) {
     home: nbaTeamName(home),
     away: nbaTeamName(away),
     venue: ((comp.venue || {}).fullName) || '',
+    market: nbaMarket(comp),
     score: {
       home: hasScore ? num(home.score) : null,
       away: hasScore ? num(away.score) : null
@@ -1395,6 +1435,9 @@ function buildNbaJournal(prior, matches, nowIso) {
         tag: m.projection.tag, firstSeen: nowIso, utcDate: m.utcDate, modelVersion: m.projection.modelVersion, resolved: false
       };
     }
+    // The market's chance is refreshed until tip-off, so it ends as the
+    // closing line; the model's lock never moves.
+    if (preds[m.id] && !preds[m.id].resolved && m.status === 'SCHEDULED' && m.market && m.market.pHome != null) preds[m.id].mktHome = m.market.pHome;
     if (finished && preds[m.id] && !preds[m.id].resolved) {
       var winner = nbaMatchWinner(m);
       if (winner) {
@@ -1407,6 +1450,10 @@ function buildNbaJournal(prior, matches, nowIso) {
         pr.brier = Math.round(Math.pow(pHome - outcomeHome, 2) * 1e4) / 1e4;
         pr.logLoss = Math.round((-(outcomeHome * Math.log(pHome) + (1 - outcomeHome) * Math.log(1 - pHome))) * 1e4) / 1e4;
         pr.resolvedAt = nowIso;
+        if (pr.mktHome != null) {
+          var q = Math.max(0.01, Math.min(0.99, pr.mktHome));
+          pr.mktBrier = Math.round(Math.pow(q - outcomeHome, 2) * 1e4) / 1e4;
+        }
       }
     }
   });
@@ -1434,7 +1481,14 @@ function buildNbaJournal(prior, matches, nowIso) {
     brierSkill: brier == null ? null : Math.round((0.25 - brier) * 1e4) / 1e4,
     logLoss: logLoss == null ? null : Math.round(logLoss * 1e4) / 1e4,
     byTag: byTag,
-    recent: recent
+    recent: recent,
+    // Like for like: both scored on the same games that had odds.
+    market: (function () {
+      var both = resolved.filter(function (p) { return p.mktBrier != null; });
+      if (!both.length) return null;
+      return { n: both.length, modelBrier: Math.round(mean(both, function (p) { return p.brier; }) * 1e4) / 1e4,
+        marketBrier: Math.round(mean(both, function (p) { return p.mktBrier; }) * 1e4) / 1e4 };
+    })()
   };
   // Bound the persisted doc: keep every unresolved lock + the 500 newest resolved.
   var keep = {};
@@ -1529,6 +1583,7 @@ async function fetchNbaModule() {
   // drive form (a 0-2 preseason read as FADING).
   var momentum = buildNbaMomentum(matches.filter(function (m) { return !isNbaPreseason(m.stage); }), standings);
   var projectionModel = buildNbaProjections(matches, momentum, now);
+  attachNbaEdges(matches);
   var injuries = normNbaInjuries(payloads[2]).slice(0, 60);
   var playerWatch = normNbaPlayerWatch(events, NBA_FOLLOW_PLAYERS);
   var bracket = buildNbaBracket(matches);
@@ -2704,6 +2759,10 @@ export {
   buildModuleChanges,
   scheduleReadiness,
   classifyTennis,
+  americanToProb,
+  noVig,
+  nbaMarket,
+  attachNbaEdges,
   isNbaPreseason,
   buildTennisDraw,
   normTennisEvent,

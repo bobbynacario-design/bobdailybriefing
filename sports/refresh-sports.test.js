@@ -19,6 +19,10 @@ import {
   buildModuleChanges,
   scheduleReadiness,
   classifyTennis,
+  americanToProb,
+  noVig,
+  nbaMarket,
+  attachNbaEdges,
   isNbaPreseason,
   pickTennisTier,
   collectTennis,
@@ -556,4 +560,28 @@ test('followed players are found in every event and draw, ranked by their own to
   assert.equal(e.next.opponent, 'Iva Jovic'); assert.equal(e.next.tier, ''); assert.ok(e.next.proj.pct < 50);
   assert.deepEqual(e.record, { won: 1, lost: 1 }); assert.equal(e.form, 'LW');
   assert.deepEqual(rows[1].recent, []); assert.equal(rows[1].next, null);
+});
+
+test('bookmaker odds become margin-free chances; the model gap and the closing line are scored like for like', function () {
+  assert.equal(Math.round(americanToProb('-135') * 1000), 574);
+  assert.equal(Math.round(americanToProb('+114') * 1000), 467);
+  assert.equal(americanToProb('EVEN'), null);
+  assert.equal(noVig('-135', '+114'), 0.551);
+  var comp = { odds: [{ provider: { displayName: 'Draft Kings' }, details: 'ORL -2.5', spread: -2.5, overUnder: 233.5,
+    moneyline: { home: { close: { odds: '-135' }, open: { odds: '-120' } }, away: { close: { odds: '+114' }, open: { odds: '+100' } } } }] };
+  var mk = nbaMarket(comp);
+  assert.deepEqual([mk.provider, mk.spreadHome, mk.total, mk.pHome, mk.pHomeOpen], ['Draft Kings', -2.5, 233.5, 0.551, 0.522]);
+  assert.equal(nbaMarket({}), null);
+  var g = { id: 'g', status: 'SCHEDULED', home: 'Orlando Magic', away: 'Atlanta Hawks', utcDate: '2026-11-01T00:00:00Z', market: mk,
+    projection: { favorite: 'Orlando Magic', tag: 'Moderate edge', modelVersion: 'v', probs: { home: 0.66, away: 0.34 } } };
+  attachNbaEdges([g]);
+  assert.deepEqual(g.edge, { gap: 11, side: 'Orlando Magic', size: 11 });
+  var j1 = buildNbaJournal(null, [g], '2026-10-30T00:00:00Z');
+  g.market = Object.assign({}, mk, { pHome: 0.6 });
+  var j2 = buildNbaJournal(j1, [g], '2026-10-31T00:00:00Z');
+  assert.equal(j2.preds.g.mktHome, 0.6); assert.equal(j2.preds.g.pHome, 0.66);
+  var done = Object.assign({}, g, { status: 'FINISHED', score: { home: 90, away: 100 } });
+  var j3 = buildNbaJournal(j2, [done], '2026-11-01T05:00:00Z');
+  assert.equal(j3.preds.g.brier, 0.4356); assert.equal(j3.preds.g.mktBrier, 0.36);
+  assert.deepEqual(j3.stats.market, { n: 1, modelBrier: 0.4356, marketBrier: 0.36 });
 });

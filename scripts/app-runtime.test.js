@@ -1960,3 +1960,15 @@ test('Your players: live, next with the model side, recent results and record, e
   assert.match(context.tennisFollowedHtml([{name:'A',recent:[]}]),/No match scheduled yet/);
   assert.equal(context.tennisFollowedHtml([]),'');
 });
+
+test('NBA cards show the bookmaker line, the move since open and a 5+ point model gap; the journal compares both',()=>{
+  const {context}=environment(['sportsMarketHtml','sportsShortTeam','nbaJournalHtml','jTile'],{esc:escHtml});
+  const g={home:'Orlando Magic',away:'Atlanta Hawks',market:{provider:'Draft Kings',details:'ORL -2.5',total:233.5,pHome:0.551,pHomeOpen:0.5},edge:{gap:11,side:'Orlando Magic',size:11}};
+  const h=context.sportsMarketHtml(g);
+  assert.ok(h.includes('Draft Kings: ORL -2.5 · O/U 233.5 · Magic 55% · Hawks 45% · moved Magic +5 since open'));
+  assert.ok(h.includes('Model rates Orlando Magic 11 pts higher than the bookmaker'));
+  assert.doesNotMatch(context.sportsMarketHtml({...g,edge:{gap:3,side:'Orlando Magic',size:3}}),/Model rates/);
+  assert.equal(context.sportsMarketHtml({home:'A',away:'B'}),'');
+  const j=context.nbaJournalHtml({resolved:3,pending:1,accuracy:67,decisiveAccuracy:50,brier:0.2,brierSkill:0.05,market:{n:3,modelBrier:0.24,marketBrier:0.2}});
+  assert.ok(j.includes('model Brier 0.24, closing line 0.2 (lower is better). The bookmaker is ahead; under 50 games this is still noise.'));
+});

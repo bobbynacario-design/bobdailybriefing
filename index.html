@@ -1987,6 +1987,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .tf-head{font-size:15px;font-weight:600;color:var(--txt)}.tf-head span{font-size:12px;font-weight:400;color:var(--txt2);margin-left:.4rem}
 .tf-line{font-size:13px;line-height:1.55;color:var(--txt);margin:.35rem 0}.tf-line b{color:var(--gold);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-right:.35rem}
 .tf-recent{list-style:none;padding:0;margin:.3rem 0 0;font-size:12.5px;color:var(--txt2);line-height:1.6}.tf-recent .w{color:var(--green);font-weight:600}.tf-recent .l{color:var(--red);font-weight:600}
+.sports-market{font-size:12px;color:var(--txt2);margin-top:.3rem;font-family:var(--mono)}.sports-market.edge{color:var(--gold)}
 .sports-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem}
 .sports-panel-title{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
 .sports-list{display:flex;flex-direction:column;gap:.7rem}
@@ -11265,6 +11266,24 @@ function sportsProjectionHtml(m) {
 // Same CSS classes, same "computed by refresh-sports.js, FE only renders"
 // contract — just a home/away split instead of home/draw/away, so there's no
 // meaningless "draw 0%" phrase or bar segment for a sport that can't draw.
+// Bookmaker line (lane 3): the spread, total and each side's chance with the
+// margin removed, then the model's gap when it differs by 5+ points.
+function sportsShortTeam(name) { var parts = String(name || '').split(' '); return parts[parts.length - 1] || name; }
+function sportsMarketHtml(m) {
+  var k = m && m.market;
+  if (!k) return '';
+  var bits = [];
+  if (k.details) bits.push(k.details);
+  if (k.total != null) bits.push('O/U ' + k.total);
+  if (k.pHome != null) bits.push(sportsShortTeam(m.home) + ' ' + Math.round(k.pHome * 100) + '% · ' + sportsShortTeam(m.away) + ' ' + (100 - Math.round(k.pHome * 100)) + '%');
+  if (k.pHomeOpen != null && k.pHome != null && Math.abs(k.pHome - k.pHomeOpen) >= 0.03) {
+    var mv = Math.round((k.pHome - k.pHomeOpen) * 100);
+    bits.push('moved ' + (mv > 0 ? sportsShortTeam(m.home) : sportsShortTeam(m.away)) + ' +' + Math.abs(mv) + ' since open');
+  }
+  var html = '<div class="sports-market">' + esc((k.provider || 'Bookmaker') + ': ' + bits.join(' · ')) + '</div>';
+  if (m.edge && m.edge.size >= 5) html += '<div class="sports-market edge">' + esc('Model rates ' + m.edge.side + ' ' + m.edge.size + ' pts higher than the bookmaker') + '</div>';
+  return html;
+}
 function sportsWinProbHtml(m) {
   var p = m && m.projection;
   if (!p || !p.probs) return '';
@@ -11821,6 +11840,10 @@ function nbaJournalHtml(j) {
     jTile(j.brier == null ? 'n/a' : j.brier, 'Brier (vs 0.25)') +
   '</div>';
   html += '<div class="decision-stat-note">Forward journal: a projection is locked when first shown and scored when the match resolves. Brier is measured against a 50/50 baseline (0.25); skill ' + skill + ' (higher is better). Model framing, not advice.</div>';
+  if (j.market && j.market.n) {
+    var beat = j.market.modelBrier < j.market.marketBrier;
+    html += '<div class="decision-stat-note"><b>Model vs bookmaker</b> on the same ' + j.market.n + ' game' + (j.market.n === 1 ? '' : 's') + ': model Brier ' + j.market.modelBrier + ', closing line ' + j.market.marketBrier + ' (lower is better). ' + (beat ? 'The model is ahead so far' : 'The bookmaker is ahead') + (j.market.n < 50 ? '; under 50 games this is still noise.' : '.') + '</div>';
+  }
   if (j.byTag && j.byTag.length) {
     html += '<div class="journal-section">By confidence</div><div class="jlist">' + j.byTag.map(function (r) {
       return '<div class="jrow"><span class="jrow-sym">' + esc(r.tag) + '</span><span class="decision-mini">n=' + r.n + '</span><span class="jrow-date">' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</span></div>';
@@ -12045,7 +12068,7 @@ function sportsNextUpHtml(mod, key) {
   if (!matches.length) return '<div class="sports-empty">No upcoming fixtures are published in the current window.</div>';
   return '<div class="sports-next-list">' + matches.map(function (match) {
     var pinned = sportsIsFollowedMatch(match, followed);
-    return '<div class="sports-next-item"><div class="sports-next-time">' + esc(sportsMatchWhen(match)) + '</div><div><div class="sports-next-match">' + esc((match.home || 'TBD') + ' vs ' + (match.away || 'TBD')) + '</div><div class="sports-next-meta">' + esc((match.stage || 'Match') + (match.venue ? ' / ' + match.venue : '')) + '</div>' + sportsWinProbHtml(match) + '</div><div class="sports-next-flag">' + (pinned ? 'Followed' : 'League') + '</div></div>';
+    return '<div class="sports-next-item"><div class="sports-next-time">' + esc(sportsMatchWhen(match)) + '</div><div><div class="sports-next-match">' + esc((match.home || 'TBD') + ' vs ' + (match.away || 'TBD')) + '</div><div class="sports-next-meta">' + esc((match.stage || 'Match') + (match.venue ? ' / ' + match.venue : '')) + '</div>' + sportsWinProbHtml(match) + sportsMarketHtml(match) + '</div><div class="sports-next-flag">' + (pinned ? 'Followed' : 'League') + '</div></div>';
   }).join('') + '</div>';
 }
 function sportsChangesHtml(mod, key) {
