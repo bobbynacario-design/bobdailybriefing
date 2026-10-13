@@ -5,7 +5,7 @@ export function buildNbaProjections(matches, momentum, now = new Date()) {
   const byTeam = new Map((momentum || []).map(row => [row.team, row]));
   const latest = new Map();
   for (const game of matches || []) {
-    if (game.status !== 'FINISHED' || game.stage === 'pre-season') continue;
+    if (game.status !== 'FINISHED' || /^pre-?season$/i.test(String(game.stage || ''))) continue;
     for (const team of [game.home, game.away]) latest.set(team, Math.max(latest.get(team) || 0, Date.parse(game.utcDate) || 0));
   }
   let projected = 0;

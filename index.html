@@ -11642,6 +11642,9 @@ function tennisNotable(m, bestOf) {
   if (!w || !l) return null;
   if (w.seed != null && l.seed != null && w.seed > l.seed) return { kind: 'upset', txt: 'Upset · [' + w.seed + '] beat [' + l.seed + ']' };
   if (w.seed == null && l.seed != null) return { kind: 'upset', txt: 'Upset · unseeded beat [' + l.seed + ']' };
+  // ESPN gives no seeds, but rankings ride on every player: a clear ranking
+  // upset is the real story (Bergs #39 over Alcaraz #3), ahead of long matches.
+  if (w.rank && l.rank && w.rank > l.rank && ((l.rank <= 10 && w.rank - l.rank >= 10) || (w.rank >= 2 * l.rank && w.rank - l.rank >= 15))) return { kind: 'upset', txt: 'Upset · #' + w.rank + ' beat #' + l.rank, loserRank: l.rank };
   var sets = Math.max.apply(null, ps.map(function (p) {
     return (p.sets || []).filter(function (s) { return s.g != null; }).length;
   }).concat([0]));
@@ -11699,7 +11702,8 @@ function tennisNotableStrip(draw, bestOf) {
     });
   });
   if (!items.length) return '';
-  items.sort(function (a, b) { return (a.n.kind === 'upset' ? 0 : 1) - (b.n.kind === 'upset' ? 0 : 1); });
+  // Upsets first, the highest-ranked loser first (Alcaraz before Fils).
+  items.sort(function (a, b) { return (a.n.kind === 'upset' ? 0 : 1) - (b.n.kind === 'upset' ? 0 : 1) || (a.n.loserRank || 999) - (b.n.loserRank || 999); });
   var rows = items.slice(0, 6).map(function (it) {
     return '<div class="t-note"><span class="t-note-flag ' + it.n.kind + '">' + esc(it.n.txt) + '</span>' +
       '<span class="t-note-txt"><b>' + esc(it.w) + '</b> beat ' + esc(it.l) + '</span>' +
@@ -11729,7 +11733,8 @@ function tennisTierView(tier, isSlam) {
   var events = [];
   var cur = tier.current || tier.next;
   if (cur) events.push(cur);
-  (tier.recent || []).forEach(function (r) { if (!cur || r.id !== cur.id) events.push(r); });
+  (tier.live || []).forEach(function (r) { if (!events.some(function (e) { return e.id === r.id; })) events.push(r); });
+  (tier.recent || []).forEach(function (r) { if (!events.some(function (e) { return e.id === r.id; })) events.push(r); });
   if (!events.length) return '<div class="sports-empty">No current, upcoming or recent event in the provider window.</div>';
   // Selected tournament: sticky by id, else a live event, else the most recent
   // completed one (so between Slams the last champion's full bracket leads).
@@ -11840,7 +11845,7 @@ function sportsTennisHtml(mod) {
   var tier = validTier[tennisTier] ? tennisTier : (liveTier || 'slam');
   html += '<div class="sports-subtabs">' +
     '<button class="sports-module-tab' + (tier === 'slam' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'slam\')">Grand Slams</button>' +
-    '<button class="sports-module-tab' + (tier === 'masters' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'masters\')">Masters 1000</button>' +
+    '<button class="sports-module-tab' + (tier === 'masters' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'masters\')">Masters &amp; WTA 1000</button>' +
     '<button class="sports-module-tab' + (tier === 'tour500' ? ' active' : '') + '" onclick="sportsShowTennisTier(\'tour500\')">ATP / WTA 500</button>' +
   '</div>';
   var tierData = tier === 'masters' ? tiers.masters : (tier === 'tour500' ? tiers.tour500 : tiers.slam);
@@ -11937,7 +11942,8 @@ function sportsAvailableModules(d) {
   var mods = d && d.modules || {};
   if (mods.nba && mods.nba.enabled !== false) out.push({ key:'nba', label:'NBA', module:mods.nba });
   if (mods.tennis && mods.tennis.enabled !== false) out.push({ key:'tennis', label:'Tennis', module:mods.tennis });
-  if (d && d.worldCup) out.push({ key:'worldcup', label:'FIFA Archive', module:d.worldCup });
+  // The World Cup ended in July; its archive stays in the doc but off the tabs.
+  if (!out.length && d && d.worldCup) out.push({ key:'worldcup', label:'FIFA Archive', module:d.worldCup });
   return out;
 }
 var sportsFollowPanels = {};
@@ -12102,9 +12108,18 @@ function sportsPhaseNote(mod, key) {
   var next = (mod.upcoming || []).slice().sort(function (a, b) {
     return String(a.utcDate).localeCompare(String(b.utcDate));
   })[0];
-  var note = league + ' is in ' + phase + '. Standings, momentum and form below are final figures from the last completed season, not current-season results. ';
-  note += next ? 'First scheduled fixture: ' + sportsDate(next.utcDate) + '.'
-    : 'Live fixtures will return when the provider publishes the next schedule; completed-season data remains in League details.';
+  var note;
+  if (phase === 'preseason') {
+    // Records, form and the table below come from exhibition games and reset at
+    // the opener; form and projections ignore preseason.
+    var opener = (mod.matches || []).filter(function (m) { return m.stage === 'regular-season'; })
+      .sort(function (a, b) { return String(a.utcDate).localeCompare(String(b.utcDate)); })[0];
+    note = league + ' preseason: records and results below are exhibition games and reset on opening night' + (opener ? ' (' + sportsDate(opener.utcDate) + ')' : '') + '. Form and projections start once teams have played regular-season games.';
+  } else {
+    note = league + ' is in ' + phase + '. Standings, momentum and form below are final figures from the last completed season, not current-season results. ';
+    note += next ? 'First scheduled fixture: ' + sportsDate(next.utcDate) + '.'
+      : 'Live fixtures will return when the provider publishes the next schedule; completed-season data remains in League details.';
+  }
   return '<div class="sports-offseason">' + esc(note) + '</div>';
 }
 function sportsGenericModuleHtml(mod, key) {

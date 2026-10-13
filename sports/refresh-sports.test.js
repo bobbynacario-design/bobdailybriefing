@@ -19,6 +19,9 @@ import {
   buildModuleChanges,
   scheduleReadiness,
   classifyTennis,
+  isNbaPreseason,
+  pickTennisTier,
+  collectTennis,
   buildTennisDraw,
   normTennisEvent,
   tennisTournamentTiming,
@@ -477,4 +480,60 @@ test('NBA journal freezes pre-tip estimates and scores only previously locked ga
   assert.equal(JSON.stringify(first),original);
   assert.equal(buildNbaJournal(null,[done],'2026-10-11T00:00:00Z').stats.resolved,0);
   assert.equal(buildNbaJournal(null,[next],'2026-10-10T13:00:00Z').stats.pending,0);
+});
+
+test('tennis tiers follow the feed: WTA 1000s and ATP 500s that share a name land apart', function () {
+  assert.equal(classifyTennis('Dongfeng Voyah Wuhan Open', 'wta').tier, 'masters1000');
+  assert.equal(classifyTennis('China Open', 'wta').tier, 'masters1000');
+  assert.equal(classifyTennis('China Open', 'atp').tier, 'tour500');
+  assert.equal(classifyTennis('Qatar TotalEnergies Open', 'wta').tier, 'masters1000');
+  assert.equal(classifyTennis('Qatar ExxonMobil Open', 'atp').tier, 'tour500');
+  assert.equal(classifyTennis('Kinoshita Group Japan Open', 'wta').tier, 'other');
+  assert.equal(classifyTennis('Kinoshita Group Japan Open', 'atp').tier, 'tour500');
+  assert.equal(classifyTennis('Rolex Shanghai Masters', 'atp').tier, 'masters1000');
+  assert.equal(classifyTennis('China Open').tier, 'other');
+  assert.equal(normTennisEvent({ id: 'w', name: 'Dongfeng Voyah Wuhan Open', groupings: [] }, 'wta').tier, 'masters1000');
+});
+
+test('an event that has not started is upcoming even when its placeholder draw reads as finished', function () {
+  var now = Date.parse('2026-10-13T05:00:00Z');
+  function event(id, start, state) {
+    var e = normTennisEvent({ id: id, name: 'Swiss Indoors Basel', date: start, groupings: [{ grouping: { displayName: "Men's Singles" },
+      competitions: [tComp(7, 'Final', state, [{ name: 'A', winner: true }, { name: 'B' }])].map(function (c) { c.date = start; return c; }) }] }, 'atp');
+    return e;
+  }
+  var tier = pickTennisTier([event('future', '2026-10-26T04:00:00Z', 'post'), event('past', '2026-10-05T04:00:00Z', 'post')], 'tour500', now);
+  assert.equal(tier.current.id, 'future');
+  assert.equal(tier.current.status, 'upcoming');
+  assert.deepEqual(tier.recent.map(function (e) { return e.id; }), ['past']);
+});
+
+test('preseason games, under either ESPN spelling, never count as form', function () {
+  assert.equal(isNbaPreseason('preseason'), true);
+  assert.equal(isNbaPreseason('pre-season'), true);
+  assert.equal(isNbaPreseason('regular-season'), false);
+  var games = [{ status: 'FINISHED', stage: 'preseason', home: 'A', away: 'B', utcDate: '2026-10-10T00:00:00Z', score: { home: 90, away: 110 } }];
+  var projections = buildNbaProjections(games.concat([{ id: 'x', status: 'SCHEDULED', stage: 'regular-season', home: 'A', away: 'B', utcDate: '2026-10-22T00:00:00Z' }]),
+    [{ team: 'A', score: 10, recentGames: 3 }, { team: 'B', score: 90, recentGames: 3 }], new Date('2026-10-13T00:00:00Z'));
+  assert.equal(projections.projected, 0);
+});
+
+test('a big draw that has started reads live even when only later, unplayed rounds are stored', function () {
+  var comps = [tComp(1, 'Round 1', 'post', [{ name: 'Shi Han', winner: true }, { name: 'Alexandra Eala' }])];
+  ['Round 2', 'Round 3', 'Round of 16', 'Quarterfinal', 'Semifinal', 'Final'].forEach(function (r, i) { comps.push(tComp(i + 2, r, 'pre', [{ name: 'X' + i }, { name: 'Y' + i }])); });
+  var e = normTennisEvent({ id: 'wuhan', name: 'Dongfeng Voyah Wuhan Open', groupings: [{ grouping: { displayName: "Women's Singles" }, competitions: comps }] }, 'wta');
+  assert.equal(e.draws.women.rounds.length, 5);
+  assert.equal(e.draws.women.played, 1);
+  assert.equal(tennisTournamentTiming(e).status, 'live');
+});
+
+test('one ESPN event carrying both tours splits into each tour tier with only its own draw', function () {
+  var ev = { id: 'cn', name: 'China Open', groupings: [
+    { grouping: { displayName: "Men's Singles" }, competitions: [tComp(7, 'Final', 'post', [{ name: 'M1', winner: true }, { name: 'M2' }])] },
+    { grouping: { displayName: "Women's Singles" }, competitions: [tComp(7, 'Final', 'post', [{ name: 'W1', winner: true }, { name: 'W2' }])] }] };
+  var list = collectTennis([ev], [ev]);
+  assert.equal(list.length, 2);
+  var atp = list.find(function (t) { return t.tier === 'tour500'; }), wta = list.find(function (t) { return t.tier === 'masters1000'; });
+  assert.equal(atp.draws.women, null); assert.equal(atp.draws.men.champion, 'M1');
+  assert.equal(wta.draws.men, null); assert.equal(wta.draws.women.champion, 'W1');
 });

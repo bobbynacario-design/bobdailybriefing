@@ -1471,6 +1471,8 @@ function buildNbaModule() {
   return m;
 }
 
+function isNbaPreseason(stage) { return /^pre-?season$/i.test(String(stage || '')); }
+
 function nbaModulePhase(now, upcoming) {
   var next = (upcoming || [])[0];
   if (next && next.stage === 'post-season') return 'playoffs';
@@ -1516,7 +1518,9 @@ async function fetchNbaModule() {
   var matches = addNbaRestSignals(events.map(normNbaGame).filter(function (m) { return m.id && m.utcDate; }));
   var upcoming = matches.filter(function (m) { return m.status !== 'FINISHED'; }).slice(0, 20);
   var recent = matches.filter(function (m) { return m.status === 'FINISHED'; }).slice(-20).reverse();
-  var momentum = buildNbaMomentum(matches.filter(function (m) { return m.stage !== 'pre-season'; }), standings);
+  // ESPN's slug is 'preseason'; the old 'pre-season' check let exhibition games
+  // drive form (a 0-2 preseason read as FADING).
+  var momentum = buildNbaMomentum(matches.filter(function (m) { return !isNbaPreseason(m.stage); }), standings);
   var projectionModel = buildNbaProjections(matches, momentum, now);
   var injuries = normNbaInjuries(payloads[2]).slice(0, 60);
   var playerWatch = normNbaPlayerWatch(events, NBA_FOLLOW_PLAYERS);
@@ -1592,6 +1596,12 @@ var TENNIS_SLAMS = [
 // ESPN names carry sponsors/cities, so match on distinctive tokens. Slams are
 // checked first so Roland Garros never falls through to a "paris" Masters token.
 var TENNIS_MASTERS = [
+  // WTA-only 1000s. The same names are ATP 500s, so `tours` keeps each feed's
+  // event in its own tier (Eala's Wuhan was missed before this).
+  { token: 'wuhan', surface: 'Hard', tours: ['wta'] },
+  { token: 'china open', surface: 'Hard', tours: ['wta'] },
+  { token: 'qatar', surface: 'Hard', tours: ['wta'] },
+  { token: 'dubai', surface: 'Hard', tours: ['wta'] },
   { token: 'indian wells', surface: 'Hard' },
   { token: 'miami open', surface: 'Hard' },
   { token: 'monte-carlo', surface: 'Clay' },
@@ -1605,7 +1615,7 @@ var TENNIS_MASTERS = [
   { token: 'rogers cup', surface: 'Hard' },
   { token: 'cincinnati', surface: 'Hard' },
   { token: 'western & southern', surface: 'Hard' },
-  { token: 'shanghai', surface: 'Hard' },
+  { token: 'shanghai', surface: 'Hard', tours: ['atp'] },
   { token: 'paris masters', surface: 'Hard (indoor)' },
   { token: 'rolex paris', surface: 'Hard (indoor)' }
 ];
@@ -1617,6 +1627,9 @@ var TENNIS_MASTERS = [
 // left out rather than risk a mis-tag. Missing a 500 is safer than promoting a
 // 250/1000 into this tier. Extend as needed each season.
 var TENNIS_500 = [
+  { token: 'china open', surface: 'Hard', tours: ['atp'] },
+  { token: 'qatar', surface: 'Hard', tours: ['atp'] },
+  { token: 'dubai', surface: 'Hard', tours: ['atp'] },
   { token: 'rotterdam', surface: 'Hard (indoor)' },
   { token: 'rio open', surface: 'Clay' },
   { token: 'acapulco', surface: 'Hard' },
@@ -1627,7 +1640,8 @@ var TENNIS_500 = [
   { token: 'terra wortmann', surface: 'Grass' },
   { token: 'hamburg', surface: 'Clay' },
   { token: 'dc open', surface: 'Hard' },
-  { token: 'japan open', surface: 'Hard' },
+  // Kinoshita sponsors both Tokyo (ATP 500) and the WTA's Osaka 250.
+  { token: 'japan open', surface: 'Hard', tours: ['atp'] },
   { token: 'erste bank', surface: 'Hard (indoor)' },
   { token: 'swiss indoors', surface: 'Hard (indoor)' },
   { token: 'brisbane', surface: 'Hard' },
@@ -1637,22 +1651,22 @@ var TENNIS_500 = [
   { token: 'berlin', surface: 'Grass' },
   { token: 'eastbourne', surface: 'Grass' },
   { token: 'san diego', surface: 'Hard' },
-  { token: 'pan pacific', surface: 'Hard' },
-  { token: 'toray', surface: 'Hard' },
-  { token: 'ningbo', surface: 'Hard' },
+  { token: 'pan pacific', surface: 'Hard', tours: ['wta'] },
+  { token: 'toray', surface: 'Hard', tours: ['wta'] },
+  { token: 'ningbo', surface: 'Hard', tours: ['wta'] },
   { token: 'abu dhabi', surface: 'Hard' }
 ];
 
-function classifyTennis(name) {
+// tour ('atp' | 'wta') comes from the feed the event was read from; a token
+// with `tours` only matches that tour. Without a tour, tour-specific tokens
+// are skipped rather than guessed.
+function classifyTennis(name, tour) {
   var n = String(name || '').toLowerCase();
-  for (var i = 0; i < TENNIS_SLAMS.length; i++) {
-    if (n.indexOf(TENNIS_SLAMS[i].token) !== -1) return { tier: 'slam', surface: TENNIS_SLAMS[i].surface };
-  }
-  for (var j = 0; j < TENNIS_MASTERS.length; j++) {
-    if (n.indexOf(TENNIS_MASTERS[j].token) !== -1) return { tier: 'masters1000', surface: TENNIS_MASTERS[j].surface };
-  }
-  for (var k = 0; k < TENNIS_500.length; k++) {
-    if (n.indexOf(TENNIS_500[k].token) !== -1) return { tier: 'tour500', surface: TENNIS_500[k].surface };
+  function hit(t) { return n.indexOf(t.token) !== -1 && (!t.tours || (tour && t.tours.indexOf(tour) !== -1)); }
+  var lists = [['slam', TENNIS_SLAMS], ['masters1000', TENNIS_MASTERS], ['tour500', TENNIS_500]];
+  for (var i = 0; i < lists.length; i++) {
+    var found = lists[i][1].filter(hit)[0];
+    if (found) return { tier: lists[i][0], surface: found.surface, tours: found.tours || null };
   }
   return { tier: 'other', surface: '' };
 }
@@ -1731,17 +1745,21 @@ function buildTennisDraw(comps) {
       runnerUp = l ? l.name : null;
     }
   }
+  // Counted over every round, before the slice: early rounds that are not
+  // stored still show the event has started.
+  var played = matches.filter(function (m) { return m.status === 'FINISHED' || m.status === 'LIVE'; }).length;
   return {
     rounds: rounds.slice(-5), // R16 → Final for a slam
     roundsTotal: rounds.length,
+    played: played,
     champion: champion,
     runnerUp: runnerUp,
     finalStatus: finalStatus
   };
 }
 
-function normTennisEvent(event) {
-  var cls = classifyTennis(event && event.name);
+function normTennisEvent(event, tour) {
+  var cls = classifyTennis(event && event.name, tour);
   if (cls.tier === 'other') return null; // ignore 250/500-level events
   var groupings = event.groupings || [];
   function drawFor(label) {
@@ -1750,9 +1768,12 @@ function normTennisEvent(event) {
     })[0];
     return g && (g.competitions || []).length ? buildTennisDraw(g.competitions) : null;
   }
-  var men = drawFor("men's singles");
-  var women = drawFor("women's singles");
-  var tour = (men && women) ? 'combined' : (men ? 'ATP' : (women ? 'WTA' : 'combined'));
+  // A tour-specific match (China Open: WTA 1000, ATP 500) keeps only that
+  // tour's draw, even when ESPN carries both in one event.
+  var only = cls.tours && tour ? tour : null;
+  var men = only === 'wta' ? null : drawFor("men's singles");
+  var women = only === 'atp' ? null : drawFor("women's singles");
+  tour = (men && women) ? 'combined' : (men ? 'ATP' : (women ? 'WTA' : 'combined'));
   return {
     id: event.id,
     name: event.name,
@@ -1769,21 +1790,22 @@ function normTennisEvent(event) {
 // women's draw into an already-seen event when the id matches.
 function collectTennis(atpEvents, wtaEvents) {
   var byId = {}, order = [];
-  function add(event) {
-    var t = normTennisEvent(event);
+  function add(tour, event) {
+    var t = normTennisEvent(event, tour);
     if (!t) return;
-    if (byId[t.id]) {
-      var ex = byId[t.id];
+    var key = t.id + '|' + t.tier; // one ESPN event can be two tiers
+    if (byId[key]) {
+      var ex = byId[key];
       if (!ex.draws.men && t.draws.men) ex.draws.men = t.draws.men;
       if (!ex.draws.women && t.draws.women) ex.draws.women = t.draws.women;
       ex.tour = (ex.draws.men && ex.draws.women) ? 'combined' : (ex.draws.men ? 'ATP' : 'WTA');
     } else {
-      byId[t.id] = t;
-      order.push(t.id);
+      byId[key] = t;
+      order.push(key);
     }
   }
-  (atpEvents || []).forEach(add);
-  (wtaEvents || []).forEach(add);
+  (atpEvents || []).forEach(function (e) { add('atp', e); });
+  (wtaEvents || []).forEach(function (e) { add('wta', e); });
   return order.map(function (id) { return byId[id]; });
 }
 
@@ -1800,6 +1822,7 @@ function tennisTournamentTiming(t) {
         if (m.date && (!firstDate || m.date < firstDate)) firstDate = m.date;
       });
     });
+    if (d.played > 0) anyFinal = true;
   });
   var completed = draws.length > 0 && draws.every(function (d) { return d.finalStatus === 'FINISHED'; });
   var status;
@@ -1819,11 +1842,12 @@ function pickTennisTier(tournaments, tier, nowMs) {
     t.lastDate = tm.lastDate || t.startDate;
     t.firstDate = tm.firstDate || t.startDate;
     // No draw posted yet → decide by start date.
-    if (!tm.firstDate && t.startDate) {
-      t.status = new Date(t.startDate).getTime() > nowMs ? 'upcoming' : tm.status;
-    } else {
-      t.status = tm.status;
-    }
+    // An event that has not started is upcoming whatever its placeholder draw
+    // says (Basel and Ningbo showed as completed a week before their start).
+    var starts = new Date(t.firstDate || t.startDate).getTime();
+    if (starts > nowMs && !tm.firstDate) t.status = 'upcoming';
+    else if (starts > nowMs && tm.status === 'completed') t.status = 'upcoming';
+    else t.status = tm.status;
     if (t.status === 'upcoming' && t.startDate) {
       t.countdownDays = Math.max(0, Math.round((new Date(t.startDate).getTime() - nowMs) / 86400000));
     }
@@ -1835,6 +1859,8 @@ function pickTennisTier(tournaments, tier, nowMs) {
     .sort(function (a, b) { return new Date(b.lastDate || b.startDate) - new Date(a.lastDate || a.startDate); });
   return {
     current: live[0] || upcoming[0] || null,
+    // Every live event: Shanghai (ATP) and Wuhan (WTA) run the same week.
+    live: live,
     next: upcoming[0] || null,
     recent: completed.slice(0, 2)
   };
@@ -1992,6 +2018,7 @@ function collectTennisMatches(mod) {
     var tier = tiers[tk] || {};
     var events = [];
     if (tier.current) events.push(tier.current);
+    (tier.live || []).forEach(function (t) { if (events.indexOf(t) < 0) events.push(t); });
     if (tier.next && (!tier.current || tier.next.id !== tier.current.id)) events.push(tier.next);
     (tier.recent || []).forEach(function (e) { events.push(e); });
     events.forEach(function (t) {
@@ -2487,6 +2514,8 @@ async function main() {
     ' moduleRun=' + MODULE_ARG);
 
   if (DRY_RUN) {
+    // SPORTS_DRY_OUT=<file> saves the built doc for inspection.
+    if (process.env.SPORTS_DRY_OUT) writeFileSync(process.env.SPORTS_DRY_OUT, JSON.stringify(doc));
     console.log('\n--dry-run: NOT writing sports-' + dateKey + ' / sports-latest.');
     return;
   }
@@ -2594,9 +2623,11 @@ export {
   buildModuleChanges,
   scheduleReadiness,
   classifyTennis,
+  isNbaPreseason,
   buildTennisDraw,
   normTennisEvent,
   tennisTournamentTiming,
+  collectTennis,
   pickTennisTier,
   tennisRatingMap,
   tennisWinProb,

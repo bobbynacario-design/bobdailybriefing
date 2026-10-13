@@ -1703,7 +1703,8 @@ test('a page opened by a push tap counts it once and takes the mark off the addr
 test('sports hides retired PBA even in legacy data and renders NBA probability splits without a draw', () => {
   const {context}=environment(['sportsAvailableModules','sportsWinProbHtml','sportsProb'],{esc:escHtml});
   const keys=context.sportsAvailableModules({modules:{nba:{},pba:{},tennis:{}},worldCup:{}}).map(m=>m.key);
-  assert.deepEqual(Array.from(keys),['nba','tennis','worldcup']);
+  assert.deepEqual(Array.from(keys),['nba','tennis']);
+  assert.deepEqual(Array.from(context.sportsAvailableModules({worldCup:{}}).map(m=>m.key)),['worldcup']);
   const game={home:'Home',away:'Away',projection:{favorite:'Home',tag:'Moderate edge',probs:{home:.65,draw:0,away:.35}}};
   const output=context.sportsWinProbHtml(game);
   assert.match(output,/Home 65%/);assert.match(output,/Away 35%/);assert.doesNotMatch(output,/draw/i);
@@ -1932,4 +1933,18 @@ test('PSE session reset clears private drafts, paper history and pending load ge
   const {context:c,element}=environment(['resetPseResearch'],{_pseSessionEpoch:0,_psePaperLoadToken:0,_pseDraft:{thesis:'private'},_psePaper:[{id:'private'}],_psePaperUid:'u1'});
   c.resetPseResearch();assert.equal(c._pseDraft,null);assert.equal(c._psePaper.length,0);assert.equal(c._psePaperUid,null);assert.equal(c._pseSessionEpoch,1);
   assert.match(element('pse-out').innerHTML,/Sign in/);assert.ok(html.includes('if (window.resetPseResearch) window.resetPseResearch();'));
+});
+
+test('tennis flags a clear ranking upset ahead of long matches; NBA preseason note names the opener',()=>{
+  const {context}=environment(['tennisNotable','sportsPhaseNote','sportsDate'],{esc:escHtml});
+  const m=(w,l,sets)=>({status:'FINISHED',players:[{name:'W',winner:true,rank:w,sets:sets||[{g:7},{g:7}]},{name:'L',rank:l,sets:sets||[{g:5},{g:6}]}]});
+  assert.equal(context.tennisNotable(m(39,3),3).txt,'Upset · #39 beat #3');
+  assert.equal(context.tennisNotable(m(56,4),3).txt,'Upset · #56 beat #4');
+  assert.equal(context.tennisNotable(m(43,12,[{g:3},{g:7},{g:6}]),3).txt,'Upset · #43 beat #12');
+  assert.equal(context.tennisNotable(m(18,14),3),null);
+  assert.equal(context.tennisNotable(m(26,10,[{g:7},{g:4},{g:7}]),3).txt,'Upset · #26 beat #10');
+  assert.equal(context.tennisNotable(m(18,14,[{g:7},{g:4},{g:7}]),3).txt,'Final-set decider');
+  const note=context.sportsPhaseNote({phase:'preseason',upcoming:[{utcDate:'2026-10-13T00:00:00Z',stage:'preseason'}],
+    matches:[{utcDate:'2026-10-22T00:00:00Z',stage:'regular-season'},{utcDate:'2026-10-21T23:30:00Z',stage:'regular-season'},{utcDate:'2026-10-13T00:00:00Z',stage:'preseason'}]},'nba');
+  assert.ok(note.includes('exhibition games and reset on opening night (Oct 22, 07:30 PHT)'));assert.doesNotMatch(note,/last completed season/);
 });
