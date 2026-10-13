@@ -18,7 +18,8 @@ import { CONFIG } from './config.js';
 import { buildPhSnapshot, writePhSnapshot, loadPhSnapshot, phtToday } from './ph-snapshot.js';
 import { refreshWatchlists } from './pse-watch.js';
 import { fetchEvents, applyEvents, fetchDirectory } from './pse-events.js';
-import { buildPseRadar } from './pse-radar.js';
+import { buildPseRadar, equalWeightIndex } from './pse-radar.js';
+import {buildResearch,refreshPaperOutcomes} from './pse-research.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -94,6 +95,13 @@ async function main() {
     ph.events = { dividends: null, news: null, ipos: null, failed: ['all'], checkedAt: new Date().toISOString() };
   }
   var phDoc = Object.assign({ generatedAt: new Date().toISOString() }, ph);
+  STAGE.set('company-research');
+  var research=null;
+  try {
+    var previousResearch=await db.collection(COLL).doc('pse-research').get();
+    research=await buildResearch(ph.board,previousResearch.exists ? previousResearch.data() : null,phtToday());
+    console.log('  PSE company research: '+research.companies.length+' covered; '+research.failed.length+' sources unavailable.');
+  }catch(e){console.log('  PSE research unavailable: '+e.message);}
 
   console.log('\n===== briefings-bob/radar-ph =====');
   var ix = ph.index;
@@ -117,6 +125,7 @@ async function main() {
     if (process.env.PSE_RADAR_DRY_OUT && pse) writeFileSync(process.env.PSE_RADAR_DRY_OUT, JSON.stringify(pse));
     if (process.env.PH_DRY_RUN_OUT) writeFileSync(process.env.PH_DRY_RUN_OUT, JSON.stringify(phDoc));
     var dryWatch = await watchlists(db, ph, true, events);
+    if(research) console.log('  Research prepared; dry run leaves research and paper records unchanged.');
     await directory(db, true);
     console.log('\n--dry-run: NOT writing briefings-bob/radar-ph' + (dryWatch ? ' or the ' + dryWatch.lists + ' watchlist(s)' : '') + '.');
     return;
@@ -131,6 +140,15 @@ async function main() {
   // Watchlists only follow a written snapshot: a stale run must not turn old
   // prices into today's alerts.
   var watch = wrote ? await watchlists(db, ph, false, events) : null;
+  if(wrote && research){
+    STAGE.set('research-write');
+    await db.collection(COLL).doc('pse-research').set(research);
+  }
+  if(wrote){
+    STAGE.set('paper-outcomes');
+    try {var paper=await refreshPaperOutcomes(db,bars,equalWeightIndex(bars));console.log('  Paper outcomes: '+paper.updated+' updated.');}
+    catch(e){console.log('  Paper outcome refresh unavailable: '+e.message);}
+  }
   var dirFailed = await directory(db, false);
 
   // pse-radar (today's scores) and pse-radar-journal (the walk-back evidence).
