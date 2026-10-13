@@ -139,10 +139,20 @@ function stockMetrics(bars) {
   var closes = bars.map(function (b) { return b.close; });
   var last = bars[bars.length - 1];
   var yr = lastYear(bars);
-  var hi = maxOf(yr.map(function (b) { return b.high != null ? b.high : b.close; }));
-  var lo = minOf(yr.map(function (b) { return b.low != null ? b.low : b.close; }));
+  var highs = yr.map(function (b) { return b.high != null ? b.high : b.close; });
+  var lows = yr.map(function (b) { return b.low != null ? b.low : b.close; });
+  var hi = maxOf(highs), lo = minOf(lows);
+  var priorHi = highs.length > 1 ? maxOf(highs.slice(0, -1)) : null;
+  var priorLo = lows.length > 1 ? minOf(lows.slice(0, -1)) : null;
   var s50 = sma(closes, 50), s200 = sma(closes, 200);
   var values = bars.slice(-20).map(function (b) { return b.value; }).filter(function (v) { return v != null; });
+  // Did the last close cross the 200-day average? Yesterday's close against
+  // yesterday's average, today's against today's.
+  var s200prev = sma(closes.slice(0, -1), 200), crossed = null;
+  if (s200 != null && s200prev != null) {
+    var nowAbove = last.close > s200, wasAbove = closes[closes.length - 2] > s200prev;
+    if (nowAbove !== wasAbove) crossed = nowAbove ? 'up' : 'down';
+  }
   return {
     asOf: last.date, close: r2(last.close), dayChangePct: r2(dayPct(bars)),
     ret1w: r2(retDays(bars, 7)), ret1m: r2(retDays(bars, 30)), ret3m: r2(retDays(bars, 91)),
@@ -155,6 +165,11 @@ function stockMetrics(bars) {
     sma50: r2(s50), sma200: r2(s200),
     above50: s50 != null ? last.close > s50 : null,
     above200: s200 != null ? last.close > s200 : null,
+    crossed200: crossed,
+    // the last session broke below / above every other session of the 52 weeks
+    // (strictly, so a stock that hasn't moved doesn't make a "new low" daily)
+    newLow52: priorLo != null && last.low != null ? last.low < priorLo : false,
+    newHigh52: priorHi != null && last.high != null ? last.high > priorHi : false,
     rsi14: r2(rsi(closes, 14)),
     avgValue20: values.length ? Math.round(values.reduce(function (a, b) { return a + b; }, 0) / values.length) : null,
     bars: bars.length,
@@ -191,4 +206,29 @@ function buildBreadth(stocks) {
   };
 }
 
-export { r2, sma, dayPct, retN, retDays, maxOf, minOf, ytdPct, rsi, vol, median, mergeHistory, indexMetrics, stockMetrics, buildBreadth };
+// Watchlist alerts for one person's list after a close. `items` is
+// {SYMBOL: {target}} (target = the buy-below price they set, optional);
+// `rows` is {SYMBOL: stock row}; only rows from `asOf`'s session alert, so a
+// stock that did not trade cannot repeat yesterday's news. One alert per
+// stock, the most useful first: their own price, a new 52-week low, a 200-day
+// cross, a 4%+ day, a new 52-week high.
+var WATCH_MOVE = 4;
+function peso(v) { return '₱' + Number(v).toFixed(2); }
+function watchAlerts(items, rows, asOf) {
+  var rank = { target: 0, low: 1, cross: 2, move: 3, high: 4 };
+  var out = [];
+  Object.keys(items || {}).sort().forEach(function (sym) {
+    var r = rows && rows[sym], it = items[sym] || {};
+    if (!r || r.close == null || r.asOf !== asOf) return;
+    var a = null;
+    if (it.target > 0 && r.close <= it.target) a = { kind: 'target', text: sym + ' ' + peso(r.close) + ', at or below your ' + peso(it.target) };
+    else if (r.newLow52) a = { kind: 'low', text: sym + ' made a new 52-week low (' + peso(r.close) + ')' };
+    else if (r.crossed200) a = { kind: 'cross', text: sym + ' crossed ' + (r.crossed200 === 'up' ? 'above' : 'below') + ' its 200-day average' };
+    else if (r.dayChangePct != null && Math.abs(r.dayChangePct) >= WATCH_MOVE) a = { kind: 'move', text: sym + ' ' + (r.dayChangePct > 0 ? '+' : '−') + Math.abs(r.dayChangePct).toFixed(1) + '% today' };
+    else if (r.newHigh52) a = { kind: 'high', text: sym + ' made a new 52-week high (' + peso(r.close) + ')' };
+    if (a) out.push(Object.assign({ symbol: sym }, a));
+  });
+  return out.sort(function (x, y) { return rank[x.kind] - rank[y.kind]; });
+}
+
+export { r2, sma, dayPct, retN, retDays, maxOf, minOf, ytdPct, rsi, vol, median, mergeHistory, indexMetrics, stockMetrics, buildBreadth, watchAlerts };

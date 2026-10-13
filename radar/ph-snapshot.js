@@ -147,4 +147,4 @@ async function loadPhSnapshot(db, coll) {
   return snap.exists ? (snap.data() || null) : null;
 }
 
-export { buildPhSnapshot, fetchYahooChart, writePhSnapshot, loadPhSnapshot };
+export { buildPhSnapshot, fetchYahooChart, writePhSnapshot, loadPhSnapshot, phtToday };

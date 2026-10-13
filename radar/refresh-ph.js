@@ -15,7 +15,8 @@ import { dirname, join } from 'path';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
-import { buildPhSnapshot, writePhSnapshot, loadPhSnapshot } from './ph-snapshot.js';
+import { buildPhSnapshot, writePhSnapshot, loadPhSnapshot, phtToday } from './ph-snapshot.js';
+import { refreshWatchlists } from './pse-watch.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -79,7 +80,8 @@ async function main() {
 
   if (DRY_RUN) {
     if (process.env.PH_DRY_RUN_OUT) writeFileSync(process.env.PH_DRY_RUN_OUT, JSON.stringify(phDoc));
-    console.log('\n--dry-run: NOT writing briefings-bob/radar-ph.');
+    var dryWatch = await watchlists(db, ph, true);
+    console.log('\n--dry-run: NOT writing briefings-bob/radar-ph' + (dryWatch ? ' or the ' + dryWatch.lists + ' watchlist(s)' : '') + '.');
     return;
   }
 
@@ -89,13 +91,32 @@ async function main() {
     ? '\nWrote briefings-bob/radar-ph (after-close refresh).'
     : '\nSkipped briefings-bob/radar-ph write — stored snapshot is newer.');
 
+  // Watchlists only follow a written snapshot: a stale run must not turn old
+  // prices into today's alerts.
+  var watch = wrote ? await watchlists(db, ph, false) : null;
+
   await recordRunHealth(db, 'ph', {
     status: wrote ? 'ok' : 'skipped',
     asOf: ph.asOf,
     durationMs: Date.now() - RUN_STARTED,
     message: !wrote ? 'stored snapshot is newer'
-      : ph.boardFailed.length ? 'PSE Edge missing ' + ph.boardFailed.join(', ') : ''
+      : [ph.boardFailed.length ? 'PSE Edge missing ' + ph.boardFailed.join(', ') : '',
+        watch && watch.failed ? 'watchlists failed: ' + watch.failed : ''].filter(Boolean).join('; ')
   });
+}
+
+// Non-fatal: the board is already written. Counts only in the log (public repo).
+async function watchlists(db, ph, dryRun) {
+  STAGE.set('watchlists');
+  try {
+    var w = await refreshWatchlists(db, COLL, ph, phtToday(), { dryRun: dryRun, verbose: dryRun && !process.env.CI });
+    console.log('  watchlists: ' + w.lists + ' list(s), ' + w.extra + ' stock(s) beyond the PSEi 30 (' + w.fetched + ' fetched, ' +
+      w.missing + ' not found), ' + w.alerts + ' alert(s)' + (dryRun ? ' — not written' : ' — written'));
+    return w;
+  } catch (e) {
+    console.log('  watchlists failed: ' + (e.message || e));
+    return { failed: e.message || String(e) };
+  }
 }
 
 main().then(function () { process.exit(0); }).catch(async function (e) {

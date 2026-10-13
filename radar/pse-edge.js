@@ -80,7 +80,7 @@ async function lookupCompanyId(symbol) {
   if (!res.ok) throw new Error('lookup HTTP ' + res.status);
   var list = await res.json();
   var hit = (list || []).find(function (c) { return String(c.symbol).toUpperCase() === symbol.toUpperCase(); });
-  return hit ? String(hit.cmpyId) : null;
+  return hit ? { cmpyId: String(hit.cmpyId), name: String(hit.cmpyNm || '') } : null;
 }
 
 async function fetchStockPage(cmpyId, symbol) {
@@ -100,10 +100,15 @@ async function fetchBars(cmpyId, securityId, fromIso, toIso, symbol) {
 }
 
 // One stock: ids (reused from the last doc when known), the page, ~400 days of
-// bars. Returns { cmpyId, securityId, page, bars } or throws.
+// bars. Returns { cmpyId, securityId, name, page, bars } or throws. `name` is
+// PSE Edge's company name on a fresh lookup, else the one already known.
 async function fetchEdgeStock(symbol, known, todayIso, days) {
-  var cmpyId = known && known.cmpyId;
-  if (!cmpyId) { cmpyId = await lookupCompanyId(symbol); await pause(300); }
+  var cmpyId = known && known.cmpyId, name = (known && known.name) || '';
+  if (!cmpyId) {
+    var hit = await lookupCompanyId(symbol);
+    await pause(300);
+    if (hit) { cmpyId = hit.cmpyId; name = name || hit.name; }
+  }
   if (!cmpyId) throw new Error('not found on PSE Edge');
   var page = await fetchStockPage(cmpyId, symbol);
   var securityId = page.securityId || (known && known.securityId);
@@ -112,7 +117,7 @@ async function fetchEdgeStock(symbol, known, todayIso, days) {
   var from = new Date(Date.parse(todayIso + 'T00:00:00Z') - (days || 400) * 86400000).toISOString().slice(0, 10);
   var bars = await fetchBars(cmpyId, securityId, from, todayIso, symbol);
   await pause(300);
-  return { cmpyId: cmpyId, securityId: securityId, page: page, bars: bars };
+  return { cmpyId: cmpyId, securityId: securityId, name: name, page: page, bars: bars };
 }
 
 export { fetchEdgeStock, parseEdgeChart, parseEdgeStockPage, edgeDate, edgeQueryDate };

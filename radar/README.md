@@ -534,6 +534,13 @@ close), no model calls. `--dry-run` builds without writing.
   laptop task's log). Returns are date-based so a missed day can't stretch "1M".
 - USD/PHP + AUD/PHP from Yahoo.
 - Update the stock list after each index review (Feb and Aug circulars).
+- **Watchlists** (`pse-watch.js`, doc `pse-watch-<uid>`, one per person): the app
+  writes `items` ({CODE: {addedAt, target}}, target = optional buy-below price).
+  After the snapshot is written, the job fetches any watched code outside the 30
+  (`rows`), lists unknown codes (`missing`) and computes `alerts` for the session
+  (`watchAlerts` in ph-metrics.js: own price, new 52-week low, 200-day cross, a
+  4%+ day, new 52-week high; one per stock). It writes with `update()`, never
+  touching `items` or `uid`. The repo is public, so the log carries counts only.
 
 ---
 
