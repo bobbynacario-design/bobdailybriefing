@@ -1986,3 +1986,30 @@ test('Boxing & UFC: cards with prelims folded, Filipino fighters first, upsets n
   assert.ok(html.includes('Favourites won 3 of 5 fights with a recorded pre-fight price (Brier 0.21, 0.25 = coin flip).'));
   assert.ok(html.includes('rel="noopener noreferrer">Polymarket ↗</a>'));
 });
+
+test('sports digest: next 24 hours for followed teams, players and fight cards; your results before upsets; edges only at 5+ points',()=>{
+  const names=['sportsDigestHtml','sportsFollowed','sportsFollowKey','sportsIsFollowedMatch','sportsTeamKey','sportsShortTeam','sportsDate','tennisRankTxt','tennisNotable'];
+  const {context}=environment(names,{esc:escHtml,localStorage:{getItem:()=>null,setItem:()=>{}}});
+  const now=Date.parse('2026-10-13T06:00:00Z');
+  const d={modules:{
+    nba:{watchlist:[{team:'Los Angeles Lakers'}],matches:[
+      {id:'1',status:'SCHEDULED',stage:'regular-season',home:'Los Angeles Lakers',away:'Golden State Warriors',utcDate:'2026-10-14T02:00:00Z',market:{pHome:0.551,details:'LAL -2.5'},edge:{size:7,side:'Golden State Warriors'}},
+      {id:'2',status:'FINISHED',stage:'preseason',home:'Los Angeles Lakers',away:'Utah Jazz',utcDate:'2026-10-13T01:00:00Z',score:{home:109,away:119}},
+      {id:'3',status:'SCHEDULED',stage:'regular-season',home:'Boston Celtics',away:'Miami Heat',utcDate:'2026-10-14T00:00:00Z',edge:{size:4,side:'Miami Heat'}}]},
+    tennis:{followed:[{name:'Alexandra Eala',filipino:true,recent:[{won:false,opponent:'Shi Han',score:'4-6 6-3 6-3',date:'2026-10-12T13:05:00Z',event:'Wuhan Open',round:'Round 1'}]}],
+      tiers:{masters:{live:[{id:'s',name:'Shanghai',draws:{men:{rounds:[{name:'Round 3',matches:[
+        {status:'FINISHED',date:'2026-10-12T10:00:00Z',players:[{name:'Zizou Bergs',winner:true,rank:39},{name:'Carlos Alcaraz',rank:3}]},
+        {status:'FINISHED',date:'2026-10-12T11:00:00Z',players:[{name:'Botic',winner:true,rank:41},{name:'Fils',rank:11}]}]}]}}}]}}},
+    combat:{cards:[{name:'UFC Fight Night',date:'2026-10-13T21:00:00Z',fights:[{fighters:[{name:'Malott',pct:53},{name:'Buckley',pct:47}]}]}],boxing:[],
+      results:[{winner:'Talbott',loser:'Figueiredo',winnerPct:30,date:'2026-10-12T02:00:00Z',card:'UFC 332'}]}}};
+  const h=context.sportsDigestHtml(d,now);
+  assert.ok(h.includes('Golden State Warriors at Los Angeles Lakers'));assert.ok(h.includes('Lakers 55% · Warriors 45% (LAL -2.5)'));
+  assert.ok(h.includes('UFC Fight Night: Malott 53% vs Buckley 47%'));
+  assert.ok(h.includes('Utah Jazz beat Los Angeles Lakers 119-109 (preseason)'));
+  assert.ok(h.indexOf('Alexandra Eala lost to Shi Han')<h.indexOf('Zizou Bergs beat Carlos Alcaraz'));
+  assert.ok(h.indexOf('Zizou Bergs')<h.indexOf('Botic beat Fils'));
+  assert.ok(h.includes('Talbott beat Figueiredo as a 30% underdog'));
+  assert.ok(h.includes('Model rates Golden State Warriors 7 pts above the bookmaker'));assert.doesNotMatch(h,/Miami Heat 4 pts/);
+  assert.doesNotMatch(h,/Boston Celtics/);
+  assert.ok(context.sportsDigestHtml({modules:{}},now).includes('Nothing on for your teams'));
+});

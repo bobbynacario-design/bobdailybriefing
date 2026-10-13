@@ -1992,6 +1992,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .cb-fight .meta{grid-column:1/-1;font-size:11.5px;color:var(--txt2)}.cb-fight .pct{font-family:var(--mono);font-size:12px;color:var(--txt2);text-align:right}.cb-fight .fav{color:var(--txt);font-weight:600}
 .cb-bar{grid-column:1/-1;display:flex;height:4px;border-radius:2px;overflow:hidden;background:var(--bg4)}.cb-bar i{background:var(--gold)}.cb-bar b{background:var(--bg4)}
 .cb-res{font-size:13px;line-height:1.6;padding:.3rem 0;border-bottom:1px solid var(--rim)}.cb-res .up{color:var(--gold);font-weight:600}
+.sports-digest{border-left:3px solid var(--gold)}.sd-group{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin:.7rem 0 .2rem}.sd-group:first-of-type{margin-top:0}
+.sd-row{display:grid;grid-template-columns:62px minmax(0,1fr);gap:.6rem;font-size:13.5px;line-height:1.5;padding:.25rem 0}.sd-row .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--gold);padding-top:.15rem}.sd-row .sub{display:block;font-size:12px;color:var(--txt2)}
 .sports-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem}
 .sports-panel-title{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
 .sports-list{display:flex;flex-direction:column;gap:.7rem}
@@ -3900,7 +3902,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Sports Briefing</div>
     <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-sports"/></svg> Sports</div>
-    <div class="hero-sub" id="sports-sub">NBA first, PH Local next, FIFA archived</div>
+    <div class="hero-sub" id="sports-sub">NBA, tennis, boxing and UFC</div>
     <div class="hero-divider"></div>
   </div>
   <div id="sports-out"><div class="empty-state">LOADING SPORTS…</div></div>
@@ -12235,6 +12237,83 @@ function sportsGenericModuleHtml(mod, key) {
   }
   return html;
 }
+// The digest (lane 5): one card above the tabs with what matters now, from
+// the stored doc only. Today = the next 24 hours; overnight = the last 36.
+// Edges list model-vs-bookmaker gaps only once the model has projections.
+function sportsDigestHtml(d, nowMs) {
+  d = d || {};
+  var mods = d.modules || {}, nba = mods.nba || {}, tennis = mods.tennis || {}, combat = mods.combat || {};
+  var ahead = 24 * 3600000, back = 36 * 3600000;
+  var within = function (iso, from, to) { var t = Date.parse(iso); return isFinite(t) && t >= from && t <= to; };
+  var today = [], overnight = [], edges = [];
+  var followed = sportsFollowed(nba, 'nba', 'teams');
+  (nba.matches || []).forEach(function (m) {
+    if (!sportsIsFollowedMatch(m, followed)) return;
+    if (m.status === 'SCHEDULED' && within(m.utcDate, nowMs, nowMs + ahead)) {
+      var k = m.market, line = k && k.pHome != null ? sportsShortTeam(m.home) + ' ' + Math.round(k.pHome * 100) + '% · ' + sportsShortTeam(m.away) + ' ' + (100 - Math.round(k.pHome * 100)) + '% (' + (k.details || 'bookmaker') + ')' : '';
+      today.push({ at: m.utcDate, tag: 'NBA', text: m.away + ' at ' + m.home + (m.stage === 'preseason' ? ' (preseason)' : ''), sub: sportsDate(m.utcDate) + (line ? ' · ' + line : '') });
+    }
+    if (m.status === 'FINISHED' && within(m.utcDate, nowMs - back, nowMs) && m.score && m.score.home != null) {
+      var homeWon = m.score.home > m.score.away, hi = Math.max(m.score.home, m.score.away), lo = Math.min(m.score.home, m.score.away);
+      overnight.push({ at: m.utcDate, tag: 'NBA', text: (homeWon ? m.home + ' beat ' + m.away : m.away + ' beat ' + m.home) + ' ' + hi + '-' + lo + (m.stage === 'preseason' ? ' (preseason)' : ''), sub: sportsDate(m.utcDate) });
+    }
+  });
+  (nba.matches || []).forEach(function (m) {
+    if (m.edge && m.edge.size >= 5 && m.status === 'SCHEDULED' && within(m.utcDate, nowMs, nowMs + 3 * 86400000)) {
+      edges.push({ at: m.utcDate, size: m.edge.size, tag: 'NBA', text: 'Model rates ' + m.edge.side + ' ' + m.edge.size + ' pts above the bookmaker', sub: m.away + ' at ' + m.home + ' · ' + sportsDate(m.utcDate) });
+    }
+  });
+  (tennis.followed || []).forEach(function (p) {
+    var who = (p.filipino ? '🇵🇭 ' : '') + p.name;
+    if (p.live) today.unshift({ at: p.live.date, tag: 'LIVE', text: who + ' vs ' + p.live.opponent + (p.live.score ? ' · ' + p.live.score : ''), sub: p.live.event + ', ' + p.live.round });
+    else if (p.next && within(p.next.date, nowMs - 3600000, nowMs + 36 * 3600000)) today.push({ at: p.next.date, tag: 'TENNIS', text: who + ' vs ' + p.next.opponent + tennisRankTxt(p.next.oppRank), sub: sportsDate(p.next.date) + ' · ' + p.next.event + ', ' + p.next.round + (p.next.proj ? ' · model ' + (p.next.proj.pct >= 50 ? 'favours ' + p.name.split(' ').pop() + ' ' + p.next.proj.pct : 'favours opponent ' + (100 - p.next.proj.pct)) + '%' : '') });
+    var last = (p.recent || [])[0];
+    if (last && within(last.date, nowMs - 48 * 3600000, nowMs)) overnight.push({ at: last.date, tag: 'TENNIS', text: who + (last.won ? ' beat ' : ' lost to ') + last.opponent + tennisRankTxt(last.oppRank) + ' ' + (last.score || ''), sub: last.event + ', ' + last.round });
+  });
+  var upsets = [];
+  ['slam', 'masters', 'tour500'].forEach(function (k) {
+    var tier = (tennis.tiers || {})[k] || {}, events = [tier.current].concat(tier.live || []).filter(Boolean), seen = {};
+    events.forEach(function (t) {
+      if (seen[t.id + t.name]) return; seen[t.id + t.name] = true;
+      ['men', 'women'].forEach(function (tour) {
+        ((t.draws && t.draws[tour] && t.draws[tour].rounds) || []).forEach(function (r) {
+          r.matches.forEach(function (m) {
+            if (!within(m.date, nowMs - back, nowMs)) return;
+            var n = tennisNotable(m, 3);
+            if (!n || n.kind !== 'upset') return;
+            var w = m.players.filter(function (p) { return p.winner; })[0], l = m.players.filter(function (p) { return !p.winner; })[0];
+            upsets.push({ at: m.date, rank: n.loserRank || 999, tag: 'UPSET', text: w.name + ' beat ' + l.name + ' (' + n.txt.replace('Upset · ', '') + ')', sub: t.name + ', ' + r.name });
+          });
+        });
+      });
+    });
+  });
+  upsets.sort(function (a, b) { return a.rank - b.rank; }).slice(0, 3).forEach(function (u) { overnight.push(u); });
+  (combat.cards || []).forEach(function (c) {
+    if (!within(c.date, nowMs, nowMs + 48 * 3600000)) return;
+    var top = c.fights[0];
+    if (top) today.push({ at: c.date, tag: 'FIGHT', text: c.name + ': ' + top.fighters.map(function (f) { return f.name + (f.pct != null ? ' ' + f.pct + '%' : ''); }).join(' vs '), sub: sportsDate(c.date) + ' · ' + c.fights.length + ' fights' });
+  });
+  (combat.boxing || []).forEach(function (f) {
+    if (f.status !== 'upcoming' || !within(f.date, nowMs, nowMs + 48 * 3600000) || (!f.filipino && f.volume < 5000 && f.liquidity < 5000)) return;
+    today.push({ at: f.date, tag: 'FIGHT', text: (f.filipino ? '🇵🇭 ' : '') + f.fighters.map(function (x) { return x.name + (x.pct != null ? ' ' + x.pct + '%' : ''); }).join(' vs '), sub: sportsDate(f.date) + ' · boxing' });
+  });
+  (combat.results || []).forEach(function (r) {
+    if (!within(r.date, nowMs - 48 * 3600000, nowMs) || r.winnerPct == null || r.winnerPct >= 50) return;
+    overnight.push({ at: r.date, tag: 'UPSET', text: r.winner + ' beat ' + r.loser + ' as a ' + r.winnerPct + '% underdog', sub: r.card || 'boxing' });
+  });
+  function rows(list) { return list.map(function (x) { return '<div class="sd-row"><span class="tag">' + esc(x.tag) + '</span><span>' + esc(x.text) + (x.sub ? '<span class="sub">' + esc(x.sub) + '</span>' : '') + '</span></div>'; }).join(''); }
+  today.sort(function (a, b) { return a.tag === 'LIVE' ? -1 : b.tag === 'LIVE' ? 1 : String(a.at).localeCompare(String(b.at)); });
+  // Your teams and players first (newest first), then upsets, biggest first.
+  overnight.sort(function (a, b) { var ua = a.tag === 'UPSET' ? 1 : 0, ub = b.tag === 'UPSET' ? 1 : 0; return ua - ub || (ua ? (a.rank || 999) - (b.rank || 999) : String(b.at).localeCompare(String(a.at))); });
+  edges.sort(function (a, b) { return b.size - a.size; });
+  var html = '';
+  if (today.length) html += '<div class="sd-group">Next 24 hours</div>' + rows(today.slice(0, 6));
+  if (overnight.length) html += '<div class="sd-group">Since yesterday</div>' + rows(overnight.slice(0, 6));
+  if (edges.length) html += '<div class="sd-group">Model vs bookmaker</div>' + rows(edges.slice(0, 3));
+  if (!html) html = '<div class="sports-empty">Nothing on for your teams, players or the fight cards in the next day.</div>';
+  return '<div class="sports-panel sports-digest"><div class="sports-panel-title">Your sports today</div>' + html + '</div>';
+}
 var sportsActiveModule = null;
 var sportsCachedData = null;
 var sportsCachedMiro = null;
@@ -12243,7 +12322,7 @@ function sportsRenderActive() {
   if (!out || !sportsCachedData) return;
   var d = sportsCachedData;
   var miro = sportsCachedMiro;
-  var tabs = sportsModuleTabs(d);
+  var tabs = sportsDigestHtml(d, Date.now()) + sportsModuleTabs(d);
   if (sportsActiveModule === 'worldcup') {
     out.innerHTML = tabs + sportsWorldCupHtml(d, miro);
     return;
