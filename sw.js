@@ -1,7 +1,7 @@
 /* Daybook service worker.
    App-shell requests are network-first so deploys update cleanly; cache is the
    offline fallback. Firebase and Google auth traffic always bypasses the cache. */
-var CACHE_NAME = 'bob-briefing-shell-v233';
+var CACHE_NAME = 'bob-briefing-shell-v234';
 
 var briefingMessaging = null;
 try {
@@ -52,6 +52,8 @@ var PRECACHE = [
   './lib/entity-timeline-core.js',
   './lib/radar-assistant-core.js',
   './lib/flights-core.js',
+  './lib/pse-research-core.js',
+  './lib/pse-research-ui.js',
   './lib/flights-ui.js',
   './lib/daybook-calendar-core.js',
   './lib/daybook-calendar-ui.js',

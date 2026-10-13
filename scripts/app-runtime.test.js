@@ -1908,3 +1908,28 @@ test('PSE watchlist box suggests as you type: exact code, code prefix, company-n
   assert.match(h,/class="pse-sug active" aria-selected="true"/);
   assert.match(h,/Jollibee &lt;Foods>/);assert.doesNotMatch(h,/<Foods>/);
 });
+
+test('PSE paper saving preserves failed drafts, reuses the save identifier and prevents double submissions',async()=>{
+  const calls=[];let fail=true,release;
+  const {context:c,element}=environment(['pseDraftInput','pseCommitPick'],{pseRender:()=>{},pseReloadPaper:()=>{},
+    _firebaseUid:'u1',_psePaperUid:'u1',_pseSessionEpoch:1,_psePaperLoadToken:0,_psePaper:[],_psePaperBusy:false,
+    _pseDraft:{symbol:'BDO',requestId:'stable-save-id',company:{priceDate:'2026-10-12',price:112,checkedAt:'2026-10-13T01:00:00Z'}},
+    fbRecordPsePaper:async input=>{calls.push(input);if(fail)throw Error('uncertain connection');await new Promise(r=>{release=r;});return {id:'stable-save-id',pick:{symbol:'BDO'}};}});
+  vm.runInContext(readFileSync(new URL('../lib/pse-research-core.js',import.meta.url),'utf8'),c);
+  for(const [id,value] of Object.entries({'pse-pick-approach':'quality','pse-pick-horizon':'20','pse-pick-thesis':'Recurring earnings support the valuation.',
+    'pse-pick-invalidation':'Credit costs rise and profit declines.','pse-pick-fee':'0.3','pse-pick-slip':'0.1'}))element(id).value=value;
+  await c.pseCommitPick();assert.match(c._pseDraft.status,/Could not confirm/);assert.equal(c._pseDraft.requestId,'stable-save-id');assert.equal(c._psePaperBusy,false);
+  fail=false;const saving=c.pseCommitPick();await c.pseCommitPick();assert.equal(calls.length,2);assert.equal(calls[1].requestId,calls[0].requestId);
+  release();await saving;assert.equal(c._pseDraft,null);assert.equal(c._psePaper.length,1);assert.equal(c._psePaperBusy,false);
+});
+test('PSE loads the shared tab without waiting for paper history and discards history from a previous account',async()=>{
+  let release;const {context:c}=environment(['renderPh'],{pseRender:()=>{},_firebaseUid:'u1',_psePaperUid:null,_pseSessionEpoch:0,_psePaperLoadToken:0,
+    _pseDir:[],fbLoadPh:async()=>({index:{close:5700},board:[]}),fbLoadPseResearch:async()=>({companies:[]}),fbLoadPsePaper:()=>new Promise(r=>{release=r;})});
+  await c.renderPh();assert.equal(c._pseDoc.index.close,5700);assert.match(c._psePaperError,/Loading/);
+  c._firebaseUid='u2';release({picks:[{id:'private-old-pick'}]});await Promise.resolve();await Promise.resolve();assert.equal(c._psePaper.length,0);
+});
+test('PSE session reset clears private drafts, paper history and pending load generations',()=>{
+  const {context:c,element}=environment(['resetPseResearch'],{_pseSessionEpoch:0,_psePaperLoadToken:0,_pseDraft:{thesis:'private'},_psePaper:[{id:'private'}],_psePaperUid:'u1'});
+  c.resetPseResearch();assert.equal(c._pseDraft,null);assert.equal(c._psePaper.length,0);assert.equal(c._psePaperUid,null);assert.equal(c._pseSessionEpoch,1);
+  assert.match(element('pse-out').innerHTML,/Sign in/);assert.ok(html.includes('if (window.resetPseResearch) window.resetPseResearch();'));
+});
