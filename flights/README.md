@@ -26,6 +26,14 @@ with earlier days of the same route only: below every earlier day is a
 began on 10 Oct 2026, so the first comparison appears after the next day's
 scout.
 
+Domestic hotel cards cover Boracay, El Nido, Siargao, Cebu, Bohol and Puerto
+Princesa. Manila staycations cover Manila, Makati and Pasay. Where fewer than
+two flight-date stays exist, these destinations also price the next two
+Friday–Sunday weekends (strictly future check-in dates), within the existing
+call budget and quote cache. Weekend cards need no airfare and show room-only
+totals, exact dates, guests and checked times. Only qualifying observed rates
+get a discount badge; other rates are labelled for comparison.
+
 Hotels: after each scout, `npm run hotels` (refresh-hotels.js) writes
 `briefings-bob/hotels-latest` (no uid). For every city in `hotel-cities.js`
 it keeps three well-reviewed hotels (Tripadvisor rating 4+, 150+ reviews,

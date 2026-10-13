@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {cityFor,pickStays,chooseHotels,quoteRates,scoutHotels,MAX_CALLS} from './hotels.js';
+import {cityFor,pickStays,chooseHotels,quoteRates,scoutHotels,weekendStays,MAX_CALLS} from './hotels.js';
 import {HOTEL_CITIES} from './hotel-cities.js';
 const now=Date.parse('2026-10-12T12:00:00Z'), today='2026-10-12', checkedAt='2026-10-12T11:00:00Z';
 const fare=(amount,extra={})=>({id:'f'+amount,kind:'advertised-fare',airline:'PAL',origin:'MNL',destination:'NRT',tripType:'round-trip',cabin:'Economy',currency:'USD',amount,
@@ -45,6 +45,25 @@ function fakeApi(calls) {
     return {error:null,result:{chk_in:u.searchParams.get('chk_in'),chk_out:u.searchParams.get('chk_out'),rates:[{name:'Agoda.com',rate:139},{name:'Booking.com',rate:156}]}};
   };
 }
+test('local hotel weekends are future dated across Fridays, Sundays and year boundaries',()=>{
+  assert.deepEqual(weekendStays('2026-10-14').map(s=>[s.checkIn,s.checkOut]),[['2026-10-16','2026-10-18'],['2026-10-23','2026-10-25']]);
+  assert.equal(weekendStays('2026-10-16')[0].checkIn,'2026-10-23');
+  assert.equal(weekendStays('2026-12-31')[0].checkOut,'2027-01-03');
+  assert.throws(()=>weekendStays('2026-02-30'),/Invalid/);
+});
+test('domestic and staycation rates are scouted without fares, then reused without inventing a flight',async()=>{
+  const calls=[],fetchJson=async url=>{
+    calls.push(url);const u=new URL(url);
+    return url.includes('/list?')?{result:{list:[hotel(1,150)]}}:{result:{chk_in:u.searchParams.get('chk_in'),chk_out:u.searchParams.get('chk_out'),rates:[{name:'Agoda',rate:120}]}};
+  };
+  const doc=await scoutHotels({offers:[],today,now,fetchJson,gapMs:0,only:['Manila','Cebu']});
+  assert.deepEqual(doc.cities.map(c=>[c.city,c.market,c.stays.length]),[['Cebu','domestic',2],['Manila','staycation',2]]);
+  assert.equal(doc.summary.pricedStays,4);
+  assert.ok(doc.cities.every(c=>c.stays.every(s=>s.kind==='weekend' && !('fare' in s))));
+  const next=await scoutHotels({offers:[],prior:doc,today,now:now+3600000,fetchJson,gapMs:0,only:['Manila','Cebu']});
+  assert.equal(next.summary.calls,0);assert.equal(next.summary.reusedStays,4);
+  assert.doesNotMatch(JSON.stringify(next),/undefined/);
+});
 test('scout prices each stay per hotel, marks failed calls, then reuses the stay on the next run',async()=>{
   const calls=[];
   const doc=await scoutHotels({offers:[fare(400)],prior:null,now,today,fetchJson:fakeApi(calls),gapMs:0});

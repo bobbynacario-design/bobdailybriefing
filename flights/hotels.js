@@ -9,6 +9,14 @@ export const MAX_CALLS=420;
 export function cityFor(code) { return HOTEL_CITIES.find(c=>c.airports.includes(code)) || null; }
 function economy(cabin) { return /economy/i.test(cabin || '') && !/premium/i.test(cabin || ''); }
 function nightsBetween(a,b) { return Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000); }
+// Two upcoming Friday–Sunday stays, independent of a flight quote.
+export function weekendStays(today) {
+  if(!ISO.test(today || '') || !Number.isFinite(Date.parse(today+'T00:00:00Z')) || new Date(today+'T00:00:00Z').toISOString().slice(0,10)!==today) throw Error('Invalid hotel scout date');
+  const base=new Date(today+'T00:00:00Z');
+  const offset=(5-base.getUTCDay()+7)%7 || 7;
+  const date=days=>new Date(base.getTime()+days*86400000).toISOString().slice(0,10);
+  return [offset,offset+7].map(days=>({checkIn:date(days),checkOut:date(days+2),nights:2,kind:'weekend'}));
+}
 // The stays worth pricing: per city, the dates of its cheapest fresh economy
 // return fare, then the cheapest from each other departure airport when its
 // dates differ (the board ranks per departure when one is chosen).
@@ -90,15 +98,24 @@ export async function scoutHotels({offers,prior,now=Date.now(),today,fetchJson,g
     if(!hotels.length && old && Array.isArray(old.hotels) && old.hotels.length) return {hotels:old.hotels,listedAt:old.listedAt};
     return {hotels,listedAt:hotels.length ? generatedAt : null};
   }),size,gapMs);
-  const cities=list.map((c,i)=>({city:c.city,location:c.location,airports:c.airports,listedAt:lists[i].listedAt,hotels:lists[i].hotels,stays:[]}));
+  const cities=list.map((c,i)=>({city:c.city,location:c.location,airports:c.airports,market:c.market || 'international',listedAt:lists[i].listedAt,hotels:lists[i].hotels,stays:[]}));
   const byName=new Map(cities.map(c=>[c.city,c]));
   const wanted=pickStays(offers,{now,today}).filter(s=>byName.has(s.city) && byName.get(s.city).hotels.length);
+  for(const city of cities.filter(c=>c.market!=='international' && c.hotels.length)) {
+    const existing=wanted.filter(s=>s.city===city.city);
+    for(const weekend of weekendStays(today)) {
+      if(existing.length>=MAX_STAYS_PER_CITY) break;
+      if(existing.some(s=>s.checkIn===weekend.checkIn && s.checkOut===weekend.checkOut)) continue;
+      const stay={city:city.city,...weekend};wanted.push(stay);existing.push(stay);
+    }
+  }
   const tasks=[];
   for(const s of wanted) {
     const city=byName.get(s.city), keys=city.hotels.map(h=>h.key).join(',');
     const old=(priorCities.get(s.city)?.stays || []).find(o=>o.checkIn===s.checkIn && o.checkOut===s.checkOut && o.hotelKeys===keys && now-Date.parse(o.pricedAt || '')<STAY_TTL_HOURS*3600000);
-    if(old){reusedStays++;city.stays.push({...old,fare:s.fare});continue;}
-    const stay={checkIn:s.checkIn,checkOut:s.checkOut,nights:s.nights,pricedAt:generatedAt,hotelKeys:keys,fare:s.fare,quotes:[]};
+    if(old){reusedStays++;const reused={...old,kind:s.kind || 'flight'};delete reused.fare;if(s.fare)reused.fare=s.fare;city.stays.push(reused);continue;}
+    const stay={checkIn:s.checkIn,checkOut:s.checkOut,nights:s.nights,kind:s.kind || 'flight',pricedAt:generatedAt,hotelKeys:keys,quotes:[]};
+    if(s.fare) stay.fare=s.fare;
     city.stays.push(stay);
     city.hotels.forEach(h=>tasks.push(async()=>{
       const result=await call('/rates?hotel_key='+h.key+'&chk_in='+s.checkIn+'&chk_out='+s.checkOut+'&rooms='+STAY.rooms+'&adults='+STAY.adults+'&currency='+STAY.currency);
@@ -114,5 +131,5 @@ export async function scoutHotels({offers,prior,now=Date.now(),today,fetchJson,g
     cities:cities.filter(c=>c.hotels.length),
     summary:{cities:cities.filter(c=>c.hotels.length).length,stays:stays.length,pricedStays:stays.filter(s=>s.quotes.some(q=>q.rates.length)).length,
       quotes:stays.reduce((n,s)=>n+s.quotes.filter(q=>q.rates.length).length,0),calls,failedCalls,reusedStays,budgetHit},
-    coverage:'Nightly room rates for exact dates from booking sites listed on Tripadvisor, for the dates of each city\'s cheapest scouted return fare. Not live availability; taxes and fees may be extra.'};
+    coverage:'Nightly room rates for exact dates from Tripadvisor partner sites. Flight dates where available; domestic destinations and Metro Manila also scout upcoming Friday–Sunday stays. Hotel-only totals exclude transport. Not live availability; taxes and fees may be extra.'};
 }

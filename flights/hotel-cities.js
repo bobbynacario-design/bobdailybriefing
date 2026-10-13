@@ -61,9 +61,15 @@ export const HOTEL_CITIES=[
   {city:'Toronto',location:'g155019',airports:['YYZ']},
   {city:'London',location:'g186338',airports:['LHR','LGW']},
   {city:'Manchester',location:'g187069',airports:['MAN']},
-  {city:'Boracay',location:'g294260',airports:['MPH']},
-  {city:'El Nido',location:'g294255',airports:['ENI']},
-  {city:'Siargao',location:'g2048776',airports:['IAO']}
+  {city:'Boracay',location:'g294260',airports:['MPH'],market:'domestic'},
+  {city:'El Nido',location:'g294255',airports:['ENI'],market:'domestic'},
+  {city:'Siargao',location:'g2048776',airports:['IAO'],market:'domestic'},
+  {city:'Cebu',location:'g298460',airports:['CEB'],market:'domestic'},
+  {city:'Bohol',location:'g294259',airports:['TAG'],market:'domestic'},
+  {city:'Puerto Princesa',location:'g294257',airports:['PPS'],market:'domestic'},
+  {city:'Manila',location:'g298573',airports:['MNL'],market:'staycation'},
+  {city:'Makati',location:'g298450',airports:[],market:'staycation'},
+  {city:'Pasay',location:'g298452',airports:[],market:'staycation'}
 ];
 export const HOTEL_API='https://data.xotelo.com/api';
 // One room for two adults, the usual booking-site default. Rates are per

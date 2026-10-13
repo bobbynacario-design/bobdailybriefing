@@ -28,12 +28,12 @@ async function main() {
   initializeApp({projectId:'pokerhq-a67e4',credential:existsSync(key) ? cert(JSON.parse(readFileSync(key,'utf8'))) : applicationDefault()});
   db=getFirestore();
   const [flights,prior]=await Promise.all(['flights-latest','hotels-latest'].map(id=>db.collection('briefings-bob').doc(id).get()));
-  if(!flights.exists) throw Error('No flight scout to pair hotels with.');
-  const doc=await scoutHotels({offers:flights.data().offers || [],prior:prior.exists ? prior.data() : null,today,fetchJson,only:only.length ? only : null});
-  doc.flightsGeneratedAt=flights.data().generatedAt || null;
+  const flightDoc=flights.exists ? flights.data() : {};
+  const doc=await scoutHotels({offers:flightDoc.offers || [],prior:prior.exists ? prior.data() : null,today,fetchJson,only:only.length ? only : null});
+  doc.flightsGeneratedAt=flightDoc.generatedAt || null;
   console.log(JSON.stringify({bytes:Buffer.byteLength(JSON.stringify(doc)),summary:doc.summary}));
   for(const c of doc.cities.filter(c=>c.stays.length)) for(const s of c.stays)
-    console.log(c.city+' '+s.checkIn+'→'+s.checkOut+' ('+s.fare.origin+'): '+s.quotes.map(q=>{const h=c.hotels.find(h=>h.key===q.key);return h.name.slice(0,28)+' '+(q.rates[0] ? q.rates[0].site+' '+q.rates[0].rate : q.checked ? 'no rates' : 'unchecked');}).join(' | '));
+    console.log(c.city+' '+s.checkIn+'→'+s.checkOut+' ('+(s.fare?.origin || 'hotel only')+'): '+s.quotes.map(q=>{const h=c.hotels.find(h=>h.key===q.key);return h.name.slice(0,28)+' '+(q.rates[0] ? q.rates[0].site+' '+q.rates[0].rate : q.checked ? 'no rates' : 'unchecked');}).join(' | '));
   if(!dryRun) {
     // A run that read no hotel list at all keeps the previous document.
     if(!doc.summary.cities || doc.summary.calls && doc.summary.failedCalls===doc.summary.calls) throw Error('Hotel rates could not be read; previous hotel scout preserved.');
