@@ -1983,6 +1983,10 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .sports-kpi-value{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--txt);line-height:1.1}
 .sports-kpi-sub{font-family:var(--mono);font-size:10px;color:var(--txt3);margin-top:.3rem;line-height:1.5}
 .sports-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);gap:1rem;align-items:start}
+.tf-player{padding:.2rem 0 .7rem;border-bottom:1px solid var(--rim);margin-bottom:.6rem}.tf-player:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.tf-head{font-size:15px;font-weight:600;color:var(--txt)}.tf-head span{font-size:12px;font-weight:400;color:var(--txt2);margin-left:.4rem}
+.tf-line{font-size:13px;line-height:1.55;color:var(--txt);margin:.35rem 0}.tf-line b{color:var(--gold);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-right:.35rem}
+.tf-recent{list-style:none;padding:0;margin:.3rem 0 0;font-size:12.5px;color:var(--txt2);line-height:1.6}.tf-recent .w{color:var(--green);font-weight:600}.tf-recent .l{color:var(--red);font-weight:600}
 .sports-panel{background:var(--bg2);border:1px solid var(--rim);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1rem}
 .sports-panel-title{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
 .sports-list{display:flex;flex-direction:column;gap:.7rem}
@@ -11832,6 +11836,27 @@ function nbaJournalHtml(j) {
   }
   return html;
 }
+// Followed players across every tournament (lane 2): live, next with the
+// ranking projection, the last four results and a 150-day record.
+function tennisRankTxt(r) { return r ? ' (#' + r + ')' : ''; }
+function tennisFollowedHtml(list) {
+  list = list || [];
+  if (!list.length) return '';
+  var rows = list.map(function (p) {
+    var head = '<div class="tf-head">' + (p.filipino ? '🇵🇭 ' : '') + esc(p.name) + '<span>' + esc([p.tour, p.rank ? '#' + p.rank : '', (p.record && (p.record.won + p.record.lost)) ? p.record.won + '–' + p.record.lost + ' in the last 5 months' : '', p.form ? 'form ' + p.form.split('').join(' ') : ''].filter(Boolean).join(' · ')) + '</span></div>';
+    var where = function (m) { return esc(m.event) + (m.tier ? ' (' + esc(m.tier) + ')' : ''); };
+    var live = p.live ? '<div class="tf-line"><b>Live</b>' + esc(m2(p.live)) + '</div>' : '';
+    function m2(m) { return m.round + ' vs ' + m.opponent + tennisRankTxt(m.oppRank) + (m.score ? ' · ' + m.score : ''); }
+    var next = p.next ? '<div class="tf-line"><b>Next</b>' + esc(p.next.round) + ' vs ' + esc(p.next.opponent) + esc(tennisRankTxt(p.next.oppRank)) + ' · ' + where(p.next) + ' · ' + esc(sportsDate(p.next.date)) +
+        (p.next.proj ? ' · ' + esc(p.next.proj.tag === 'Toss-up' ? 'toss-up' : (p.next.proj.pct >= 50 ? 'model favours ' + p.name.split(' ').pop() : 'model favours opponent')) + ' ' + Math.max(p.next.proj.pct, 100 - p.next.proj.pct) + '%' : '') + '</div>'
+      : (p.live ? '' : '<div class="tf-line"><b>Next</b>No match scheduled yet. ESPN lists it once the draw is out.</div>');
+    var recent = (p.recent || []).slice(0, 4).map(function (m) {
+      return '<li><span class="' + (m.won ? 'w' : 'l') + '">' + (m.won ? 'W' : 'L') + '</span> ' + esc(m.round) + ', ' + where(m) + ' — ' + (m.won ? 'beat ' : 'lost to ') + esc(m.opponent) + esc(tennisRankTxt(m.oppRank)) + ' ' + esc(m.score || '') + ' · ' + esc(sportsDateOnly(m.date)) + '</li>';
+    }).join('');
+    return '<div class="tf-player">' + head + live + next + (recent ? '<ul class="tf-recent">' + recent + '</ul>' : '') + '</div>';
+  }).join('');
+  return '<div class="sports-panel"><div class="sports-panel-title">Your players · every tournament</div>' + rows + '</div>';
+}
 function sportsTennisHtml(mod) {
   mod = mod || {};
   var tiers = mod.tiers || { slam: {}, masters: {}, tour500: {} };
@@ -11839,6 +11864,7 @@ function sportsTennisHtml(mod) {
     '<h2>' + esc(mod.title || 'Tennis — Majors & Masters') + '</h2></div>' +
     '<div class="sports-brief-phase">' + esc(mod.phase || 'setup') + '<br>' + esc(mod.asOf || '') + '</div></div>';
   html += sportsFreshnessHtml(mod);
+  html += tennisFollowedHtml(mod.followed);
   function tennisTierLive(k) { return tiers[k] && tiers[k].current && tiers[k].current.status === 'live'; }
   var liveTier = tennisTierLive('slam') ? 'slam' : (tennisTierLive('masters') ? 'masters' : (tennisTierLive('tour500') ? 'tour500' : null));
   var validTier = { slam: 1, masters: 1, tour500: 1 };

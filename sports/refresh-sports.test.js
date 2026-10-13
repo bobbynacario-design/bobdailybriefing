@@ -22,6 +22,7 @@ import {
   isNbaPreseason,
   pickTennisTier,
   collectTennis,
+  buildFollowedPlayers,
   buildTennisDraw,
   normTennisEvent,
   tennisTournamentTiming,
@@ -536,4 +537,23 @@ test('one ESPN event carrying both tours splits into each tour tier with only it
   var atp = list.find(function (t) { return t.tier === 'tour500'; }), wta = list.find(function (t) { return t.tier === 'masters1000'; });
   assert.equal(atp.draws.women, null); assert.equal(atp.draws.men.champion, 'M1');
   assert.equal(wta.draws.men, null); assert.equal(wta.draws.women.champion, 'W1');
+});
+
+test('followed players are found in every event and draw, ranked by their own tour, with results and the next match', function () {
+  function ev(id, name, label, comps) { return { id: id, name: name, groupings: [{ grouping: { displayName: label }, competitions: comps }] }; }
+  var c1 = tComp(1, 'Round 1', 'post', [{ name: 'Shi Han', winner: true, sets: [[4], [6], [6]] }, { name: 'Alexandra Eala', sets: [[6], [3], [3]] }]); c1.date = '2026-10-12T13:05Z';
+  var c2 = tComp(3, 'Round 3', 'post', [{ name: 'Alexandra Eala', winner: true, sets: [[7, 7], [6]] }, { name: 'Iva Jovic', sets: [[6, 5], [4]] }]); c2.date = '2026-09-05T23:15Z';
+  var c3 = tComp(2, 'Round 2', 'pre', [{ name: 'Alexandra Eala' }, { name: 'Iva Jovic' }]); c3.date = '2026-10-20T03:00Z';
+  var men = tComp(1, 'Round 1', 'post', [{ name: 'Alexandra Eala Jr', winner: true }, { name: 'X' }]);
+  var atpFeed = [ev('us', 'US Open', "Women's Singles", [c2]), ev('us', 'US Open', "Men's Singles", [men])];
+  var wtaFeed = [ev('wu', 'Dongfeng Voyah Wuhan Open', "Women's Singles", [c1]), ev('sg', 'Singapore Tennis Open', "Women's Singles", [c3])];
+  var rows = buildFollowedPlayers(atpFeed, wtaFeed, ['Alexandra Eala', 'Nobody'], { 'Iva Jovic': { rank: 900, points: 1 } },
+    { 'Alexandra Eala': { rank: 19, points: 2241 }, 'Iva Jovic': { rank: 11, points: 3500 } }, Date.parse('2026-10-13T00:00:00Z'));
+  var e = rows[0];
+  assert.equal(e.tour, 'WTA'); assert.equal(e.rank, 19); assert.equal(e.filipino, true);
+  assert.deepEqual(e.recent.map(function (m) { return [m.event, m.tier, m.won, m.score, m.oppRank]; }),
+    [['Dongfeng Voyah Wuhan Open', '1000', false, '4-6 6-3 6-3', null], ['US Open', 'Grand Slam', true, '7-6(5) 6-4', 11]]);
+  assert.equal(e.next.opponent, 'Iva Jovic'); assert.equal(e.next.tier, ''); assert.ok(e.next.proj.pct < 50);
+  assert.deepEqual(e.record, { won: 1, lost: 1 }); assert.equal(e.form, 'LW');
+  assert.deepEqual(rows[1].recent, []); assert.equal(rows[1].next, null);
 });

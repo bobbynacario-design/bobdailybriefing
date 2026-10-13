@@ -64,6 +64,7 @@ jobs:
           SPORTS_FOLLOW_TEAMS: ${{ vars.SPORTS_FOLLOW_TEAMS }}
           NBA_FOLLOW_TEAMS: ${{ vars.NBA_FOLLOW_TEAMS }}
           NBA_FOLLOW_PLAYERS: ${{ vars.NBA_FOLLOW_PLAYERS }}
+          TENNIS_FOLLOW_PLAYERS: ${{ vars.TENNIS_FOLLOW_PLAYERS }}
       - name: Build and verify release artifact
         run: npm run check:site
       - uses: actions/configure-pages@v5

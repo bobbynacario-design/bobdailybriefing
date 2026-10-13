@@ -1948,3 +1948,15 @@ test('tennis flags a clear ranking upset ahead of long matches; NBA preseason no
     matches:[{utcDate:'2026-10-22T00:00:00Z',stage:'regular-season'},{utcDate:'2026-10-21T23:30:00Z',stage:'regular-season'},{utcDate:'2026-10-13T00:00:00Z',stage:'preseason'}]},'nba');
   assert.ok(note.includes('exhibition games and reset on opening night (Oct 22, 07:30 PHT)'));assert.doesNotMatch(note,/last completed season/);
 });
+
+test('Your players: live, next with the model side, recent results and record, escaped',()=>{
+  const {context}=environment(['tennisFollowedHtml','tennisRankTxt','sportsDate','sportsDateOnly'],{esc:escHtml});
+  const html=context.tennisFollowedHtml([{name:'Alexandra Eala',tour:'WTA',rank:19,filipino:true,record:{won:24,lost:12},form:'LLLWW',
+    next:{round:'Round 2',opponent:'Iva <Jovic>',oppRank:11,event:'Japan Open',tier:'500',date:'2026-10-20T03:00:00Z',proj:{pct:42,tag:'Lean'}},
+    recent:[{won:false,round:'Round 1',event:'Wuhan Open',tier:'1000',opponent:'Shi Han',score:'4-6 6-3 6-3',date:'2026-10-12T13:05:00Z'}]}]);
+  assert.match(html,/🇵🇭 Alexandra Eala/);assert.match(html,/WTA · #19 · 24–12 in the last 5 months · form L L L W W/);
+  assert.ok(html.includes('Round 2 vs Iva &lt;Jovic> (#11) · Japan Open (500)'));assert.doesNotMatch(html,/<Jovic/);assert.match(html,/model favours opponent 58%/);
+  assert.match(html,/lost to Shi Han 4-6 6-3 6-3/);
+  assert.match(context.tennisFollowedHtml([{name:'A',recent:[]}]),/No match scheduled yet/);
+  assert.equal(context.tennisFollowedHtml([]),'');
+});

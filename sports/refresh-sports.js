@@ -65,6 +65,13 @@ var NBA_FOLLOW_PLAYERS = (process.env.NBA_FOLLOW_PLAYERS || '')
   .split(',')
   .map(function (s) { return s.trim(); })
   .filter(Boolean);
+// Tennis players followed across EVERY tournament (250s, 125s, qualifying),
+// not just the tiers. Filipino players carry a flag.
+var TENNIS_FOLLOW_PLAYERS = (process.env.TENNIS_FOLLOW_PLAYERS || 'Alexandra Eala')
+  .split(',')
+  .map(function (s) { return s.trim(); })
+  .filter(Boolean);
+var TENNIS_FILIPINO = ['Alexandra Eala'];
 var ARGV = process.argv.slice(2);
 var DRY_RUN = ARGV.indexOf('--dry-run') !== -1;
 var MODULE_ARG = argValue('--module') || process.env.SPORTS_MODULE || 'all';
@@ -1935,6 +1942,78 @@ function enrichTennisDraw(draw, map) {
   });
 }
 
+// Scores read from the winner's side ("6-4 3-6 7-6(5)"); an unfinished match
+// reads from the first player's side.
+function tennisScoreLine(players, fromIdx) {
+  var a = players[fromIdx], b = players[1 - fromIdx];
+  var n = Math.max((a.sets || []).length, (b.sets || []).length), parts = [];
+  for (var i = 0; i < n; i++) {
+    var x = (a.sets || [])[i] || {}, y = (b.sets || [])[i] || {};
+    if (x.g == null || y.g == null) continue;
+    var tb = (x.tb != null && y.tb != null) ? '(' + Math.min(x.tb, y.tb) + ')' : '';
+    parts.push(x.g + '-' + y.g + tb);
+  }
+  return parts.join(' ');
+}
+
+var TENNIS_TIER_LABEL = { slam: 'Grand Slam', masters1000: '1000', tour500: '500', other: '' };
+
+// Every singles match of each followed player across both feeds and all
+// events: last results, the next match with a ranking-points projection, and
+// a 150-day record. Pure: events in, rows out.
+function buildFollowedPlayers(atpEvents, wtaEvents, follows, atpMap, wtaMap, nowMs) {
+  var want = {};
+  (follows || []).forEach(function (n) { want[String(n).toLowerCase()] = n; });
+  var rows = {};
+  // The draw decides the tour: a Slam's women's draw rides in the ATP feed too.
+  function scan(events) {
+    (events || []).forEach(function (event) {
+      (event.groupings || []).forEach(function (g) {
+        var label = String((g.grouping || {}).displayName || '').toLowerCase();
+        if (!/singles/.test(label)) return;
+        var tour = /women/.test(label) ? 'wta' : 'atp', map = (tour === 'wta' ? wtaMap : atpMap) || {};
+        var cls = classifyTennis(event && event.name, tour);
+        (g.competitions || []).forEach(function (comp) {
+          var m = normTennisMatch(comp);
+          if (!m) return;
+          m.players.forEach(function (p, idx) {
+            var key = want[p.name.toLowerCase()];
+            if (!key) return;
+            var opp = m.players[1 - idx], me = map[p.name] || {}, them = map[opp.name] || {};
+            var row = rows[key] || (rows[key] = { name: key, tour: tour.toUpperCase(), rank: me.rank || null, points: me.points || null,
+              filipino: TENNIS_FILIPINO.indexOf(key) >= 0, matches: [] });
+            if (!row.rank && me.rank) { row.rank = me.rank; row.points = me.points; }
+            var item = { id: m.id, event: event.name || '', eventId: event.id, tier: TENNIS_TIER_LABEL[cls.tier] || '',
+              round: m.round, date: m.date, status: m.status, opponent: opp.name, oppRank: them.rank || null };
+            if (m.status === 'FINISHED') {
+              item.won = p.winner === true;
+              item.score = tennisScoreLine(m.players, item.won ? idx : 1 - idx);
+            } else if (m.status === 'LIVE') {
+              item.score = tennisScoreLine(m.players, idx);
+            } else if (me.points && them.points) {
+              var pr = tennisWinProb(me.points, them.points);
+              item.proj = { pct: Math.round(pr * 100), tag: tennisProjTag(pr - 0.5) };
+            }
+            if (!row.matches.some(function (x) { return x.id === item.id; })) row.matches.push(item);
+          });
+        });
+      });
+    });
+  }
+  scan(atpEvents);
+  scan(wtaEvents);
+  return (follows || []).map(function (name) {
+    var row = rows[name] || { name: name, tour: '', rank: null, points: null, filipino: TENNIS_FILIPINO.indexOf(name) >= 0, matches: [] };
+    var done = row.matches.filter(function (x) { return x.status === 'FINISHED'; }).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+    var ahead = row.matches.filter(function (x) { return x.status !== 'FINISHED'; }).sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
+    return { name: row.name, tour: row.tour, rank: row.rank, points: row.points, filipino: row.filipino,
+      recent: done.slice(0, 6), live: ahead.filter(function (x) { return x.status === 'LIVE'; })[0] || null,
+      next: ahead.filter(function (x) { return x.status === 'SCHEDULED' && Date.parse(x.date) > nowMs - 6 * 3600000; })[0] || null,
+      record: { won: done.filter(function (x) { return x.won; }).length, lost: done.filter(function (x) { return !x.won; }).length },
+      form: done.slice(0, 5).map(function (x) { return x.won ? 'W' : 'L'; }).join('') };
+  });
+}
+
 async function fetchTennisModule() {
   var now = new Date();
   var dates = dateKeyUtc(shiftedDate(now, -150)) + '-' + dateKeyUtc(shiftedDate(now, 90));
@@ -1955,6 +2034,7 @@ async function fetchTennisModule() {
     enrichTennisDraw(t.draws.women, wtaMap);
   });
   var nowMs = now.getTime();
+  var followed = buildFollowedPlayers(atp, wta, TENNIS_FOLLOW_PLAYERS, atpMap, wtaMap, nowMs);
   var slam = pickTennisTier(tournaments, 'slam', nowMs);
   var masters = pickTennisTier(tournaments, 'masters1000', nowMs);
   var tour500 = pickTennisTier(tournaments, 'tour500', nowMs);
@@ -1977,7 +2057,8 @@ async function fetchTennisModule() {
     refreshStatus: 'ok',
     fallback: false,
     staleAfterHours: (phase === 'between events') ? 168 : 12,
-    tiers: { slam: slam, masters: masters, tour500: tour500 }
+    tiers: { slam: slam, masters: masters, tour500: tour500 },
+    followed: followed
   };
 }
 
@@ -2628,6 +2709,8 @@ export {
   normTennisEvent,
   tennisTournamentTiming,
   collectTennis,
+  buildFollowedPlayers,
+  tennisScoreLine,
   pickTennisTier,
   tennisRatingMap,
   tennisWinProb,
