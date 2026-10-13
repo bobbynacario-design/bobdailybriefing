@@ -13,7 +13,9 @@
 // Nothing here is fatal on its own: a run fails only when neither the PSEi nor
 // any PSE Edge stock came back.
 //
-//   buildPhSnapshot(config, previousDoc) -> { asOf, index, indexHistory, fx, board, breadth, ... }
+//   buildPhSnapshot(config, previousDoc, barSink) -> { asOf, index, indexHistory, fx, board, breadth, ... }
+//   barSink (optional {}) receives each stock's raw bars by symbol, for the PSE
+//   radar; the doc itself keeps only the computed figures.
 
 import { r2, dayPct, retN, mergeHistory, indexMetrics, stockMetrics, buildBreadth } from './ph-metrics.js';
 import { fetchEdgeStock } from './pse-edge.js';
@@ -57,7 +59,7 @@ function phtToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
-async function buildPhSnapshot(config, prev) {
+async function buildPhSnapshot(config, prev, barSink) {
   var ph = config.ph;
   prev = prev || {};
   console.log('Fetching PH snapshot (PSEi from Yahoo, ' + ph.board.stocks.length + ' PSEi stocks from PSE Edge, FX)...');
@@ -92,6 +94,7 @@ async function buildPhSnapshot(config, prev) {
     var item = ph.board.stocks[i];
     try {
       var got = await fetchEdgeStock(item.symbol, known[item.symbol], today, 400);
+      if (barSink) barSink[item.symbol] = got.bars;
       var metrics = stockMetrics(got.bars);
       if (!metrics) throw new Error('no daily bars');
       board.push(Object.assign({

@@ -18,6 +18,7 @@ import { CONFIG } from './config.js';
 import { buildPhSnapshot, writePhSnapshot, loadPhSnapshot, phtToday } from './ph-snapshot.js';
 import { refreshWatchlists } from './pse-watch.js';
 import { fetchEvents, applyEvents } from './pse-events.js';
+import { buildPseRadar } from './pse-radar.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -63,7 +64,23 @@ async function main() {
   var prev = await loadPhSnapshot(db, COLL);
 
   STAGE.set('build-snapshot');
-  var ph = await buildPhSnapshot(CONFIG, prev);
+  var bars = {};
+  var ph = await buildPhSnapshot(CONFIG, prev, bars);
+
+  // The PSE radar (pse-radar.js): the US scoring and journal over these bars.
+  // Non-fatal; written below, only with a written snapshot.
+  STAGE.set('pse-radar');
+  var pse = null, pseFailed = '';
+  try {
+    pse = buildPseRadar(bars, CONFIG);
+    var top = pse.radar.signals.slice(0, 5).map(function (s) { return s.symbol + ' ' + s.score + ' ' + s.status; });
+    var j = pse.journal;
+    console.log('  PSE radar: ' + pse.radar.signals.length + ' scored, PSE30 ' + (pse.radar.regime.pse30AboveSma20 ? 'above' : 'below') +
+      ' its 20-day; top ' + top.join(', ') + '. Journal: ' + (j.counts ? j.counts.raw + ' picks over ' + j.counts.uniqueDates + ' days' : 'n/a'));
+  } catch (e) {
+    pseFailed = e.message || String(e);
+    console.log('  PSE radar failed: ' + pseFailed);
+  }
 
   // Dividends, company news and IPOs (pse-events.js). Non-fatal: each source
   // that fails is named in events.failed and its section is left null.
@@ -97,6 +114,7 @@ async function main() {
     (ev.failed.length ? '  failed: ' + ev.failed.join(', ') : ''));
 
   if (DRY_RUN) {
+    if (process.env.PSE_RADAR_DRY_OUT && pse) writeFileSync(process.env.PSE_RADAR_DRY_OUT, JSON.stringify(pse));
     if (process.env.PH_DRY_RUN_OUT) writeFileSync(process.env.PH_DRY_RUN_OUT, JSON.stringify(phDoc));
     var dryWatch = await watchlists(db, ph, true, events);
     console.log('\n--dry-run: NOT writing briefings-bob/radar-ph' + (dryWatch ? ' or the ' + dryWatch.lists + ' watchlist(s)' : '') + '.');
@@ -113,13 +131,28 @@ async function main() {
   // prices into today's alerts.
   var watch = wrote ? await watchlists(db, ph, false, events) : null;
 
+  // pse-radar (today's scores) and pse-radar-journal (the walk-back evidence).
+  if (wrote && pse) {
+    STAGE.set('pse-radar-write');
+    try {
+      var at = new Date().toISOString();
+      await db.collection(COLL).doc('pse-radar').set(Object.assign({ generatedAt: at }, pse.radar));
+      await db.collection(COLL).doc('pse-radar-journal').set(Object.assign({ generatedAt: at, asOf: pse.radar.asOf }, pse.journal));
+      console.log('Wrote briefings-bob/pse-radar and pse-radar-journal.');
+    } catch (e) {
+      pseFailed = 'write: ' + (e.message || e);
+      console.log('  PSE radar write failed: ' + pseFailed);
+    }
+  }
+
   await recordRunHealth(db, 'ph', {
     status: wrote ? 'ok' : 'skipped',
     asOf: ph.asOf,
     durationMs: Date.now() - RUN_STARTED,
     message: !wrote ? 'stored snapshot is newer'
       : [ph.boardFailed.length ? 'PSE Edge missing ' + ph.boardFailed.join(', ') : '',
-        watch && watch.failed ? 'watchlists failed: ' + watch.failed : ''].filter(Boolean).join('; ')
+        watch && watch.failed ? 'watchlists failed: ' + watch.failed : '',
+        pseFailed ? 'PSE radar failed: ' + pseFailed : ''].filter(Boolean).join('; ')
   });
 }
 

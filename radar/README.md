@@ -550,6 +550,16 @@ close), no model calls. `--dry-run` builds without writing.
   the latest, meetings, press releases), and IPO listing notices grouped by company
   (90 days). Watchlists also get `news`, and two more alerts after the price
   ones: the last day to buy before an ex-date, and a new filing (not buybacks).
+- **PSE radar** (`pse-radar.js`, docs `pse-radar` and `pse-radar-journal`): the US
+  `scoring.js` and `journal.js`, unchanged, over the 30 stocks' PSE Edge bars.
+  Peso value stands in for volume; each stock is measured against PSE30, an
+  equal-weight index of the 30 built from their bars, which is also passed as
+  SPY/QQQ (those names drive the backdrop, the data date, beta and the journal
+  calendar). Themes are the PSE sector indices; a sector's regime is its members'
+  breadth above the 20-day. The journal re-scores every day the bars reach, so
+  its evidence starts at ~10 months. First reading (12 Oct): score bands ordered
+  by 20-day excess (+0.6% top band, −0.2% bottom) but daily IC ≈ 0 over ~10
+  independent windows — a trend screen, not a proven ranker on PSE.
 
 ---
 
