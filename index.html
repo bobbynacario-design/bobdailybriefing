@@ -2250,6 +2250,7 @@ a.pse-sym:hover{text-decoration:underline}
 .pse-paper-draft input,.pse-paper-draft select,.pse-paper-draft textarea{display:block;width:100%;box-sizing:border-box;background:var(--bg2);color:var(--txt);border:1px solid var(--rim);border-radius:6px;padding:.5rem;margin-top:.2rem;font:inherit}
 .pse-paper-draft button,.pse-research-card button{margin-top:.5rem}
 .pse-paper-draft fieldset{border:0;padding:0;margin:0;min-width:0}
+.pse-paper-status{font-size:13px;line-height:1.5;color:var(--red);margin-top:.5rem}.pse-paper-status.pending{color:var(--txt2)}.pse-paper-status:empty{display:none}
 .pse-mini{position:relative;display:inline-block;width:56px;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--red-dim),var(--bg4),var(--green-dim));vertical-align:middle}
 .pse-mini i{position:absolute;top:50%;width:7px;height:7px;border-radius:50%;background:var(--gold);transform:translate(-50%,-50%)}
 .pse-watch{border-left:3px solid var(--gold);padding:.85rem 1rem;margin-bottom:.9rem;overflow:visible;z-index:5}
@@ -10501,6 +10502,14 @@ function pseStartPick(symbol){
   _pseDraft={symbol:symbol,company:JSON.parse(JSON.stringify(company)),requestId:crypto.randomUUID(),approach:company.type==='reit' ? 'income' : 'quality',horizon:60,
     thesis:'',invalidation:'',feePct:0.30,slippagePct:0.10,lowMultiple:'',highMultiple:''};
   pseRender();var form=document.getElementById('pse-paper-draft');if(form)form.scrollIntoView({behavior:'smooth',block:'start'});
+}
+// Fills only empty boxes, so his own writing is never replaced.
+function pseFillStarter(){
+  if(!_pseDraft || _psePaperBusy)return;
+  var s=PseResearchUI.starter(_pseDraft.company),t=document.getElementById('pse-pick-thesis'),i=document.getElementById('pse-pick-invalidation');
+  if(t && !t.value.trim())t.value=s.thesis;
+  if(i && !i.value.trim())i.value=s.invalidation;
+  if(t){t.focus();t.setSelectionRange(t.value.length,t.value.length);}
 }
 function pseCancelPick(){if(_psePaperBusy)return;_pseDraft=null;pseRender();}
 function pseDraftInput(){
