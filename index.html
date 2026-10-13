@@ -2374,6 +2374,9 @@ a.pse-sym:hover{text-decoration:underline}
 .miro-health{border-left:3px solid var(--gold);background:var(--gold-dim);padding:.75rem .85rem;font-size:11px;color:var(--txt2);line-height:1.6}
 .miro-health strong{color:var(--txt)}
 .miro-empty{font-size:11px;color:var(--txt3);line-height:1.6;padding:.55rem 0}
+.miro-plain{font-size:13px;line-height:1.55;color:var(--txt);background:var(--bg2);border-radius:8px;padding:.5rem .7rem;margin-top:.4rem}.miro-plain b{color:var(--gold);font-weight:600}
+.miro-howto{font-size:13px;line-height:1.6;color:var(--txt);margin:.2rem 0 1rem}.miro-howto summary{cursor:pointer;color:var(--gold);font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase}.miro-howto dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:.35rem .9rem;margin:.6rem 0 0}.miro-howto dt{font-family:var(--mono);font-size:12px;color:var(--txt2)}.miro-howto dd{margin:0}
+@media (max-width:560px){.miro-howto dl{grid-template-columns:1fr}.miro-howto dd{margin-bottom:.4rem}}
 .miro-all{padding:1rem 0}.miro-all-body{padding-top:1rem}.miro-all-body .radar-grid{margin:0}
 @media(max-width:760px){.miro-brief-grid{grid-template-columns:1fr}.miro-signal{grid-template-columns:minmax(0,1fr) 72px}.miro-delta{grid-column:2}.miro-settings-body{display:block}.miro-controls{margin:.8rem 0 0}.miro-change{grid-template-columns:58px minmax(0,1fr)}}
 
@@ -10732,6 +10735,40 @@ function miroVerdict(m) {
   };
   return { label: reasons[m.gateReason] || 'NO EDGE', cls: 'rel-low' };
 }
+// The panel line in plain words, using this card's own numbers.
+function miroPanelPlain(m) {
+  if (m.haircutProb == null || m.panelProb == null || m.impliedYes == null) return '';
+  var price = m.impliedYes, raw = m.panelProb, cut = m.haircutProb;
+  var s = 'Traders price YES at <b>' + miroPct(price) + '</b>. Our ' + (m.panelN ? m.panelN + ' ' : '') + 'AI readers, who never see that price, put it at <b>' + miroPct(raw) + '</b>' +
+    (m.panelDispersion != null ? ' (they disagree by about ±' + (m.panelDispersion * 100).toFixed(1) + ' pts)' : '') + '. ' +
+    'Markets are usually right, so we only move part of the way from the price toward the readers: <b>' + miroPct(cut) + '</b> is our working estimate. ';
+  var noQuotes = m.noBook || m.yesBid == null || m.yesAsk == null, verdict = miroVerdict(m);
+  if (noQuotes && !m.closed) {
+    s += 'Live quotes are missing, so this is only a comparison with the last price, not a gap you could trade.';
+  } else if (m.edge != null && m.edge > 0 && (m.gateReason === 'no-edge' || m.edge < 0.03)) {
+    s += 'After costs that leaves a gap of only ' + (m.edge * 100).toFixed(1) + ' pts, too small to matter.';
+  } else if (m.edge != null && m.edgeSide && m.edge > 0) {
+    var buy = m.edgeSide === 'YES' ? 'YES' : 'NO';
+    s += 'That makes ' + buy + ' look cheap by about <b>' + (m.edge * 100).toFixed(1) + ' pts</b> after trading costs. ';
+    s += verdict && verdict.label === 'RESEARCH FLAG' ? 'Worth a closer look, not a bet: the readers can be wrong, and the Evidence Check shows how often they have been.'
+      : 'The card is not flagged because ' + esc(String(m.gateReason || 'a check failed').replace(/-/g, ' ')) + '.';
+  } else {
+    s += 'After costs that is no meaningful gap from the price.';
+  }
+  return '<div class="miro-plain">' + s + '</div>';
+}
+// One glossary for every card's numbers.
+function miroHowToHtml() {
+  return '<details class="miro-howto"><summary>How to read a market card</summary><dl>' +
+    '<dt>mkt 60% YES</dt><dd>What traders on Polymarket are paying: 60¢ for a share that pays $1 if YES happens, so the crowd puts it at about 60%.</dd>' +
+    '<dt>Panel 10% raw</dt><dd>The average of our AI readers. Each reads the week\'s news without seeing the market price and gives its own chance.</dd>' +
+    '<dt>→ 34% haircut</dt><dd>The readers are often overconfident, so their view is pulled back toward the market price (about 60% of the way to the readers, less when they disagree). This is our working estimate.</dd>' +
+    '<dt>5 reads · spread ±2.5 pts</dt><dd>How many readers answered, and how much they disagreed. A wide spread means a weaker signal.</dd>' +
+    '<dt>est. edge after costs</dt><dd>Our working estimate minus the price you would actually pay, after fees and slippage. +25 pts on the NO side means NO looks about 25 pts too cheap.</dd>' +
+    '<dt>book 59/60¢</dt><dd>The best price to sell and to buy YES right now, the gap between them (spread) and how many shares sit at the top (depth).</dd>' +
+    '<dt>Badges</dt><dd>RESEARCH FLAG: a gap big enough to look into. NO EDGE, PANEL SPLIT, TOO THIN, SPREAD TOO WIDE: why a card is not flagged. None of this is advice; the Evidence Check shows how the readers have scored against the market.</dd>' +
+  '</dl></details>';
+}
 function miroCard(m) {
   var imp = m.impliedYes;
   var barW = imp == null ? 0 : Math.max(2, Math.min(100, imp * 100));
@@ -10776,7 +10813,7 @@ function miroCard(m) {
       (m.panelN != null ? ' · ' + m.panelN + ' reads' : '') +
       (m.panelDispersion != null ? ' · spread ±' + (m.panelDispersion * 100).toFixed(1) + ' pts' : '') +
       ' · <span style="color:' + edgeCol + '">' + (noQuotes ? 'price comparison after assumed costs ' : 'est. edge after costs ') + edgeTxt + '</span>' + sideTxt +
-      '</div>' + miroPanelReadHtml(m);
+      '</div>' + miroPanelPlain(m) + miroPanelReadHtml(m);
     // Executable order book (Lane B): the prices edge is actually computed against.
     if (m.spread != null) {
       var dep = m.depthTop == null ? '—' : (m.depthTop >= 1000 ? Math.round(m.depthTop / 1000) + 'k' : Math.round(m.depthTop)) + ' sh';
@@ -11076,7 +11113,7 @@ function miroRenderData(d, j) {
     (signals.length ? '<div class="miro-signal-list">' + signals.slice(0, 6).map(miroSignalHtml).join('') + '</div>' : '<div class="miro-empty">No themes followed. Open Manage followed themes above to choose what belongs in your brief.</div>') +
     '</section></div><div><section class="miro-section"><div class="miro-section-head"><h3>What Changed — and Why</h3><span class="miro-section-meta">moves of 0.5+ pts</span></div>' + miroMoveRunHtml(d) + miroChangesHtml(d, followed) +
     '</section><section class="miro-section"><div class="miro-section-head"><h3>Evidence Check</h3><span class="miro-section-meta">forecast journal</span></div>' + miroHealthHtml(j, d) + '</section></div></div>';
-  html += '<details class="miro-all"><summary>All market data / ' + d.markets.length + ' signals</summary><div class="miro-all-body"><div class="radar-grid">' + d.markets.map(miroCard).join('') + '</div></div></details>';
+  html += '<details class="miro-all"><summary>All market data / ' + d.markets.length + ' signals</summary><div class="miro-all-body">' + miroHowToHtml() + '<div class="radar-grid">' + d.markets.map(miroCard).join('') + '</div></div></details>';
   out.innerHTML = html;
 }
 function renderMiro() {

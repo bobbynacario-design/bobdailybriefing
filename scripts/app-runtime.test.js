@@ -159,13 +159,14 @@ test('Markets accuracy stays cautious below 30 resolved forecasts',()=>{
 });
 
 test('Markets never presents a missing-quote legacy GO as a research flag',()=>{
-  const {context}=environment(['miroCard','miroVerdict','miroPct','miroNum','miroPriceLink','miroPriceSourceHtml','miroCheckedAt'],{esc:String,miroProbabilityRead:()=>'',miroMoveExplanationHtml:()=>'',miroPanelReadHtml:()=>''});
+  const {context}=environment(['miroCard','miroVerdict','miroPct','miroNum','miroPriceLink','miroPriceSourceHtml','miroCheckedAt','miroPanelPlain'],{esc:String,miroProbabilityRead:()=>'',miroMoveExplanationHtml:()=>'',miroPanelReadHtml:()=>''});
   const m={slug:'rates',label:'Rates',gate:'GO',haircutProb:.7,panelProb:.8,impliedYes:.2,noBook:true,edge:.25,priceCheckedAt:'2026-10-12T06:15:00Z'};
   const out=context.miroCard(m);
   assert.doesNotMatch(out,/RESEARCH FLAG|est\. edge after costs/);
   assert.match(out,/Price comparison only — quotes unavailable/);assert.match(out,/Price checked 12 Oct, \d{1,2}:15 [ap]m · <a [^>]*>Polymarket ↗<\/a> — access may be restricted/);
   assert.match(context.miroCard({...m,slug:'bad slug',priceCheckedAt:''}),/Price checked time unavailable<\/div>/);
   assert.match(out,/price comparison after assumed costs/);
+  assert.match(out,/only a comparison with the last price, not a gap you could trade/);assert.doesNotMatch(out,/Worth a closer look/);
   assert.equal(context.miroVerdict({...m,noBook:false,yesBid:.19,yesAsk:.21}).label,'RESEARCH FLAG');
 });
 test('Daily Boost account writes merge against the transaction snapshot', async()=>{
@@ -2034,4 +2035,18 @@ test('combat unresolved and no-winner outcomes never appear as wins or accuracy 
   assert.match(c.combatResultHtml({bout:'A vs B',winner:'A'}),/Settlement unverified/);
   assert.doesNotMatch(c.combatResultHtml({bout:'A vs B',winner:'A'}),/beat/);
   assert.match(c.combatResultHtml({bout:'A vs B',void:true,settlementConfirmed:true}),/not scored/);
+});
+
+test('Markets: each panel card says its numbers in plain words, and one glossary explains the terms',()=>{
+  const {context}=environment(['miroPanelPlain','miroHowToHtml','miroPct','miroVerdict'],{esc:escHtml});
+  const m={impliedYes:0.625,panelProb:0.088,haircutProb:0.323,panelN:5,panelDispersion:0.025,edge:0.292,edgeSide:'NO',gate:'GO',yesBid:0.62,yesAsk:0.63,spread:0.01};
+  const h=context.miroPanelPlain(m);
+  assert.ok(h.includes('Traders price YES at <b>62.5%</b>. Our 5 AI readers, who never see that price, put it at <b>8.8%</b> (they disagree by about ±2.5 pts).'));
+  assert.ok(h.includes('<b>32.3%</b> is our working estimate.'));assert.ok(h.includes('That makes NO look cheap by about <b>29.2 pts</b> after trading costs.'));
+  assert.ok(h.includes('Worth a closer look, not a bet'));
+  assert.ok(context.miroPanelPlain({...m,gate:'NO-GO',gateReason:'wide-spread'}).includes('not flagged because wide spread.'));
+  assert.ok(context.miroPanelPlain({...m,edge:-0.01}).includes('no meaningful gap'));
+  assert.ok(context.miroPanelPlain({...m,edge:0.01,gate:'NO-GO',gateReason:'no-edge'}).includes('a gap of only 1.0 pts, too small to matter.'));
+  assert.equal(context.miroPanelPlain({impliedYes:0.5}),'');
+  const g=context.miroHowToHtml();assert.match(g,/How to read a market card/);assert.match(g,/haircut/);assert.match(g,/est. edge after costs/);
 });
