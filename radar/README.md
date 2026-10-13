@@ -541,6 +541,15 @@ close), no model calls. `--dry-run` builds without writing.
   (`watchAlerts` in ph-metrics.js: own price, new 52-week low, 200-day cross, a
   4%+ day, new 52-week high; one per stock). It writes with `update()`, never
   touching `items` or `uid`. The repo is public, so the log carries counts only.
+- **Dividends, company news, IPOs** (`pse-events.js`, ~15 PSE Edge requests a
+  run, each source non-fatal): the dividends list (≈18 months) gives every board
+  row `div12m`/`yield12m` (cash per common share with ex-dates in the last 365
+  days, free-text rates parsed by `pesoAmount`) and `nextEx`; the doc's `events`
+  holds the board's ex-dates in the next 45 days, its filings worth reading in the
+  last 14 days (results, dividends, material information, buybacks collapsed to
+  the latest, meetings, press releases), and IPO listing notices grouped by company
+  (90 days). Watchlists also get `news`, and two more alerts after the price
+  ones: the last day to buy before an ex-date, and a new filing (not buybacks).
 
 ---
 

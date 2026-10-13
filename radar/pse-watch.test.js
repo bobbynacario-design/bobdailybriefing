@@ -73,4 +73,19 @@ test('refreshWatchlists fetches codes beyond the PSEi once, writes each list its
   updates.length = 0;
   await refreshWatchlists(db, 'briefings-bob', ph, '2026-10-13', { fetchStock, dryRun: true });
   assert.equal(updates.length, 0, 'a dry run writes nothing');
+
+  // With dividends and filings: the event alerts follow the price alerts, a
+  // non-PSEi row gets its dividend year, and each list gets its own news.
+  const events = {
+    dividends: [{ cmpyId: '9', security: 'COMMON', type: 'Cash', rate: 'P0.25', amount: 0.25, exDate: '2026-10-14', circular: 'D1' },
+      { cmpyId: '9', security: 'COMMON', type: 'Cash', rate: 'P0.25', amount: 0.25, exDate: '2026-07-14', circular: 'D2' }],
+    filings: [{ cmpyId: '9', company: 'MREIT, Inc.', template: 'Press Release', at: '2026-10-12T15:00', circular: 'F1' }]
+  };
+  ph.board[0].cmpyId = '260';
+  await refreshWatchlists(db, 'briefings-bob', ph, '2026-10-13', { fetchStock, events });
+  const a2 = updates.find(u => u.id === 'pse-watch-a').u;
+  assert.deepEqual(a2.alerts.map(x => x.kind + ':' + x.symbol), ['target:BDO', 'exdiv:MREIT', 'news:MREIT']);
+  assert.equal(a2.rows.MREIT.yield12m, 1.79, '0.25 paid in July on a 14.00 close');
+  assert.equal(a2.rows.MREIT.nextEx.exDate, '2026-10-14');
+  assert.deepEqual(a2.news.map(n => n.symbol + ':' + n.kind), ['MREIT:press']);
 });

@@ -6,9 +6,11 @@
 //   rows       the stocks it watches that are NOT among the 30 PSEi stocks
 //              (those already sit on radar-ph), fetched from PSE Edge
 //   missing    codes PSE Edge does not know
-//   alerts     watchAlerts() for the session (ph-metrics.js), read by the
-//              morning push
+//   alerts     watchAlerts() for the session (ph-metrics.js), then the
+//              event alerts (pse-events.js: last day to buy before an
+//              ex-date, new filings), read by the morning push
 //   alertsAsOf the session the alerts are for
+//   news       its stocks' filings worth reading, last 14 days
 // It writes with update(), which replaces those fields whole and leaves the
 // person's `items` and `uid` alone.
 //
@@ -17,6 +19,11 @@
 
 import { stockMetrics, watchAlerts } from './ph-metrics.js';
 import { fetchEdgeStock } from './pse-edge.js';
+import { dividendStats, newsFor, watchEventAlerts } from './pse-events.js';
+
+// PSE Edge stamps filings in Manila time; rowsAt is UTC.
+function manila(iso) { return new Date(Date.parse(iso) + 8 * 3600000).toISOString().slice(0, 16); }
+function isoMinusDays(iso, n) { return new Date(Date.parse(iso + 'T00:00:00Z') - n * 86400000).toISOString().slice(0, 10); }
 
 var SYMBOL = /^[A-Z0-9]{1,8}$/;
 var MAX_ITEMS = 30;
@@ -29,6 +36,7 @@ function watchSymbols(doc) {
 async function refreshWatchlists(db, coll, ph, today, opts) {
   opts = opts || {};
   var fetchStock = opts.fetchStock || fetchEdgeStock;
+  var events = opts.events || null;   // fetchEvents() output, when it came back
   var snap = await db.collection(coll).where('kind', '==', 'pse-watch').get();
   var docs = snap.docs.filter(function (d) { return d.data() && d.data().uid; });
   var board = {};
@@ -49,7 +57,8 @@ async function refreshWatchlists(db, coll, ph, today, opts) {
       var got = await fetchStock(sym, known[sym], today, 400);
       var m = stockMetrics(got.bars);
       if (!m) throw new Error('no daily bars');
-      fetched[sym] = Object.assign({ symbol: sym, name: got.name, cmpyId: got.cmpyId, securityId: got.securityId, marketCap: got.page.marketCap }, m);
+      fetched[sym] = Object.assign({ symbol: sym, name: got.name, cmpyId: got.cmpyId, securityId: got.securityId, marketCap: got.page.marketCap }, m,
+        events && events.dividends ? dividendStats(events.dividends, got.cmpyId, m.asOf, m.close) : {});
     } catch (e) {
       missing[sym] = e.message || String(e);
     }
@@ -66,12 +75,26 @@ async function refreshWatchlists(db, coll, ph, today, opts) {
     });
     var items = {};
     syms.forEach(function (s) { items[s] = data.items[s] || {}; });
-    var alerts = watchAlerts(items, Object.assign({}, board, rows), asOf);
+    var all = Object.assign({}, board, rows);
+    var alerts = watchAlerts(items, all, asOf);
+    var update = { rows: rows, missing: gone, alertsAsOf: asOf || null, rowsAt: new Date().toISOString() };
+    if (events && asOf) {
+      // News since this list was last refreshed (the first time: since the
+      // afternoon before this session).
+      var since = data.rowsAt ? manila(data.rowsAt) : isoMinusDays(asOf, 1) + 'T16:00';
+      alerts = alerts.concat(watchEventAlerts(items, all, events, asOf, since));
+      if (events.filings) {
+        var ids = syms.map(function (s) { return all[s] && all[s].cmpyId; }).filter(Boolean);
+        var bySym = {};
+        syms.forEach(function (s) { if (all[s] && all[s].cmpyId) bySym[all[s].cmpyId] = s; });
+        update.news = newsFor(events.filings, ids, isoMinusDays(asOf, 14) + 'T23:59', 20)
+          .map(function (n) { return Object.assign({ symbol: bySym[n.cmpyId] || null }, n); });
+      }
+    }
+    update.alerts = alerts;
     summary.alerts += alerts.length;
     if (opts.dryRun && opts.verbose) console.log('  [local] ' + syms.length + ' stocks: ' + (alerts.map(function (a) { return a.text; }).join('; ') || 'no alerts'));
-    if (!opts.dryRun) {
-      await docs[j].ref.update({ rows: rows, missing: gone, alerts: alerts, alertsAsOf: asOf || null, rowsAt: new Date().toISOString() });
-    }
+    if (!opts.dryRun) await docs[j].ref.update(update);
   }
   return summary;
 }

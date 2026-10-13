@@ -17,6 +17,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { buildPhSnapshot, writePhSnapshot, loadPhSnapshot, phtToday } from './ph-snapshot.js';
 import { refreshWatchlists } from './pse-watch.js';
+import { fetchEvents, applyEvents } from './pse-events.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -63,6 +64,18 @@ async function main() {
 
   STAGE.set('build-snapshot');
   var ph = await buildPhSnapshot(CONFIG, prev);
+
+  // Dividends, company news and IPOs (pse-events.js). Non-fatal: each source
+  // that fails is named in events.failed and its section is left null.
+  STAGE.set('events');
+  var events = null;
+  try {
+    events = await fetchEvents(phtToday());
+    ph.events = applyEvents(ph.board, events, ph.breadth.asOf || ph.asOf, phtToday());
+  } catch (e) {
+    console.log('  events failed: ' + (e.message || e));
+    ph.events = { dividends: null, news: null, ipos: null, failed: ['all'], checkedAt: new Date().toISOString() };
+  }
   var phDoc = Object.assign({ generatedAt: new Date().toISOString() }, ph);
 
   console.log('\n===== briefings-bob/radar-ph =====');
@@ -77,10 +90,15 @@ async function main() {
   console.log('  breadth: ' + br.above200 + '/' + br.with200 + ' above 200-day, ' + br.above50 + '/' + br.with50 + ' above 50-day, ' +
     br.advancers + ' up / ' + br.decliners + ' down / ' + br.unchanged + ' flat, mood ' + br.mood);
   console.log('  near 52-week low: ' + (br.nearLow.join(', ') || 'none') + '  |  near high: ' + (br.nearHigh.join(', ') || 'none'));
+  var ev = ph.events;
+  console.log('  events: ' + (ev.dividends ? ev.dividends.length + ' ex-date(s) in 45 days' : 'dividends n/a') + ', ' +
+    (ev.news ? ev.news.length + ' filing(s) in 14 days' : 'news n/a') + ', ' + (ev.ipos ? ev.ipos.length + ' IPO(s)' : 'IPOs n/a') +
+    ', ' + ph.board.filter(function (s) { return s.yield12m != null; }).length + ' stocks with a 12-month yield' +
+    (ev.failed.length ? '  failed: ' + ev.failed.join(', ') : ''));
 
   if (DRY_RUN) {
     if (process.env.PH_DRY_RUN_OUT) writeFileSync(process.env.PH_DRY_RUN_OUT, JSON.stringify(phDoc));
-    var dryWatch = await watchlists(db, ph, true);
+    var dryWatch = await watchlists(db, ph, true, events);
     console.log('\n--dry-run: NOT writing briefings-bob/radar-ph' + (dryWatch ? ' or the ' + dryWatch.lists + ' watchlist(s)' : '') + '.');
     return;
   }
@@ -93,7 +111,7 @@ async function main() {
 
   // Watchlists only follow a written snapshot: a stale run must not turn old
   // prices into today's alerts.
-  var watch = wrote ? await watchlists(db, ph, false) : null;
+  var watch = wrote ? await watchlists(db, ph, false, events) : null;
 
   await recordRunHealth(db, 'ph', {
     status: wrote ? 'ok' : 'skipped',
@@ -106,10 +124,10 @@ async function main() {
 }
 
 // Non-fatal: the board is already written. Counts only in the log (public repo).
-async function watchlists(db, ph, dryRun) {
+async function watchlists(db, ph, dryRun, events) {
   STAGE.set('watchlists');
   try {
-    var w = await refreshWatchlists(db, COLL, ph, phtToday(), { dryRun: dryRun, verbose: dryRun && !process.env.CI });
+    var w = await refreshWatchlists(db, COLL, ph, phtToday(), { dryRun: dryRun, verbose: dryRun && !process.env.CI, events: events });
     console.log('  watchlists: ' + w.lists + ' list(s), ' + w.extra + ' stock(s) beyond the PSEi 30 (' + w.fetched + ' fetched, ' +
       w.missing + ' not found), ' + w.alerts + ' alert(s)' + (dryRun ? ' — not written' : ' — written'));
     return w;
