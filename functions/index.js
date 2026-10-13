@@ -33,6 +33,7 @@ const WeeklyReviewCore = require("./weekly-review-core");
 const LifeRecordsCore = require("./life-records-core");
 const DaybookCalendarCore = require("./daybook-calendar-core");
 const FlightsCore = require("./flights-core");
+const PsePaper = require("./pse-paper");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 const Ask = require("./ask-daybook");
 const Haiku = require("./haiku");
@@ -43,6 +44,18 @@ const {dispatchFeed} = require("./news-dispatch");
 const {extractUsage, webSearchCount, recordUsage, recordSearches} = require("./llm-usage");
 
 initializeApp();
+
+// Server-only paper books: immutable thesis snapshots, separate outcomes.
+// No client writes and no order execution. Each member can access only their book.
+exports.recordPsePaperPick = onCall({region:"asia-southeast1",timeoutSeconds:60},async request=>{
+  await requireDaybookMember(request.auth,"saving a PSE paper pick");
+  try {return await PsePaper.recordPick(getFirestore(),request.auth.uid,request.data || {});}
+  catch(e){throw new HttpsError(['invalid-argument','already-exists','failed-precondition','resource-exhausted'].includes(e.code) ? e.code : 'internal',e.code ? e.message : 'Could not save the paper pick. Retry with the same draft.');}
+});
+exports.listPsePaperPicks = onCall({region:"asia-southeast1",timeoutSeconds:60},async request=>{
+  await requireDaybookMember(request.auth,"loading PSE paper picks");
+  return PsePaper.listPicks(getFirestore(),request.auth.uid);
+});
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");

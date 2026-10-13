@@ -8,6 +8,7 @@ functions/command-center-core.js
 functions/briefing-prompt-core.js
 functions/daily-boost.js
 functions/intelligence-search-core.js
+functions/pse-research-core.js
 
 # radar — local-only secrets and deps (never committed)
 radar/node_modules/
