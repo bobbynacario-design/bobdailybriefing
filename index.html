@@ -1071,6 +1071,19 @@ window.fbLoadJournal = async function() {
   }
 };
 
+// The PSE radar: today's scores and the journal's walk-back evidence, both
+// written by radar/refresh-ph.js (no uid). Null on any failure.
+window.fbLoadPseRadar = async function() {
+  try {
+    var snaps = await Promise.all([getDoc(doc(db, COLL, 'pse-radar')), getDoc(doc(db, COLL, 'pse-radar-journal'))]);
+    if (!snaps[0].exists()) return null;
+    return {radar: snaps[0].data(), journal: snaps[1].exists() ? snaps[1].data() : null};
+  } catch(e) {
+    console.error('PSE radar load failed:', e);
+    return null;
+  }
+};
+
 // Load the PH market snapshot. Single doc, no uid.
 window.fbLoadPh = async function() {
   try {
@@ -2212,6 +2225,20 @@ a.pse-sym:hover{text-decoration:underline}
 .pse-ipo-top{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;flex-wrap:wrap;font-size:14px}
 .pse-ipo-how{margin:.35rem 0 .2rem;font-size:13px;font-weight:600}.pse-ipo-how a{color:var(--gold)}
 .pse-ipo-list .pse-news{grid-template-columns:minmax(0,1fr) auto}
+.pse-rcard{border-left:3px solid var(--rim2);padding:.75rem .95rem;margin-bottom:.6rem}
+.pse-rcard-top{display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap}
+.pse-rank{font-family:var(--mono);font-size:11px;color:var(--txt3)}
+.pse-status{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin-left:auto}
+.pse-score{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--txt);min-width:2ch;text-align:right}
+.pse-rcard-sub{font-family:var(--mono);font-size:10.5px;color:var(--txt3);margin:.2rem 0 .35rem}
+.pse-why{font-size:13px;line-height:1.6;color:var(--txt2)}
+.pse-plan{font-family:var(--mono);font-size:11.5px;color:var(--txt);margin-top:.35rem}
+.pse-evidence{background:var(--bg3);border:1px solid var(--rim);border-radius:8px;padding:.5rem .75rem;margin:0 0 .7rem}
+.pse-evidence>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--txt)}
+.pse-evtable{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;margin:.5rem 0}
+.pse-evtable th,.pse-evtable td{text-align:right;padding:.25rem .4rem;border-bottom:1px solid var(--rim)}
+.pse-evtable th:first-child,.pse-evtable td:first-child{text-align:left}
+.pse-evtable th{font-weight:500;color:var(--txt3);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
 .pse-all{margin-top:1rem}.pse-all>summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);padding:.4rem 0}
 .ph-spark{display:block;width:100%;height:44px;margin:.6rem 0 .2rem}
 .ph-rets{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin:.5rem 0}
@@ -10110,6 +10137,81 @@ function pseIposHtml(ipos) {
         }).join('') + '</div></div>';
     }).join('');
 }
+// ── PSE radar (pse-radar, pse-radar-journal; radar/pse-radar.js) ──
+// The US Radar's scoring on the 30, against PSE30 (the average PSEi stock).
+// The evidence box says what the journal's walk-back shows, in plain words.
+var PSE_STATUS = {confirmed: {label: 'Confirmed', col: 'var(--green)'}, forming: {label: 'Forming', col: 'var(--amber)'}, invalidated: {label: 'Invalidated', col: 'var(--txt3)'}};
+function pseMonthYear(iso) {
+  var m = /^(\d{4})-(\d{2})/.exec(String(iso || ''));
+  return m ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m[2]) - 1] + ' ' + m[1] : '';
+}
+// What the walk-back supports. Thresholds: a mean daily rank correlation of
+// 0.05+ with an overlap-adjusted t of 2+ counts as shown; 0.02+ as weak; below
+// that, ordered score bands still read as "not proven", unordered as "not working".
+function pseRadarVerdict(j) {
+  var ic = (j && j.informationCoefficient) || {}, b = (j && j.byScoreBucket) || {};
+  var top = b['80-100'], bottom = b['0-39'];
+  var ordered = !!(top && bottom && top.n && bottom.n && top.avgExcessReturn > bottom.avgExcessReturn);
+  if (ic.meanIC >= 0.05 && ic.tStatOverlapAdj >= 2) return {tone: 'var(--green)', text: 'Holding up on PSE so far: higher scores ranked better day to day, not just on average.'};
+  if (ic.meanIC >= 0.02 && ordered) return {tone: 'var(--amber)', text: 'Weak evidence on PSE: higher scores did better on average and ranked a little better day to day. Too few independent tests to rely on.'};
+  if (ordered) return {tone: 'var(--amber)', text: 'Not proven on PSE. Higher scores did a little better on average, but day to day the ranking was close to a coin flip. Use it as a trend screen, not a buy list.'};
+  return {tone: 'var(--red)', text: 'Not working on PSE: higher scores did no better than lower ones. Read the scores as a description of each chart, nothing more.'};
+}
+function pseRadarEvidenceHtml(j) {
+  if (!j || !j.byScoreBucket || !j.coverage) return '';
+  var v = pseRadarVerdict(j), cov = j.coverage, h = (j.journalConfig && j.journalConfig.horizonBars) || 20;
+  var rows = ['80-100', '60-79', '40-59', '0-39'].map(function (k) {
+    var r = j.byScoreBucket[k];
+    if (!r || !r.n) return '';
+    return '<tr><td>' + k.replace('-', '–') + '</td><td>' + r.n + '</td><td>' + phRet(r.avgExcessReturn) + '</td><td>' + (r.excessWinRate == null ? '—' : r.excessWinRate + '%') + '</td></tr>';
+  }).join('');
+  return '<details class="pse-evidence"><summary><span style="color:' + v.tone + '">●</span> Does the score work on PSE? ' + esc(v.text.split(':')[0].split('.')[0]) + '</summary>' +
+    '<div class="pse-how" style="color:var(--txt2)">' + esc(v.text) + '</div>' +
+    '<div class="pse-how">Every trading day from ' + esc(pseMonthYear(cov.firstDate)) + ' to ' + esc(pseMonthYear(cov.lastDate)) + ' (' + cov.emitDates + ' days) was scored with only the data known that day, ' +
+    'then each stock was checked ' + h + ' trading days later against PSE30, buying at the next open and using its stop and target.</div>' +
+    '<table class="pse-evtable"><thead><tr><th>Score</th><th>Cases</th><th>vs PSE30</th><th>Beat it</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="pse-how">Day-to-day ranking (rank correlation of score with what followed): ' + (j.informationCoefficient && j.informationCoefficient.meanIC != null ? j.informationCoefficient.meanIC.toFixed(2) : '—') +
+    ' (0 = none, 1 = perfect). The windows overlap, so ' + cov.emitDates + ' days are only about ' + Math.round(cov.effectiveWindows || 0) + ' independent tests, all in one market. ' +
+    'The weights come from the US model and were not fitted to PSE.</div></details>';
+}
+function pseRadarCard(s, rank, watch, bySym) {
+  var st = PSE_STATUS[s.status] || {label: s.status, col: 'var(--txt3)'};
+  var row = bySym[s.symbol] || {};
+  var sym = /^\d+$/.test(String(row.cmpyId || ''))
+    ? '<a class="pse-sym" href="https://edge.pse.com.ph/companyPage/stockData.do?cmpy_id=' + row.cmpyId + '" target="_blank" rel="noopener noreferrer">' + esc(s.symbol) + '</a>'
+    : '<span class="pse-sym">' + esc(s.symbol) + '</span>';
+  var plan = s.stop != null && s.target != null && s.entry != null && s.entry > s.stop
+    ? 'Plan: in near ' + pesoPx(s.entry) + ' · stop ' + pesoPx(s.stop) + ' · target ' + pesoPx(s.target) + ' (' + (s.rr || 2) + ':1)' : '';
+  return '<div class="card pse-rcard" style="border-left-color:' + st.col + '">' +
+    '<div class="pse-rcard-top"><span class="pse-rank">#' + rank + '</span>' + pseStar(s.symbol, watch) + sym + '<span class="pse-row-name">' + esc(s.name || '') + '</span>' +
+      '<span class="pse-status" style="color:' + st.col + '">' + esc(st.label) + '</span><span class="pse-score">' + s.score + '</span></div>' +
+    '<div class="pse-rcard-sub">' + esc(s.sector || s.theme || '') + (s.regimeScore != null ? ' · sector breadth ' + s.regimeScore : '') +
+      (s.relStrength20d != null ? ' · ' + (s.relStrength20d >= 0 ? '+' : '') + s.relStrength20d + ' pts vs PSE30 (20 days)' : '') + (s.early ? ' · <b style="color:var(--gold)">early</b>' : '') + '</div>' +
+    '<div class="pse-why">' + esc(s.why || '') + '</div>' +
+    (plan ? '<div class="pse-plan">' + plan + '</div>' : '') +
+    (s.invalidation ? '<div class="pse-how">' + esc(s.invalidation) + '</div>' : '') + '</div>';
+}
+function pseRadarHtml(pr, watch, board) {
+  if (!pr || !pr.radar || !(pr.radar.signals || []).length) return '';
+  var r = pr.radar, bySym = {};
+  (board || []).forEach(function (s) { bySym[s.symbol] = s; });
+  var b = r.benchmark || {};
+  var html = '<div class="journal-section">PSE radar</div><div class="pse-how" style="margin:-.2rem 0 .5rem">The US Radar’s scoring on the 30: trend, ' +
+    'traded value against its norm, strength against PSE30 (the average PSEi stock), buying pressure, and how much of its sector is trending up. Scored after the ' + esc(pseDay(r.asOf)) + ' close.</div>';
+  html += '<div class="ph-chips" style="margin:0 0 .6rem"><span class="ph-chip">PSE30 <b style="color:' + (r.regime && r.regime.pse30AboveSma20 ? 'var(--green)' : 'var(--red)') + '">' +
+    (r.regime && r.regime.pse30AboveSma20 ? 'above' : 'below') + '</b> its 20-day' + (b.ret20 != null ? ' · ' + phRet(b.ret20) + ' in 20 days' : '') + '</span>' +
+    (r.sectors || []).slice().sort(function (x, y) { return (y.regimeScore || 0) - (x.regimeScore || 0); }).map(function (x) {
+      return '<span class="ph-chip">' + esc(x.sector) + ' <b>' + (x.regimeScore == null ? '—' : x.regimeScore) + '</b></span>';
+    }).join('') + '</div>';
+  html += pseRadarEvidenceHtml(pr.journal);
+  html += r.signals.slice(0, 5).map(function (s, i) { return pseRadarCard(s, i + 1, watch, bySym); }).join('');
+  html += '<details class="pse-all"><summary>All ' + r.signals.length + ' ranked</summary><div class="pse-list">' + r.signals.map(function (s, i) {
+    var st = PSE_STATUS[s.status] || {label: s.status, col: 'var(--txt3)'};
+    return '<div class="pse-news"><span class="pse-sym">' + (i + 1) + '. ' + esc(s.symbol) + '</span><span class="pse-news-what">' + esc(s.name || '') +
+      ' · <span style="color:' + st.col + '">' + esc(st.label.toLowerCase()) + '</span></span><span class="pse-news-when">' + s.score + '</span></div>';
+  }).join('') + '</div></details>';
+  return html;
+}
 // Dividends among the 30: ex-dates coming up, then the highest trailing yields.
 function pseDividendsHtml(d, watch) {
   var ev = d.events || {}, board = (d.board || []).filter(function (s) { return s && s.close != null; });
@@ -10230,7 +10332,7 @@ function pseWatchHtml(d, w, editing) {
   return html + '</div>';
 }
 
-var _pseDoc = null, _pseWatch = null, _pseEditing = null, _pseSave = Promise.resolve();
+var _pseDoc = null, _pseWatch = null, _pseRadar = null, _pseEditing = null, _pseSave = Promise.resolve();
 function pseRender() {
   var out = document.getElementById('pse-out');
   var sub = document.getElementById('pse-sub');
@@ -10253,7 +10355,8 @@ function pseRender() {
       ' days ago. The weekday 16:30 refresh has not updated it since.</div>';
   }
   if (_pseWatch) html += pseWatchHtml(d, _pseWatch, _pseEditing);
-  html += pseMoodHtml(d.breadth) + pseIndexHtml(idx, d.fx) + pseIposHtml(d.events && d.events.ipos) + pseBoardHtml(d, watch) + pseDividendsHtml(d, watch);
+  html += pseMoodHtml(d.breadth) + pseIndexHtml(idx, d.fx) + pseRadarHtml(_pseRadar, watch, d.board) +
+    pseIposHtml(d.events && d.events.ipos) + pseBoardHtml(d, watch) + pseDividendsHtml(d, watch);
   var news = pseNewsHtml(d.events && d.events.news, 10);
   if (news) html += '<div class="journal-section">Company news, last 2 weeks</div><div class="pse-how" style="margin:-.2rem 0 .5rem">Filings by the 30 worth reading: results, dividends, material information, buybacks. Each opens on PSE Edge.</div>' + news;
 
@@ -10282,14 +10385,15 @@ function renderPh() {
   var watchLoad = window._firebaseUid && window.fbLoadPseWatch
     ? window.fbLoadPseWatch().then(function (w) { return w || {items: {}}; }, function () { return null; })
     : Promise.resolve(null);
-  return Promise.all([window.fbLoadPh(), watchLoad]).then(function (r) {
+  var radarLoad = window.fbLoadPseRadar ? window.fbLoadPseRadar() : Promise.resolve(null);
+  return Promise.all([window.fbLoadPh(), watchLoad, radarLoad]).then(function (r) {
     var d = r[0];
     if (!d || (!d.index && !(d.board && d.board.length))) {
       if (sub) sub.textContent = 'No PSE data yet';
       out.innerHTML = '<div class="empty-state">NO PSE DATA YET — THE 16:30 WEEKDAY REFRESH WRITES IT</div>';
       return;
     }
-    _pseDoc = d; _pseWatch = r[1]; _pseEditing = null;
+    _pseDoc = d; _pseWatch = r[1]; _pseRadar = r[2]; _pseEditing = null;
     pseRender();
   });
 }

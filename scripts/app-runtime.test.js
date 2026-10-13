@@ -1841,3 +1841,38 @@ test('PSE dividends, IPOs and company news: linked documents, honest empty state
   assert.doesNotMatch(news,/edge_no=bad|<release>|>X<</,'bad ids get no link, text is escaped');
   assert.match(c.pseNewsHtml(d.events.news,1),/<summary>1 more<\/summary>/);
 });
+test('PSE radar: honest verdict from the walk-back, top five as cards, everything ranked, escaped',()=>{
+  const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const {context:c}=environment(['jSign','phRet','pesoPx','pseDay','pseMonthYear','pseStar','pseRadarVerdict','pseRadarEvidenceHtml','pseRadarCard','pseRadarHtml'],{esc});
+  vm.runInContext(html.slice(html.indexOf('var PSE_STATUS = {'),html.indexOf('\n',html.indexOf('var PSE_STATUS = {'))),c);
+  vm.runInContext('var PSE_CODE = /^[A-Z0-9]{1,8}$/;',c);
+  const buckets=(top,bottom)=>({'80-100':{n:542,avgExcessReturn:top,excessWinRate:46.9},'60-79':{n:1332,avgExcessReturn:0.18,excessWinRate:39.3},'40-59':{n:1454,avgExcessReturn:-0.03,excessWinRate:36.8},'0-39':{n:1419,avgExcessReturn:bottom,excessWinRate:29.2}});
+  // The 12 Oct reading: ordered bands, IC about zero.
+  const j={byScoreBucket:buckets(0.62,-0.23),informationCoefficient:{meanIC:-0.011,tStatOverlapAdj:-0.14},
+    coverage:{firstDate:'2025-12-02',lastDate:'2026-10-09',emitDates:208,effectiveWindows:10.4},journalConfig:{horizonBars:20}};
+  assert.match(c.pseRadarVerdict(j).text,/^Not proven on PSE\. .*close to a coin flip\. Use it as a trend screen, not a buy list\.$/);
+  assert.match(c.pseRadarVerdict({...j,byScoreBucket:buckets(-0.5,0.4)}).text,/^Not working on PSE/);
+  assert.match(c.pseRadarVerdict({...j,informationCoefficient:{meanIC:0.03,tStatOverlapAdj:0.8}}).text,/^Weak evidence on PSE/);
+  assert.match(c.pseRadarVerdict({...j,informationCoefficient:{meanIC:0.07,tStatOverlapAdj:2.4}}).text,/^Holding up on PSE so far/);
+  const ev=c.pseRadarEvidenceHtml(j);
+  assert.match(ev,/Does the score work on PSE\? Not proven on PSE<\/summary>/);
+  assert.match(ev,/from Dec 2025 to Oct 2026 \(208 days\)/);assert.match(ev,/only about 10 independent tests/);
+  assert.match(ev,/<td>80–100<\/td><td>542<\/td><td><span style="color:var\(--green\)">\+0\.62%<\/span><\/td><td>46\.9%<\/td>/);
+  assert.match(ev,/were not fitted to PSE/);
+  const sig=(sym,score,status,o)=>Object.assign({symbol:sym,name:sym+' Corp',sector:'Holding firms',score,status,regimeScore:72,relStrength20d:13,entry:40.8,stop:37.94,target:46.52,rr:2,why:'Why <'+sym+'>',invalidation:'Off below 37.94'},o);
+  const signals=[sig('AEV',95,'confirmed',{early:true}),sig('AC',79,'forming'),sig('LTG',68,'forming'),sig('SM',67,'forming'),sig('TEL',63,'forming'),sig('BDO',20,'invalidated',{entry:10,stop:12})];
+  const pr={radar:{asOf:'2026-10-12',benchmark:{symbol:'PSE30',ret20:-4.73},regime:{score:25,pse30AboveSma20:false},
+    sectors:[{sector:'Property',regimeScore:25},{sector:'Holding firms',regimeScore:72}],signals},journal:j};
+  const out=c.pseRadarHtml(pr,{AEV:{}},[{symbol:'AEV',cmpyId:'188'}]);
+  assert.match(out,/Scored after the 12 Oct close/);
+  assert.match(out,/PSE30 <b style="color:var\(--red\)">below<\/b> its 20-day/);
+  assert.ok(out.indexOf('Holding firms <b>72')<out.indexOf('Property <b>25'),'strongest sector first');
+  assert.equal((out.match(/class="card pse-rcard"/g)||[]).length,5,'top five as cards');
+  assert.match(out,/#1<\/span><button[^>]*class="pse-star on"[\s\S]*?cmpy_id=188/);
+  assert.match(out,/Plan: in near ₱40\.80 · stop ₱37\.94 · target ₱46\.52 \(2:1\)/);
+  assert.match(out,/<b style="color:var\(--gold\)">early<\/b>/);
+  assert.match(out,/Why &lt;AEV>/);assert.doesNotMatch(out,/Why <AEV>/);
+  assert.match(out,/All 6 ranked/);assert.match(out,/6\. BDO/);
+  assert.doesNotMatch(c.pseRadarCard(signals[5],6,null,{}),/Plan:/,'no plan when the stop is above the entry');
+  assert.equal(c.pseRadarHtml(null,null,[]),'');
+});
