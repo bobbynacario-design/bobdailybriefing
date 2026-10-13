@@ -1210,6 +1210,22 @@ window.fbSaveHotelTrips = async function(trips) {
   });
   await setDoc(doc(db,COLL,'hotel-trips-' + uid),{uid:uid,kind:'hotel-trips',updatedAt:new Date().toISOString(),trips:clean});
 };
+// PSE watchlist, pse-watch-<uid>. The app owns `items` ({CODE: {addedAt,
+// target}}); radar/pse-watch.js adds rows, missing and alerts after the close.
+// mergeFields replaces `items` whole (so a removed code goes) and leaves the
+// job's fields alone.
+window.fbLoadPseWatch = function() { return fbReadOwn('pse-watch-'); };
+window.fbSavePseWatch = async function(items) {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  var clean = {};
+  Object.keys(items || {}).filter(function(k) { return /^[A-Z0-9]{1,8}$/.test(k); }).slice(0,30).forEach(function(k) {
+    var it = items[k] || {}, t = Number(it.target);
+    clean[k] = {addedAt: String(it.addedAt || new Date().toISOString()).slice(0,30)};
+    if (t > 0 && t < 1e6) clean[k].target = Math.round(t * 10000) / 10000;
+  });
+  await setDoc(doc(db,COLL,'pse-watch-' + uid),{uid:uid,kind:'pse-watch',items:clean,updatedAt:new Date().toISOString()},{mergeFields:['uid','kind','items','updatedAt']});
+};
 window.fbLoadFlightPrefs = async function() {
   var uid = getUid();
   if (!uid) throw new Error('Sign in first');
@@ -2176,6 +2192,17 @@ a.pse-sym:hover{text-decoration:underline}
 .pse-row-meta{grid-column:1/-1;font-family:var(--mono);font-size:10.5px;color:var(--txt3);line-height:1.6}
 .pse-mini{position:relative;display:inline-block;width:56px;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--red-dim),var(--bg4),var(--green-dim));vertical-align:middle}
 .pse-mini i{position:absolute;top:50%;width:7px;height:7px;border-radius:50%;background:var(--gold);transform:translate(-50%,-50%)}
+.pse-watch{border-left:3px solid var(--gold);padding:.85rem 1rem;margin-bottom:.9rem}
+.pse-alerts{font-size:13px;line-height:1.6;color:var(--txt);background:var(--gold-dim);border-radius:8px;padding:.5rem .7rem;margin:.45rem 0 .2rem}
+.pse-star{background:none;border:0;padding:0 .1rem;font-size:15px;line-height:1;color:var(--txt3);cursor:pointer;flex-shrink:0}
+.pse-star.on{color:var(--gold)}.pse-star:hover{color:var(--gold)}
+.pse-watch-ctl{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .9rem;font-size:12px;color:var(--txt2);margin:-.15rem 0 .2rem;padding-bottom:.45rem;border-bottom:1px solid var(--rim)}
+.pse-link{background:none;border:0;padding:0;font:inherit;font-size:12px;color:var(--gold);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.pse-target-edit{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;font-size:12px;color:var(--txt2);padding:.3rem 0 .55rem;border-bottom:1px solid var(--rim)}
+.pse-target-edit label{width:100%}
+.pse-target-edit input,.pse-watch-add input{font:inherit;font-size:13px;color:var(--txt);background:var(--bg3);border:1px solid var(--rim2);border-radius:6px;padding:.35rem .5rem;min-width:0}
+.pse-target-edit input{width:9rem}
+.pse-watch-add{display:flex;gap:.4rem;margin-top:.7rem}.pse-watch-add input{flex:1;max-width:16rem;text-transform:uppercase}
 .pse-all{margin-top:1rem}.pse-all>summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);padding:.4rem 0}
 .ph-spark{display:block;width:100%;height:44px;margin:.6rem 0 .2rem}
 .ph-rets{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin:.5rem 0}
@@ -5831,6 +5858,8 @@ var USAGE_LABELS = {
   fn_completecommandreviewday:'Morning 5: close review', 'open_command-week':'Morning 5: weekly discipline', 'open_grounding-panel':'Evidence: your numbers',
   push_open:'Opened from a push',
   today_ask:'Ask from Today (typed)', today_ask_chip:'Ask from Today (one-tap question)',
+  pse_watch_toggle:'PSE watchlist ☆', pse_watch_add:'PSE watchlist add code', pse_watch_remove:'PSE watchlist remove',
+  pse_watch_target:'PSE buy-below price (open)', pse_watch_target_save:'PSE buy-below price saved', pse_watch_target_clear:'PSE buy-below price cleared',
   checkin_pick:'Check-in: picked this week’s commitment', checkin_later:'Check-in: not now', checkin_yes:'Check-in: yes, moved it forward', checkin_no:'Check-in: no'
 };
 // The features worth knowing about when unused: shown under "Not used lately".
@@ -10027,26 +10056,36 @@ function pseIndexHtml(idx, fx) {
   }
   return html + '</div>';
 }
-function pseStockRow(s) {
+var PSE_CODE = /^[A-Z0-9]{1,8}$/;
+// `watch` is the signed-in person's items map ({CODE: {target}}): rows then get
+// a ☆ to follow or unfollow. Without it (signed out, tests) there is no button.
+// Only a valid code reaches the inline handler.
+function pseStar(symbol, watch) {
+  if (!watch || !PSE_CODE.test(String(symbol || ''))) return '';
+  var on = !!watch[symbol];
+  return '<button type="button" class="pse-star' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-track="pse_watch_toggle" title="' +
+    (on ? 'Stop following' : 'Follow in your watchlist') + '" onclick="pseToggleWatch(\'' + symbol + '\')">' + (on ? '★' : '☆') + '</button>';
+}
+function pseStockRow(s, watch) {
   var pos = s.rangePos == null ? null : Math.max(0, Math.min(100, s.rangePos));
   var trend = s.above200 == null ? '' : ' · <span style="white-space:nowrap;color:' + (s.above200 ? 'var(--green)' : 'var(--red)') + '">' + (s.above200 ? 'above' : 'below') + ' 200-day</span>';
   var sym = /^\d+$/.test(String(s.cmpyId || ''))
     ? '<a class="pse-sym" href="https://edge.pse.com.ph/companyPage/stockData.do?cmpy_id=' + s.cmpyId + '" target="_blank" rel="noopener noreferrer" title="Open on PSE Edge">' + esc(s.symbol) + '</a>'
     : '<span class="pse-sym">' + esc(s.symbol) + '</span>';
   return '<div class="pse-row">' +
-    '<div class="pse-row-id">' + sym + '<span class="pse-row-name">' + esc(s.name || '') + '</span></div>' +
+    '<div class="pse-row-id">' + pseStar(s.symbol, watch) + sym + '<span class="pse-row-name">' + esc(s.name || '') + '</span></div>' +
     '<div class="pse-row-px">' + pesoPx(s.close) + ' <span>' + phRet(s.dayChangePct) + '</span></div>' +
     '<div class="pse-row-meta">1M ' + phRet(s.ret1m) + ' · YTD ' + phRet(s.retYtd) +
       (pos == null ? '' : ' · <span class="pse-mini" title="Where the price sits in its 52-week range (' + esc(String(s.low52)) + ' to ' + esc(String(s.high52)) + ')"><i style="left:' + pos.toFixed(0) + '%"></i></span> 52-wk') +
       trend + (s.avgValue20 != null ? ' · ' + pesoShort(s.avgValue20) + '/day traded' : '') + '</div>' +
   '</div>';
 }
-function pseListHtml(title, note, rows) {
+function pseListHtml(title, note, rows, watch) {
   if (!rows.length) return '';
   return '<div class="journal-section">' + esc(title) + '</div>' + (note ? '<div class="pse-how" style="margin:-.2rem 0 .5rem">' + esc(note) + '</div>' : '') +
-    '<div class="pse-list">' + rows.map(pseStockRow).join('') + '</div>';
+    '<div class="pse-list">' + rows.map(function (s) { return pseStockRow(s, watch); }).join('') + '</div>';
 }
-function pseBoardHtml(d) {
+function pseBoardHtml(d, watch) {
   var board = (d.board || []).filter(function (s) { return s && s.close != null; });
   if (!board.length) return '<div class="rel-none-txt">No PSE stock prices in this snapshot.</div>';
   var bySym = {};
@@ -10058,12 +10097,109 @@ function pseBoardHtml(d) {
   var today = board.filter(function (s) { return s.asOf === b.asOf && s.dayChangePct != null; });
   var up = today.filter(function (s) { return s.dayChangePct > 0; }).sort(function (x, y) { return y.dayChangePct - x.dayChangePct; }).slice(0, 3);
   var down = today.filter(function (s) { return s.dayChangePct < 0; }).sort(function (x, y) { return x.dayChangePct - y.dayChangePct; }).slice(0, 3);
-  return pseListHtml('Near a 52-week low', 'Within 5% of the lowest price of the past year. Cheaper than most of the year, often for a reason: a place to start reading, not a buy signal.', nearLow) +
-    pseListHtml('Today’s biggest moves', '', up.concat(down)) +
-    pseListHtml('Near a 52-week high', 'Within 3% of the year’s high: the stocks leading right now.', nearHigh) +
+  return pseListHtml('Near a 52-week low', 'Within 5% of the lowest price of the past year. Cheaper than most of the year, often for a reason: a place to start reading, not a buy signal.', nearLow, watch) +
+    pseListHtml('Today’s biggest moves', '', up.concat(down), watch) +
+    pseListHtml('Near a 52-week high', 'Within 3% of the year’s high: the stocks leading right now.', nearHigh, watch) +
     '<details class="pse-all"><summary>All ' + board.length + ' PSEi stocks, largest first</summary>' +
-      '<div class="pse-list">' + board.map(pseStockRow).join('') + '</div>' +
+      '<div class="pse-list">' + board.map(function (s) { return pseStockRow(s, watch); }).join('') + '</div>' +
       (d.boardList ? '<div class="pse-how">' + esc(d.boardList) + '.</div>' : '') + '</details>';
+}
+
+// ── PSE watchlist (pse-watch-<uid>) ──
+// Rows for the 30 PSEi stocks come from radar-ph; any other code's row comes
+// from the list's own `rows`, which the 16:30 job fills. Alerts are the job's,
+// shown only when they are for the latest close.
+function pseWatchHtml(d, w, editing) {
+  w = w || {};
+  var items = w.items || {}, codes = Object.keys(items).filter(function (k) { return PSE_CODE.test(k); }).sort();
+  var bySym = {};
+  ((d && d.board) || []).forEach(function (s) { bySym[s.symbol] = s; });
+  Object.keys(w.rows || {}).forEach(function (k) { if (!bySym[k]) bySym[k] = w.rows[k]; });
+  var missing = w.missing || [];
+  var asOf = d && d.breadth && d.breadth.asOf;
+  var html = '<div class="card pse-watch"><div class="pse-mood-k">Your watchlist' + (codes.length ? ' · ' + codes.length : '') + '</div>';
+  var alerts = (w.alertsAsOf && w.alertsAsOf === asOf ? w.alerts || [] : []).filter(function (a) { return items[a.symbol]; });
+  if (alerts.length) {
+    html += '<div class="pse-alerts"><b>After the ' + esc(asOf) + ' close:</b> ' + alerts.map(function (a) { return esc(a.text); }).join(' · ') + '</div>';
+  }
+  if (!codes.length) {
+    html += '<div class="pse-mood-line">Follow the stocks you’re considering: tap ☆ on any row below, or add any PSE code. ' +
+      'Set a buy-below price and you’ll see when a stock reaches it.</div>';
+  }
+  codes.forEach(function (k) {
+    var row = bySym[k], it = items[k] || {};
+    if (row) html += pseStockRow(row, items);
+    else {
+      html += '<div class="pse-row"><div class="pse-row-id">' + pseStar(k, items) +
+        '<span class="pse-sym">' + esc(k) + '</span><span class="pse-row-name" style="white-space:normal">' +
+        (missing.indexOf(k) !== -1 ? 'Not found on PSE Edge: check the code' : 'Prices arrive after the next 16:30 refresh') + '</span></div></div>';
+    }
+    if (editing === k) {
+      html += '<div class="pse-target-edit"><label for="pse-target-input">Buy-below price for ' + esc(k) + ' (₱)</label>' +
+        '<input id="pse-target-input" type="number" inputmode="decimal" min="0" step="0.01" value="' + (it.target > 0 ? it.target : '') + '">' +
+        '<button type="button" class="tool-chip" data-track="pse_watch_target_save" onclick="pseSaveTarget(\'' + k + '\')">Save</button>' +
+        (it.target > 0 ? '<button type="button" class="tool-chip" data-track="pse_watch_target_clear" onclick="pseSaveTarget(\'' + k + '\', true)">Clear</button>' : '') +
+        '<button type="button" class="tool-chip" onclick="pseEditTarget(null)">Cancel</button></div>';
+    } else {
+      var line = '';
+      if (it.target > 0) {
+        line = 'Buy-below ' + pesoPx(it.target);
+        if (row && row.close != null) {
+          var gap = (row.close / it.target - 1) * 100;
+          line += row.close <= it.target ? ' · <span style="color:var(--green)">at or below it now</span>' : ' · ' + gap.toFixed(1) + '% above it';
+        }
+      }
+      html += '<div class="pse-watch-ctl">' + (line ? '<span>' + line + '</span>' : '') +
+        '<button type="button" class="pse-link" data-track="pse_watch_target" onclick="pseEditTarget(\'' + k + '\')">' + (it.target > 0 ? 'Change price' : 'Set buy-below price') + '</button>' +
+        '<button type="button" class="pse-link" data-track="pse_watch_remove" onclick="pseToggleWatch(\'' + k + '\')">Remove</button></div>';
+    }
+  });
+  html += '<div class="pse-watch-add"><input id="pse-watch-code" type="text" maxlength="8" autocomplete="off" autocapitalize="characters" placeholder="Add a PSE code, e.g. MREIT" ' +
+    'onkeydown="if(event.key===\'Enter\')pseAddWatch()"><button type="button" class="tool-chip" data-track="pse_watch_add" onclick="pseAddWatch()">Add</button></div>' +
+    '<div class="pse-how" id="pse-watch-status">' + (codes.length ? 'Alerts after each close: your buy-below price, a new 52-week low or high, a 200-day cross, or a 4%+ day.' : '') + '</div>';
+  return html + '</div>';
+}
+
+var _pseDoc = null, _pseWatch = null, _pseEditing = null, _pseSave = Promise.resolve();
+function pseRender() {
+  var out = document.getElementById('pse-out');
+  var sub = document.getElementById('pse-sub');
+  var d = _pseDoc;
+  if (!out || !d) return;
+  var idx = d.index, asOf = d.asOf || (idx && idx.asOf);
+  // >=4 calendar days old clears a normal Fri->Mon weekend gap (3 days), so it
+  // flags a stuck feed rather than a routine weekend or pre-close lag.
+  var ageDays = phDaysOld(asOf);
+  var stale = ageDays != null && ageDays >= 4;
+  if (sub) {
+    sub.innerHTML = (idx ? 'PSEi ' + esc(Number(idx.close).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + ' · ' : '') +
+      'close of ' + esc(asOf) + (d.board && d.board.length ? ' · ' + d.board.length + ' stocks from PSE Edge' : '') +
+      (stale ? ' · <span class="pse-sub-stale">' + ageDays + ' days old</span>' : '');
+  }
+  var watch = _pseWatch ? (_pseWatch.items || {}) : null;
+  var html = '';
+  if (stale) {
+    html += '<div class="pse-stale">' + uiIcon('alert') + ' This is the close of ' + esc(asOf) + ', ' + ageDays +
+      ' days ago. The weekday 16:30 refresh has not updated it since.</div>';
+  }
+  if (_pseWatch) html += pseWatchHtml(d, _pseWatch, _pseEditing);
+  html += pseMoodHtml(d.breadth) + pseIndexHtml(idx, d.fx) + pseBoardHtml(d, watch);
+
+  // PH market briefer — pulled from today's loaded briefing, tagged macro/specific.
+  var phb = phMarketStories(_currentData);
+  html += '<div class="journal-section">PH market briefer — from today’s briefing</div>';
+  if (phb.macro.length || phb.specific.length) {
+    if (phb.macro.length) html += '<div class="ph-cat-h">Macro</div>' + phb.macro.map(phNewsCard).join('');
+    if (phb.specific.length) html += '<div class="ph-cat-h">Company-specific</div>' + phb.specific.map(phNewsCard).join('');
+  } else {
+    html += '<div class="rel-none-txt">No PH market items in today’s briefing — generate or open today’s briefing on the Today tab.</div>';
+  }
+  if (d.caveat) html += '<div class="pse-caveat" style="margin-top:1.1rem">' + uiIcon('alert') + ' ' + esc(d.caveat) + '</div>';
+  // A ☆ tapped inside "All 30" re-renders the page; keep that list open.
+  var all = out.querySelector && out.querySelector('.pse-all');
+  var wasOpen = !!(all && all.open);
+  out.innerHTML = html;
+  if (wasOpen && out.querySelector('.pse-all')) out.querySelector('.pse-all').open = true;
 }
 function renderPh() {
   var out = document.getElementById('pse-out');
@@ -10071,41 +10207,69 @@ function renderPh() {
   if (!out) return;
   if (!window.fbLoadPh) { out.innerHTML = '<div class="empty-state">PSE DATA UNAVAILABLE</div>'; return; }
   out.innerHTML = '<div class="empty-state">LOADING PSE…</div>';
-  window.fbLoadPh().then(function (d) {
+  var watchLoad = window._firebaseUid && window.fbLoadPseWatch
+    ? window.fbLoadPseWatch().then(function (w) { return w || {items: {}}; }, function () { return null; })
+    : Promise.resolve(null);
+  return Promise.all([window.fbLoadPh(), watchLoad]).then(function (r) {
+    var d = r[0];
     if (!d || (!d.index && !(d.board && d.board.length))) {
       if (sub) sub.textContent = 'No PSE data yet';
       out.innerHTML = '<div class="empty-state">NO PSE DATA YET — THE 16:30 WEEKDAY REFRESH WRITES IT</div>';
       return;
     }
-    var idx = d.index, asOf = d.asOf || (idx && idx.asOf);
-    // >=4 calendar days old clears a normal Fri->Mon weekend gap (3 days), so it
-    // flags a stuck feed rather than a routine weekend or pre-close lag.
-    var ageDays = phDaysOld(asOf);
-    var stale = ageDays != null && ageDays >= 4;
-    if (sub) {
-      sub.innerHTML = (idx ? 'PSEi ' + esc(Number(idx.close).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + ' · ' : '') +
-        'close of ' + esc(asOf) + (d.board && d.board.length ? ' · ' + d.board.length + ' stocks from PSE Edge' : '') +
-        (stale ? ' · <span class="pse-sub-stale">' + ageDays + ' days old</span>' : '');
-    }
-    var html = '';
-    if (stale) {
-      html += '<div class="pse-stale">' + uiIcon('alert') + ' This is the close of ' + esc(asOf) + ', ' + ageDays +
-        ' days ago. The weekday 16:30 refresh has not updated it since.</div>';
-    }
-    html += pseMoodHtml(d.breadth) + pseIndexHtml(idx, d.fx) + pseBoardHtml(d);
-
-    // PH market briefer — pulled from today's loaded briefing, tagged macro/specific.
-    var phb = phMarketStories(_currentData);
-    html += '<div class="journal-section">PH market briefer — from today’s briefing</div>';
-    if (phb.macro.length || phb.specific.length) {
-      if (phb.macro.length) html += '<div class="ph-cat-h">Macro</div>' + phb.macro.map(phNewsCard).join('');
-      if (phb.specific.length) html += '<div class="ph-cat-h">Company-specific</div>' + phb.specific.map(phNewsCard).join('');
-    } else {
-      html += '<div class="rel-none-txt">No PH market items in today’s briefing — generate or open today’s briefing on the Today tab.</div>';
-    }
-    if (d.caveat) html += '<div class="pse-caveat" style="margin-top:1.1rem">' + uiIcon('alert') + ' ' + esc(d.caveat) + '</div>';
-    out.innerHTML = html;
+    _pseDoc = d; _pseWatch = r[1]; _pseEditing = null;
+    pseRender();
   });
+}
+// Saves run one after another; the screen updates first and goes back if a
+// save fails.
+function pseSaveWatch(items, done) {
+  var before = _pseWatch.items || {};
+  _pseWatch.items = items;
+  pseRender();
+  _pseSave = _pseSave.then(function () { return window.fbSavePseWatch(items); }).then(function () {
+    pseWatchStatus(done);
+  }, function (e) {
+    _pseWatch.items = before;
+    pseRender();
+    pseWatchStatus('Could not save: ' + (e && e.message || e));
+  });
+}
+function pseWatchStatus(text) {
+  var el = document.getElementById('pse-watch-status');
+  if (el) el.textContent = text;
+}
+function pseToggleWatch(code) {
+  if (!_pseWatch || !PSE_CODE.test(code)) return;
+  var items = Object.assign({}, _pseWatch.items || {});
+  if (items[code]) { delete items[code]; if (_pseEditing === code) _pseEditing = null; pseSaveWatch(items, code + ' removed.'); return; }
+  if (Object.keys(items).length >= 30) { pseWatchStatus('The watchlist holds 30 stocks. Remove one first.'); return; }
+  items[code] = {addedAt: new Date().toISOString()};
+  pseSaveWatch(items, code + ' added.' + (_pseDoc && (_pseDoc.board || []).some(function (s) { return s.symbol === code; }) ? '' : ' Its prices arrive after the next 16:30 refresh.'));
+}
+function pseAddWatch() {
+  var input = document.getElementById('pse-watch-code');
+  var code = String(input && input.value || '').trim().toUpperCase();
+  if (!PSE_CODE.test(code)) { pseWatchStatus('Enter a PSE code: letters and numbers, up to 8, e.g. MREIT.'); return; }
+  if (_pseWatch && (_pseWatch.items || {})[code]) { pseWatchStatus(code + ' is already on your watchlist.'); return; }
+  pseToggleWatch(code);
+}
+function pseEditTarget(code) {
+  _pseEditing = code;
+  pseRender();
+  var input = code && document.getElementById('pse-target-input');
+  if (input) input.focus();
+}
+function pseSaveTarget(code, clear) {
+  if (!_pseWatch || !(_pseWatch.items || {})[code]) return;
+  var input = document.getElementById('pse-target-input');
+  var v = clear ? 0 : Number(input && input.value);
+  if (!clear && !(v > 0 && v < 1e6)) { pseWatchStatus('Enter a price above zero, e.g. 110.50.'); return; }
+  var items = Object.assign({}, _pseWatch.items);
+  items[code] = Object.assign({}, items[code]);
+  if (clear) delete items[code].target; else items[code].target = Math.round(v * 10000) / 10000;
+  _pseEditing = null;
+  pseSaveWatch(items, clear ? code + ': buy-below price cleared.' : code + ': buy-below ' + pesoPx(items[code].target) + ' saved.');
 }
 
 // ── MARKETS (event-market scenario read) ──

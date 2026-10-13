@@ -1748,7 +1748,7 @@ test('Ask Daybook: figures not found in the cited records are shown under the an
 // says only what its stored history supports.
 const pseEnv=()=>{
   const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const {context}=environment(['jSign','phRet','phSparkline','pesoPx','pesoShort','pseMoodHtml','pseIndexTrend','pseIndexHtml','pseStockRow','pseListHtml','pseBoardHtml'],{esc});
+  const {context}=environment(['jSign','phRet','phSparkline','pesoPx','pesoShort','pseMoodHtml','pseIndexTrend','pseIndexHtml','pseStar','pseStockRow','pseListHtml','pseBoardHtml'],{esc});
   const s=html.indexOf('var PSE_MOOD = {');vm.runInContext(html.slice(s,html.indexOf('\n};',s)+3),context);
   return context;
 };
@@ -1781,4 +1781,38 @@ test('PSE mood, lists and board: weak breadth, lows nearest first, links only fo
   const moves=out.slice(out.indexOf('Today’s biggest moves'),out.indexOf('Near a 52-week high'));
   assert.doesNotMatch(moves,/X&lt;Y/,'an older close is not one of today’s moves');
   assert.ok(moves.indexOf('>ICT<')<moves.indexOf('>SMPH<'),'risers before fallers');
+});
+test('PSE watchlist: rows from the board or the list, a buy-below line, missing codes named, alerts only for the latest close',()=>{
+  const esc=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const {context:c}=environment(['jSign','phRet','pesoPx','pesoShort','pseStar','pseStockRow','pseWatchHtml'],{esc});
+  vm.runInContext('var PSE_CODE = /^[A-Z0-9]{1,8}$/;',c);
+  const d={breadth:{asOf:'2026-10-12'},board:[{symbol:'BDO',name:'BDO Unibank',cmpyId:'260',asOf:'2026-10-12',close:112,dayChangePct:-0.88}]};
+  const w={items:{BDO:{target:115},MREIT:{},NOPE:{},'bad code':{}},rows:{MREIT:{symbol:'MREIT',name:'MREIT, Inc.',asOf:'2026-10-12',close:14.2}},missing:['NOPE'],
+    alerts:[{symbol:'BDO',kind:'target',text:'BDO ₱112.00, at or below your ₱115.00'}],alertsAsOf:'2026-10-12'};
+  const out=c.pseWatchHtml(d,w,null);
+  assert.match(out,/Your watchlist · 3/);
+  assert.match(out,/After the 2026-10-12 close:<\/b> BDO ₱112\.00, at or below your ₱115\.00/);
+  assert.match(out,/Buy-below ₱115\.00 · <span style="color:var\(--green\)">at or below it now/);
+  assert.match(out,/MREIT, Inc\./);assert.match(out,/Not found on PSE Edge: check the code/);
+  assert.equal((out.match(/class="pse-star on"/g)||[]).length,3,'each watched code has a filled star');
+  assert.doesNotMatch(out,/bad code/,'an invalid code never renders or reaches a handler');
+  assert.doesNotMatch(c.pseWatchHtml(d,{...w,alertsAsOf:'2026-10-09'},null),/After the/,'yesterday’s alerts are not shown as today’s');
+  const edit=c.pseWatchHtml(d,w,'BDO');
+  assert.match(edit,/id="pse-target-input" type="number"[^>]*value="115"/);assert.match(edit,/pseSaveTarget\('BDO', true\)/);
+  const empty=c.pseWatchHtml(d,{items:{}},null);
+  assert.match(empty,/tap ☆ on any row below, or add any PSE code/);assert.match(empty,/id="pse-watch-code"/);
+  assert.match(c.pseStockRow(d.board[0],{}),/class="pse-star" aria-pressed="false"[^>]*onclick="pseToggleWatch\('BDO'\)">☆/);
+  assert.doesNotMatch(c.pseStockRow(d.board[0]),/pse-star/,'signed out: no star');
+});
+test('PSE watchlist saves only clean codes and replaces items whole, leaving the job’s fields alone',async()=>{
+  const writes=[];
+  const {context}=environment([],{});
+  const src=html.slice(html.indexOf('window.fbSavePseWatch = async function'),html.indexOf('\n};',html.indexOf('window.fbSavePseWatch = async function'))+3);
+  Object.assign(context,{getUid:()=>'u1',COLL:'briefings-bob',db:{},doc:(db,coll,id)=>coll+'/'+id,setDoc:async(ref,body,opts)=>writes.push({ref,body,opts})});
+  vm.runInContext(src,context);
+  await context.fbSavePseWatch({BDO:{target:'115.5',addedAt:'2026-10-13T00:00:00Z'},'x<y':{},JGS:{target:-3},MREIT:{target:'abc'}});
+  assert.equal(writes[0].ref,'briefings-bob/pse-watch-u1');
+  assert.deepEqual(JSON.parse(JSON.stringify(writes[0].body.items)),{BDO:{addedAt:'2026-10-13T00:00:00Z',target:115.5},JGS:{addedAt:writes[0].body.items.JGS.addedAt},MREIT:{addedAt:writes[0].body.items.MREIT.addedAt}});
+  assert.equal(writes[0].body.uid,'u1');assert.equal(writes[0].body.kind,'pse-watch');
+  assert.deepEqual(JSON.parse(JSON.stringify(writes[0].opts)),{mergeFields:['uid','kind','items','updatedAt']});
 });
