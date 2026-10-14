@@ -3,15 +3,15 @@ const assert=require('node:assert/strict');
 const A=require('./trip-activities');
 const trip={city:'Manila',start:'2026-11-20',end:'2026-11-23',base:'Hotel in Makati',interests:'Local history and quiet walks; avoid crowded malls',pace:'relaxed',budget:1500,busy:['2026-11-21'],requestId:'activity-test-01',generate:true};
 const source={id:'guide0',url:A.GUIDES.Manila[0],content:'Explore Intramuros for its historic streets and architecture. '.repeat(12)};
-const activity={name:'Intramuros',kind:'heritage',effort:'light',sourceId:'guide0',evidence:'Explore Intramuros for its historic streets and architecture.',date:'2026-11-22',slot:'morning',whyFit:'Your interest in history makes this a focused alternative to shopping.',tradeoff:'Check the route from your Makati base before committing to the outing.',check:'Confirm visitor access and current admission on the destination website.'};
+const activity={name:'Intramuros',role:'plan',kind:'heritage',effort:'light',sourceId:'guide0',evidence:'Explore Intramuros for its historic streets and architecture.',date:'2026-11-22',slot:'morning',whyFit:'Your interest in history makes this a focused alternative to shopping.',tradeoff:'Check the route from your Makati base before committing to the outing.',check:'Confirm visitor access and current admission on the destination website.'};
 const response=()=>new Response('<html><body>'+source.content+'</body></html>',{headers:{'content-type':'text/html'}});
-test('Ximen poker trip keeps one light local arrival option, not a remote market or departure outing',()=>{
+test('Ximen arrival day keeps one local sight and one local food pick, never a remote market or departure outing',()=>{
   const context=A.normalize({...trip,city:'Taipei',base:'Fictional hotel in Ximen',busy:['2026-11-21','2026-11-22']});
   const make=(name,date,kind='night-market',effort='light')=>({...activity,name,date,kind,effort,slot:'flexible',evidence:name+' is listed in the destination guide.'});
   const rows=[make('Huaxi Street Tourist Night Market',trip.start),make('Shilin Night Market',trip.end),make('The Red House',trip.start,'culture')];
   const sources=[{...source,content:rows.map(a=>a.evidence).join(' ')}];
   const plan=A.clean({activities:rows},context,sources);
-  assert.deepEqual(plan.activities.map(a=>a.name),['The Red House']);
+  assert.deepEqual(plan.activities.map(a=>a.name),['The Red House','Huaxi Street Tourist Night Market']);
   assert.match(plan.activities[0].areaFit,/Ximen/);assert.match(plan.notes.join(' '),/Departure day/);
   assert.equal(A.availableDays(context).length,1);
 });
@@ -39,7 +39,7 @@ test('requires a real base, specific interests, valid dates and reserved days',(
 });
 test('rejects fabricated sources, names, exact operational claims and reserved-day scheduling',()=>{
   assert.equal(A.clean({activities:[activity]},A.normalize(trip),[source]).activities[0].url,source.url);
-  for(const patch of [{name:'Invented Museum'},{sourceId:'https://attacker.test'},{date:'2026-11-21'},{date:trip.start,slot:'morning'},{whyFit:'Admission costs ₱500 per person.'},{tradeoff:'Walking distance from the hotel.'},{evidence:'Intramuros has an invented exhibit.'}])assert.throws(()=>A.clean({activities:[{...activity,...patch}]},A.normalize(trip),[source]));
+  for(const patch of [{name:'Invented Museum'},{sourceId:'https://attacker.test'},{date:'2026-11-21'},{whyFit:'Admission costs ₱500 per person.'},{tradeoff:'Walking distance from the hotel.'},{evidence:'Intramuros has an invented exhibit.'}])assert.throws(()=>A.clean({activities:[{...activity,...patch}]},A.normalize(trip),[source]));
   const once=A.clean({activities:[activity,activity]},A.normalize(trip),[source]);assert.equal(once.activities.length,1);assert.match(once.notes.join(' '),/1 suggestion was left out/);
 });
 test('free time is allowed, while free admission and precise journey claims remain blocked',()=>{
@@ -85,4 +85,36 @@ test('guide text decodes hex and named entities so quoted evidence with real pun
 });
 test('the scout spelling Macao reaches the Macau guide',()=>{
   assert.equal(A.normalize({...trip,city:'Macao'}).city,'Macau');assert.equal(A.normalize({...trip,city:'macau'}).city,'Macau');
+});
+test('a morning on arrival day is filtered by the day rules, not counted as a failed check',()=>{
+  const plan=A.clean({activities:[{...activity,date:trip.start,slot:'morning'}]},A.normalize(trip),[source]);
+  assert.equal(plan.activities.length,0);assert.doesNotMatch(plan.notes.join(' '),/left out/);
+});
+test('poker days get one light local morning before play and up to three backups anywhere; departure stays empty',()=>{
+  const context=A.normalize({...trip,city:'Taipei',start:'2026-11-12',end:'2026-11-15',base:'Muzik Hotel - Ximen Station Branch',busy:[],pokerDays:['2026-11-13','2026-11-14']});
+  assert.deepEqual(A.tripDays(context),[{date:'2026-11-12',type:'arrival'},{date:'2026-11-13',type:'poker'},{date:'2026-11-14',type:'poker'}]);
+  const make=(name,role,date,kind,effort='light',slot='flexible')=>({...activity,name,role,date,kind,effort,slot,evidence:name+' is listed in the destination guide.'});
+  const rows=[
+    make('The Red House','plan','2026-11-12','culture'),
+    make('Huaxi Street Tourist Night Market','plan','2026-11-12','night-market'),
+    make('Lungshan Temple','before-play','2026-11-13','heritage','light','morning'),
+    make('Bopiliao Old Street','before-play','2026-11-13','walk','light','morning'),
+    make('Shilin Night Market','if-you-bust','2026-11-13','night-market','moderate','evening'),
+    make('National Palace Museum','if-you-bust','2026-11-14','culture','full-day','afternoon'),
+    make('Elephant Mountain','if-you-bust','2026-11-14','nature','moderate','afternoon'),
+    make('Dihua Street','if-you-bust','2026-11-13','shopping','moderate','afternoon'),
+    make('Raohe Street','if-you-bust','2026-11-14','walk','moderate','evening'),
+    make('Taipei Zoo','plan','2026-11-13','nature','moderate','afternoon'),
+    make('Xinyi Shopping','plan','2026-11-15','shopping')
+  ];
+  const plan=A.clean({activities:rows},context,[{...source,content:rows.map(a=>a.evidence).join(' ')}]);
+  const by=role=>plan.activities.filter(a=>a.role===role).map(a=>a.name);
+  assert.deepEqual(by('plan'),['The Red House','Huaxi Street Tourist Night Market']);
+  assert.deepEqual(by('before-play'),['Lungshan Temple']);
+  assert.deepEqual(by('if-you-bust'),['National Palace Museum','Elephant Mountain','Dihua Street']);
+  assert.match(plan.notes.join(' '),/backups if you bust early/);
+});
+test('poker days must fall inside the trip and are never also reserved days',()=>{
+  assert.throws(()=>A.normalize({...trip,pokerDays:['2026-12-01']}));
+  assert.deepEqual(A.normalize({...trip,pokerDays:['2026-11-21','2026-11-22']}).pokerDays,['2026-11-22']);
 });
