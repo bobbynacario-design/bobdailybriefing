@@ -116,6 +116,8 @@ section('Markets');
   const move = m && m.doc && (m.doc.moveRun || (m.doc.briefing || {}).moveRun);
   if (!m || !m.doc) warn('miro:missing', 'No Markets document found.');
   else if (!move) info('miro-' + m.date + ': no explanation record');
+  // A quiet market (nothing moved 2pt) or a deliberate pause is not a fault.
+  else if (move.status === 'skipped' && (move.reason === 'no-material-moves' || move.reason === 'paused')) info('miro-' + m.date + ': explanations skipped (' + (move.reason === 'paused' ? 'paused' : 'no market moved 2pt or more') + ')');
   else if (move.status !== 'ok' && m.date === today && phtHour >= 10) warn('miro:explanations', 'Markets ' + m.date + ' explanations ' + move.status + (move.error ? ': ' + move.error : '') + '.');
   else info('miro-' + m.date + ': explanations ' + move.status + (move.stats ? ' (' + move.stats.explained + '/' + move.stats.selected + ')' : ''));
 }
