@@ -23,20 +23,71 @@ function match(rows,place) {
  if(candidates.length!==1)return null;const r=candidates[0];
  return {lat:Number(r.lat),lng:Number(r.lon),source:'OpenStreetMap',sourceUrl:'https://www.openstreetmap.org/?mlat='+Number(r.lat)+'&mlon='+Number(r.lon)+'#map=18/'+Number(r.lat)+'/'+Number(r.lon),matchedName:r.name || place.name};
 }
-async function locate({db,data,fetchImpl=fetch,now=Date.now()}) {
- const place=input(data),fixed=known(place);if(fixed)return {location:fixed};
+// Google lookups, the way RiskM8 captures a premises: find the place, run
+// the free Street View metadata check, then aim the camera from the
+// panorama toward the place. The browser shows that exact panorama through
+// the free Maps Embed API, so no image is fetched or stored here.
+const CACHE_VERSION=2;
+const toRad=d=>d*Math.PI/180;
+function bearing(from,to) {
+ const y=Math.sin(toRad(to.lng-from.lng))*Math.cos(toRad(to.lat)),x=Math.cos(toRad(from.lat))*Math.sin(toRad(to.lat))-Math.sin(toRad(from.lat))*Math.cos(toRad(to.lat))*Math.cos(toRad(to.lng-from.lng));
+ return Math.round((Math.atan2(y,x)*180/Math.PI+360)%360);
+}
+function metres(a,b) {
+ const h=Math.sin(toRad(b.lat-a.lat)/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(toRad(b.lng-a.lng)/2)**2;
+ return Math.round(2*6371000*Math.asin(Math.sqrt(h)));
+}
+// A city, region or road is not a place to look at.
+const AREA_TYPES=['locality','sublocality','administrative_area_level_1','administrative_area_level_2','administrative_area_level_3','country','postal_code','route','political','colloquial_area'];
+async function googlePlace(place,apiKey,fetchImpl) {
+ const b=CITIES[place.city];
+ const r=await fetchImpl('https://places.googleapis.com/v1/places:searchText',{method:'POST',redirect:'error',signal:AbortSignal.timeout(8000),
+  headers:{'Content-Type':'application/json','X-Goog-Api-Key':apiKey,'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.location,places.types,places.googleMapsUri'},
+  body:JSON.stringify({textQuery:place.name+', '+place.city,languageCode:'en',regionCode:b[0],maxResultCount:3,locationRestriction:{rectangle:{low:{latitude:b[2],longitude:b[1]},high:{latitude:b[4],longitude:b[3]}}}})});
+ if(!r.ok)return {error:r.status===403||r.status===401?'key':'unavailable'};
+ const rows=((await r.json()).places || []).filter(p=>p.location && Number.isFinite(p.location.latitude) && Number.isFinite(p.location.longitude) && !(p.types || []).every(t=>AREA_TYPES.includes(t)));
+ if(!rows.length)return {location:null};
+ const p=rows[0];
+ return {location:{lat:p.location.latitude,lng:p.location.longitude,source:'Google Maps',sourceUrl:p.googleMapsUri || 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(place.name+', '+place.city)+'&query_place_id='+encodeURIComponent(p.id),matchedName:p.displayName && p.displayName.text || place.name,address:p.formattedAddress || ''}};
+}
+// The metadata check is free. Nearest outdoor panorama first; a wider
+// search for beaches and viewpoints set back from the road.
+async function panorama(location,apiKey,fetchImpl) {
+ for(const radius of [150,600]){
+  const u=new URL('https://maps.googleapis.com/maps/api/streetview/metadata');
+  Object.entries({location:location.lat+','+location.lng,radius:String(radius),source:'outdoor',key:apiKey}).forEach(([k,v])=>u.searchParams.set(k,v));
+  const r=await fetchImpl(u,{redirect:'error',signal:AbortSignal.timeout(8000)});if(!r.ok)return null;
+  const m=await r.json();
+  if(m.status==='REQUEST_DENIED')return null;
+  if(m.status!=='OK' || !m.pano_id || !m.location)continue;
+  const at={lat:Number(m.location.lat),lng:Number(m.location.lng)};
+  return {id:String(m.pano_id),lat:at.lat,lng:at.lng,date:/^\d{4}(-\d{2})?$/.test(m.date || '')?m.date:'',heading:bearing(at,location),distance:metres(at,location)};
+ }
+ return null;
+}
+async function locate({db,data,apiKey='',fetchImpl=fetch,now=Date.now()}) {
+ const place=input(data),fixed=known(place);
  const id=createHash('sha256').update(place.city+':'+fold(place.name)).digest('hex'),ref=db.collection('activity-place-locations').doc(id),cache=await ref.get();
- if(cache.exists && now-cache.data().checkedAt<(cache.data().location?30:1)*86400000)return {location:cache.data().location,cached:true};
+ const c=cache.exists?cache.data():null;
+ // Lookups made before Google was configured (no pano field) are redone once a key exists.
+ if(c && c.v===CACHE_VERSION && (c.google || !apiKey) && now-c.checkedAt<(c.location?30:1)*86400000)return {location:c.location,pano:c.pano || null,cached:true};
+ if(fixed && !apiKey)return {location:fixed,pano:null};
  const rate=db.collection('activity-place-locations').doc('_lookup-rate'),settings=db.collection('activity-place-locations').doc('_settings'),daily=db.collection('activity-place-locations').doc('_daily-'+new Date(now+8*3600000).toISOString().slice(0,10));
  // Low-volume, cached, explicit-click use only. The server-side switch can
  // stop upstream lookups immediately without a client update.
  const permitted=await db.runTransaction(async tx=>{const [s,config,day]=await Promise.all([tx.get(rate),tx.get(settings),tx.get(daily)]);if(config.exists && config.data().enabled===false)return 'disabled';const count=day.exists?Number(day.data().count || 0):0;if(count>=50)return 'quota';if(s.exists && now-s.data().lastAt<1100)return 'busy';tx.set(rate,{lastAt:now});tx.set(daily,{count:count+1});return 'allowed';});
- if(permitted!=='allowed')return {location:null,note:permitted==='busy'?'Place lookup is busy. The map search is available; try Street View again shortly.':'Exact-location lookup is unavailable for now. The map search remains available.'};
- const query=new URL('https://nominatim.openstreetmap.org/search');Object.entries({q:place.name+', '+place.city,format:'jsonv2',addressdetails:'1',namedetails:'1',countrycodes:CITIES[place.city][0],limit:'5',viewbox:CITIES[place.city].slice(1).join(','),bounded:'1'}).forEach(([k,v])=>query.searchParams.set(k,v));
+ if(permitted!=='allowed')return {location:fixed,pano:null,note:permitted==='busy'?'Place lookup is busy. The map search is available; try again shortly.':'Exact-location lookup is unavailable for now. The map search remains available.'};
+ let location=fixed,note='';
  try {
-  const response=await fetchImpl(query,{headers:{'User-Agent':'DaybookTravel/1.0 (https://bobbynacario-design.github.io/bobdailybriefing/)','Accept':'application/json','Accept-Language':'en'},redirect:'error',signal:AbortSignal.timeout(10000)});
-  if(!response.ok)return {location:null,note:'Exact location lookup is unavailable. Use the map search.'};
-  const location=match(await response.json(),place);await ref.set({city:place.city,name:place.name,location,checkedAt:now});return {location};
- }catch(_){return {location:null,note:'Exact location lookup is unavailable. Use the map search.'};}
+  if(!location && apiKey){const g=await googlePlace(place,apiKey,fetchImpl);location=g.location;if(g.error==='key')note='Google refused the Maps key, so OpenStreetMap was used instead.';}
+  if(!location){
+   const query=new URL('https://nominatim.openstreetmap.org/search');Object.entries({q:place.name+', '+place.city,format:'jsonv2',addressdetails:'1',namedetails:'1',countrycodes:CITIES[place.city][0],limit:'5',viewbox:CITIES[place.city].slice(1).join(','),bounded:'1'}).forEach(([k,v])=>query.searchParams.set(k,v));
+   const response=await fetchImpl(query,{headers:{'User-Agent':'DaybookTravel/1.0 (https://bobbynacario-design.github.io/bobdailybriefing/)','Accept':'application/json','Accept-Language':'en'},redirect:'error',signal:AbortSignal.timeout(10000)});
+   if(response.ok)location=match(await response.json(),place);else note='Exact location lookup is unavailable. Use the map search.';
+  }
+  const pano=location && apiKey ? await panorama(location,apiKey,fetchImpl) : null;
+  await ref.set({v:CACHE_VERSION,google:!!apiKey,city:place.city,name:place.name,location,pano,checkedAt:now});
+  return note?{location,pano,note}:{location,pano};
+ }catch(_){return {location,pano:null,note:'Exact location lookup is unavailable. Use the map search.'};}
 }
-module.exports={input,known,match,locate};
+module.exports={input,known,match,locate,bearing,metres,panorama,googlePlace};

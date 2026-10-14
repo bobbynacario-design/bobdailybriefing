@@ -62,12 +62,14 @@ exports.listPsePaperPicks = onCall({region:"asia-southeast1",timeoutSeconds:60},
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 const OPENAI_WEBHOOK_SECRET = defineSecret("OPENAI_WEBHOOK_SECRET");
+// Server-only key (Places API (New) + Street View Static) for activity surroundings.
+const GOOGLE_MAPS_SERVER_KEY = defineSecret("GOOGLE_MAPS_SERVER_KEY");
 // A fine-grained GitHub token for this repo with Actions read and write only.
 const GITHUB_DISPATCH_TOKEN = defineSecret("GITHUB_DISPATCH_TOKEN");
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
 const GENERATION_OWNERS = (process.env.GENERATION_OWNER_EMAILS || "bobbynacario@gmail.com").split(",").map(s => s.trim().toLowerCase());
-exports.activitySurroundings = onCall({region:"asia-southeast1",timeoutSeconds:20,memory:"256MiB"},async request=>{
-  try{authorize(request.auth,GENERATION_OWNERS);return await ActivityLocations.locate({db:getFirestore(),data:request.data || {}});}
+exports.activitySurroundings = onCall({region:"asia-southeast1",secrets:[GOOGLE_MAPS_SERVER_KEY],timeoutSeconds:30,memory:"256MiB"},async request=>{
+  try{authorize(request.auth,GENERATION_OWNERS);return await ActivityLocations.locate({db:getFirestore(),data:request.data || {},apiKey:GOOGLE_MAPS_SERVER_KEY.value()});}
   catch(e){throw new HttpsError(['unauthenticated','permission-denied','invalid-argument'].includes(e.code)?e.code:'internal',e.code?e.message:'Place lookup is unavailable. Use the map search.');}
 });
 exports.tripActivities = onCall({region:"asia-southeast1",secrets:[ANTHROPIC_API_KEY],timeoutSeconds:120,memory:"256MiB"},async request=>{
