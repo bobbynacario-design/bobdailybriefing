@@ -1,6 +1,7 @@
 "use strict";
 const {createHash} = require("node:crypto");
 const {guardedGeneration} = require("./generation-guard");
+const FlightsCore = require("./flights-core");
 const VERSION = 2;
 // Area relationships verified in Taiwan Tourism Administration's place guides.
 // This is a neighbourhood match, never an exact hotel route or travel time.
@@ -35,7 +36,8 @@ const fail = (code,message) => {throw Object.assign(new Error(message),{code});}
 function text(v,max=500) {return String(v || "").trim().slice(0,max);}
 function day(v) {return /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v+"T00:00:00Z").toISOString().slice(0,10)===v;}
 function normalize(data) {
-  const city=Object.keys(GUIDES).find(c=>c.toLowerCase()===text(data.city).toLowerCase());
+  // FlightsCore.activityCity maps the scout's spellings (Macao) to a guide city.
+  const city=FlightsCore.activityCity(text(data.city));
   if(!city) fail("failed-precondition","Sourced activities are not available for this destination yet. No AI call was made.");
   const start=text(data.start,10),end=text(data.end,10);
   if(!day(start)||!day(end)||end<=start||Date.parse(end)-Date.parse(start)>31*86400000) fail("invalid-argument","Choose valid arrival and departure dates, at most 31 nights apart.");
@@ -46,9 +48,16 @@ function normalize(data) {
   if(busy.length>32||busy.some(d=>!day(d)||d<start||d>end)) fail("invalid-argument","Reserved days must fall within this trip.");
   return {city,start,end,base,interests,pace,budget,busy,commitments:text(data.commitments,500),version:VERSION};
 }
+// One pass, so "&amp;quot;" stays "&quot;". Hex and named entities matter:
+// the Manila guide writes apostrophes as &#x27; and the Palawan guides use
+// &hellip;, and evidence quoted with the real character must still match.
+const ENTITIES={amp:"&",quot:'"',apos:"'",nbsp:" ",hellip:"…",rsquo:"’",lsquo:"‘",ldquo:"“",rdquo:"”",mdash:"—",ndash:"–",lt:" ",gt:" "};
 function htmlText(html) {
   return html.replace(/<(script|style|nav|footer|head)\b[^>]*>[\s\S]*?<\/\1>/gi," ").replace(/<[^>]+>/g," ")
-    .replace(/&#(\d+);/g,(_,n)=>Number(n)<=0x10ffff?String.fromCodePoint(Number(n)):" ").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&lt;|&gt;/g," ").replace(/\s+/g," ").trim();
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi,(m,e)=>{
+      if(e[0]==="#"){const n=/^#x/i.test(e)?parseInt(e.slice(2),16):Number(e.slice(1));return n>0&&n<=0x10ffff?String.fromCodePoint(n):" ";}
+      const v=ENTITIES[e.toLowerCase()];return v===undefined?m:v;
+    }).replace(/\s+/g," ").trim();
 }
 async function sourcesFor(context,fetchImpl=fetch) {
   const profile=areaProfile(context),urls=profile ? [...new Set([GUIDES[context.city][0],...profile.places.filter(p=>p.rank===0 || p.aliases[0]==='Bopiliao Old Street').map(p=>p.url)])] : GUIDES[context.city];
@@ -71,11 +80,14 @@ const properties={name:{type:"string"},kind:{type:"string",enum:['food','night-m
 const SCHEMA={type:"object",additionalProperties:false,required:["activities"],properties:{activities:{type:"array",minItems:0,description:"Zero to three worthwhile, distinct options. Never fill space with a weak suggestion.",items:{type:"object",additionalProperties:false,required:Object.keys(properties),properties}}}};
 function clean(raw,context,sources) {
   const data=typeof raw==="string"?JSON.parse(raw):raw;
-  if(!Array.isArray(data.activities)||data.activities.length>3) fail("internal","No grounded suggestions were returned.");
-  const seen=new Set();
-  const activities=data.activities.map(a=>{
+  if(!Array.isArray(data.activities)) fail("internal","No grounded suggestions were returned.");
+  // Each option is checked on its own: one that fails is left out rather
+  // than discarding the good ones from the same paid call. Only when every
+  // returned option fails is nothing saved.
+  const seen=new Set(),dropped=[];
+  const activities=data.activities.slice(0,6).map(a=>{try {
     const source=sources.find(s=>s.id===a.sourceId),name=text(a.name,120),evidence=text(a.evidence,250);
-    const fold=s=>s.toLowerCase().replace(/\s+/g," ").trim();
+    const fold=s=>s.toLowerCase().replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/\s+/g," ").trim();
     if(!source||name.length<4||fold(name)===fold(context.city)||evidence.split(/\s+/).length>20||evidence.length<15||!fold(source.content).includes(fold(name))||!fold(source.content).includes(fold(evidence))||!fold(evidence).includes(fold(name))||seen.has(fold(name))) fail("internal","An activity could not be verified against its guide. No plan was saved.");
     seen.add(fold(name));
     if(!day(a.date)||a.date<context.start||a.date>context.end||context.busy.includes(a.date)||!["flexible","morning","afternoon","evening"].includes(a.slot)) fail("internal","The suggested schedule conflicts with your trip. No plan was saved.");
@@ -87,17 +99,19 @@ function clean(raw,context,sources) {
     const kind=/night[ -]?market/i.test(name)?'night-market':a.kind;
     if(!properties.kind.enum.includes(kind)||!properties.effort.enum.includes(a.effort)) fail('internal','The activity effort and type were not specified.');
     return {name,kind,effort:a.effort,evidence,date:a.date,slot:a.slot,whyFit:prose[0],tradeoff:prose[1],check:prose[2],url:source.url};
-  });
+  } catch(e) {if(e.code!=="internal")throw e;dropped.push(e.message);return null;}}).filter(Boolean);
+  if(dropped.length && !activities.length) fail("internal",dropped[0]);
   const profile=areaProfile(context),kinds=new Set(),dates=new Set();
   const ranked=activities.sort((a,b)=>{const x=placeFit(a.name,profile),y=placeFit(b.name,profile);return (x?x.rank:9)-(y?y.rank:9);});
   const selected=ranked.filter(a=>{
     const fit=placeFit(a.name,profile);
     if(a.date===context.end || a.date===context.start && a.effort!=='light' || profile && !fit || kinds.has(a.kind) || dates.has(a.date) || /lunar new year|christmas|festival|seasonal|special event/i.test(a.name))return false;
     kinds.add(a.kind);dates.add(a.date);if(fit)a.areaFit=profile.area+' area match';return true;
-  });
+  }).slice(0,3);
   const notes=['Departure day is left unplanned because your flight time is unknown.','At most one option per available day; arrival-day options are light and flexible.'];
   if(profile)notes.push('Local choices are restricted to '+profile.area+'. This is an area match, not a verified route from your hotel.');
   else notes.push('Your hotel area has no verified local match yet; proximity and routes are not established.');
+  if(dropped.length)notes.push(dropped.length+(dropped.length===1?' suggestion was':' suggestions were')+' left out because '+(dropped.length===1?'it':'they')+' failed a source or schedule check.');
   if(!selected.length)notes.push('No sufficiently practical, distinct option was found. A shorter or empty list is preferable to a filler suggestion.');
   return {activities:selected,notes,generatedAt:new Date().toISOString(),context,sourcesCheckedAt:new Date().toISOString()};
 }

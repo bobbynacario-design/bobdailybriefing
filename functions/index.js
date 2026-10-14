@@ -71,7 +71,7 @@ exports.tripActivities = onCall({region:"asia-southeast1",secrets:[ANTHROPIC_API
     return await TripActivities.run({db:getFirestore(),uid:request.auth.uid,data:request.data || {},period:phtDateKey(),generate:async(prompt,schema)=>{
       const answer=await Haiku.message({apiKey:ANTHROPIC_API_KEY.value(),timeoutMs:80000,
         onUsage:(model,usage)=>recordUsage(getFirestore(),"trip-activities",model,usage,phtDateKey()),
-        body:{max_tokens:2200,system:"You are a practical trip planner. Ground named experiences in the provided sources and respect the user's actual constraints.",messages:[{role:"user",content:prompt}],output_config:{effort:"low",format:{type:"json_schema",schema}}}});
+        body:{max_tokens:4000,system:"You are a practical trip planner. Ground named experiences in the provided sources and respect the user's actual constraints.",messages:[{role:"user",content:prompt}],output_config:{effort:"low",format:{type:"json_schema",schema}}}});
       return Haiku.textOf(answer);
     }});
   } catch(e) {throw new HttpsError(["unauthenticated","permission-denied","invalid-argument","failed-precondition","resource-exhausted","unavailable","aborted","internal"].includes(e.code)?e.code:"internal",e.code?e.message:"Could not build a grounded activity plan. No automatic retry was made.");}

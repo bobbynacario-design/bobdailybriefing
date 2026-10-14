@@ -29,7 +29,8 @@ test('no arrival/interior availability stops before any model call, even if depa
 test('provider schema omits unsupported array bounds while the cleaner enforces three options',()=>{
   assert.equal(A.SCHEMA.properties.activities.minItems,0);
   assert.equal(Object.hasOwn(A.SCHEMA.properties.activities,'maxItems'),false);
-  assert.throws(()=>A.clean({activities:[activity,activity,activity,activity]},A.normalize(trip),[source]));
+  const plan=A.clean({activities:[activity,activity,activity,activity]},A.normalize(trip),[source]);
+  assert.equal(plan.activities.length,1);assert.match(plan.notes.join(' '),/3 suggestions were left out/);
 });
 function database(){const records=new Map();let chain=Promise.resolve();const ref=key=>({key,get:async()=>({exists:records.has(key),data:()=>records.get(key)}),set:async(value,opts)=>records.set(key,opts && opts.merge?{...records.get(key),...value}:value)});return {records,collection:name=>({doc:id=>ref(name+'/'+id)}),runTransaction:fn=>{let run=chain.then(()=>fn({get:r=>r.get(),set:(r,v)=>records.set(r.key,v)}));chain=run.catch(()=>{});return run;}};}
 test('requires a real base, specific interests, valid dates and reserved days',()=>{
@@ -39,7 +40,7 @@ test('requires a real base, specific interests, valid dates and reserved days',(
 test('rejects fabricated sources, names, exact operational claims and reserved-day scheduling',()=>{
   assert.equal(A.clean({activities:[activity]},A.normalize(trip),[source]).activities[0].url,source.url);
   for(const patch of [{name:'Invented Museum'},{sourceId:'https://attacker.test'},{date:'2026-11-21'},{date:trip.start,slot:'morning'},{whyFit:'Admission costs ₱500 per person.'},{tradeoff:'Walking distance from the hotel.'},{evidence:'Intramuros has an invented exhibit.'}])assert.throws(()=>A.clean({activities:[{...activity,...patch}]},A.normalize(trip),[source]));
-  assert.throws(()=>A.clean({activities:[activity,activity]},A.normalize(trip),[source]));
+  const once=A.clean({activities:[activity,activity]},A.normalize(trip),[source]);assert.equal(once.activities.length,1);assert.match(once.notes.join(' '),/1 suggestion was left out/);
 });
 test('free time is allowed, while free admission and precise journey claims remain blocked',()=>{
   assert.equal(A.clean({activities:[{...activity,whyFit:'Use your free arrival day for a flexible history stop.'}]},A.normalize(trip),[source]).activities.length,1);
@@ -68,4 +69,20 @@ test('never follows guide redirects or accepts storefront/error content as trave
 });
 test('the page offers the activity button for exactly the cities that have guides',()=>{
   assert.deepEqual([...require('./flights-core').activityCities].sort(),Object.keys(A.GUIDES).sort());
+});
+test('one failed option is left out while the verified ones are kept; all failing saves nothing',()=>{
+  const ok={...activity},bad={...activity,name:'Invented Museum'},priced={...activity,date:'2026-11-20',slot:'flexible',name:'Explore Intramuros',whyFit:'Admission costs ₱500 per person.'};
+  const plan=A.clean({activities:[bad,ok]},A.normalize(trip),[source]);
+  assert.deepEqual(plan.activities.map(a=>a.name),['Intramuros']);assert.match(plan.notes.join(' '),/1 suggestion was left out/);
+  assert.throws(()=>A.clean({activities:[bad,priced]},A.normalize(trip),[source]),/could not be verified/);
+  assert.equal(A.clean({activities:[]},A.normalize(trip),[source]).activities.length,0);
+});
+test('guide text decodes hex and named entities so quoted evidence with real punctuation matches',()=>{
+  assert.equal(A.htmlText('<p>the country&#x27;s culture &hellip; Manila&rsquo;s parks &amp;quot; &#39;x&#39; &bogus;</p>'),"the country's culture … Manila’s parks &quot; 'x' &bogus;");
+  const content=A.htmlText('<p>'+'Visit Rizal Park for Manila&rsquo;s greenest open space today. '.repeat(10)+'</p>');
+  const park={...activity,name:'Rizal Park',evidence:"Visit Rizal Park for Manila's greenest open space today."};
+  assert.equal(A.clean({activities:[park]},A.normalize(trip),[{...source,content}]).activities.length,1);
+});
+test('the scout spelling Macao reaches the Macau guide',()=>{
+  assert.equal(A.normalize({...trip,city:'Macao'}).city,'Macau');assert.equal(A.normalize({...trip,city:'macau'}).city,'Macau');
 });
