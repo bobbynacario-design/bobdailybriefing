@@ -66,3 +66,6 @@ test('never follows guide redirects or accepts storefront/error content as trave
   let mode;await A.sourcesFor({city:'Manila'},async(_,options)=>{mode=options.redirect;return response();});assert.equal(mode,'error');
   await assert.rejects(A.sourcesFor({city:'Manila'},async()=>new Response('The store will not work '+source.content,{headers:{'content-type':'text/html'}})),{code:'unavailable'});
 });
+test('the page offers the activity button for exactly the cities that have guides',()=>{
+  assert.deepEqual([...require('./flights-core').activityCities].sort(),Object.keys(A.GUIDES).sort());
+});

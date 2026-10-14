@@ -1,9 +1,9 @@
 (function(root) {
   'use strict';
   var ORIGINS=['MNL','CEB','CRK'];
-  var DOMESTIC={MPH:'Boracay (Caticlan)',ENI:'El Nido',IAO:'Siargao'};
+  var DOMESTIC={MPH:'Boracay (Caticlan)',ENI:'El Nido',IAO:'Siargao',CEB:'Cebu',TAG:'Bohol',PPS:'Puerto Princesa'};
   var PH=new Set('MNL CEB CRK DVO ILO KLO MPH PPS TAG TAC BCD CGY ZAM GES DGT BXU DRP LGP LAO TUG RXS CYZ CBO DPL PAG SJI IAO SUG USU WNP BSO RZP ENI MBT TBH JOL TWT CYP DTI VRC SFE BQA BPH CRM OMH SGS LWA MXI LBX'.split(' '));
-  var DOMAINS=['philippineairlines.com','cathaypacific.com','airasia.com','cebupacificair.com','flyscoot.com'];
+  var DOMAINS=['philippineairlines.com','cathaypacific.com','airasia.com','cebupacificair.com','flyscoot.com','trip.com'];
   function url(raw) {
     try { var u=new URL(raw);return u.protocol==='https:' && !u.username && !u.password && DOMAINS.some(function(d){return u.hostname===d || u.hostname.endsWith('.'+d);}) ? u.href : ''; }
     catch (_) { return ''; }
@@ -20,7 +20,8 @@
         if(d.bookingEnd<today && !filters.savedOnly)return false;
       } else if(!ORIGINS.includes(d.origin) || !/^[A-Z]{3}$/.test(d.destination || ''))return false;
       var market=filters.market || 'international';
-      if(market==='international' ? !d.campaign && PH.has(d.destination) : d.campaign || !DOMESTIC[d.destination] || market!=='domestic' && d.destination!==market)return false;
+      if(d.campaign) {if(!(d.markets || ['international']).includes(market))return false;}
+      else if(market==='international' ? PH.has(d.destination) : !(DOMESTIC[d.destination] || d.userSupplied&&PH.has(d.destination)) || market!=='domestic' && d.destination!==market)return false;
       if(d.kind!=='advertised-fare' && d.kind!=='promo') return false;
       if(d.kind==='advertised-fare' && (!(typeof d.amount==='number' && Number.isFinite(d.amount) && d.amount>0) || !/^[A-Z]{3}$/.test(d.currency || '') || !['one-way','round-trip'].includes(d.tripType))) return false;
       if(d.kind==='advertised-fare' && (!/^\d{4}-\d{2}-\d{2}$/.test(d.departureDate || '') || !Number.isFinite(Date.parse(d.departureDate)) ||
@@ -83,24 +84,27 @@
       if(preferences.directOnly && d.stops!==0)return;
       var peso=d.currency==='PHP'?{amount:d.amount,stale:false}:phpEstimate(d,snapshot,now);
       if(!peso || peso.stale){unconverted++;return;}
-      var phpFare=Math.round(peso.amount*100)/100,estimate=Math.round((phpFare+extra)*100)/100;
+      var stay=typeof preferences.stayCost==='function' ? preferences.stayCost(d,nights) : null;
+      var hotelTotal=stay && Number.isFinite(stay.total) && stay.total>=0 ? stay.total : null;
+      var phpFare=Math.round(peso.amount*100)/100,estimate=Math.round((phpFare+extra+(hotelTotal || 0))*100)/100;
       if(budget>0 && estimate>budget)return;
-      eligible.push(Object.assign({},d,{nights:nights,phpFare:phpFare,planningAmount:estimate,extraAllowance:extra}));
+      eligible.push(Object.assign({},d,{nights:nights,phpFare:phpFare,planningAmount:estimate,extraAllowance:extra,hotelTotal:hotelTotal,hotelName:hotelTotal!=null ? stay.name : '',hotelPricingEnabled:typeof preferences.stayCost==='function'}));
     });
-    eligible.sort(function(a,b){return a.planningAmount-b.planningAmount || (b.taxesIncluded===true)-(a.taxesIncluded===true) || a.nights-b.nights || a.departureDate.localeCompare(b.departureDate);});
+    eligible.sort(function(a,b){return (a.hotelTotal==null)-(b.hotelTotal==null) || a.planningAmount-b.planningAmount || (b.taxesIncluded===true)-(a.taxesIncluded===true) || a.nights-b.nights || a.departureDate.localeCompare(b.departureDate);});
     var unique=new Set(),items=[];
     eligible.forEach(function(d){
       var key=d.destination;
       if(unique.has(key)||items.length>=3)return;unique.add(key);
       var alternatives=eligible.filter(function(other){return other.destination===d.destination && other.id!==d.id;});
       var dateOptions=new Set(alternatives.map(function(other){return other.departureDate+'|'+other.returnDate;}));
-      var reason='Lowest observed return fare to '+(d.destinationName || d.destination)+' matching '+min+'–'+max+' nights.';
+      var reason=(d.hotelTotal!=null?'Lowest observed flight + room estimate to ':'Lowest observed return fare to ')+(d.destinationName || d.destination)+' matching '+min+'–'+max+' nights.';
       if(dateOptions.size)reason+=' '+dateOptions.size+' other date '+(dateOptions.size===1?'combination':'combinations')+' observed.';
       var checks=[];
       if(d.taxesIncluded!==true)checks.push('Taxes and surcharges');
-      if(!DOMESTIC[d.destination] && d.travelTaxIncluded!==true)checks.push('Philippine travel tax');
+      if(!PH.has(d.destination) && d.travelTaxIncluded!==true)checks.push('Philippine travel tax');
       if(d.checkedBaggageIncluded!==true)checks.push(preferences.baggage?'Your checked bag':'Baggage allowance');
       if(!Number.isInteger(d.stops))checks.push('Stops');
+      if(d.hotelPricingEnabled && d.hotelTotal==null)checks.push('Hotel cost not included');
       checks.push('Seats and final price');
       items.push(Object.assign({},d,{recommendation:reason,costChecks:checks,alternativeIds:alternatives.slice(0,3).map(function(d){return d.id;})}));
     });
@@ -201,6 +205,29 @@
     var q='Flights from '+String(from).trim()+' to '+String(to).trim()+' on '+start+(end ? ' through '+end : ' one way');
     return 'https://www.google.com/travel/flights?hl=en&curr=PHP&q='+encodeURIComponent(q);
   }
+  function manualQuote(value,id,now) {
+    now=now==null?Date.now():Number(new Date(now));value=value || {};
+    var airlines={'Cebu Pacific':'https://www.cebupacificair.com/en-PH','AirAsia':'https://www.airasia.com/flights/','Scoot':'https://www.flyscoot.com/','Philippine Airlines':'https://www.philippineairlines.com/'};
+    var date=function(s){return /^\d{4}-\d{2}-\d{2}$/.test(s || '')&&Number.isFinite(Date.parse(s+'T00:00:00Z'))&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;};
+    var passengers=Number(value.passengers),total=Number(value.total),checked=Date.parse(value.observedAt),destination=String(value.destination || '').trim().toUpperCase();
+    if(!/^[a-f0-9]{20}$/.test(id || '') || !airlines[value.airline] || !ORIGINS.includes(value.origin) || !/^[A-Z]{3}$/.test(destination) || destination===value.origin || !date(value.departureDate) || value.returnDate && (!date(value.returnDate)||value.returnDate<value.departureDate) || !Number.isInteger(passengers)||passengers<1||passengers>9 || !(total>0)||!Number.isFinite(total)||total>1000000 || !Number.isFinite(checked)||checked>now+300000||now-checked>7*86400000)return null;
+    var parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(now)).map(function(p){return [p.type,p.value];}));
+    if(value.departureDate<=parts.year+'-'+parts.month+'-'+parts.day)return null;
+    var kg=value.baggageKg===''||value.baggageKg==null?null:Number(value.baggageKg);
+    if(kg!=null&&(!Number.isFinite(kg)||kg<0||kg>100))return null;
+    var link=value.link ? url(value.link) : airlines[value.airline];if(!link)return null;
+    return {id:id,kind:'advertised-fare',userSupplied:true,airline:value.airline,origin:value.origin,destination:destination,originName:{MNL:'Manila',CEB:'Cebu',CRK:'Clark'}[value.origin],destinationName:DOMESTIC[destination] || destination,departureDate:value.departureDate,returnDate:value.returnDate || '',tripType:value.returnDate?'round-trip':'one-way',cabin:'Economy',currency:'PHP',amount:Math.round(total/passengers*100)/100,quoteTotal:total,passengers:passengers,baggageKg:kg,
+      taxesIncluded:value.taxes==='yes'?true:value.taxes==='no'?false:null,checkedBaggageIncluded:kg==null?null:kg>0,stops:value.stops==='0'?0:null,travelTaxIncluded:null,
+      sourceUrl:link,bookingUrl:link,checkedAt:new Date(checked).toISOString(),priceLabel:'PHP '+(Math.round(total/passengers*100)/100),priceBasis:'Economy quote entered by you: PHP '+total+' total for '+passengers+' traveller(s); comparison uses the per-person amount.',fees:value.taxes==='yes'?'You recorded mandatory airline taxes and fees included; other charges need confirmation.':'Mandatory taxes and fees not confirmed included.',baggage:kg==null?'Baggage not recorded.':kg+' kg checked baggage per traveller recorded by you.',connections:value.stops==='0'?'Nonstop recorded by you.':'Stops not recorded.',bookingEnd:'',travelPeriod:'Your recorded travel dates.',airlineSeen:'',terms:'Private user-supplied quote, not independently checked by the scout. Recheck availability, passenger settings and final checkout price.'};
+  }
+  function missingBudgetPrices(d,offers,now) {
+    now=now==null?Date.now():Number(new Date(now));
+    var carriers=PH.has(d.destination)?['Cebu Pacific','AirAsia']:['Cebu Pacific','AirAsia','Scoot'];
+    return carriers.filter(function(airline){return !(offers || []).some(function(o){
+      var age=now-Date.parse(o.checkedAt || '');
+      return o.kind==='advertised-fare' && o.airline===airline && o.origin===d.origin && o.destination===d.destination && o.tripType===d.tripType && o.departureDate===d.departureDate && o.returnDate===d.returnDate && economy(o.cabin) && o.amount>0 && age>=-300000 && age<=26*3600000;
+    });});
+  }
   var HOTEL_FRESH_HOURS=40;
   // Hotels: hotels-latest holds, per city, a few well-reviewed hotels with
   // Tripadvisor's typical nightly range and the booking-site rates for the
@@ -295,7 +322,18 @@
     var rooms=Number(p && p.rooms) || 1, adults=Number(p && p.adults) || 2;
     return (rooms===1 ? '1 room' : rooms+' rooms')+', '+(adults===1 ? '1 adult' : adults+' adults');
   }
-  root.FlightsCore={searchLink:searchLink,select:select,officialUrl:url,evidenceUrl:evidenceUrl,origins:ORIGINS,domestic:DOMESTIC,phpEstimate:phpEstimate,shortlist:shortlist,deadlineLabel:deadlineLabel,
+  // Cities the tripActivities callable has destination guides for (GUIDES in
+  // functions/trip-activities.js; a test keeps the two lists equal). Other
+  // cities get no "What could I do" button. The scout spells Macau "Macao".
+  var ACTIVITY_CITIES=['Manila','Makati','Pasay','Boracay','Cebu','Bohol','El Nido','Siargao','Puerto Princesa','Singapore','Hong Kong','Taipei','Tokyo','Osaka','Macau'];
+  var ACTIVITY_ALIASES={macao:'Macau'};
+  function activityCity(name) {
+    var n=String(name || '').trim().toLowerCase();
+    if(ACTIVITY_ALIASES[n]) return ACTIVITY_ALIASES[n];
+    for(var i=0;i<ACTIVITY_CITIES.length;i++) if(ACTIVITY_CITIES[i].toLowerCase()===n) return ACTIVITY_CITIES[i];
+    return null;
+  }
+  root.FlightsCore={activityCities:ACTIVITY_CITIES,activityCity:activityCity,searchLink:searchLink,manualQuote:manualQuote,missingBudgetPrices:missingBudgetPrices,select:select,officialUrl:url,evidenceUrl:evidenceUrl,origins:ORIGINS,domestic:DOMESTIC,phpEstimate:phpEstimate,shortlist:shortlist,deadlineLabel:deadlineLabel,
     region:region,economy:economy,dayLabel:dayLabel,tripLabel:tripLabel,board:board,memoryIndex:memoryIndex,priceMemory:priceMemory,
     hotelIndex:hotelIndex,hotelCity:hotelCity,stayQuotes:stayQuotes,typicalNightly:typicalNightly,tripTotal:tripTotal,hotelStaySettings:hotelStaySettings,hotelSearchLink:hotelSearchLink,guestsLabel:guestsLabel,hotelFreshHours:HOTEL_FRESH_HOURS,hotelUrl:tripadvisorUrl};
   if(typeof module!=='undefined' && module.exports)module.exports=root.FlightsCore;
