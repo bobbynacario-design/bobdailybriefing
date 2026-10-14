@@ -53,3 +53,28 @@ test('a refused key falls back to OpenStreetMap and says so, and an older keyles
  await L.locate({db:database,data:place,fetchImpl,now:100000});assert.equal(osm,1);
  const r=await L.locate({db:database,data:place,apiKey:'k',fetchImpl,now:200000});assert.equal(osm,2);assert.match(r.note,/refused the Maps key/);assert.equal(r.location.lng,119.4);
 });
+function places(map){const calls=[];return {calls,fetchImpl:async(url,opts)=>{const u=String(url);calls.push(u);
+ if(u.startsWith('https://places.googleapis.com/')){const q=JSON.parse(opts.body).textQuery;const p=Object.keys(map).find(k=>q.startsWith(k));return {ok:true,status:200,json:async()=>({places:p?[map[p]]:[]})};}
+ if(u.includes('/streetview/metadata'))return {ok:true,json:async()=>({status:'OK',pano_id:'P1',location:{lat:9.8123,lng:126.0596},date:'2022-05',copyright:'© Chris'})};
+ if(u.includes('nominatim'))throw new Error('OpenStreetMap must not be asked for the hotel');
+ throw new Error('unexpected '+u);}};}
+const at=(name,lat,lng)=>({id:name,displayName:{text:name},formattedAddress:name+', Siargao',location:{latitude:lat,longitude:lng},types:['tourist_attraction'],googleMapsUri:'https://maps.google.com/?q='+name});
+test('a visitor photo sphere keeps its author; Google car imagery adds no credit',async()=>{
+ const g=places({'Viewpoint':at('Coconut Plantation View Point',9.81232,126.05961)});
+ const r=await L.locate({db:db(),data:{city:'Siargao',name:'Viewpoint'},apiKey:'k',fetchImpl:g.fetchImpl,now:100000});assert.equal(r.pano.by,'Chris');
+ const car=await L.panorama({lat:10,lng:120},'k',async()=>({ok:true,json:async()=>({status:'OK',pano_id:'P2',location:{lat:10,lng:120},date:'2019-03',copyright:'© 2019 Google'})}));assert.equal(car.by,'');
+});
+test('the hotel is looked up once, in the same permit, by Google only and without a panorama check',async()=>{
+ const database=db(),g=places({'Viewpoint':at('Coconut Plantation View Point',9.81232,126.05961),'Siargao Bleu':at('Siargao Bleu Resort & Spa',9.7872,126.1557)});
+ const r=await L.locate({db:database,data:{city:'Siargao',name:'Viewpoint',base:'Siargao Bleu Resort & Spa'},apiKey:'k',fetchImpl:g.fetchImpl,now:100000});
+ assert.equal(r.base.matchedName,'Siargao Bleu Resort & Spa');assert.ok(Math.abs(L.metres(r.base,r.location)-10900)<600);
+ assert.equal(g.calls.filter(u=>u.includes('places.googleapis')).length,2);assert.equal(g.calls.filter(u=>u.includes('metadata')).length,1);
+ const again=await L.locate({db:database,data:{city:'Siargao',name:'Viewpoint',base:'Siargao Bleu Resort & Spa'},apiKey:'k',fetchImpl:g.fetchImpl,now:100500});
+ assert.equal(again.cached,true);assert.equal(again.base.matchedName,'Siargao Bleu Resort & Spa');assert.equal(g.calls.length,3);
+});
+test('without a key, or when the hotel is not found, no distance is offered',async()=>{
+ const none=await L.locate({db:db(),data:{city:'Taipei',name:'The Red House',base:'Muzik Hotel - Ximen Station Branch'},now:100000,fetchImpl:()=>{throw new Error('no network');}});
+ assert.equal(none.base,undefined);assert.ok(none.location);
+ const g=places({'Viewpoint':at('Coconut Plantation View Point',9.81232,126.05961)});
+ const r=await L.locate({db:db(),data:{city:'Siargao',name:'Viewpoint',base:'Unknown Hut'},apiKey:'k',fetchImpl:g.fetchImpl,now:100000});assert.equal(r.base,undefined);assert.ok(r.pano);
+});

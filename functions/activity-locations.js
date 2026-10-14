@@ -27,7 +27,7 @@ function match(rows,place) {
 // the free Street View metadata check, then aim the camera from the
 // panorama toward the place. The browser shows that exact panorama through
 // the free Maps Embed API, so no image is fetched or stored here.
-const CACHE_VERSION=2;
+const CACHE_VERSION=3;
 const toRad=d=>d*Math.PI/180;
 function bearing(from,to) {
  const y=Math.sin(toRad(to.lng-from.lng))*Math.cos(toRad(to.lat)),x=Math.cos(toRad(from.lat))*Math.sin(toRad(to.lat))-Math.sin(toRad(from.lat))*Math.cos(toRad(to.lat))*Math.cos(toRad(to.lng-from.lng));
@@ -61,33 +61,54 @@ async function panorama(location,apiKey,fetchImpl) {
   if(m.status==='REQUEST_DENIED')return null;
   if(m.status!=='OK' || !m.pano_id || !m.location)continue;
   const at={lat:Number(m.location.lat),lng:Number(m.location.lng)};
-  return {id:String(m.pano_id),lat:at.lat,lng:at.lng,date:/^\d{4}(-\d{2})?$/.test(m.date || '')?m.date:'',heading:bearing(at,location),distance:metres(at,location)};
+  // A visitor's photo sphere carries its author ("© Chris"); Google's own
+  // car imagery says Google, which the embed already credits.
+  const by=String(m.copyright || '').replace(/^\s*(?:©|\(c\)|copyright)\s*/i,'').trim().slice(0,60);
+  return {id:String(m.pano_id),lat:at.lat,lng:at.lng,date:/^\d{4}(-\d{2})?$/.test(m.date || '')?m.date:'',heading:bearing(at,location),distance:metres(at,location),by:/google/i.test(by)?'':by};
  }
  return null;
 }
-async function locate({db,data,apiKey='',fetchImpl=fetch,now=Date.now()}) {
- const place=input(data),fixed=known(place);
- const id=createHash('sha256').update(place.city+':'+fold(place.name)).digest('hex'),ref=db.collection('activity-place-locations').doc(id),cache=await ref.get();
+// Low-volume, cached, explicit-click use only: one upstream permit per
+// click, however many lookups it needs. The server-side switch can stop
+// upstream lookups immediately without a client update.
+async function permit(db,now) {
+ const col=db.collection('activity-place-locations'),rate=col.doc('_lookup-rate'),settings=col.doc('_settings'),daily=col.doc('_daily-'+new Date(now+8*3600000).toISOString().slice(0,10));
+ return db.runTransaction(async tx=>{const [s,config,day]=await Promise.all([tx.get(rate),tx.get(settings),tx.get(daily)]);if(config.exists && config.data().enabled===false)return 'disabled';const count=day.exists?Number(day.data().count || 0):0;if(count>=50)return 'quota';if(s.exists && now-s.data().lastAt<1100)return 'busy';tx.set(rate,{lastAt:now});tx.set(daily,{count:count+1});return 'allowed';});
+}
+// One place: cached for 30 days (a miss for 1), Google first when a key
+// exists, OpenStreetMap otherwise. `pano` is skipped for the user's hotel.
+async function lookup({db,place,apiKey,fetchImpl,now,withPano,gate,osm=true}) {
+ const fixed=known(place),id=createHash('sha256').update(place.city+':'+fold(place.name)).digest('hex'),ref=db.collection('activity-place-locations').doc(id),cache=await ref.get();
  const c=cache.exists?cache.data():null;
- // Lookups made before Google was configured (no pano field) are redone once a key exists.
- if(c && c.v===CACHE_VERSION && (c.google || !apiKey) && now-c.checkedAt<(c.location?30:1)*86400000)return {location:c.location,pano:c.pano || null,cached:true};
+ // Lookups made before Google was configured, or before the photo credit
+ // was kept, are redone; a hotel-only entry has no panorama check yet.
+ if(c && c.v===CACHE_VERSION && (c.google || !apiKey) && (c.panoChecked || !withPano || !apiKey) && now-c.checkedAt<(c.location?30:1)*86400000)return {location:c.location,pano:c.pano || null,cached:true};
  if(fixed && !apiKey)return {location:fixed,pano:null};
- const rate=db.collection('activity-place-locations').doc('_lookup-rate'),settings=db.collection('activity-place-locations').doc('_settings'),daily=db.collection('activity-place-locations').doc('_daily-'+new Date(now+8*3600000).toISOString().slice(0,10));
- // Low-volume, cached, explicit-click use only. The server-side switch can
- // stop upstream lookups immediately without a client update.
- const permitted=await db.runTransaction(async tx=>{const [s,config,day]=await Promise.all([tx.get(rate),tx.get(settings),tx.get(daily)]);if(config.exists && config.data().enabled===false)return 'disabled';const count=day.exists?Number(day.data().count || 0):0;if(count>=50)return 'quota';if(s.exists && now-s.data().lastAt<1100)return 'busy';tx.set(rate,{lastAt:now});tx.set(daily,{count:count+1});return 'allowed';});
+ const permitted=await gate();
  if(permitted!=='allowed')return {location:fixed,pano:null,note:permitted==='busy'?'Place lookup is busy. The map search is available; try again shortly.':'Exact-location lookup is unavailable for now. The map search remains available.'};
  let location=fixed,note='';
  try {
   if(!location && apiKey){const g=await googlePlace(place,apiKey,fetchImpl);location=g.location;if(g.error==='key')note='Google refused the Maps key, so OpenStreetMap was used instead.';}
-  if(!location){
+  if(!location && osm){
    const query=new URL('https://nominatim.openstreetmap.org/search');Object.entries({q:place.name+', '+place.city,format:'jsonv2',addressdetails:'1',namedetails:'1',countrycodes:CITIES[place.city][0],limit:'5',viewbox:CITIES[place.city].slice(1).join(','),bounded:'1'}).forEach(([k,v])=>query.searchParams.set(k,v));
    const response=await fetchImpl(query,{headers:{'User-Agent':'DaybookTravel/1.0 (https://bobbynacario-design.github.io/bobdailybriefing/)','Accept':'application/json','Accept-Language':'en'},redirect:'error',signal:AbortSignal.timeout(10000)});
    if(response.ok)location=match(await response.json(),place);else note='Exact location lookup is unavailable. Use the map search.';
   }
-  const pano=location && apiKey ? await panorama(location,apiKey,fetchImpl) : null;
-  await ref.set({v:CACHE_VERSION,google:!!apiKey,city:place.city,name:place.name,location,pano,checkedAt:now});
+  const pano=location && apiKey && withPano ? await panorama(location,apiKey,fetchImpl) : null;
+  await ref.set({v:CACHE_VERSION,google:!!apiKey,panoChecked:!!(withPano && apiKey),city:place.city,name:place.name,location,pano,checkedAt:now});
   return note?{location,pano,note}:{location,pano};
  }catch(_){return {location,pano:null,note:'Exact location lookup is unavailable. Use the map search.'};}
+}
+async function locate({db,data,apiKey='',fetchImpl=fetch,now=Date.now()}) {
+ const place=input(data);let permitted=null;const gate=async()=>permitted || (permitted=await permit(db,now));
+ const result=await lookup({db,place,apiKey,fetchImpl,now,withPano:true,gate});
+ // The user's hotel, for a straight-line distance on the page. Google only:
+ // a second OpenStreetMap request in the same second breaks its usage policy.
+ const base=String(data.base || '').trim();
+ if(result.location && apiKey && base.length>=4 && base.length<=160 && fold(base)!==fold(place.name)){
+  const b=await lookup({db,place:{city:place.city,name:base},apiKey,fetchImpl,now,withPano:false,gate,osm:false}).catch(()=>null);
+  if(b && b.location)result.base={lat:b.location.lat,lng:b.location.lng,matchedName:b.location.matchedName || base};
+ }
+ return result;
 }
 module.exports={input,known,match,locate,bearing,metres,panorama,googlePlace};
