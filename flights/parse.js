@@ -101,11 +101,41 @@ export function parseAirAsiaPromos(html, source, checkedAt) {
   return records;
 }
 export function parseSource(html, source, checkedAt) {
-  const items=source.type==='airasia-fares' ? parseAirAsiaFares(html,source,checkedAt) : source.type==='fares' ? parseFares(html,source,checkedAt) : source.id==='airasia-ph' ? parseAirAsiaPromos(html,source,checkedAt) : source.airline==='Cebu Pacific' ? parseCebuCampaigns(html,source,checkedAt) : [];
+  const items=source.type==='trip-fares' ? parseTripFares(html,source,checkedAt) : source.type==='airasia-fares' ? parseAirAsiaFares(html,source,checkedAt) : source.type==='fares' ? parseFares(html,source,checkedAt) : source.id==='airasia-ph' ? parseAirAsiaPromos(html,source,checkedAt) : source.airline==='Cebu Pacific' ? parseCebuCampaigns(html,source,checkedAt) : [];
   const blocked=/sec-if-cpt|captcha|access denied|verify you are human/i.test(html);
   if(source.type==='campaign-feed' && !items.length && !blocked && /<rss\b/i.test(html) && /<channel>/i.test(html))return {items,status:'ok',message:'No current eligible sale announcements in the readable feed.'};
   return {items,status:items.length ? 'ok' : 'unavailable',message:items.length ? items.length+(source.type==='campaign-feed'?' sale announcements read; route availability not verified':' eligible offers read') : blocked ?
     'Airline page requires an interactive browser; no fares extracted.' : 'No readable eligible offers with verified route and fare fields. Check the airline directly.'};
+}
+
+export function parseTripFares(html,source,checkedAt) {
+  const $=load(html),out=[];$('script,style').remove();
+  const asOf=$.text().match(/flight prices found on Trip\.com as of ([A-Za-z]{3}) (\d{1,2}), (\d{4})/);
+  const sourceDay=asOf && dateValue(asOf[2]+' '+asOf[1]+' '+asOf[3]);
+  if(!sourceDay || Date.parse(sourceDay+'T00:00:00+08:00')>Date.parse(checkedAt) || Date.parse(checkedAt)-Date.parse(sourceDay+'T00:00:00+08:00')>26*3600000)return [];
+  const observedDay=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(checkedAt));
+  const parts=Object.fromEntries(observedDay.map(p=>[p.type,p.value]));
+  const today=parts.year+'-'+parts.month+'-'+parts.day;
+  $('._tp-card').each((_,element)=>{
+    const card=$(element),bookingUrl=officialUrl(card.find('a[test-item="view_button"]').attr('href'),source.url);
+    if(!bookingUrl)return;const p=new URL(bookingUrl).searchParams;
+    const origin=(p.get('departcitycode')||'').toUpperCase(),destination=(p.get('arrivalcitycode')||'').toUpperCase();
+    const departureDate=dateValue(p.get('ddate')),returnDate=p.get('flighttype')==='d'?dateValue(p.get('rdate')):'';
+    if(!ORIGINS.includes(origin) || !(outsidePH(destination)||DOMESTIC[destination]) || !departureDate || departureDate<=today || !['s','d'].includes(p.get('flighttype')) || p.get('flighttype')==='d'&&(!returnDate||returnDate<=departureDate))return;
+    const body=text(card.text()),info=text(card.find('._tp-info').text()),prices=[...body.matchAll(/\bPHP\s+([\d,]+(?:\.\d{1,2})?)/g)];
+    const operator=card.find('[data-tp-full-name]').attr('data-tp-full-name');
+    const airline=operator==='Cebu Pacific'?'Cebu Pacific':operator==='Philippines AirAsia'?'AirAsia':operator==='Philippine Airlines'?'Philippine Airlines':operator==='Scoot'?'Scoot':operator==='HK Express'?'HK Express':null;
+    if(!airline||prices.length!==1||!info.includes(origin+'-'+destination))return;
+    const amount=Number(prices[0][1].replace(/,/g,''));if(!(amount>0)||Number(p.get('recentviewprice'))!==amount)return;
+    const flights=(p.get('recentviewflt')||'').split('|'),prefix={'Cebu Pacific':'5j','AirAsia':'z2','Philippine Airlines':'pr','Scoot':'tr','HK Express':'uo'}[airline];
+    if(flights.length!==(returnDate?2:1)||!flights.every(f=>new RegExp('^'+prefix+'\\d+$','i').test(f)))return;
+    const visibleDate=iso=>{const d=new Date(iso+'T00:00:00Z');return new RegExp('\\b'+Object.keys(months)[d.getUTCMonth()]+'\\s+'+d.getUTCDate()+'\\b','i').test(info);};
+    if(!visibleDate(departureDate)||returnDate&&!visibleDate(returnDate))return;
+    const tripType=returnDate?'round-trip':'one-way',key=[airline,origin,destination,departureDate,returnDate,tripType,'Not stated','PHP','Trip.com'].join('|');
+    out.push({id:id(key),kind:'advertised-fare',airline,origin,destination,originName:origin==='MNL'?'Manila':origin==='CEB'?'Cebu':'Clark',destinationName:DOMESTIC[destination]||destination,departureDate,returnDate,tripType,cabin:'Not stated',currency:'PHP',amount,partner:'Trip.com',sourceAsOf:sourceDay,
+      priceLabel:'PHP '+amount,priceBasis:'Trip.com published fare sample per traveller; not a direct-airline quote or guaranteed checkout price.',taxesIncluded:null,travelTaxIncluded:null,checkedBaggageIncluded:null,stops:!returnDate&&/Nonstop/.test(info)?0:null,
+      fees:'Confirm mandatory fees and taxes at partner checkout; international travel tax may be additional.',baggage:'Baggage allowance is not established by this published quote.',connections:'Confirm flight times and all legs before booking.',bookingEnd:'',travelPeriod:'Exact dates in the partner booking link.',sourceUrl:source.url,bookingUrl,checkedAt:sourceDay===today?checkedAt:sourceDay+'T00:00:00+08:00',airlineSeen:'',terms:'Sold through Trip.com. Compare the direct airline price and cancellation terms; the displayed price may no longer be available.'});
+  });return out;
 }
 
 // MOVE route cards include the exact dated booking link and visible price.

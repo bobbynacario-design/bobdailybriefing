@@ -1,7 +1,13 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {parseFares,parseAirAsiaFares,parseAirAsiaPromos,parseSource,dateValue,officialUrl} from './parse.js';
+import {parseFares,parseAirAsiaFares,parseTripFares,parseAirAsiaPromos,parseSource,dateValue,officialUrl} from './parse.js';
 const checked='2026-10-10T02:00:00Z';
+test('Trip.com quotes use exact booking dates and visible prices, preserve unknown cabin and reject stale, mixed or mismatched cards',()=>{
+ const s={url:'https://ph.trip.com/flights/city-of-manila-to-cebu/airfares-mnl-ceb/'};
+ const html='<p>flight prices found on Trip.com as of Oct 14, 2026</p><div class="_tp-card">Cheapest one-way PHP 2,299<div class="_tp-info"><span data-tp-full-name="Cebu Pacific">Cebu Pacific</span>MNL-CEB · Nonstop · Sun, Nov 29</div><a test-item="view_button" href="https://ph.trip.com/flights/tickets-mnl-ceb/?ddate=2026-11-29&amp;flighttype=s&amp;departcitycode=mnl&amp;arrivalcitycode=ceb&amp;recentviewflt=5j2515&amp;recentviewprice=2299">Book Now</a></div>';
+ const d=parseTripFares(html,s,'2026-10-13T23:00:00Z')[0];assert.equal(d.airline,'Cebu Pacific');assert.equal(d.amount,2299);assert.equal(d.departureDate,'2026-11-29');assert.equal(d.cabin,'Not stated');assert.equal(d.partner,'Trip.com');assert.equal(d.checkedBaggageIncluded,null);
+ for(const bad of [html.replace('Oct 14, 2026','Oct 1, 2026'),html.replace('recentviewprice=2299','recentviewprice=100'),html.replace('Sun, Nov 29','Sun, Nov 22'),html.replace('ddate=2026-11-29','ddate='),html.replace('flighttype=s','flighttype=d'),html.replace('5j2515','pr123')])assert.equal(parseTripFares(bad,s,'2026-10-14T01:00:00Z').length,0);
+});
 test('MOVE prices require a visible dated single-adult flight card; bundles and mismatched fields are excluded',()=>{
  const s={airline:'AirAsia',type:'airasia-fares',url:'https://www.airasia.com/flights/en/gb/from-manila-mnl-to-cebu-ceb/'};
  const card='<a href="https://www.airasia.com/v2/flights/search/?origin=MNL&amp;destination=CEB&amp;departDate=01%2F01%2F2027&amp;tripType=O&amp;adult=1&amp;child=0&amp;infant=0&amp;cabinClass=economy&amp;currency=PHP"><img alt="Philippines AirAsia"><span>1 Jan (Fri)</span><span>MNL</span><span>CEB</span><span>Direct</span><span>PHP</span><span class="text-2xl">2,401</span></a>';

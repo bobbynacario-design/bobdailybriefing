@@ -1,5 +1,23 @@
 # Flights scout
 
+Free partner quotes: Trip.com's public Manila–Cebu, Manila–El Nido and
+Manila–Hong Kong pages are read without an API subscription. Only current,
+published summary cards with full ISO booking dates, a matching visible price,
+route, operator and flight-number prefix are accepted. Undated prices, mixed
+operators and old publisher dates are excluded. Unknown cabins stay out of
+economy recommendations and appear in a separate partner-samples section.
+These quotes are sold through the partner and are not direct-airline prices.
+
+Private quotes: the user can enter an economy quote, total PHP amount,
+same-fare passenger count, checked time (Philippine time), baggage and fee
+settings. The per-person amount enters comparisons without requiring the
+saved-only filter. Matching route/date/airline/passenger entries update the
+previous quote. Quotes keep their original observation time across reloads;
+older than 26 hours cannot enter fresh recommendations. Storage is the existing
+uid-scoped shortlist; no user quote is published into the shared scout or
+shared price history. Missing terms remain explicit. No paid services or
+additional model calls are used.
+
 Budget-airline coverage now uses Scoot's current `www.flyscoot.com/flights/`
 pages and visible AirAsia MOVE route cards for Manila to Cebu, Boracay,
 Puerto Princesa and Bangkok. MOVE fares require a dated, single-adult,
