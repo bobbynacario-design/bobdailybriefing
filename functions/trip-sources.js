@@ -10,11 +10,7 @@ const {CITIES}=require("./activity-locations");
 const UA={"User-Agent":"DaybookTravel/1.0 (https://bobbynacario-design.github.io/bobdailybriefing/)","Accept":"application/json"};
 // Wikivoyage article(s) per destination. Region articles (Bohol) add the
 // towns where visitors stay; Cebu's own article is a disambiguation page.
-const WIKIVOYAGE={
-  Manila:["Manila"],Makati:["Makati"],Pasay:["Pasay"],Boracay:["Boracay"],Cebu:["Cebu City"],
-  Bohol:["Bohol","Panglao Island","Tagbilaran"],"El Nido":["El Nido"],Siargao:["Siargao"],"Puerto Princesa":["Puerto Princesa"],
-  Singapore:["Singapore"],"Hong Kong":["Hong Kong"],Taipei:["Taipei"],Tokyo:["Tokyo"],Osaka:["Osaka"],Macau:["Macau"]
-};
+const WIKIVOYAGE=Object.fromEntries(Object.entries(require('./flights-core').activityDestinations).map(([city,d])=>[city,d.wiki]));
 // "go" listings are transport (airports, piers), not things to do.
 const TYPES=["see","do","eat","drink","buy"],SECTIONS={See:"see",Do:"do",Eat:"eat",Drink:"drink",Buy:"buy"};
 const MAX_DISTRICTS=12,MAX_ENTRIES=400,CACHE_DAYS=7,CACHE_VERSION=2;
@@ -103,9 +99,10 @@ async function wikivoyage(city,fetchImpl) {
 const GOOGLE_QUERIES=[["see","tourist attractions in "],["see","parks, beaches and scenic spots in "],["eat","popular local restaurants in "]];
 // Places with almost no reviews are often tour agents or mislabelled pins.
 const MIN_REVIEWS=15;
-async function googleSights(city,apiKey,fetchImpl) {
+async function googleSights(city,apiKey,fetchImpl,permit=async()=>true) {
   const b=CITIES[city],out=[];
   for(const [type,q] of GOOGLE_QUERIES){
+    if(!await permit())break;
     const r=await fetchImpl("https://places.googleapis.com/v1/places:searchText",{method:"POST",redirect:"error",signal:AbortSignal.timeout(10000),
       headers:{"Content-Type":"application/json","X-Goog-Api-Key":apiKey,"X-Goog-FieldMask":"places.id,places.displayName,places.location,places.primaryTypeDisplayName,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.editorialSummary"},
       body:JSON.stringify({textQuery:q+city,languageCode:"en",regionCode:b[0],maxResultCount:20,locationRestriction:{rectangle:{low:{latitude:b[2],longitude:b[1]},high:{latitude:b[4],longitude:b[3]}}}})});
@@ -125,9 +122,12 @@ function km(a,b) {const h=Math.sin(toRad(b.lat-a.lat)/2)**2+Math.cos(toRad(a.lat
 // Cached per destination for a week: Wikivoyage changes slowly, and the
 // Google searches stay well inside the free monthly allowance.
 async function destination({db,city,apiKey,fetchImpl,now}) {
+  if(!WIKIVOYAGE[city] || !CITIES[city])throw new Error('Unsupported activity destination');
   const ref=db.collection("activity-sources").doc(city.replace(/[^A-Za-z]/g,"-")),snap=await ref.get(),c=snap.exists?snap.data():null;
   if(c && c.v===CACHE_VERSION && (c.google || !apiKey) && now-c.savedAt<CACHE_DAYS*86400000)return c;
-  const [wv,g]=await Promise.all([wikivoyage(city,fetchImpl).catch(()=>({entries:[],pages:[]})),apiKey?googleSights(city,apiKey,fetchImpl).catch(()=>[]):Promise.resolve([])]);
+  const budget=db.collection('activity-source-budgets').doc(new Date(now+8*3600000).toISOString().slice(0,7));
+  const permit=()=>db.runTransaction(async tx=>{const s=await tx.get(budget),count=s.exists?Number(s.data().count || 0):0;if(count>=300)return false;tx.set(budget,{count:count+1,updated:now});return true;});
+  const [wv,g]=await Promise.all([wikivoyage(city,fetchImpl).catch(()=>({entries:[],pages:[]})),apiKey?googleSights(city,apiKey,fetchImpl,permit).catch(()=>[]):Promise.resolve([])]);
   const data={v:CACHE_VERSION,city,savedAt:now,google:!!apiKey,pages:wv.pages,wikivoyage:wv.entries,places:g};
   if(wv.entries.length || g.length)await ref.set(data);
   return data;

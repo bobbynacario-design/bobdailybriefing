@@ -1,6 +1,7 @@
 "use strict";
 const {createHash}=require('node:crypto');
-const CITIES={Manila:['ph',120,14,122,16],Makati:['ph',120,14,122,16],Pasay:['ph',120,14,122,16],Boracay:['ph',121.8,11.8,122.1,12.1],Cebu:['ph',123,9,125,12],Bohol:['ph',123,9,125,11],'El Nido':['ph',119,10.8,120,11.7],Siargao:['ph',125.7,9.5,126.4,10.2],'Puerto Princesa':['ph',118,9,120,11],Singapore:['sg',103.5,1,104.2,1.6],'Hong Kong':['hk',113.7,22,114.6,22.7],Taipei:['tw',121.3,24.8,121.8,25.3],Tokyo:['jp',139,35,140.3,36.2],Osaka:['jp',135,34,136,35],Macau:['mo',113.4,22,113.7,22.3]};
+const FlightsCore=require('./flights-core');
+const CITIES=Object.fromEntries(Object.entries(FlightsCore.activityDestinations).map(([city,d])=>[city,d.box]));
 // Tourism Administration coordinates; precise location, not live imagery coverage.
 const KNOWN=[
  ['Taipei',['the red house','red house'],25.042013,121.50685,'https://eng.taiwan.net.tw/m1.aspx?id=3310&print=1&sNo=0002090'],
@@ -8,7 +9,7 @@ const KNOWN=[
  ['Taipei',['lungshan temple','longshan temple'],25.037162,121.4999,'https://eng.taiwan.net.tw/m1.aspx?id=93&sNo=0002090']
 ];
 const fold=s=>String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-function input(data) {const city=Object.keys(CITIES).find(c=>fold(c)===fold(data.city)),name=String(data.name || '').trim();if(!city||name.length<4||name.length>120)throw Object.assign(Error('Choose a named activity in a supported destination.'),{code:'invalid-argument'});return {city,name};}
+function input(data) {const city=FlightsCore.activityCity(data.city),name=String(data.name || '').trim();if(!city||name.length<4||name.length>120)throw Object.assign(Error('Choose a named activity in a supported destination.'),{code:'invalid-argument'});return {city,name};}
 function known(place) {const row=KNOWN.find(r=>r[0]===place.city && r[1].includes(fold(place.name)));return row?{lat:row[2],lng:row[3],source:'Tourism Administration',sourceUrl:row[4],matchedName:place.name}:null;}
 function match(rows,place) {
  const bounds=CITIES[place.city],target=fold(place.name).replace(/^the /,'');

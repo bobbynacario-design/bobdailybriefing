@@ -47,7 +47,7 @@ test('one place under two spellings is merged; sights come nearest first, then f
   assert.deepEqual(s.map(x=>x.id),['s0','s1','s2']);
   assert.equal(T.select(data,null)[0].distanceKm,null);
 });
-function db(){const m=new Map(),ref=id=>({get:async()=>({exists:m.has(id),data:()=>m.get(id)}),set:async v=>m.set(id,v)});return {m,collection:()=>({doc:ref})};}
+function db(){const m=new Map(),ref=id=>({id,get:async()=>({exists:m.has(id),data:()=>m.get(id)}),set:async v=>m.set(id,v)});return {m,collection:()=>({doc:ref}),runTransaction:async fn=>fn({get:r=>r.get(),set:(r,v)=>m.set(r.id,v)})};}
 test('a destination is fetched once a week, Google only with a key, and an empty result is not cached',async()=>{
   const calls=[];const fetchImpl=async(url,opts)=>{const u=String(url);calls.push(u);
     if(u.startsWith('https://en.wikivoyage.org/'))return new Response(JSON.stringify({query:{pages:[{title:'Siargao',revisions:[{timestamp:'2026-06-29T20:41:36Z',slots:{main:{content:'==Do==\n* {{do | name=Fat Lips Surfshop | lat=9.79 | long=126.16 | content=Surfboards and tours.}}'}}}]}]}}));
@@ -64,6 +64,20 @@ test('every destination has a Wikivoyage article and a search box',()=>{
   const {CITIES}=require('./activity-locations');
   for(const city of Object.keys(T.WIKIVOYAGE)){assert.ok(T.WIKIVOYAGE[city].length);assert.ok(CITIES[city],city);}
   assert.equal(T.pageUrl('Taipei/Old Taipei'),'https://en.wikivoyage.org/wiki/Taipei/Old_Taipei');
+});
+test('all scout destinations share one canonical source and location catalog',async()=>{
+  const {HOTEL_CITIES}=await import('../flights/hotel-cities.js'),core=require('./flights-core'),{CITIES}=require('./activity-locations');
+  assert.equal(core.activityCities.length,HOTEL_CITIES.length);
+  assert.deepEqual([...core.activityCities].sort(),HOTEL_CITIES.map(c=>c.city).sort());
+  for(const city of core.activityCities){const box=CITIES[city];assert.ok(T.WIKIVOYAGE[city].length,city);assert.equal(box.length,5);assert.match(box[0],/^[a-z]{2}$/);assert.ok(box[1]<box[3] && box[2]<box[4],city);assert.ok(box[1]>=-180 && box[3]<=180 && box[2]>=-90 && box[4]<=90,city);}
+  for(const [alias,city] of [['Saigon','Ho Chi Minh City'],['New York City','New York'],['Washington DC','Washington, D.C.'],['Macao','Macau']])assert.equal(core.activityCity(alias),city);
+  assert.deepEqual(T.WIKIVOYAGE['San Jose'],['San Jose (California)']);assert.deepEqual(T.WIKIVOYAGE.Portland,['Portland (Oregon)']);
+});
+test('Google enrichment stops at the app monthly cap while Wikivoyage remains usable',async()=>{
+  const database=db(),now=Date.parse('2026-10-15T00:00:00Z');await database.collection().doc('2026-10').set({count:299});let google=0;
+  const fetchImpl=async url=>{if(String(url).startsWith('https://places.googleapis.com')){google++;return new Response(JSON.stringify({places:[]}));}return new Response(JSON.stringify({query:{pages:[{title:'Perth',revisions:[{timestamp:'2026-10-01T00:00:00Z',slots:{main:{content:'{{see|name=Test garden|content=A public garden.}}'}}}]}]}}));};
+  const d=await T.destination({db:database,city:'Perth',apiKey:'test',fetchImpl,now});assert.equal(google,1);assert.equal(d.wikivoyage.length,1);assert.equal(database.m.get('2026-10').count,300);
+  await T.destination({db:database,city:'Seoul',apiKey:'test',fetchImpl,now});assert.equal(google,1);
 });
 test('listing text decodes hex and named entities in one pass',()=>{
   assert.equal(T.plain("the country&#x27;s culture &hellip; Manila&rsquo;s parks &amp;quot; &#39;x&#39; &bogus; 1&ndash;2"),"the country's culture \u2026 Manila\u2019s parks &quot; 'x' &bogus; 1\u20132");
