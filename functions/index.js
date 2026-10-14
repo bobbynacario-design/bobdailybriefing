@@ -38,6 +38,7 @@ const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHE
 const Ask = require("./ask-daybook");
 const Haiku = require("./haiku");
 const TripActivities = require("./trip-activities");
+const ActivityLocations = require("./activity-locations");
 const Note = require("./client-note");
 const Calendar = require("./calendar");
 const IntelligenceSearchCore = require("./intelligence-search-core");
@@ -65,6 +66,10 @@ const OPENAI_WEBHOOK_SECRET = defineSecret("OPENAI_WEBHOOK_SECRET");
 const GITHUB_DISPATCH_TOKEN = defineSecret("GITHUB_DISPATCH_TOKEN");
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
 const GENERATION_OWNERS = (process.env.GENERATION_OWNER_EMAILS || "bobbynacario@gmail.com").split(",").map(s => s.trim().toLowerCase());
+exports.activitySurroundings = onCall({region:"asia-southeast1",timeoutSeconds:20,memory:"256MiB"},async request=>{
+  try{authorize(request.auth,GENERATION_OWNERS);return await ActivityLocations.locate({db:getFirestore(),data:request.data || {}});}
+  catch(e){throw new HttpsError(['unauthenticated','permission-denied','invalid-argument'].includes(e.code)?e.code:'internal',e.code?e.message:'Place lookup is unavailable. Use the map search.');}
+});
 exports.tripActivities = onCall({region:"asia-southeast1",secrets:[ANTHROPIC_API_KEY],timeoutSeconds:120,memory:"256MiB"},async request=>{
   try {
     authorize(request.auth,GENERATION_OWNERS);
