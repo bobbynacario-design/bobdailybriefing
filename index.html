@@ -12510,8 +12510,8 @@ function llmUsd(v) {
 }
 function llmInt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
 function llmTrendHtml(d){
-  var trend=LlmTrendCore.build(d,llmPriceUsd),max=Math.max(1,...trend.days.map(function(x){return x.cost||0;})),chart='',w=490,h=225,left=45,top=28,bottom=172,step=60;
-  for(var i=0;i<4;i++){var value=max*i/3,y=bottom-(bottom-top)*i/3;chart+='<line x1="'+left+'" x2="475" y1="'+y+'" y2="'+y+'" stroke="var(--rim)"/><text x="38" y="'+(y+4)+'" text-anchor="end" fill="var(--txt3)" font-size="10">$'+value.toFixed(1)+'</text>';}
+  var trend=LlmTrendCore.build(d,llmPriceUsd),max=Math.max(.01,...trend.days.map(function(x){return x.cost||0;})),chart='',w=490,h=225,left=45,top=28,bottom=172,step=60;
+  for(var i=0;i<4;i++){var value=max*i/3,y=bottom-(bottom-top)*i/3;chart+='<line x1="'+left+'" x2="475" y1="'+y+'" y2="'+y+'" stroke="var(--rim)"/><text x="38" y="'+(y+4)+'" text-anchor="end" fill="var(--txt3)" font-size="10">$'+value.toFixed(max<.1?3:max<1?2:1)+'</text>';}
   trend.days.forEach(function(x,i){var pos=left+12+i*step,bh=x.cost==null?0:(bottom-top)*x.cost/max,label=x.day.slice(5),cost=x.cost==null?'—':llmUsd(x.cost),detail=label+': '+cost+(x.estimated?' estimated':' priced from daily model usage')+(x.today?' · today so far':'');
     if(x.cost!=null)chart+='<rect x="'+pos+'" y="'+(bottom-Math.max(1,bh))+'" width="38" height="'+Math.max(1,bh)+'" rx="3" fill="var(--gold)" opacity="'+(x.today?'.45':x.estimated?'.7':'1')+'"><title>'+esc(detail)+'</title></rect>';
     chart+='<text x="'+(pos+19)+'" y="'+(x.cost==null?bottom-7:bottom-bh-7)+'" text-anchor="middle" fill="var(--txt)" font-size="10">'+esc(cost)+'</text><text x="'+(pos+19)+'" y="192" text-anchor="middle" fill="var(--txt3)" font-size="10">'+label+'</text>'+(x.today?'<text x="'+(pos+19)+'" y="207" text-anchor="middle" fill="var(--gold)" font-size="9">so far</text>':'');
