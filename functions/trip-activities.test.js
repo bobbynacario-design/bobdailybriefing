@@ -3,10 +3,31 @@ const assert=require('node:assert/strict');
 const A=require('./trip-activities');
 const trip={city:'Manila',start:'2026-11-20',end:'2026-11-23',base:'Hotel in Makati',interests:'Local history and quiet walks; avoid crowded malls',pace:'relaxed',budget:1500,busy:['2026-11-21'],requestId:'activity-test-01',generate:true};
 const source={id:'guide0',url:A.GUIDES.Manila[0],content:'Explore Intramuros for its historic streets and architecture. '.repeat(12)};
-const activity={name:'Intramuros',sourceId:'guide0',evidence:'Explore Intramuros for its historic streets and architecture.',date:'2026-11-22',slot:'morning',whyFit:'Your interest in history makes this a focused alternative to shopping.',tradeoff:'Check the route from your Makati base before committing to the outing.',check:'Confirm visitor access and current admission on the destination website.'};
+const activity={name:'Intramuros',kind:'heritage',effort:'light',sourceId:'guide0',evidence:'Explore Intramuros for its historic streets and architecture.',date:'2026-11-22',slot:'morning',whyFit:'Your interest in history makes this a focused alternative to shopping.',tradeoff:'Check the route from your Makati base before committing to the outing.',check:'Confirm visitor access and current admission on the destination website.'};
 const response=()=>new Response('<html><body>'+source.content+'</body></html>',{headers:{'content-type':'text/html'}});
+test('Ximen poker trip keeps one light local arrival option, not a remote market or departure outing',()=>{
+  const context=A.normalize({...trip,city:'Taipei',base:'Fictional hotel in Ximen',busy:['2026-11-21','2026-11-22']});
+  const make=(name,date,kind='night-market',effort='light')=>({...activity,name,date,kind,effort,slot:'flexible',evidence:name+' is listed in the destination guide.'});
+  const rows=[make('Huaxi Street Tourist Night Market',trip.start),make('Shilin Night Market',trip.end),make('The Red House',trip.start,'culture')];
+  const sources=[{...source,content:rows.map(a=>a.evidence).join(' ')}];
+  const plan=A.clean({activities:rows},context,sources);
+  assert.deepEqual(plan.activities.map(a=>a.name),['The Red House']);
+  assert.match(plan.activities[0].areaFit,/Ximen/);assert.match(plan.notes.join(' '),/Departure day/);
+  assert.equal(A.availableDays(context).length,1);
+});
+test('different market names cannot fill multiple slots; seasonal titles and heavy arrival outings are excluded',()=>{
+  const make=(name,date,kind='food',effort='light')=>({...activity,name,date,kind,effort,slot:'flexible',evidence:name+' is listed in the destination guide.'});
+  const rows=[make('First Night Market',trip.start),make('Second Night Market','2026-11-22'),make('Lunar New Year Shopping Area','2026-11-22','shopping')];
+  const sources=[{...source,content:rows.map(a=>a.evidence).join(' ')}];
+  assert.equal(A.clean({activities:rows},A.normalize(trip),sources).activities.length,1);
+  const heavy=make('Full Day Boat Tour',trip.start,'nature','full-day');
+  assert.equal(A.clean({activities:[heavy]},A.normalize(trip),[{...source,content:heavy.evidence}]).activities.length,0);
+});
+test('no arrival/interior availability stops before any model call, even if departure day is free',async()=>{
+  let calls=0;await assert.rejects(A.run({db:database(),uid:'bob',data:{...trip,busy:['2026-11-20','2026-11-21','2026-11-22']},period:'2026-10-14',generate:async()=>{calls++;},fetchImpl:response}),{code:'failed-precondition'});assert.equal(calls,0);
+});
 test('provider schema omits unsupported array bounds while the cleaner enforces three options',()=>{
-  assert.equal(A.SCHEMA.properties.activities.minItems,1);
+  assert.equal(A.SCHEMA.properties.activities.minItems,0);
   assert.equal(Object.hasOwn(A.SCHEMA.properties.activities,'maxItems'),false);
   assert.throws(()=>A.clean({activities:[activity,activity,activity,activity]},A.normalize(trip),[source]));
 });
