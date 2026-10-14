@@ -34,6 +34,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/radar-assistant-core.js"></script>
 <script src="./lib/flights-core.js"></script>
 <script src="./lib/sports-trust-core.js"></script>
+<script src="./lib/llm-trend-core.js"></script>
 <script src="./lib/pse-research-core.js"></script>
 <script src="./lib/pse-research-ui.js"></script>
 <script src="./lib/flights-ui.js"></script>
@@ -2216,6 +2217,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .llm-tbl th{color:var(--txt3);font-weight:400;font-size:10px;letter-spacing:.05em;text-transform:uppercase}
 .llm-tbl td.num,.llm-tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
 .llm-tbl tr.llm-tot td{border-top:1px solid var(--rim2);border-bottom:none;color:var(--txt);font-weight:600}
+.llm-trend{margin-top:1.5rem;padding:1rem;border:1px solid var(--rim2);border-radius:8px;background:var(--bg2)}
+.llm-trend h3{font-family:var(--mono);font-size:13px;color:var(--gold);margin:0 0 .7rem}.llm-trend-summary{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;font-family:var(--mono);font-size:12px}.llm-trend svg{display:block;width:100%;height:auto;margin:.6rem 0}.llm-trend p{font-size:11px;line-height:1.6;color:var(--txt3);margin:.4rem 0}
 #llm-usage-out > .src{display:block;white-space:normal;line-height:1.6}
 
 /* ── PSE (PH snapshot) ── */
@@ -4213,6 +4216,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
           <p>Radar&rsquo;s forecast panel uses Haiku 5.5 for two draft perspectives and Sonnet 5.5 for the review. It reuses existing news without extra searches; both models&rsquo; token usage is recorded separately.</p>
           <p>Every AI call across the app records its token usage to a shared ledger. The <b>weekly read</b> and saved-record <b>Ask Daybook</b> questions use Claude Haiku; <b>radar</b> catalysts and reads use Claude Opus. The daily <b>briefing</b>, web-enabled questions, <b>Go deeper</b> dossiers, <b>meeting briefs</b>, <b>deep-research</b> reports and the <b>Markets</b> panel use OpenAI. Claude's web searches are billed per search, so they get their own line. The table ranks the spend by feature, in USD, using each provider's published rates — raw API cost, no markup.</p>
           <p class="help-key">The ledger stores tokens only; cost is computed from a single rate table, so the figure is auditable (see the "rates as of" line). Deep-research models are shown <i>unpriced</i> until their rates are confirmed — the tracker never guesses.</p>
+          <div id="llm-trend-out" aria-live="polite"><p class="rel-none-txt">Loading seven-day trend…</p></div>
         </div>
       </div>
     </div>
@@ -12505,14 +12509,28 @@ function llmUsd(v) {
   return v < 1 ? '$' + v.toFixed(4) : '$' + v.toFixed(2);
 }
 function llmInt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
+function llmTrendHtml(d){
+  var trend=LlmTrendCore.build(d,llmPriceUsd),max=Math.max(1,...trend.days.map(function(x){return x.cost||0;})),chart='',w=490,h=225,left=45,top=28,bottom=172,step=60;
+  for(var i=0;i<4;i++){var value=max*i/3,y=bottom-(bottom-top)*i/3;chart+='<line x1="'+left+'" x2="475" y1="'+y+'" y2="'+y+'" stroke="var(--rim)"/><text x="38" y="'+(y+4)+'" text-anchor="end" fill="var(--txt3)" font-size="10">$'+value.toFixed(1)+'</text>';}
+  trend.days.forEach(function(x,i){var pos=left+12+i*step,bh=x.cost==null?0:(bottom-top)*x.cost/max,label=x.day.slice(5),cost=x.cost==null?'—':llmUsd(x.cost),detail=label+': '+cost+(x.estimated?' estimated':' priced from daily model usage')+(x.today?' · today so far':'');
+    if(x.cost!=null)chart+='<rect x="'+pos+'" y="'+(bottom-Math.max(1,bh))+'" width="38" height="'+Math.max(1,bh)+'" rx="3" fill="var(--gold)" opacity="'+(x.today?'.45':x.estimated?'.7':'1')+'"><title>'+esc(detail)+'</title></rect>';
+    chart+='<text x="'+(pos+19)+'" y="'+(x.cost==null?bottom-7:bottom-bh-7)+'" text-anchor="middle" fill="var(--txt)" font-size="10">'+esc(cost)+'</text><text x="'+(pos+19)+'" y="192" text-anchor="middle" fill="var(--txt3)" font-size="10">'+label+'</text>'+(x.today?'<text x="'+(pos+19)+'" y="207" text-anchor="middle" fill="var(--gold)" font-size="9">so far</text>':'');
+  });
+  var direction=trend.change==null?'Not enough days to compare':Math.abs(trend.change)<.5?'Broadly steady':(trend.change>0?'Up ':'Down ')+Math.abs(trend.change).toFixed(0)+'%';
+  if(trend.estimated&&trend.change!=null)direction='Est. '+direction.toLowerCase();
+  return '<section class="llm-trend"><h3>API cost trend · past 7 days</h3><div class="llm-trend-summary"><span>'+llmUsd(trend.missing===7?null:trend.total)+(trend.unpriced?'+':'')+' '+(trend.estimated?'estimated':'priced')+' subtotal</span><span>'+esc(direction)+'</span></div><svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Seven-day API cost in US dollars. '+esc(direction)+'"><title>'+esc(trend.days.map(function(x){return x.day+': '+(x.cost==null?'no daily record':llmUsd(x.cost)+(x.estimated?' estimated':''));}).join('; '))+'</title>'+chart+'</svg><p>USD · Philippine calendar days. Trend compares the last three completed days with the preceding three; today is incomplete.</p>'+(trend.estimated?'<p>Older days are indicative estimates from daily tokens using the ledger’s overall model and cache mix. Their separate search fees cannot be reconstructed. Model-mix changes can affect the apparent trend; this is not a provider bill.</p>':'<p>Daily model, cache and recorded search usage priced with the same rate table as the feature breakdown.</p>')+(trend.missing?'<p>— means no daily ledger record; it is not assumed to be zero.</p>':'')+(trend.unpriced?'<p>Unpriced models are excluded; displayed costs are incomplete.</p>':'')+'</section>';
+}
 function renderLlmUsage() {
   var out = document.getElementById('llm-usage-out');
+  var chartOut=document.getElementById('llm-trend-out');
   if (!out || window.daybookMember) return;  // the owner's AI spend; its card is hidden for members
-  if (!window.fbLoadLlmUsage) { out.innerHTML = '<div class="rel-none-txt">Usage unavailable.</div>'; return; }
+  if (!window.fbLoadLlmUsage) { out.innerHTML = '<div class="rel-none-txt">Usage unavailable.</div>'; if(chartOut)chartOut.innerHTML=out.innerHTML;return; }
   out.innerHTML = '<div class="rel-none-txt">Loading usage…</div>';
+  if(chartOut)chartOut.innerHTML='<p class="rel-none-txt">Loading seven-day trend…</p>';
   window.fbLoadLlmUsage().then(function (d) {
     if (!d || !d.entries || !Object.keys(d.entries).length) {
       out.innerHTML = '<div class="rel-none-txt">No LLM usage recorded yet — it accrues as the briefing, radar and Markets refreshes run.</div>';
+      if(chartOut)chartOut.innerHTML='<p class="rel-none-txt">No daily usage recorded yet.</p>';
       return;
     }
     var rows = Object.keys(d.entries).map(function (k) {
@@ -12569,7 +12587,8 @@ function renderLlmUsage() {
         ? ' · local/* models run on your own machine and cost $0 in API terms (electricity is not modelled here)' : '') +
       ' · raw API cost, no markup.</div>';
     out.innerHTML = html;
-  });
+    if(chartOut)chartOut.innerHTML=llmTrendHtml(d);
+  }).catch(function(e){console.error('LLM usage chart failed:',e);out.innerHTML='<p class="rel-none-txt">Usage could not load. Reopen Help to retry.</p>';if(chartOut)chartOut.innerHTML=out.innerHTML;});
 }
 
 // ── SCORE ──

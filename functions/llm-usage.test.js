@@ -66,6 +66,8 @@ test("a feature's searches are their own per-use line, kept out of byDay", async
   assert.equal(searches.inputTokens, 0);
   // Searches are not API calls, so the day's call count is the one briefing call.
   assert.deepEqual(d.byDay["2026-10-08"], {calls: 1, inputTokens: 78000, outputTokens: 7000});
+  assert.equal(d.byDayEntries["2026-10-08"]["briefing-search|web-search"].calls,7);
+  assert.equal(d.byDayEntries["2026-10-08"]["briefing|gpt-5.5"].cachedTokens,12000);
 });
 
 test("no searches writes nothing, a null usage is still a no-op, and calls can be folded", async () => {

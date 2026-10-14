@@ -1154,7 +1154,8 @@ test('the cost table prices OpenAI search lines per use and keeps them out of th
     'briefing|gpt-5.5':{feature:'briefing',model:'gpt-5.5',calls:2,inputTokens:156000,cachedTokens:24000,outputTokens:14000,firstSeen:'2026-10-08T00:00:00Z'},
     'briefing-search|web-search':{feature:'briefing-search',model:'web-search',calls:30,inputTokens:0,outputTokens:0,cachedTokens:0,firstSeen:'2026-10-08T00:00:00Z'},
     'ask-daybook-search|web-search':{feature:'ask-daybook-search',model:'web-search',calls:3,inputTokens:0,outputTokens:0,cachedTokens:0,firstSeen:'2026-10-08T00:00:00Z'}}};
-  const {context,element}=environment(['llmPriceUsd','llmUsd','llmInt','renderLlmUsage'],{esc:escRead,fbLoadLlmUsage:async()=>ledger,LLM_RATES_AS_OF:'test'});
+  const {context,element}=environment(['llmPriceUsd','llmUsd','llmInt','llmTrendHtml','renderLlmUsage'],{esc:escRead,fbLoadLlmUsage:async()=>ledger,LLM_RATES_AS_OF:'test'});
+  vm.runInContext(readFileSync(new URL('../lib/llm-trend-core.js',import.meta.url),'utf8'),context);
   vm.runInContext(pricingSource(),context);
   context.renderLlmUsage();
   await new Promise(r=>setImmediate(r));
@@ -1163,6 +1164,8 @@ test('the cost table prices OpenAI search lines per use and keeps them out of th
   assert.match(out,/<td>ask-daybook-search<\/td><td>web-search<\/td><td class="num">3 searches<\/td>[\s\S]*?\$0\.0300/);
   const tokens=(132000*0.005+24000*0.0005+14000*0.030)/1000;
   assert.match(out,new RegExp('<tr class="llm-tot"><td>Total</td><td></td><td class="num">2</td>[\\s\\S]*?\\$'+(tokens+0.33).toFixed(2)+'</td>'),'searches add to the cost, not to the call count');
+  assert.match(element('llm-trend-out').innerHTML,/API cost trend · past 7 days/);
+  assert.match(element('llm-trend-out').innerHTML,/no daily ledger record/);
 });
 test('an early name carries an early chip with its up-day volume', () => {
   const {context}=environment(['radarContext'],{uiIcon:()=>''});

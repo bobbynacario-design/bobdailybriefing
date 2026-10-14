@@ -74,6 +74,16 @@ async function recordUsage(db, feature, model, usage, dateKey, calls, opts) {
       e.lastSeen = nowIso;
       if (!e.firstSeen) e.firstSeen = nowIso;
       d.entries[key] = e;
+      if (dateKey) {
+        d.byDayEntries = d.byDayEntries || {};
+        const dayEntries = d.byDayEntries[dateKey] || {};
+        const daily = dayEntries[key] || {feature,model,calls:0,inputTokens:0,outputTokens:0,cachedTokens:0,cacheWriteTokens:0};
+        daily.calls += nCalls;
+        ["inputTokens","outputTokens","cachedTokens","cacheWriteTokens"].forEach(field => {daily[field] = _num(daily[field]) + _num(usage[field]);});
+        dayEntries[key]=daily;d.byDayEntries[dateKey]=dayEntries;
+        if(!d.dailyTrackingStartedAt)d.dailyTrackingStartedAt=nowIso;
+        Object.keys(d.byDayEntries).sort().slice(0,-35).forEach(day => {delete d.byDayEntries[day];});
+      }
       if (dateKey && perDay) {
         const dd = d.byDay[dateKey] || {calls: 0, inputTokens: 0, outputTokens: 0};
         dd.calls += nCalls;
