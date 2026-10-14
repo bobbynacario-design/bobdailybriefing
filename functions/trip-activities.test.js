@@ -46,10 +46,15 @@ test('free time is allowed, while free admission and precise journey claims rema
   assert.equal(A.clean({activities:[{...activity,whyFit:'Use your free arrival day for a flexible history stop.'}]},A.normalize(trip),[source]).activities.length,1);
   for(const whyFit of ['This stop offers free admission to visitors.','It takes a 30-minute ride from your hotel.','Entry is guaranteed for visitors.'])assert.throws(()=>A.clean({activities:[{...activity,whyFit}]},A.normalize(trip),[source]));
 });
+// A Wikivoyage API answer for Manila with three listings.
+const manilaWiki="==See==\n* {{see | name=Intramuros | lat=14.5906 | long=120.9750 | lastedit=2026-03-01 | hours=Daily 8AM-10PM | content=Explore Intramuros for its historic streets and architecture. }}\n* {{see | name=Rizal Park | lat=14.5826 | long=120.9787 | content=A large park with gardens and monuments. }}\n==Eat==\n* {{eat | name=Binondo Food Walk | content=Snack your way through the old Chinese quarter. }}\n==Get in==\n* {{go | name=Manila Airport | content=The main airport. }}";
+const wiki=()=>new Response(JSON.stringify({query:{pages:[{title:'Manila',revisions:[{timestamp:'2026-10-11T08:28:36Z',slots:{main:{content:manilaWiki}}}]}]}}),{headers:{'content-type':'application/json'}});
+const pick=(prompt,name)=>JSON.parse(prompt.split('\nSOURCES: ')[1]).find(e=>e.name===name).id;
 test('opening and cache reuse incur no model/source calls; exact preferences and UID separate caches',async()=>{
-  const db=database();let models=0,fetches=0;const options={db,uid:'bob',data:trip,period:'2026-10-14',fetchImpl:async()=>{fetches++;return response();},generate:async()=>{models++;return {activities:[activity]};}};
+  const db=database();let models=0,fetches=0;const options={db,uid:'bob',data:trip,period:'2026-10-14',fetchImpl:async()=>{fetches++;return wiki();},generate:async p=>{models++;return {activities:[{...activity,sourceId:pick(p,'Intramuros')}]};}};
   assert.equal((await A.run({...options,data:{...trip,generate:false}})).plan,null);assert.equal(models,0);assert.equal(fetches,0);
-  await A.run(options);assert.equal(models,1);
+  const first=await A.run(options);assert.equal(models,1);assert.equal(first.plan.activities[0].url,'https://en.wikivoyage.org/wiki/Manila');
+  assert.equal(first.plan.activities[0].facts.hours,'Daily 8AM-10PM');assert.equal(first.plan.activities[0].facts.source,'Wikivoyage');
   assert.equal((await A.run({...options,data:{...trip,requestId:'activity-test-02'}})).cached,true);assert.equal(models,1);assert.equal(fetches,1);
   assert.ok((await A.run({...options,data:{city:trip.city,start:trip.start,end:trip.end,loadTrip:true}})).plan);assert.equal(fetches,1);
   assert.equal((await A.run({...options,uid:'other',data:{...trip,generate:false}})).plan,null);
@@ -57,15 +62,27 @@ test('opening and cache reuse incur no model/source calls; exact preferences and
   assert.equal((await A.run({...options,data:{...trip,loadTrip:true,commitments:'Poker trip'}})).plan,null);
 });
 test('source failures and fully reserved trips never start a paid call; refreshes stop at the daily cap',async()=>{
-  const db=database();let models=0;const options={db,uid:'bob',data:trip,period:'2026-10-14',generate:async()=>{models++;return {activities:[activity]};},fetchImpl:async()=>new Response('unavailable',{status:403})};
+  const db=database();let models=0;const options={db,uid:'bob',data:trip,period:'2026-10-14',generate:async p=>{models++;return {activities:[{...activity,sourceId:pick(p,'Intramuros')}]};},fetchImpl:async()=>new Response('unavailable',{status:403})};
   await assert.rejects(A.run(options),{code:'unavailable'});assert.equal(models,0);assert.equal(db.records.size,0);
   await assert.rejects(A.run({...options,data:{...trip,busy:['2026-11-20','2026-11-21','2026-11-22','2026-11-23']}}),{code:'failed-precondition'});
-  for(let i=0;i<3;i++)await A.run({...options,fetchImpl:response,data:{...trip,refresh:true,requestId:'refresh-trip-'+i}});
-  await assert.rejects(A.run({...options,fetchImpl:response,data:{...trip,refresh:true,requestId:'refresh-trip-4'}}),{code:'resource-exhausted'});assert.equal(models,3);
+  for(let i=0;i<3;i++)await A.run({...options,fetchImpl:wiki,data:{...trip,refresh:true,requestId:'refresh-trip-'+i}});
+  await assert.rejects(A.run({...options,fetchImpl:wiki,data:{...trip,refresh:true,requestId:'refresh-trip-4'}}),{code:'resource-exhausted'});assert.equal(models,3);
 });
-test('never follows guide redirects or accepts storefront/error content as travel evidence',async()=>{
-  let mode;await A.sourcesFor({city:'Manila'},async(_,options)=>{mode=options.redirect;return response();});assert.equal(mode,'error');
-  await assert.rejects(A.sourcesFor({city:'Manila'},async()=>new Response('The store will not work '+source.content,{headers:{'content-type':'text/html'}})),{code:'unavailable'});
+test('sources never follow redirects, skip transport listings and give the model compact entries',async()=>{
+  let mode;const {sources,base}=await A.sourcesFor(A.normalize(trip),{db:database(),fetchImpl:async(_,o)=>{mode=o.redirect;return wiki();}});
+  assert.equal(mode,'error');assert.equal(base,null);
+  assert.deepEqual(sources.map(s=>s.name).sort(),['Binondo Food Walk','Intramuros','Rizal Park']);
+  const p=A.prompt(A.normalize(trip),sources);assert.match(p,/SOURCES: \[/);assert.doesNotMatch(p,/GUIDES:/);assert.doesNotMatch(p,/Manila Airport/);
+});
+test('measured distances replace the area list: near picks on arrival, nearest first, with the distance shown',()=>{
+  const context=A.normalize({...trip,city:'Taipei',start:'2026-11-12',end:'2026-11-15',base:'Muzik Hotel - Ximen Station Branch',busy:[],pokerDays:['2026-11-13','2026-11-14']});
+  const s=(id,name,km)=>({id,name,source:'Wikivoyage',url:'https://en.wikivoyage.org/wiki/Taipei',distanceKm:km,content:name+' is a place worth seeing in this city.'});
+  const sources=[s('s0','Red House',0.3),s('s1','Huaxi Street Night Market',1.2),s('s2','Shilin Night Market',7.4),s('s3','Taipei 101',6.1)];
+  const make=(name,role,date,kind,effort,slot,sid)=>({...activity,name,role,date,kind,effort,slot,sourceId:sid,evidence:name+' is a place worth seeing in this city.'});
+  const plan=A.clean({activities:[make('Taipei 101','plan','2026-11-12','culture','light','flexible','s3'),make('Red House','plan','2026-11-12','culture','light','flexible','s0'),make('Huaxi Street Night Market','plan','2026-11-12','night-market','light','flexible','s1'),make('Shilin Night Market','if-you-bust','2026-11-13','food','moderate','evening','s2')]},context,sources,{lat:25.04,lng:121.5,matchedName:'Muzik Hotel'});
+  assert.deepEqual(plan.activities.map(a=>a.name),['Red House','Huaxi Street Night Market']);
+  assert.equal(plan.activities[0].areaFit,'About 300 m from your hotel in a straight line');assert.equal(plan.activities[1].distanceKm,1.2);
+  assert.match(plan.notes.join(' '),/within 2.5 km of Muzik Hotel/);assert.match(plan.notes.join(' '),/Wikivoyage \(CC BY-SA\)/);
 });
 test('the page offers the activity button for exactly the cities that have guides',()=>{
   assert.deepEqual([...require('./flights-core').activityCities].sort(),Object.keys(A.GUIDES).sort());
@@ -76,12 +93,6 @@ test('one failed option is left out while the verified ones are kept; all failin
   assert.deepEqual(plan.activities.map(a=>a.name),['Intramuros']);assert.match(plan.notes.join(' '),/1 suggestion was left out/);
   assert.throws(()=>A.clean({activities:[bad,priced]},A.normalize(trip),[source]),/could not be verified/);
   assert.equal(A.clean({activities:[]},A.normalize(trip),[source]).activities.length,0);
-});
-test('guide text decodes hex and named entities so quoted evidence with real punctuation matches',()=>{
-  assert.equal(A.htmlText('<p>the country&#x27;s culture &hellip; Manila&rsquo;s parks &amp;quot; &#39;x&#39; &bogus;</p>'),"the country's culture … Manila’s parks &quot; 'x' &bogus;");
-  const content=A.htmlText('<p>'+'Visit Rizal Park for Manila&rsquo;s greenest open space today. '.repeat(10)+'</p>');
-  const park={...activity,name:'Rizal Park',evidence:"Visit Rizal Park for Manila's greenest open space today."};
-  assert.equal(A.clean({activities:[park]},A.normalize(trip),[{...source,content}]).activities.length,1);
 });
 test('the scout spelling Macao reaches the Macau guide',()=>{
   assert.equal(A.normalize({...trip,city:'Macao'}).city,'Macau');assert.equal(A.normalize({...trip,city:'macau'}).city,'Macau');

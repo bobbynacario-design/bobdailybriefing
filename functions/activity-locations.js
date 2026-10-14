@@ -111,4 +111,11 @@ async function locate({db,data,apiKey='',fetchImpl=fetch,now=Date.now()}) {
  }
  return result;
 }
-module.exports={input,known,match,locate,bearing,metres,panorama,googlePlace};
+// The hotel alone, for trip activities: a point to measure distances from.
+async function placePoint({db,city,name,apiKey,fetchImpl=fetch,now=Date.now()}) {
+ const n=String(name || "").trim();if(!apiKey || !CITIES[city] || n.length<4 || n.length>160)return null;
+ let permitted=null;const gate=async()=>permitted || (permitted=await permit(db,now));
+ const r=await lookup({db,place:{city,name:n},apiKey,fetchImpl,now,withPano:false,gate,osm:false}).catch(()=>null);
+ return r && r.location ? {lat:r.location.lat,lng:r.location.lng,matchedName:r.location.matchedName || n} : null;
+}
+module.exports={CITIES,input,known,match,locate,placePoint,bearing,metres,panorama,googlePlace};
