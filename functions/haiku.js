@@ -13,6 +13,7 @@ function usageOf(json) {
 }
 
 function providerError(status) {
+  if (status === 400) return {code: "failed-precondition", message: "Claude rejected the request format. This needs a server fix; retrying the same request will not help."};
   if (status === 401 || status === 403) return {code: "failed-precondition", message: "Claude refused the server's API key. Check the ANTHROPIC_API_KEY secret and redeploy the function."};
   if (status === 429) return {code: "aborted", message: "Claude is rate-limiting or out of credit. Try again in a few minutes."};
   return {code: status >= 500 ? "unavailable" : "internal", message: "Claude request failed. Try again in a minute."};

@@ -93,6 +93,11 @@ test("provider errors never echo credentials and deadlines prevent another reque
   await assert.rejects(Haiku.ask({...askOptions(expired), deadline: Date.now() - 1}), /timed out/);
   assert.equal(expired.requests.length, 0);
 });
+test("a rejected request format needs a server fix rather than encouraging paid retries", async () => {
+  const f=fixture([{status:400,error:{message:'unsupported maxItems; test-key'}}]);
+  await assert.rejects(Haiku.message({...f,body:{messages:[]}}),e=>e.code==='failed-precondition' && /server fix/.test(e.message) && !e.message.includes('test-key') && !/try again/i.test(e.message));
+  assert.equal(f.billed.length,0);assert.equal(f.requests.length,1);
+});
 
 test("an answer without retrieval is rejected, and a later failure retains earlier usage", async () => {
   const skipped = fixture([textReply()]);

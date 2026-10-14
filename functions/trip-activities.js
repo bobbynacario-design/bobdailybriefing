@@ -53,7 +53,9 @@ async function sourcesFor(context,fetchImpl=fetch) {
   return sources;
 }
 const properties={name:{type:"string"},sourceId:{type:"string"},evidence:{type:"string"},date:{type:"string"},slot:{type:"string",enum:["flexible","morning","afternoon","evening"]},whyFit:{type:"string"},tradeoff:{type:"string"},check:{type:"string"}};
-const SCHEMA={type:"object",additionalProperties:false,required:["activities"],properties:{activities:{type:"array",minItems:1,maxItems:3,items:{type:"object",additionalProperties:false,required:Object.keys(properties),properties}}}};
+// Anthropic accepts minItems 0/1, but not maxItems. Enforce the upper bound
+// in clean(), rather than sending an unsupported provider schema constraint.
+const SCHEMA={type:"object",additionalProperties:false,required:["activities"],properties:{activities:{type:"array",minItems:1,description:"One to three distinct, sourced activity options.",items:{type:"object",additionalProperties:false,required:Object.keys(properties),properties}}}};
 function clean(raw,context,sources) {
   const data=typeof raw==="string"?JSON.parse(raw):raw;
   if(!Array.isArray(data.activities)||!data.activities.length||data.activities.length>3) fail("internal","No grounded suggestions were returned.");
@@ -67,7 +69,7 @@ function clean(raw,context,sources) {
     if((a.date===context.start||a.date===context.end)&&a.slot!=="flexible") fail("internal","Arrival and departure suggestions must stay flexible.");
     const prose=[a.whyFit,a.tradeoff,a.check].map(v=>text(v,450));
     // Precise operational figures are not live inventory. Never manufacture them.
-    if(prose.some(s=>/\d|[₱$€£]|\b(free|open daily|guaranteed|walking distance)\b/i.test(s))) fail("internal","Unverified cost or timing claims were returned. No plan was saved.");
+    if(prose.some(s=>/[₱$€£]|\b\d+(?:\.\d+)?[\s-]*(?:minutes?|hours?|km|kilometers?|metres?|meters?|pesos?|USD|PHP|NTD|TWD)\b|\b\d{1,2}:\d{2}\b|\b(open daily|guaranteed|walking distance|free (?:entry|admission|tickets?)|no admission charge)\b/i.test(s))) fail("internal","Unverified cost or timing claims were returned. No plan was saved.");
     if(prose.some(s=>s.length<15)) fail("internal","The suggestions lacked practical detail.");
     return {name,evidence,date:a.date,slot:a.slot,whyFit:prose[0],tradeoff:prose[1],check:prose[2],url:source.url};
   });

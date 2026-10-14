@@ -5,6 +5,11 @@ const trip={city:'Manila',start:'2026-11-20',end:'2026-11-23',base:'Hotel in Mak
 const source={id:'guide0',url:A.GUIDES.Manila[0],content:'Explore Intramuros for its historic streets and architecture. '.repeat(12)};
 const activity={name:'Intramuros',sourceId:'guide0',evidence:'Explore Intramuros for its historic streets and architecture.',date:'2026-11-22',slot:'morning',whyFit:'Your interest in history makes this a focused alternative to shopping.',tradeoff:'Check the route from your Makati base before committing to the outing.',check:'Confirm visitor access and current admission on the destination website.'};
 const response=()=>new Response('<html><body>'+source.content+'</body></html>',{headers:{'content-type':'text/html'}});
+test('provider schema omits unsupported array bounds while the cleaner enforces three options',()=>{
+  assert.equal(A.SCHEMA.properties.activities.minItems,1);
+  assert.equal(Object.hasOwn(A.SCHEMA.properties.activities,'maxItems'),false);
+  assert.throws(()=>A.clean({activities:[activity,activity,activity,activity]},A.normalize(trip),[source]));
+});
 function database(){const records=new Map();let chain=Promise.resolve();const ref=key=>({key,get:async()=>({exists:records.has(key),data:()=>records.get(key)}),set:async(value,opts)=>records.set(key,opts && opts.merge?{...records.get(key),...value}:value)});return {records,collection:name=>({doc:id=>ref(name+'/'+id)}),runTransaction:fn=>{let run=chain.then(()=>fn({get:r=>r.get(),set:(r,v)=>records.set(r.key,v)}));chain=run.catch(()=>{});return run;}};}
 test('requires a real base, specific interests, valid dates and reserved days',()=>{
   for(const patch of [{base:''},{interests:'anything'},{end:'2026-02-30'},{busy:['2026-12-01']},{city:'Unknown city'},{start:'2026-99-99'}])assert.throws(()=>A.normalize({...trip,...patch}));
@@ -14,6 +19,10 @@ test('rejects fabricated sources, names, exact operational claims and reserved-d
   assert.equal(A.clean({activities:[activity]},A.normalize(trip),[source]).activities[0].url,source.url);
   for(const patch of [{name:'Invented Museum'},{sourceId:'https://attacker.test'},{date:'2026-11-21'},{date:trip.start,slot:'morning'},{whyFit:'Admission costs ₱500 per person.'},{tradeoff:'Walking distance from the hotel.'},{evidence:'Intramuros has an invented exhibit.'}])assert.throws(()=>A.clean({activities:[{...activity,...patch}]},A.normalize(trip),[source]));
   assert.throws(()=>A.clean({activities:[activity,activity]},A.normalize(trip),[source]));
+});
+test('free time is allowed, while free admission and precise journey claims remain blocked',()=>{
+  assert.equal(A.clean({activities:[{...activity,whyFit:'Use your free arrival day for a flexible history stop.'}]},A.normalize(trip),[source]).activities.length,1);
+  for(const whyFit of ['This stop offers free admission to visitors.','It takes a 30-minute ride from your hotel.','Entry is guaranteed for visitors.'])assert.throws(()=>A.clean({activities:[{...activity,whyFit}]},A.normalize(trip),[source]));
 });
 test('opening and cache reuse incur no model/source calls; exact preferences and UID separate caches',async()=>{
   const db=database();let models=0,fetches=0;const options={db,uid:'bob',data:trip,period:'2026-10-14',fetchImpl:async()=>{fetches++;return response();},generate:async()=>{models++;return {activities:[activity]};}};
