@@ -3946,6 +3946,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Flights</div>
     <div class="hero-sub" id="flights-sub">Manila · Cebu · Clark / international and key domestic destinations / flexible dates</div>
     <div class="hero-divider"></div>
+    <button class="tool-chip" type="button" onclick="openFlightQuote()" aria-controls="flight-quote-panel">+ Add a flight quote</button>
   </div>
   <div class="flights-controls">
     <label>Destinations<select id="flights-market" onchange="renderFlightOffers()"><option value="international">International</option><option value="domestic">Domestic · key destinations</option><option value="MPH">Boracay (Caticlan)</option><option value="ENI">El Nido</option><option value="IAO">Siargao</option></select></label>
@@ -3968,7 +3969,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <p class="flights-note">These settings rank the shortlist and are remembered on this device, with the destination mode, departure, cabin and trip filters. Your allowance is a planning estimate for extra charges, not a verified total; confirm passenger and fare conditions on the airline. All observed samples remain below.</p>
   </details>
   <p class="flights-note" id="flights-status" role="status"></p>
-  <details class="flight-trip-settings"><summary>Add a flight quote you found · private to you</summary>
+  <details class="flight-trip-settings" id="flight-quote-panel"><summary>Add a flight quote you found · private to you</summary>
     <p class="flights-note">Copy an economy fare from the airline or booking partner. Enter the total shown for all travellers and the time you checked it. The comparison uses the per-person price; one-way quotes stay separate from returns.</p>
     <form id="flight-quote-form" onsubmit="event.preventDefault();saveFlightQuote(this)">
       <div class="flights-controls">
