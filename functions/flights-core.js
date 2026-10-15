@@ -3,7 +3,7 @@
   var ORIGINS=['MNL','CEB','CRK'];
   var DOMESTIC={MPH:'Boracay (Caticlan)',ENI:'El Nido',IAO:'Siargao',CEB:'Cebu',TAG:'Bohol',PPS:'Puerto Princesa'};
   var PH=new Set('MNL CEB CRK DVO ILO KLO MPH PPS TAG TAC BCD CGY ZAM GES DGT BXU DRP LGP LAO TUG RXS CYZ CBO DPL PAG SJI IAO SUG USU WNP BSO RZP ENI MBT TBH JOL TWT CYP DTI VRC SFE BQA BPH CRM OMH SGS LWA MXI LBX'.split(' '));
-  var DOMAINS=['philippineairlines.com','cathaypacific.com','airasia.com','cebupacificair.com','flyscoot.com','trip.com'];
+  var DOMAINS=['philippineairlines.com','cathaypacific.com','airasia.com','cebupacificair.com','flyscoot.com','trip.com','aviasales.com'];
   function url(raw) {
     try { var u=new URL(raw);return u.protocol==='https:' && !u.username && !u.password && DOMAINS.some(function(d){return u.hostname===d || u.hostname.endsWith('.'+d);}) ? u.href : ''; }
     catch (_) { return ''; }
