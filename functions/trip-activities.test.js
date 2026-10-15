@@ -65,8 +65,15 @@ test('source failures and fully reserved trips never start a paid call; refreshe
   const db=database();let models=0;const options={db,uid:'bob',data:trip,period:'2026-10-14',generate:async p=>{models++;return {activities:[{...activity,sourceId:pick(p,'Intramuros')}]};},fetchImpl:async()=>new Response('unavailable',{status:403})};
   await assert.rejects(A.run(options),{code:'unavailable'});assert.equal(models,0);assert.equal(db.records.size,0);
   await assert.rejects(A.run({...options,data:{...trip,busy:['2026-11-20','2026-11-21','2026-11-22','2026-11-23']}}),{code:'failed-precondition'});
-  for(let i=0;i<3;i++)await A.run({...options,fetchImpl:wiki,data:{...trip,refresh:true,requestId:'refresh-trip-'+i}});
-  await assert.rejects(A.run({...options,fetchImpl:wiki,data:{...trip,refresh:true,requestId:'refresh-trip-4'}}),{code:'resource-exhausted'});assert.equal(models,3);
+  for(let i=0;i<10;i++){
+    const result=await A.run({...options,fetchImpl:wiki,data:{...trip,refresh:true,requestId:'refresh-trip-'+i}});
+    assert.equal(result.quota.limit,10);assert.equal(result.quota.remaining,9-i);
+    assert.equal(result.quota.resetAt,'2026-10-14T16:00:00.000Z');
+  }
+  await assert.rejects(A.run({...options,fetchImpl:wiki,data:{...trip,refresh:true,requestId:'refresh-trip-11'}}),e=>e.code==='resource-exhausted' && e.details.quota.remaining===0 && /midnight Philippine time/.test(e.message));assert.equal(models,10);
+  const saved=await A.run({...options,data:{city:trip.city,start:trip.start,end:trip.end,loadTrip:true}});assert.ok(saved.plan);assert.equal(saved.quota.remaining,0);assert.equal(models,10);
+  const next=await A.run({...options,period:'2026-10-15',fetchImpl:wiki,data:{...trip,refresh:true,requestId:'next-day-trip'}});assert.equal(next.quota.remaining,9);assert.equal(next.quota.resetAt,'2026-10-15T16:00:00.000Z');
+
 });
 test('sources never follow redirects, skip transport listings and give the model compact entries',async()=>{
   let mode;const {sources,base}=await A.sourcesFor(A.normalize(trip),{db:database(),fetchImpl:async(_,o)=>{mode=o.redirect;return wiki();}});
@@ -128,4 +135,11 @@ test('poker days get one light local morning before play and up to three backups
 test('poker days must fall inside the trip and are never also reserved days',()=>{
   assert.throws(()=>A.normalize({...trip,pokerDays:['2026-12-01']}));
   assert.deepEqual(A.normalize({...trip,pokerDays:['2026-11-21','2026-11-22']}).pokerDays,['2026-11-22']);
+});
+
+test('failed AI attempts consume a build and return the quota; cached plans consume none',async()=>{
+  const db=database(),options={db,uid:'bob',data:trip,period:'2026-10-14',fetchImpl:wiki,generate:async()=>{throw Object.assign(new Error('Upstream failed'),{code:'unavailable'});}};
+  await assert.rejects(A.run(options),e=>e.code==='unavailable' && e.details.quota.remaining===9);
+  const loaded=await A.run({...options,data:{city:trip.city,start:trip.start,end:trip.end,loadTrip:true}});
+  assert.equal(loaded.quota.used,1);assert.equal(loaded.quota.remaining,9);
 });
