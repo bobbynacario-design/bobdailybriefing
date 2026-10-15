@@ -8,6 +8,8 @@
     "dry-run": "node refresh-flights.js --dry-run",
     "hotels": "node refresh-hotels.js",
     "hotels:dry-run": "node refresh-hotels.js --dry-run",
+    "exact": "node exact-prices.js",
+    "exact:dry-run": "node exact-prices.js --dry-run",
     "test": "node --test *.test.js"
   },
   "engines": {
