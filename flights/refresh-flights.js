@@ -1,4 +1,4 @@
-import {readFileSync,existsSync} from 'node:fs';
+import {readFileSync,writeFileSync,existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname,join} from 'node:path';
 import {initializeApp,cert,applicationDefault} from 'firebase-admin/app';
@@ -9,6 +9,7 @@ import {checkAnnouncementLinks,preferAnnouncement} from './announcement-links.js
 import {trackChanges} from './changes.js';
 import {trimOffers} from './trim.js';
 import {updateHistory} from './history.js';
+import {pairReturns} from './pairs.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 
 const started=Date.now(), dryRun=process.argv.includes('--dry-run'), force=process.argv.includes('--force') || process.env.FLIGHTS_FORCE==='1';
@@ -28,7 +29,7 @@ async function fetchSource(source) {
   }
 }
 async function main() {
-  let prior=null, priorHistory=null;
+  let prior=null, priorHistory=null, fx=null;
   if(!dryRun) {
     const key=join(root,'../radar/serviceAccountKey.json');
     initializeApp({projectId:'pokerhq-a67e4',credential:existsSync(key) ? cert(JSON.parse(readFileSync(key,'utf8'))) : applicationDefault()});
@@ -41,15 +42,21 @@ async function main() {
     }
     const history=await db.collection('briefings-bob').doc('flights-history').get();
     priorHistory=history.exists ? history.data() : null;
-  }
+    const ph=await db.collection('briefings-bob').doc('radar-ph').get();
+    fx=ph.exists ? ph.data() : null;
+  } else if(process.env.FLIGHTS_FX_FILE) fx=JSON.parse(readFileSync(process.env.FLIGHTS_FX_FILE,'utf8'));
   const results=[];
   // Two at a time, bounded timeout per public page. No anti-bot bypass or retries.
   for(let i=0;i<SOURCES.length;i+=2) results.push(...await Promise.all(SOURCES.slice(i,i+2).map(fetchSource)));
-  const fresh=await checkAnnouncementLinks(results.flatMap(r=>r.items)), byId=new Map();
+  // Return legs only pair with outbound fares; they are never offers themselves.
+  const legs=results.flatMap(r=>r.items.filter(d=>d.kind==='return-leg'));
+  const fresh=await checkAnnouncementLinks(results.flatMap(r=>r.items.filter(d=>d.kind!=='return-leg'))), byId=new Map();
   for(const offer of fresh) {
     const existing=byId.get(offer.id);
     byId.set(offer.id,preferAnnouncement(existing,offer));
   }
+  const pairs=pairReturns(fresh,legs,fx,asOf);
+  pairs.forEach(p=>byId.set(p.id,p));
   const failed=new Set(results.filter(r=>r.status!=='ok').map(r=>r.url));
   for(const offer of prior?.offers || []) {
     if(failed.has(offer.discoveryUrl || offer.sourceUrl) && !byId.has(offer.id) && Date.now()-Date.parse(offer.checkedAt)<48*3600000 &&
@@ -61,12 +68,14 @@ async function main() {
   const sources=results.map(({items,...row})=>({...row,offerCount:items.length}));
   const successful=results.filter(r=>r.status==='ok').length;
   const doc={asOf,generatedAt:checkedAt,origins:ORIGINS,offers,sources,
-    summary:{successfulSources:successful,totalSources:SOURCES.length,fareCount:offers.filter(d=>d.kind==='advertised-fare').length,promoCount:offers.filter(d=>d.kind==='promo').length},
+    summary:{successfulSources:successful,totalSources:SOURCES.length,fareCount:offers.filter(d=>d.kind==='advertised-fare').length,pairedRoundTrips:offers.filter(d=>d.paired).length,returnLegs:legs.length,promoCount:offers.filter(d=>d.kind==='promo').length},
     changes:{newOffers:offers.filter(d=>d.change.status==='new').length,priceDrops:offers.filter(d=>d.change.status==='dropped').length,priceRises:offers.filter(d=>d.change.status==='rose').length,comparedWith:prior?.generatedAt || null},
     coverage:'Airline fares and labelled sale announcements; not an exhaustive worldwide fare search or live seat inventory.',modelCalls:0};
   const history=updateHistory(priorHistory,offers,asOf,checkedAt);
   sources.forEach(s=>console.log(s.id+': '+s.status+' · '+s.message));
   console.log(JSON.stringify({bytes:Buffer.byteLength(JSON.stringify(doc)),historyRoutes:Object.keys(history.routes).length,historyBytes:Buffer.byteLength(JSON.stringify(history)),offersFound:byId.size,summary:doc.summary,origins:ORIGINS,airlines:[...new Set(offers.map(d=>d.airline))],destinations:[...new Set(offers.map(d=>d.destination))]}));
+  // A dry run can save what it would write, for a local preview.
+  if(dryRun && process.env.FLIGHTS_DUMP) writeFileSync(process.env.FLIGHTS_DUMP,JSON.stringify(doc));
   if(dryRun) return;
   if(!successful) throw Error('No airline source produced readable offers; previous scout preserved.');
   const batch=db.batch();

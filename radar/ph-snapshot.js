@@ -93,6 +93,16 @@ async function buildPhSnapshot(config, prev, barSink) {
     var aud = await fetchYahooChart('AUDPHP=X', '5d');
     if (aud.length) fx.audphp = { level: r2(aud[aud.length - 1].close) };
   } catch (e) { console.log('  FX AUDPHP skipped: ' + (e.message || e)); }
+  // Level only, for Trips: budget-airline return legs priced in these
+  // currencies become PHP round-trip estimates (flights/pairs.js). Six
+  // significant figures, since a won or a dong is a fraction of a centavo.
+  for (var c of ['JPY', 'KRW', 'THB', 'SGD', 'HKD', 'MYR', 'TWD', 'CNY', 'IDR', 'VND']) {
+    try {
+      var bars = await fetchYahooChart(c + 'PHP=X', '5d');
+      var last = bars.length ? Number(bars[bars.length - 1].close) : NaN;
+      if (last > 0) fx[c.toLowerCase() + 'php'] = { level: Number(last.toPrecision(6)) };
+    } catch (e) { console.log('  FX ' + c + 'PHP skipped: ' + (e.message || e)); }
+  }
 
   // PSEi stocks from PSE Edge. Company and security ids are reused from the
   // last doc, so a normal run is two requests per stock.

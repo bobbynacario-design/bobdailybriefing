@@ -13,7 +13,7 @@ test('MOVE prices require a visible dated single-adult flight card; bundles and 
  const card='<a href="https://www.airasia.com/v2/flights/search/?origin=MNL&amp;destination=CEB&amp;departDate=01%2F01%2F2027&amp;tripType=O&amp;adult=1&amp;child=0&amp;infant=0&amp;cabinClass=economy&amp;currency=PHP"><img alt="Philippines AirAsia"><span>1 Jan (Fri)</span><span>MNL</span><span>CEB</span><span>Direct</span><span>PHP</span><span class="text-2xl">2,401</span></a>';
  const d=parseAirAsiaFares('<h1>From PHP 1</h1>'+card+card,s,checked);assert.equal(d.length,1);assert.equal(d[0].amount,2401);assert.equal(d[0].tripType,'one-way');assert.equal(d[0].returnDate,'');assert.equal(d[0].stops,0);
  const bkk=parseAirAsiaFares(card.replace(/CEB/g,'DMK'),s,checked);assert.equal(bkk[0].destination,'DMK');assert.equal(bkk[0].destinationName,'Bangkok');
- for(const bad of [card.replace('1 Jan','2 Jan'),card.replace('adult=1','adult=2'),card.replace('tripType=O','tripType=R'),card.replace('/v2/flights/search/','/snap/hotels/list'),card.replace('class="text-2xl"','class="other"'),card.replace('Philippines AirAsia','Unknown operator'),card.replace('<span>CEB</span>','<span>PPS</span>')])assert.equal(parseAirAsiaFares(bad,s,checked).length,0);
+ for(const bad of [card.replace('1 Jan','2 Jan'),card.replace('adult=1','adult=2'),card.replace('tripType=O','tripType=R'),card.replace('/v2/flights/search/','/snap/hotels/list'),card.replace('<span class="text-2xl">2,401</span>',''),card.replace('Philippines AirAsia','Unknown operator'),card.replace('<span>CEB</span>','<span>PPS</span>')])assert.equal(parseAirAsiaFares(bad,s,checked).length,0);
 });
 const source={id:'pal-manila',airline:'Philippine Airlines',type:'fares',url:'https://flights.philippineairlines.com/en-ph/flights-from-manila'};
 function fare({origin='Manila (MNL)',destination='Tokyo (NRT)',date='22 Nov 2026 - 27 Nov 2026',price='USD 250*',trip='Round-trip'}={}) {
@@ -59,4 +59,23 @@ test('accepts only the requested domestic destinations and normalizes Boracay',(
  assert.equal(parseFares(fare({destination:'Kalibo (KLO)'}),source,checked).length,0);
  assert.equal(parseFares(fare({destination:'Puerto Princesa (PPS)'}),source,checked).length,1);
  assert.equal(parseFares(fare({destination:'Siargao (IAO)',origin:'Davao (DVO)'}),source,checked).length,0);
+});
+test('MOVE keeps every named budget airline under one name, drops ticketing-only and mixed cards, reads newer price cards, keeps the cheaper repeat, and turns inbound pages into return legs',()=>{
+ const s={airline:'AirAsia MOVE',type:'airasia-fares',url:'https://www.airasia.com/flights/en/gb/from-manila-mnl-to-hong-kong-hkg/'};
+ const card=(op,from,to,date,day,cur,price,extra='')=>'<a href="https://www.airasia.com/v2/flights/search/?origin='+from+'&amp;destination='+to+'&amp;departDate='+date+'&amp;tripType=O&amp;adult=1&amp;child=0&amp;infant=0&amp;cabinClass=economy&amp;currency='+cur+'">'+op.map(o=>'<img alt="'+o+'">').join('')+'<span>'+day+'</span><span>'+from+'</span><span>Direct</span><span>'+to+'</span><span>'+cur+'</span><span>'+price+'</span>'+extra+'</a>';
+ const html=[card(['Hong Kong Express Airways'],'MNL','HKG','05/12/2026','5 Dec (Sat)','PHP','3,648'),card(['Hong Kong Express Airways'],'MNL','HKG','05/12/2026','5 Dec (Sat)','PHP','3,500'),
+   card(['Hahn Air'],'MNL','HKG','06/12/2026','6 Dec (Sun)','PHP','2,000'),card(['Jeju Air','Korean Air'],'MNL','HKG','07/12/2026','7 Dec (Mon)','PHP','2,000'),
+   card(['Philippine Airlines'],'MNL','HKG','08/12/2026','8 Dec (Tue)','PHP','2,000'),card(['Jetstar Japan'],'NRT','MNL','16/01/2027','16 Jan (Sat)','JPY','23,450')].join('');
+ const out=parseAirAsiaFares(html,s,'2026-10-15T00:00:00Z');
+ const fares=out.filter(d=>d.kind==='advertised-fare'),legs=out.filter(d=>d.kind==='return-leg');
+ assert.deepEqual(fares.map(d=>[d.airline,d.departureDate,d.amount]),[['HK Express','2026-12-05',3500]]);
+ assert.match(fares[0].terms,/Sold through AirAsia MOVE for HK Express/);
+ assert.deepEqual(legs.map(d=>[d.airline,d.origin,d.destination,d.currency,d.amount]),[['Jetstar','NRT','MNL','JPY',23450]]);
+});
+test('return pages with rounded amounts (146K won, 2.6M dong) give rounded legs; an outbound PHP card never does',()=>{
+ const s={airline:'AirAsia MOVE',type:'airasia-fares',url:'https://www.airasia.com/flights/en/gb/from-seoul-incheon-icn-to-manila-mnl/'};
+ const card=(from,to,cur,price)=>'<a href="https://www.airasia.com/v2/flights/search/?origin='+from+'&amp;destination='+to+'&amp;departDate=23/10/2026&amp;tripType=O&amp;adult=1&amp;child=0&amp;infant=0&amp;cabinClass=economy&amp;currency='+cur+'"><img alt="Jeju Air"><span>23 Oct (Fri)</span><span>'+from+'</span><span>Direct</span><span>'+to+'</span><span>'+cur+'</span><span>'+price+'</span></a>';
+ const legs=parseAirAsiaFares(card('ICN','MNL','KRW','146K')+card('DAD','MNL','VND','2.6M'),s,'2026-10-15T00:00:00Z');
+ assert.deepEqual(legs.map(d=>[d.kind,d.currency,d.amount,d.rounded]),[['return-leg','KRW',146000,true],['return-leg','VND',2600000,true]]);
+ assert.equal(parseAirAsiaFares(card('MNL','ICN','PHP','7K'),s,'2026-10-15T00:00:00Z').length,0);
 });

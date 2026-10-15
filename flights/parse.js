@@ -109,6 +109,8 @@ export function parseSource(html, source, checkedAt) {
   const items=source.type==='trip-fares' ? parseTripFares(html,source,checkedAt) : source.type==='airasia-fares' ? parseAirAsiaFares(html,source,checkedAt) : source.type==='fares' ? parseFares(html,source,checkedAt) : source.id==='airasia-ph' ? parseAirAsiaPromos(html,source,checkedAt) : source.airline==='Cebu Pacific' ? parseCebuCampaigns(html,source,checkedAt) : [];
   const blocked=/sec-if-cpt|captcha|access denied|verify you are human/i.test(html);
   if(source.type==='campaign-feed' && !items.length && !blocked && /<rss\b/i.test(html) && /<channel>/i.test(html))return {items,status:'ok',message:'No current eligible sale announcements in the readable feed.'};
+  const legs=items.filter(d=>d.kind==='return-leg').length;
+  if(legs) return {items,status:'ok',message:legs+' return '+(legs===1?'leg':'legs')+' read for round-trip pairing'+(items.length>legs ? ' · '+(items.length-legs)+' eligible offers read' : '')};
   return {items,status:items.length ? 'ok' : 'unavailable',message:items.length ? items.length+(source.type==='campaign-feed'?' sale announcements read; route availability not verified':' eligible offers read') : blocked ?
     'Airline page requires an interactive browser; no fares extracted.' : 'No readable eligible offers with verified route and fare fields. Check the airline directly.'};
 }
@@ -143,34 +145,62 @@ export function parseTripFares(html,source,checkedAt) {
   });return out;
 }
 
+// AirAsia MOVE is a booking site: its route pages list many airlines. Only
+// named budget airlines are kept (the full-service ones come from their own
+// pages), each under one name. A card whose logos name two different airlines,
+// or only a ticketing carrier such as Hahn Air, is left out.
+const BUDGET_AIRLINES=[
+  [/^(?:Philippines |Thai |Indonesia |Malaysia )?AirAsia(?: X| Cambodia)?$/i,'AirAsia'],[/^Scoot$/i,'Scoot'],[/^Cebu Pacific$/i,'Cebu Pacific'],
+  [/^Jetstar(?: Japan| Asia| Airways)?$/i,'Jetstar'],[/^(?:Hong Kong Express(?: Airways)?|HK Express)$/i,'HK Express'],[/^Jeju Air$/i,'Jeju Air'],[/^Jin Air$/i,'Jin Air'],
+  [/^Eastar Jet$/i,'Eastar Jet'],[/^T.?way Air$/i,"T'way Air"],[/^Air Busan$/i,'Air Busan'],[/^Air Seoul$/i,'Air Seoul'],[/^(?:Thai )?Viet ?Jet(?: Air)?$/i,'VietJet'],
+  [/^Tigerair Taiwan$/i,'Tigerair Taiwan'],[/^Peach(?: Aviation)?$/i,'Peach'],[/^ZIPAIR(?: Tokyo)?$/i,'ZIPAIR'],[/^Spring Airlines$/i,'Spring Airlines']
+];
+export function budgetAirline(names) {
+  const found=[...new Set(names.map(n=>{const m=BUDGET_AIRLINES.find(([re])=>re.test(text(n)));return m ? m[1] : '';}))];
+  return found.length===1 && found[0] && names.length ? found[0] : null;
+}
 // MOVE route cards include the exact dated booking link and visible price.
 // Flight+hotel bundles and page headline prices are deliberately not fares.
+// A page into Manila, Cebu or Clark gives return legs (kind 'return-leg', in
+// the origin's currency) that the scout pairs with outbound fares; they are
+// never shown as fares themselves.
 export function parseAirAsiaFares(html,source,checkedAt) {
-  const $=load(html), out=[],seen=new Set();
+  const $=load(html), out=[],seen=new Map();
   $('a[href]').each((_,element)=>{
     const card=$(element),link=officialUrl(card.attr('href'),source.url);
     if(!link) return;
     const u=new URL(link),p=u.searchParams;
     if(u.pathname!=='/v2/flights/search/' || p.get('tripType')!=='O' || p.get('adult')!=='1' || p.get('child')!=='0' || p.get('infant')!=='0' || p.get('cabinClass')!=='economy') return;
     const origin=p.get('origin'),destination=p.get('destination'),departureDate=dateValue(p.get('departDate'));
-    if(!ORIGINS.includes(origin) || !(outsidePH(destination) || DOMESTIC[destination]) || !departureDate || departureDate<checkedAt.slice(0,10)) return;
+    const inbound=ORIGINS.includes(destination) && outsidePH(origin);
+    if(!(inbound || ORIGINS.includes(origin) && (outsidePH(destination) || DOMESTIC[destination])) || !departureDate || departureDate<checkedAt.slice(0,10)) return;
     const body=text(card.text());
     const visibleCodes=card.find('span').toArray().map(e=>text($(e).text()));
     if(!visibleCodes.includes(origin) || !visibleCodes.includes(destination)) return;
     const date=new Date(departureDate+'T00:00:00Z');
     const visibleDay=new RegExp('\\b'+date.getUTCDate()+'\\s+'+Object.keys(months)[date.getUTCMonth()]+'\\b','i');
     if(!visibleCodes.some(v=>visibleDay.test(v))) return;
-    const prices=card.find('span.text-2xl').toArray().map(e=>text($(e).text()));
+    // The price sits in a large span, or (newer cards) right after the currency code.
+    let prices=card.find('span.text-2xl').toArray().map(e=>text($(e).text()));
+    if(!prices.length) prices=visibleCodes.map((v,i)=>v===p.get('currency') ? visibleCodes[i+1] : null).filter(v=>v!=null);
     const currencies=visibleCodes.filter(v=>/^[A-Z]{3}$/.test(v)&&v===p.get('currency'));
-    if(prices.length!==1 || !/^[\d,]+(?:\.\d{1,2})?$/.test(prices[0]) || !currencies.length) return;
-    const amount=Number(prices[0].replace(/,/g,''));if(!(amount>0)) return;
+    if(prices.length!==1 || !(/^[\d,]+(?:\.\d{1,2})?$/.test(prices[0]) || inbound && /^\d+(?:\.\d)?[KM]$/.test(prices[0])) || !currencies.length) return;
+    // Return pages in won or dong show rounded amounts (146K, 2.6M); kept, marked rounded.
+    const rounded=/[KM]$/.test(prices[0]),amount=rounded ? Math.round(Number(prices[0].slice(0,-1))*(prices[0].endsWith('M') ? 1e6 : 1e3)) : Number(prices[0].replace(/,/g,''));if(!(amount>0)) return;
     const operators=card.find('img[alt]').toArray().map(e=>text($(e).attr('alt')));
-    const airline=operators.some(a=>/^(?:Philippines|Thai|Indonesia|Malaysia)?\s*AirAsia(?: X)?$/i.test(a))?'AirAsia':operators.includes('Cebu Pacific')?'Cebu Pacific':operators.includes('Scoot')?'Scoot':null;
+    const airline=budgetAirline(operators);
     if(!airline) return;
     const currency=p.get('currency'),key=[airline,origin,destination,departureDate,'','one-way','Economy',currency].join('|');
-    if(seen.has(key)) return;seen.add(key);
+    // The page repeats cards, sometimes at two prices for one date: keep the cheaper.
+    if(seen.has(key)){const prev=out[seen.get(key)];if(prev.amount<=amount)return;out.splice(seen.get(key),1);seen.forEach((v,k)=>{if(v>seen.get(key))seen.set(k,v-1);});}
+    seen.set(key,out.length);
+    const direct=visibleCodes.includes('Direct');
+    if(inbound) {
+      out.push({id:id('leg|'+key),kind:'return-leg',airline,origin,destination,departureDate,currency,amount,rounded,stops:direct?0:null,sourceUrl:source.url,bookingUrl:link,checkedAt});
+      return;
+    }
     out.push({id:id(key),kind:'advertised-fare',airline,origin,destination,originName:origin==='MNL'?'Manila':origin==='CEB'?'Cebu':'Clark',destinationName:DOMESTIC[destination] || AIRPORT_CITY[destination] || destination,departureDate,returnDate:'',tripType:'one-way',cabin:'Economy',currency,amount,
-      priceLabel:currency+' '+amount,priceBasis:'AirAsia MOVE advertised one-way fare for one adult; not a return ticket or final checkout total.',taxesIncluded:null,travelTaxIncluded:null,checkedBaggageIncluded:null,stops:visibleCodes.includes('Direct')?0:null,
-      fees:'Confirm taxes, surcharges and applicable travel tax at checkout.',baggage:'Confirm baggage allowance and add-on prices.',connections:'Flight times and stops must be reconfirmed.',bookingEnd:'',travelPeriod:'Exact sample departure date; return leg not priced.',sourceUrl:source.url,bookingUrl:link,checkedAt,airlineSeen:'',terms:'Sold through AirAsia MOVE. Confirm the operating airline, availability and final price before booking.'});
+      priceLabel:currency+' '+amount,priceBasis:'AirAsia MOVE advertised one-way fare for one adult; not a return ticket or final checkout total.',taxesIncluded:null,travelTaxIncluded:null,checkedBaggageIncluded:null,stops:direct?0:null,
+      fees:'Confirm taxes, surcharges and applicable travel tax at checkout.',baggage:'Confirm baggage allowance and add-on prices.',connections:direct ? 'Shown as direct on AirAsia MOVE; reconfirm flight times.' : 'Connection or stops not established; reconfirm before booking.',bookingEnd:'',travelPeriod:'Exact sample departure date; return leg not priced.',sourceUrl:source.url,bookingUrl:link,checkedAt,airlineSeen:'',terms:'Sold through AirAsia MOVE'+(airline==='AirAsia' ? '' : ' for '+airline)+'. Confirm the operating airline, availability and final price before booking.'});
   });return out;
 }
