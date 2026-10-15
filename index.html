@@ -3246,7 +3246,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">Markets</button>
     <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">Sports</button>
     <button class="ntab" data-page="calendar" onclick="switchPage('calendar',this)">Calendar</button>
-    <button class="ntab" data-page="flights" onclick="switchPage('flights',this)">Flights</button>
+    <button class="ntab" data-page="flights" onclick="switchPage('flights',this)">Trips</button>
     <button class="ntab owner-only" data-page="about" onclick="switchPage('about',this)">About you</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">Help</button>
     <button class="ntab" data-page="decisions" onclick="switchPage('decisions',this)">Decisions</button>
@@ -3961,8 +3961,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 <!-- ═══════════════ FLIGHTS PAGE ═══════════════ -->
 <div class="page" id="page-flights">
   <div class="hero" style="margin-bottom:1.25rem">
-    <div class="hero-eyebrow">Your travel scout</div>
-    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Flights</div>
+    <div class="hero-eyebrow">Your trip planner</div>
+    <div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Trips</div>
     <div class="hero-sub" id="flights-sub">Manila · Cebu · Clark / international and key domestic destinations / flexible dates</div>
     <div class="hero-divider"></div>
     <button class="tool-chip" type="button" onclick="openFlightQuote()" aria-controls="flight-quote-panel">+ Add a flight quote</button>
@@ -4317,7 +4317,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     </div>
 
     <div class="help-card">
-      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Flights — fares and seat sales</div>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Trips — fares, hotels and seat sales</div>
       <p><b>Trips worth checking first</b> ranks up to three distinct destinations using fresh economy return samples, your trip length and an optional PHP budget. Set an extra-cost allowance for planning; it is added to the fare when checking your budget, but is not a verified ticket total. The cards explain why each option was selected and which taxes, baggage or stops remain unconfirmed. Checked-baggage preference highlights gaps; confirmed-nonstop-only excludes flights with unknown stops. Below it, <b>All destinations</b> lists cities by region (tap a region header to fold it; <b>Expand all</b> and <b>Collapse all</b> act on every region, folded regions are remembered on this device, and open cities stay open when you change filters), with separate journey and cabin groups ranked cheapest first, and each group's best fare, dates (weekday and nights) and how many fares were seen; open a city for every observed date pair, each with its own airline link, Save, and expandable fare restrictions, source-check timestamp and dated exchange rate. "All N fares to …" on a shortlist card opens that city. Cabin defaults to Economy; the status line counts the business and premium fares it hides. Destination mode, departure, cabin, trip and your trip settings are remembered on this device (not the destination text or dates); Reset filters restores the defaults.</p>
       <p><b>Your time off · trips abroad</b> sits at the top. It reads your leave from Calendar (Zoho People leave synced to your linked Google or Microsoft 365 calendar, or your own events with “leave” in the title), joins it with the weekends and company holidays next to it, and shows each window of three days or more: how many leave days it costs, what it overlaps on your calendar (such as a Manila poker series or a meeting), the scouted fares that fit inside it, and Google Flights searches for those exact dates in PHP for the cheapest cities the scout sees. Those searches include Cebu Pacific, AirAsia and other airlines the scout cannot read; Daybook does not price them itself. <b>Poker abroad comes from PokerHQ</b>, read-only: its tournaments at venues abroad (Taipei, Incheon, Jeju, Macau, Hanoi and others) are grouped into festivals. Where you starred events in PokerHQ (★ Playing These), the card plans a trip from the day before your first pick to the day after your last: leave days needed (or “inside your time off”), your picks’ buy-ins, the cheapest scouted fare to that city around those dates, and links to Google Flights, the organiser and PokerHQ. With nothing starred, it shows the events PokerHQ grades target or stretch for your bankroll (PokerHQ’s own rule; the amount is never shown) and the trip if you played those — a grade means affordable, not chosen. Festivals with neither get one line with a flight search around the main event. Poker entries on your calendar with a city abroad in the title appear too when PokerHQ does not already cover them. Daybook never changes PokerHQ.</p>
       <p><b>Folded lanes.</b> Budget-airline one-way fares, partner fare samples, promotions without a booking deadline, and the domestic and Manila staycation hotel deals each fold to one line with their count and lowest price. Open one and it stays open while you change filters on this visit. A hotel on several weekends is one card, with its other dates and prices underneath.</p>
@@ -5993,7 +5993,7 @@ document.addEventListener('visibilitychange', function() { if (document.visibili
 var USAGE_LABELS = {
   fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence', ask_send_decision:'Ask: decision draft', ask_send_check:'Ask: to check', ask_send_take:'Ask: my take', ask_send_copy:'Ask: copy as text', 'ask_send_confirm-check':'Ask: check added',
   page_today:'Today', page_command:'Morning 5', page_evidence:'Evidence', page_decisions:'Decisions', page_research:'Research', page_timeline:'Timeline',
-  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_flights:'Flights', page_calendar:'Calendar', page_pse:'PSE', page_trends:'Trends',
+  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_flights:'Trips', page_calendar:'Calendar', page_pse:'PSE', page_trends:'Trends',
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
   card_more:'More like this', card_less:'Less like this', card_remind:'Remind me',
   aha_save:'Aha: save insight', aha_decision:'Aha: open as decision', aha_note:'Aha: write my take', aha_check:'Aha: check later', aha_link:'Aha: jump to a story',
