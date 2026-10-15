@@ -130,7 +130,8 @@ test('poker days get one light local morning before play and up to three backups
   assert.deepEqual(by('plan'),['The Red House','Huaxi Street Tourist Night Market']);
   assert.deepEqual(by('before-play'),['Lungshan Temple']);
   assert.deepEqual(by('if-you-bust'),['National Palace Museum','Elephant Mountain','Dihua Street']);
-  assert.match(plan.notes.join(' '),/backups if you bust early/);
+  assert.match(plan.notes.join(' '),/shared backups/);
+  assert.ok(plan.activities.filter(a=>a.role==='if-you-bust').every(a=>JSON.stringify(a.eligibleDates)===JSON.stringify(['2026-11-13','2026-11-14'])));
 });
 test('poker days must fall inside the trip and are never also reserved days',()=>{
   assert.throws(()=>A.normalize({...trip,pokerDays:['2026-12-01']}));
@@ -142,4 +143,18 @@ test('failed AI attempts consume a build and return the quota; cached plans cons
   await assert.rejects(A.run(options),e=>e.code==='unavailable' && e.details.quota.remaining===9);
   const loaded=await A.run({...options,data:{city:trip.city,start:trip.start,end:trip.end,loadTrip:true}});
   assert.equal(loaded.quota.used,1);assert.equal(loaded.quota.remaining,9);
+});
+
+test('model receives listing hours, prices and edit dates without treating them as live confirmation',()=>{
+  const sourceWithFacts={...source,source:'Wikivoyage',hours:'10:00-22:30',price:'NT$45-60',lastedit:'2016-02-17'};
+  const prompt=A.prompt(A.normalize(trip),[sourceWithFacts]);
+  const entry=JSON.parse(prompt.split('\nSOURCES: ')[1])[0];
+  assert.equal(entry.facts.hours,'10:00-22:30');assert.equal(entry.facts.price,'NT$45-60');assert.equal(entry.facts.lastedit,'2016-02-17');
+  assert.match(prompt,/Never say hours or prices were absent/);assert.match(prompt,/not live confirmation/);
+});
+
+test('shared backups exclude reserved poker days and departure',()=>{
+  const context=A.normalize({...trip,busy:['2026-11-21'],pokerDays:['2026-11-20','2026-11-21','2026-11-22','2026-11-23']});
+  const plan=A.clean({activities:[{...activity,role:'if-you-bust'}]},context,[source]);
+  assert.deepEqual(plan.activities[0].eligibleDates,['2026-11-20','2026-11-22']);
 });
