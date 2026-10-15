@@ -23,7 +23,7 @@ const {
 } = require("./market-facts");
 const {authorize, daybookRole, guardedGeneration} = require("./generation-guard");
 const {
-  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, pseLine, fareWatchLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
+  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, pseLine, fareWatchLine, bookedTripLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
   notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, newReminders, weeklyReadDue,
   commitmentLine, weeklyReviewDue,
 } = require("./delivery-core");
@@ -1490,6 +1490,17 @@ async function todayFor(db, uid, meetings, dayKey, owner) {
   }
 }
 
+// His next booked trip's countdown and open to-dos. Best effort.
+async function bookedTripFor(db, uid, dayKey) {
+  try {
+    const snap = await db.collection(BRIEFINGS_COLL).doc("trips-booked-" + uid).get();
+    return snap.exists ? bookedTripLine(FlightsCore, snap.data(), dayKey) : null;
+  } catch (error) {
+    logger.warn("Booked trip line failed", {message: error.message});
+    return null;
+  }
+}
+
 // His fare watches met by the latest flight scout, once each. Best effort:
 // a failed read leaves the line off.
 async function fareWatchFor(db, uid, alerted, now) {
@@ -1547,21 +1558,22 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const pse = await pseFor(db, prefs.uid, options.test ? null : state.lastPseAlertsAsOf, dayKey);
   // A test push shows met fare watches even if a morning push carried them.
   const fares = await fareWatchFor(db, prefs.uid, options.test ? [] : state.fareAlerted, now);
+  const trip = await bookedTripFor(db, prefs.uid, dayKey);
   // Only reminders no push has carried yet.
   const reminders = newReminders(boost.reminders, state.lastReminderIds);
   // One morning push a day; after it, only a meeting about to start.
   const urgent = urgentItems(items, state.pushed, dayKey);
-  const kind = options.test ? "test" : pushKind(state, dayKey, {items, asks, today, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment, pse: pse && pse.line, fares: fares && fares.line}, urgent);
+  const kind = options.test ? "test" : pushKind(state, dayKey, {items, asks, today, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment, pse: pse && pse.line, fares: fares && fares.line, trip}, urgent);
   if (!kind) return {status: state.morningDay === dayKey ? "already-sent" : "nothing-to-send"};
   const sentItems = kind === "urgent" ? urgent : items;
-  const alone = kind !== "urgent" && !items.length && !asks.length && !today && !pse && !fares;
+  const alone = kind !== "urgent" && !items.length && !asks.length && !today && !pse && !fares && !trip;
   const remindersOnly = alone && reminders.length > 0;
   const weeklyOnly = alone && !reminders.length && !!boost.weekly;
 
   // No spark line since 11 Oct: Daily Boost was done on 0 of 13 days, and the
   // push he chose reads lead, today, this week.
   const copy = kind === "urgent" ? notificationCopy(urgent, false, {urgent: true}) :
-    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, fares: fares && fares.line, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
+    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, fares: fares && fares.line, trip, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {

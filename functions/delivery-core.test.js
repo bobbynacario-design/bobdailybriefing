@@ -338,3 +338,18 @@ test("a met fare watch rides the morning push once; a new price is news again", 
   assert.equal(pushKind({}, "2026-10-16", {fares: first.line}), "morning");
   assert.match(notificationCopy([], false, {fares: first.line}).body, /^Fare watch: Tokyo/);
 });
+
+test("the next booked trip rides the morning push: countdown and open to-dos within a week, only late or soon-due items further out", () => {
+  const {bookedTripLine} = require("./delivery-core");
+  const core = require("./flights-core");
+  const doc = {items: {b1: {city: "Tokyo", destination: "NRT", origin: "MNL", depart: "2026-12-20", ret: "2026-12-27", hotel: "Inn", done: {passport: true}}}};
+  assert.equal(bookedTripLine(core, doc, "2026-10-15"), null, "two months out with nothing due within a week");
+  assert.equal(bookedTripLine(core, doc, "2026-11-24"), "Trip to Tokyo in 26 days · to do: visa");
+  assert.equal(bookedTripLine(core, doc, "2026-12-01"), "Trip to Tokyo in 19 days · late: visa");
+  assert.equal(bookedTripLine(core, doc, "2026-12-17"), "Trip to Tokyo in 3 days · late: visa · to do: travel tax, eTravel");
+  assert.equal(bookedTripLine(core, doc, "2026-12-22"), null, "nothing while away");
+  const allDone = {items: {b1: {...doc.items.b1, destination: "MPH", done: {checkin: true}}}};
+  assert.equal(bookedTripLine(core, allDone, "2026-12-18"), "Trip to Tokyo in 2 days · checklist done");
+  assert.equal(pushKind({}, "2026-12-17", {trip: "Trip to Tokyo in 3 days"}), "morning");
+  assert.match(notificationCopy([], false, {trip: "Trip to Tokyo in 3 days"}).body, /^Trip to Tokyo in 3 days/);
+});

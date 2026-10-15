@@ -164,6 +164,29 @@ function fareWatchLine(core, watchDoc, latest, fx, alerted, now) {
   return {keys: hits.map((h) => h.key), line: "Fare watch: " + hits.slice(0, 2).map((h) => h.text).join(" · ") + (hits.length > 2 ? " · +" + (hits.length - 2) + " more" : "")};
 }
 
+// His next booked trip (trips-booked-<uid>) for the morning push, through
+// the shared FlightsCore checklist: within a week, the countdown and what is
+// open now or late; further out, only a to-do that is late or due within a
+// week (a visa). Nothing while away or when everything is ticked.
+const TRIP_TODO = {entry: "visa", arrival: "arrival card", passport: "passport check", tax: "travel tax", etravel: "eTravel", hotel: "hotel", checkin: "online check-in"};
+function bookedTripLine(core, doc, today) {
+  if (!core || typeof core.cleanBooked !== "function" || !doc || !doc.items || !/^\d{4}-\d{2}-\d{2}$/.test(String(today || ""))) return null;
+  const soon = new Date(Date.parse(today + "T00:00:00Z") + 7 * 86400000).toISOString().slice(0, 10);
+  const trips = Object.values(doc.items).map((t) => core.cleanBooked(t)).filter((t) => t && core.bookedStatus(t, today).phase === "upcoming")
+    .sort((a, b) => a.depart.localeCompare(b.depart));
+  for (const t of trips) {
+    const days = core.bookedStatus(t, today).days, list = core.bookedChecklist(t, today);
+    const late = list.filter((i) => i.state === "late"), now = list.filter((i) => i.state === "now" && (days <= 7 || (i.by && i.by <= soon)));
+    if (days > 7 && !late.length && !now.length) continue;
+    const when = days === 0 ? "today" : days === 1 ? "tomorrow" : "in " + days + " days";
+    const parts = [];
+    if (late.length) parts.push("late: " + late.map((i) => TRIP_TODO[i.key]).join(", "));
+    if (now.length) parts.push("to do: " + now.map((i) => TRIP_TODO[i.key]).join(", "));
+    return "Trip to " + t.city + " " + when + (parts.length ? " · " + parts.join(" · ") : " · checklist done");
+  }
+  return null;
+}
+
 // The calls a push just asked about, added to those asked before; a key is
 // forgotten after 60 days, so a call still open two months on is asked again.
 function askedAfter(asked, items, dayKey) {
@@ -192,7 +215,7 @@ function pushKind(state, dayKey, content, urgent) {
   content = content || {};
   if (state.morningDay !== dayKey) {
     const any = (content.items || []).length || (content.reminders || []).length || (content.asks || []).length ||
-      content.today || content.weekly || content.experiment || content.commitment || content.pse || content.fares;
+      content.today || content.weekly || content.experiment || content.commitment || content.pse || content.fares || content.trip;
     return any ? "morning" : "";
   }
   return (urgent || []).length ? "urgent" : "";
@@ -242,7 +265,7 @@ function notificationCopy(items, test, extra) {
   const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
   const todayLine = extra.today ? "\n" + extra.today : "";
   const askLines = (Array.isArray(extra.asks) ? extra.asks : []).map((item) => "\n" + askLine(item)).join("");
-  const watchLine = (extra.pse ? "\n" + extra.pse : "") + (extra.fares ? "\n" + extra.fares : "");
+  const watchLine = (extra.trip ? "\n" + extra.trip : "") + (extra.pse ? "\n" + extra.pse : "") + (extra.fares ? "\n" + extra.fares : "");
   // The lead, then today's plan and this week, then what is due, then his PSE watchlist and fare watches.
   const lines = todayLine + commitmentLine + askLines + watchLine + reminderLine + experimentLine + weeklyLine + sparkLine;
   if (!lead) return {title, body: lines ? lines.slice(1) : "No priority items currently clear your delivery thresholds."};
@@ -350,6 +373,7 @@ module.exports = {
   todayLine,
   pseLine,
   fareWatchLine,
+  bookedTripLine,
   askedAfter,
   urgentItems,
   pushKind,

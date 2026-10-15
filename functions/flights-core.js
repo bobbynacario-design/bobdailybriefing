@@ -476,7 +476,52 @@
     var best=rows[0] || null;
     return {watch:w,best:best,matches:rows.length,hit:!!(best && best.php<=w.target)};
   }
-  root.FlightsCore={budgetAirlines:BUDGET_AIRLINES,budgetParts:budgetParts,cleanWatch:cleanWatch,fareWatch:fareWatch,entryCheck:entryCheck,entryChecked:ENTRY_CHECKED,activityDestinations:ACTIVITY_DESTINATIONS,activityCities:ACTIVITY_CITIES,activityCity:activityCity,searchLink:searchLink,manualQuote:manualQuote,missingBudgetPrices:missingBudgetPrices,select:select,officialUrl:url,evidenceUrl:evidenceUrl,origins:ORIGINS,domestic:DOMESTIC,phpEstimate:phpEstimate,shortlist:shortlist,deadlineLabel:deadlineLabel,
+  // A trip you have booked (trips-booked-<uid>): where, when, how, where you
+  // stay, and the boxes you have ticked. Text is trimmed; dates must be real.
+  var BOOKED_KEYS=['entry','arrival','passport','tax','etravel','hotel','checkin'];
+  function cleanBooked(t) {
+    if(!t || typeof t!=='object') return null;
+    var iso=function(v){return /^\d{4}-\d{2}-\d{2}$/.test(v || '') && Number.isFinite(Date.parse(v)) ? v : '';};
+    var s=function(v,n){return String(v==null ? '' : v).replace(/\s+/g,' ').trim().slice(0,n);};
+    var dest=s(t.destination,3).toUpperCase(),depart=iso(t.depart),ret=iso(t.ret);
+    if(!/^[A-Z]{3}$/.test(dest) || !depart || ret && ret<depart) return null;
+    var done={};BOOKED_KEYS.forEach(function(k){if(t.done && t.done[k]===true)done[k]=true;});
+    return {city:s(t.city,60) || dest,destination:dest,origin:/^(MNL|CEB|CRK)$/.test(t.origin || '') ? t.origin : 'MNL',depart:depart,ret:ret,
+      airline:s(t.airline,60),flight:s(t.flight,60),hotel:s(t.hotel,120),travellers:Math.min(9,Math.max(1,Math.round(Number(t.travellers) || 1))),
+      fareId:/^[a-f0-9]{20}$/.test(t.fareId || '') ? t.fareId : '',done:done,addedAt:s(t.addedAt,30)};
+  }
+  function addDaysIso(iso,n){return new Date(Date.parse(iso+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);}
+  // Where a booked trip stands today: days to go, the day you are on, or over.
+  function bookedStatus(t,today) {
+    var end=t.ret || t.depart,days=Math.round((Date.parse(t.depart)-Date.parse(today))/86400000);
+    if(today<t.depart) return {phase:'upcoming',days:days};
+    if(today<=end) return {phase:'away',day:1-days,of:Math.round((Date.parse(end)-Date.parse(t.depart))/86400000)+1};
+    return {phase:'done'};
+  }
+  // What to do before going, each with the day it is due (or none) and
+  // whether it is ticked. Domestic trips skip entry, arrival card, passport
+  // and travel tax; eTravel is for international departures.
+  function bookedChecklist(t,today) {
+    var intl=!DOMESTIC[t.destination] && !PH.has(t.destination),e=intl ? entryCheck(t.destination,t.depart,t.ret || t.depart,today) : null,r=e && ENTRY_PH[e.country];
+    var items=[];
+    // from: the day it can first be done; by: the day it must be done. state is
+    // done, late (past by), now (between from and by) or later (before from).
+    var add=function(key,text,from,by){var done=!!t.done[key];items.push({key:key,text:text,from:from || '',by:by || '',done:done,
+      state:done ? 'done' : by && today>by ? 'late' : !from || today>=from ? 'now' : 'later'});};
+    if(intl) {
+      if(e && e.kind==='visa') add('entry','Visa: '+e.text.replace(/^[^:]*: visa needed, /,''),'',e.applyBy);
+      else if(e) add('entry',e.text,'','');
+      else add('entry','Check the entry rules for a Philippine passport','',t.depart);
+      if(r && r.card) add('arrival',r.card.charAt(0).toUpperCase()+r.card.slice(1),addDaysIso(t.depart,-3),t.depart);
+      add('passport','Passport valid until at least '+dayLabel(addDaysIso(t.ret || t.depart,183)),'',t.depart);
+      add('tax','Travel tax (₱1,620 economy) paid, unless your ticket includes it','',t.depart);
+      add('etravel','eTravel registration (etravel.gov.ph, free) within 72 hours before the flight',addDaysIso(t.depart,-3),t.depart);
+    }
+    if(!t.hotel) add('hotel','Book where you will stay','',t.depart);
+    add('checkin','Online check-in when the airline opens it',addDaysIso(t.depart,-2),t.depart);
+    return items;
+  }
+  root.FlightsCore={cleanBooked:cleanBooked,bookedStatus:bookedStatus,bookedChecklist:bookedChecklist,budgetAirlines:BUDGET_AIRLINES,budgetParts:budgetParts,cleanWatch:cleanWatch,fareWatch:fareWatch,entryCheck:entryCheck,entryChecked:ENTRY_CHECKED,activityDestinations:ACTIVITY_DESTINATIONS,activityCities:ACTIVITY_CITIES,activityCity:activityCity,searchLink:searchLink,manualQuote:manualQuote,missingBudgetPrices:missingBudgetPrices,select:select,officialUrl:url,evidenceUrl:evidenceUrl,origins:ORIGINS,domestic:DOMESTIC,phpEstimate:phpEstimate,shortlist:shortlist,deadlineLabel:deadlineLabel,
     region:region,economy:economy,dayLabel:dayLabel,tripLabel:tripLabel,board:board,memoryIndex:memoryIndex,priceMemory:priceMemory,
     hotelIndex:hotelIndex,hotelCity:hotelCity,stayQuotes:stayQuotes,typicalNightly:typicalNightly,tripTotal:tripTotal,hotelStaySettings:hotelStaySettings,hotelSearchLink:hotelSearchLink,guestsLabel:guestsLabel,hotelFreshHours:HOTEL_FRESH_HOURS,hotelUrl:tripadvisorUrl};
   if(typeof module!=='undefined' && module.exports)module.exports=root.FlightsCore;
