@@ -2,9 +2,14 @@ import {load} from 'cheerio';
 import {createHash} from 'node:crypto';
 import {ORIGINS,DOMESTIC} from './config.js';
 import {parseCebuCampaigns} from './campaigns.js';
+import {HOTEL_CITIES} from './hotel-cities.js';
 
 // Domestic fares are limited to the three requested destinations.
 const PH = new Set('MNL CEB CRK DVO ILO KLO MPH PPS TAG TAC BCD CGY ZAM GES DGT BXU DRP LGP LAO TUG RXS CYZ CBO DPL PAG SJI IAO SUG USU WNP WNP BSO RZP ENI MBT TBH JOL TWT CYP DTI VRC WNP SFE BQA BPH CRM OMH SGS LWA MXI LBX'.split(' '));
+// Budget-airline pages give only airport codes; name them by city (the first
+// city listing an airport wins), so DMK and BKK both read as Bangkok.
+const AIRPORT_CITY = {};
+HOTEL_CITIES.forEach(c => c.airports.forEach(a => { if (!AIRPORT_CITY[a]) AIRPORT_CITY[a] = c.city; }));
 const text = v => String(v || '').replace(/\s+/g,' ').trim();
 const id = v => createHash('sha256').update(v).digest('hex').slice(0,20);
 const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
@@ -132,7 +137,7 @@ export function parseTripFares(html,source,checkedAt) {
     const visibleDate=iso=>{const d=new Date(iso+'T00:00:00Z');return new RegExp('\\b'+Object.keys(months)[d.getUTCMonth()]+'\\s+'+d.getUTCDate()+'\\b','i').test(info);};
     if(!visibleDate(departureDate)||returnDate&&!visibleDate(returnDate))return;
     const tripType=returnDate?'round-trip':'one-way',key=[airline,origin,destination,departureDate,returnDate,tripType,'Not stated','PHP','Trip.com'].join('|');
-    out.push({id:id(key),kind:'advertised-fare',airline,origin,destination,originName:origin==='MNL'?'Manila':origin==='CEB'?'Cebu':'Clark',destinationName:DOMESTIC[destination]||destination,departureDate,returnDate,tripType,cabin:'Not stated',currency:'PHP',amount,partner:'Trip.com',sourceAsOf:sourceDay,
+    out.push({id:id(key),kind:'advertised-fare',airline,origin,destination,originName:origin==='MNL'?'Manila':origin==='CEB'?'Cebu':'Clark',destinationName:DOMESTIC[destination]||AIRPORT_CITY[destination]||destination,departureDate,returnDate,tripType,cabin:'Not stated',currency:'PHP',amount,partner:'Trip.com',sourceAsOf:sourceDay,
       priceLabel:'PHP '+amount,priceBasis:'Trip.com published fare sample per traveller; not a direct-airline quote or guaranteed checkout price.',taxesIncluded:null,travelTaxIncluded:null,checkedBaggageIncluded:null,stops:!returnDate&&/Nonstop/.test(info)?0:null,
       fees:'Confirm mandatory fees and taxes at partner checkout; international travel tax may be additional.',baggage:'Baggage allowance is not established by this published quote.',connections:'Confirm flight times and all legs before booking.',bookingEnd:'',travelPeriod:'Exact dates in the partner booking link.',sourceUrl:source.url,bookingUrl,checkedAt:sourceDay===today?checkedAt:sourceDay+'T00:00:00+08:00',airlineSeen:'',terms:'Sold through Trip.com. Compare the direct airline price and cancellation terms; the displayed price may no longer be available.'});
   });return out;
@@ -164,7 +169,7 @@ export function parseAirAsiaFares(html,source,checkedAt) {
     if(!airline) return;
     const currency=p.get('currency'),key=[airline,origin,destination,departureDate,'','one-way','Economy',currency].join('|');
     if(seen.has(key)) return;seen.add(key);
-    out.push({id:id(key),kind:'advertised-fare',airline,origin,destination,originName:origin==='MNL'?'Manila':origin==='CEB'?'Cebu':'Clark',destinationName:DOMESTIC[destination] || destination,departureDate,returnDate:'',tripType:'one-way',cabin:'Economy',currency,amount,
+    out.push({id:id(key),kind:'advertised-fare',airline,origin,destination,originName:origin==='MNL'?'Manila':origin==='CEB'?'Cebu':'Clark',destinationName:DOMESTIC[destination] || AIRPORT_CITY[destination] || destination,departureDate,returnDate:'',tripType:'one-way',cabin:'Economy',currency,amount,
       priceLabel:currency+' '+amount,priceBasis:'AirAsia MOVE advertised one-way fare for one adult; not a return ticket or final checkout total.',taxesIncluded:null,travelTaxIncluded:null,checkedBaggageIncluded:null,stops:visibleCodes.includes('Direct')?0:null,
       fees:'Confirm taxes, surcharges and applicable travel tax at checkout.',baggage:'Confirm baggage allowance and add-on prices.',connections:'Flight times and stops must be reconfirmed.',bookingEnd:'',travelPeriod:'Exact sample departure date; return leg not priced.',sourceUrl:source.url,bookingUrl:link,checkedAt,airlineSeen:'',terms:'Sold through AirAsia MOVE. Confirm the operating airline, availability and final price before booking.'});
   });return out;

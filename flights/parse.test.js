@@ -12,6 +12,7 @@ test('MOVE prices require a visible dated single-adult flight card; bundles and 
  const s={airline:'AirAsia',type:'airasia-fares',url:'https://www.airasia.com/flights/en/gb/from-manila-mnl-to-cebu-ceb/'};
  const card='<a href="https://www.airasia.com/v2/flights/search/?origin=MNL&amp;destination=CEB&amp;departDate=01%2F01%2F2027&amp;tripType=O&amp;adult=1&amp;child=0&amp;infant=0&amp;cabinClass=economy&amp;currency=PHP"><img alt="Philippines AirAsia"><span>1 Jan (Fri)</span><span>MNL</span><span>CEB</span><span>Direct</span><span>PHP</span><span class="text-2xl">2,401</span></a>';
  const d=parseAirAsiaFares('<h1>From PHP 1</h1>'+card+card,s,checked);assert.equal(d.length,1);assert.equal(d[0].amount,2401);assert.equal(d[0].tripType,'one-way');assert.equal(d[0].returnDate,'');assert.equal(d[0].stops,0);
+ const bkk=parseAirAsiaFares(card.replace(/CEB/g,'DMK'),s,checked);assert.equal(bkk[0].destination,'DMK');assert.equal(bkk[0].destinationName,'Bangkok');
  for(const bad of [card.replace('1 Jan','2 Jan'),card.replace('adult=1','adult=2'),card.replace('tripType=O','tripType=R'),card.replace('/v2/flights/search/','/snap/hotels/list'),card.replace('class="text-2xl"','class="other"'),card.replace('Philippines AirAsia','Unknown operator'),card.replace('<span>CEB</span>','<span>PPS</span>')])assert.equal(parseAirAsiaFares(bad,s,checked).length,0);
 });
 const source={id:'pal-manila',airline:'Philippine Airlines',type:'fares',url:'https://flights.philippineairlines.com/en-ph/flights-from-manila'};
