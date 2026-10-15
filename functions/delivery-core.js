@@ -143,6 +143,27 @@ function pseLine(watch, lastAsOf, dayKey) {
   return {asOf, line: "PSE: " + alerts.slice(0, 2).map((a) => String(a.text)).join(" · ") + (alerts.length > 2 ? " · +" + (alerts.length - 2) + " more" : "")};
 }
 
+// His fare watches (flights-watch-<uid>, set on Trips) against the latest
+// flight scout, through the shared FlightsCore so the push and the page agree.
+// A fare at or under its target is announced once: alerted holds the
+// watch|fare|price keys already sent, so a new price or a new fare is news
+// and the same one is not. {line, keys}, or null when nothing is new.
+function fareWatchLine(core, watchDoc, latest, fx, alerted, now) {
+  if (!core || typeof core.fareWatch !== "function" || !watchDoc || !latest) return null;
+  const items = watchDoc.items && typeof watchDoc.items === "object" ? watchDoc.items : {};
+  const sent = Array.isArray(alerted) ? alerted.map(String) : [];
+  const peso = (n) => "₱" + Math.round(n).toLocaleString("en-PH");
+  const hits = [];
+  Object.keys(items).sort().forEach((id) => {
+    const r = core.fareWatch(items[id], latest, fx, now);
+    if (!r || !r.hit) return;
+    const key = id + "|" + r.best.fare.id + "|" + r.best.php;
+    if (sent.indexOf(key) < 0) hits.push({key, text: r.watch.city + " ≈ " + peso(r.best.php) + " (" + core.tripLabel(r.best.fare, now) + "), at or under your " + peso(r.watch.target)});
+  });
+  if (!hits.length) return null;
+  return {keys: hits.map((h) => h.key), line: "Fare watch: " + hits.slice(0, 2).map((h) => h.text).join(" · ") + (hits.length > 2 ? " · +" + (hits.length - 2) + " more" : "")};
+}
+
 // The calls a push just asked about, added to those asked before; a key is
 // forgotten after 60 days, so a call still open two months on is asked again.
 function askedAfter(asked, items, dayKey) {
@@ -171,7 +192,7 @@ function pushKind(state, dayKey, content, urgent) {
   content = content || {};
   if (state.morningDay !== dayKey) {
     const any = (content.items || []).length || (content.reminders || []).length || (content.asks || []).length ||
-      content.today || content.weekly || content.experiment || content.commitment || content.pse;
+      content.today || content.weekly || content.experiment || content.commitment || content.pse || content.fares;
     return any ? "morning" : "";
   }
   return (urgent || []).length ? "urgent" : "";
@@ -221,8 +242,8 @@ function notificationCopy(items, test, extra) {
   const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
   const todayLine = extra.today ? "\n" + extra.today : "";
   const askLines = (Array.isArray(extra.asks) ? extra.asks : []).map((item) => "\n" + askLine(item)).join("");
-  const watchLine = extra.pse ? "\n" + extra.pse : "";
-  // The lead, then today's plan and this week, then what is due, then his PSE watchlist.
+  const watchLine = (extra.pse ? "\n" + extra.pse : "") + (extra.fares ? "\n" + extra.fares : "");
+  // The lead, then today's plan and this week, then what is due, then his PSE watchlist and fare watches.
   const lines = todayLine + commitmentLine + askLines + watchLine + reminderLine + experimentLine + weeklyLine + sparkLine;
   if (!lead) return {title, body: lines ? lines.slice(1) : "No priority items currently clear your delivery thresholds."};
   const remaining = Math.max(0, items.length - 1);
@@ -328,6 +349,7 @@ module.exports = {
   decisionAsks,
   todayLine,
   pseLine,
+  fareWatchLine,
   askedAfter,
   urgentItems,
   pushKind,

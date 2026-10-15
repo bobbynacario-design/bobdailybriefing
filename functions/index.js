@@ -23,7 +23,7 @@ const {
 } = require("./market-facts");
 const {authorize, daybookRole, guardedGeneration} = require("./generation-guard");
 const {
-  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, pseLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
+  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, pseLine, fareWatchLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
   notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, newReminders, weeklyReadDue,
   commitmentLine, weeklyReviewDue,
 } = require("./delivery-core");
@@ -1490,6 +1490,19 @@ async function todayFor(db, uid, meetings, dayKey, owner) {
   }
 }
 
+// His fare watches met by the latest flight scout, once each. Best effort:
+// a failed read leaves the line off.
+async function fareWatchFor(db, uid, alerted, now) {
+  try {
+    const [watch, latest, ph] = await Promise.all(["flights-watch-" + uid, "flights-latest", "radar-ph"].map((id) => db.collection(BRIEFINGS_COLL).doc(id).get()));
+    if (!watch.exists || !latest.exists) return null;
+    return fareWatchLine(FlightsCore, watch.data(), latest.data(), ph.exists ? ph.data() : null, alerted, now);
+  } catch (error) {
+    logger.warn("Fare watch line failed", {message: error.message});
+    return null;
+  }
+}
+
 // His PSE watchlist alerts from the last close (pse-watch-<uid>), once.
 // Best effort: a failed read leaves the line off.
 async function pseFor(db, uid, lastAsOf, dayKey) {
@@ -1532,21 +1545,23 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const today = await todayFor(db, prefs.uid, inputs.meetings, dayKey, role === "owner");
   // A test push shows the latest alerts even if a morning push already carried them.
   const pse = await pseFor(db, prefs.uid, options.test ? null : state.lastPseAlertsAsOf, dayKey);
+  // A test push shows met fare watches even if a morning push carried them.
+  const fares = await fareWatchFor(db, prefs.uid, options.test ? [] : state.fareAlerted, now);
   // Only reminders no push has carried yet.
   const reminders = newReminders(boost.reminders, state.lastReminderIds);
   // One morning push a day; after it, only a meeting about to start.
   const urgent = urgentItems(items, state.pushed, dayKey);
-  const kind = options.test ? "test" : pushKind(state, dayKey, {items, asks, today, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment, pse: pse && pse.line}, urgent);
+  const kind = options.test ? "test" : pushKind(state, dayKey, {items, asks, today, reminders, weekly: boost.weekly, experiment: boost.experiment, commitment: boost.commitment, pse: pse && pse.line, fares: fares && fares.line}, urgent);
   if (!kind) return {status: state.morningDay === dayKey ? "already-sent" : "nothing-to-send"};
   const sentItems = kind === "urgent" ? urgent : items;
-  const alone = kind !== "urgent" && !items.length && !asks.length && !today && !pse;
+  const alone = kind !== "urgent" && !items.length && !asks.length && !today && !pse && !fares;
   const remindersOnly = alone && reminders.length > 0;
   const weeklyOnly = alone && !reminders.length && !!boost.weekly;
 
   // No spark line since 11 Oct: Daily Boost was done on 0 of 13 days, and the
   // push he chose reads lead, today, this week.
   const copy = kind === "urgent" ? notificationCopy(urgent, false, {urgent: true}) :
-    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
+    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, fares: fares && fares.line, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
@@ -1577,6 +1592,8 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
         if (boost.weekly) next.lastWeeklyNudge = dayKey;
         // These PSE alerts are announced; the next close's alerts ride the next push.
         if (pse) next.lastPseAlertsAsOf = pse.asOf;
+        // These fare-watch hits are announced; a new price or fare is news again.
+        if (fares) next.fareAlerted = (Array.isArray(next.fareAlerted) ? next.fareAlerted : []).concat(fares.keys).slice(-60);
       }
       next.asked = askedAfter(next.asked, kind === "morning" ? asks : [], dayKey);
       next.pushed = pushedAfter(next.pushed, sentItems, dayKey);
@@ -1591,6 +1608,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
       lead: remindersOnly ? "To check: " + reminders[0].metric : weeklyOnly ? "Weekly read" : (sentItems[0] ? sentItems[0].source + ": " + sentItems[0].title : "No items above threshold"),
       reminders: reminders.length,
       pse: pse ? pse.asOf : null,
+      fares: fares ? fares.keys.length : 0,
       // What the phone showed, so a push can be checked without the phone.
       title: copy.title,
       body: String(copy.body || "").slice(0, 500),

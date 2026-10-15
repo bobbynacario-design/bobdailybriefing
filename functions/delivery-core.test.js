@@ -320,3 +320,21 @@ test('unverified dividend deadlines never reach the morning push; other alerts s
   assert.equal(pseLine({...watch,alertsCalendarVerified:true},null,'2026-10-13').line,'PSE: deadline');
   assert.equal(pseLine({...watch,alerts:[...watch.alerts,{symbol:'BDO',kind:'news',text:'report'}]},null,'2026-10-13').line,'PSE: report');
 });
+
+test("a met fare watch rides the morning push once; a new price is news again", () => {
+  const {fareWatchLine} = require("./delivery-core");
+  const core = require("./flights-core");
+  const now = Date.parse("2026-10-15T22:00:00Z");
+  const fare = (id, amount) => ({id: id.repeat(20), kind: "advertised-fare", airline: "Philippine Airlines", origin: "MNL", destination: "NRT", destinationName: "Tokyo",
+    departureDate: "2026-11-10", returnDate: "2026-11-15", tripType: "round-trip", cabin: "Economy", currency: "USD", amount,
+    sourceUrl: "https://flights.philippineairlines.com/en-ph/", bookingUrl: "https://flights.philippineairlines.com/en-ph/", checkedAt: new Date(now - 3600000).toISOString()});
+  const fx = {asOf: "2026-10-15", fx: {usdphp: {level: 60}}};
+  const watch = {items: {wabc1: {city: "Tokyo", airports: ["NRT"], from: "2026-11-01", to: "2026-11-30", minNights: 3, maxNights: 10, target: 20000}}};
+  const first = fareWatchLine(core, watch, {offers: [fare("a", 300)]}, fx, [], now);
+  assert.match(first.line, /^Fare watch: Tokyo ≈ ₱18,000 \(Tue 10 Nov → Sun 15 Nov · 5 nights\), at or under your ₱20,000$/);
+  assert.equal(fareWatchLine(core, watch, {offers: [fare("a", 300)]}, fx, first.keys, now), null, "the same fare and price is not sent twice");
+  assert.ok(fareWatchLine(core, watch, {offers: [fare("a", 290)]}, fx, first.keys, now), "a lower price is news");
+  assert.equal(fareWatchLine(core, watch, {offers: [fare("a", 400)]}, fx, [], now), null, "above target says nothing");
+  assert.equal(pushKind({}, "2026-10-16", {fares: first.line}), "morning");
+  assert.match(notificationCopy([], false, {fares: first.line}).body, /^Fare watch: Tokyo/);
+});
