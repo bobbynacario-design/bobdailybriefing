@@ -256,3 +256,38 @@ test("reader feedback caps its examples at ten each way", () => {
   assert.equal(out.block.split("\n").filter((line) => line.startsWith("- ")).length, 10);
   assert.equal(out.stats.up, 14);
 });
+
+// ── recentBriefingDocs ──
+
+// 15-16 Oct 2026: trip-activities docs (uid, saved, no data) filled the old
+// "last five by uid" read, so the no-rerun list came back empty.
+test("recentBriefingDocs skips uid-stamped docs that are not briefings", async () => {
+  const rows = [
+    {id: "trip-activities-latest-a", uid: "u1", saved: 9, kind: "trip-activities-latest"},
+    {id: "trip-activities-a", uid: "u1", saved: 8, kind: "trip-activities"},
+    {id: "trip-activities-latest-b", uid: "u1", saved: 7, kind: "trip-activities-latest"},
+    {id: "trip-activities-b", uid: "u1", saved: 6, kind: "trip-activities"},
+    {id: "trip-activities-c", uid: "u1", saved: 5, kind: "trip-activities"},
+    {id: "Thursday--October-15--2026", uid: "u1", saved: 4, data: "{\"date\":\"15\"}"},
+    {id: "Wednesday--October-14--2026", uid: "u1", saved: 3, data: "{\"date\":\"14\"}"},
+    {id: "Tuesday--October-13--2026", uid: "u1", saved: 2, data: "{\"date\":\"13\"}"},
+    {id: "Monday--October-12--2026", uid: "u2", saved: 1, data: "{\"date\":\"12\"}"},
+  ];
+  const calls = [];
+  const coll = {
+    where(field, op, value) { calls.push(["where", field, op, value]); return this; },
+    orderBy(field, dir) { calls.push(["orderBy", field, dir]); return this; },
+    select(...fields) { calls.push(["select", ...fields]); return this; },
+    limit(n) { calls.push(["limit", n]); this.n = n; return this; },
+    async get() {
+      const docs = rows.filter((r) => r.uid === "u1").sort((a, b) => b.saved - a.saved).slice(0, this.n)
+        .map((r) => ({id: r.id, data: () => (r.data === undefined ? {saved: r.saved} : {saved: r.saved, data: r.data})}));
+      return {docs};
+    },
+  };
+  const {recentBriefingDocs} = require("./briefing-context");
+  const docs = await recentBriefingDocs(coll, "u1", 2);
+  assert.deepEqual(docs.map((d) => d.id), ["Thursday--October-15--2026", "Wednesday--October-14--2026"]);
+  assert.ok(calls.some((c) => c[0] === "limit" && c[1] >= 60), "scans well past five documents");
+  assert.ok(calls.some((c) => c[0] === "select" && c.includes("data") && c.includes("saved")), "reads only the fields it needs");
+});

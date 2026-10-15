@@ -226,6 +226,22 @@ function priorWatch(briefings, todayKey) {
   return found;
 }
 
+// ── Recent briefing documents ──
+//
+// briefings-bob also holds uid-stamped documents that are not briefings: since
+// 14 Oct 2026 every trip-activities build saves two. A plain "last five by uid"
+// read let them push every briefing out, so the no-rerun list and the watch
+// follow-up went empty on 15-16 Oct and stories came back word for word. Read a
+// wide window with only the two fields needed and keep the docs that carry a
+// briefing. Trip builds are capped at ten a day (twenty docs), so a hundred
+// still reaches three days back.
+const RECENT_SCAN = 100;
+async function recentBriefingDocs(coll, uid, count) {
+  const snap = await coll.where("uid", "==", uid).orderBy("saved", "desc")
+    .select("data", "saved").limit(RECENT_SCAN).get();
+  return snap.docs.filter((doc) => typeof (doc.data() || {}).data === "string").slice(0, count);
+}
+
 // ── Reader feedback ──
 //
 // Bob's "more like this" / "less like this" votes, summarised for the prompt.
@@ -234,4 +250,4 @@ function priorWatch(briefings, todayKey) {
 // the generator sends. It is re-exported here so callers keep one import.
 const {buildReaderFeedback} = require("./briefing-prompt-core");
 
-module.exports = {buildStandingContext, priorWatch, isTracked, buildReaderFeedback};
+module.exports = {buildStandingContext, priorWatch, isTracked, buildReaderFeedback, recentBriefingDocs};

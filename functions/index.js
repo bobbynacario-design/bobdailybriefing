@@ -14,7 +14,7 @@ const {researchResult} = require("./research-result");
 const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing-evidence");
-const {buildStandingContext, priorWatch, buildReaderFeedback} = require("./briefing-context");
+const {buildStandingContext, priorWatch, buildReaderFeedback, recentBriefingDocs} = require("./briefing-context");
 const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS, profileBrief} = require("./briefing-prompt-core");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
 const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, materialFromIndex, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
@@ -236,8 +236,7 @@ async function loadStandingContext(db, uid) {
       pointedDocument(db, "miro-latest", "miro-").catch(() => null),
       db.collection(JOURNAL_COLL).where("uid", "==", uid)
         .orderBy("saved", "desc").limit(100).get().catch(() => null),
-      db.collection(BRIEFINGS_COLL).where("uid", "==", uid)
-        .orderBy("saved", "desc").limit(5).get().catch(() => null),
+      recentBriefingDocs(db.collection(BRIEFINGS_COLL), uid, 5).catch(() => null),
       db.collection(BRIEFINGS_COLL).doc("accounts-" + uid).get().catch(() => null),
     ]);
     // His accounts (Evidence, Your accounts), or the starter list until he keeps his own.
@@ -246,10 +245,9 @@ async function loadStandingContext(db, uid) {
     const decisions = decisionsSnap ?
       decisionsSnap.docs.map((doc) => Object.assign({id: doc.id}, doc.data())) : [];
 
-    // briefings-bob also holds preference and snapshot documents. Those either
-    // carry no uid or no `data` payload, so they parse to null here and are
-    // dropped by priorWatch rather than needing a separate filter.
-    const archive = briefingSnap ? briefingSnap.docs.map((doc) => {
+    // recentBriefingDocs keeps only documents with a briefing payload; the
+    // trip and snapshot documents beside them in briefings-bob are skipped.
+    const archive = briefingSnap ? briefingSnap.map((doc) => {
       const value = doc.data() || {};
       let briefing = null;
       try {
@@ -1379,12 +1377,12 @@ async function sharedCommandInputs(db) {
 
 async function userCommandInputs(db, uid, prefs, shared, now) {
   const [briefingSnap, decisionsSnap, meetingsSnap] = await Promise.all([
-    db.collection(BRIEFINGS_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(5).get(),
+    recentBriefingDocs(db.collection(BRIEFINGS_COLL), uid, 5),
     db.collection(JOURNAL_COLL).where("uid", "==", uid).orderBy("saved", "desc").limit(100).get(),
     db.collection(BRIEFINGS_COLL).doc("meetings-" + uid).get().catch(() => null),
   ]);
   let briefing = null, briefingDay = "";
-  briefingSnap.docs.some((doc) => {
+  briefingSnap.some((doc) => {
     const value = doc.data();
     if (!value.data) return false;
     try { briefing = JSON.parse(value.data); } catch (error) { briefing = null; }
