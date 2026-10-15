@@ -10,6 +10,7 @@ import {trackChanges} from './changes.js';
 import {trimOffers} from './trim.js';
 import {updateHistory} from './history.js';
 import {pairReturns} from './pairs.js';
+import {fetchTravelpayouts} from './travelpayouts.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 
 const started=Date.now(), dryRun=process.argv.includes('--dry-run'), force=process.argv.includes('--force') || process.env.FLIGHTS_FORCE==='1';
@@ -48,6 +49,8 @@ async function main() {
   const results=[];
   // Two at a time, bounded timeout per public page. No anti-bot bypass or retries.
   for(let i=0;i<SOURCES.length;i+=2) results.push(...await Promise.all(SOURCES.slice(i,i+2).map(fetchSource)));
+  // Recent Aviasales search prices (Cebu Pacific and other budget airlines), with Bob's free token.
+  results.push(await fetchTravelpayouts(process.env.TRAVELPAYOUTS_TOKEN || '',checkedAt));
   // Return legs only pair with outbound fares; they are never offers themselves.
   const legs=results.flatMap(r=>r.items.filter(d=>d.kind==='return-leg'));
   const fresh=await checkAnnouncementLinks(results.flatMap(r=>r.items.filter(d=>d.kind!=='return-leg'))), byId=new Map();
@@ -68,7 +71,7 @@ async function main() {
   const sources=results.map(({items,...row})=>({...row,offerCount:items.length}));
   const successful=results.filter(r=>r.status==='ok').length;
   const doc={asOf,generatedAt:checkedAt,origins:ORIGINS,offers,sources,
-    summary:{successfulSources:successful,totalSources:SOURCES.length,fareCount:offers.filter(d=>d.kind==='advertised-fare').length,pairedRoundTrips:offers.filter(d=>d.paired).length,returnLegs:legs.length,promoCount:offers.filter(d=>d.kind==='promo').length},
+    summary:{successfulSources:successful,totalSources:results.length,fareCount:offers.filter(d=>d.kind==='advertised-fare').length,pairedRoundTrips:offers.filter(d=>d.paired).length,returnLegs:legs.length,promoCount:offers.filter(d=>d.kind==='promo').length},
     changes:{newOffers:offers.filter(d=>d.change.status==='new').length,priceDrops:offers.filter(d=>d.change.status==='dropped').length,priceRises:offers.filter(d=>d.change.status==='rose').length,comparedWith:prior?.generatedAt || null},
     coverage:'Airline fares and labelled sale announcements; not an exhaustive worldwide fare search or live seat inventory.',modelCalls:0};
   const history=updateHistory(priorHistory,offers,asOf,checkedAt);
@@ -83,7 +86,7 @@ async function main() {
   batch.set(db.collection('briefings-bob').doc('flights-'+asOf),doc);
   batch.set(db.collection('briefings-bob').doc('flights-history'),history);
   await batch.commit();
-  await recordRunHealth(db,'flights',{status:'ok',asOf,durationMs:Date.now()-started,message:offers.length+' offers; '+successful+'/'+SOURCES.length+' sources readable; no model calls.'});
+  await recordRunHealth(db,'flights',{status:'ok',asOf,durationMs:Date.now()-started,message:offers.length+' offers; '+successful+'/'+results.length+' sources readable; no model calls.'});
 }
 main().catch(async error=>{
   console.error('Flight scout failed:',error.message);

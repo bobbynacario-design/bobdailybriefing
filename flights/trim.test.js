@@ -14,6 +14,6 @@ test('trimming keeps promotions and spreads the fare budget across routes, cheap
 test('source list has unique ids and labelled official https pages within the document budget',()=>{
   assert.equal(new Set(SOURCES.map(s=>s.id)).size,SOURCES.length);
   for(const s of SOURCES){assert.match(s.url,/^https:\/\//);assert.ok(s.label,s.id);}
-  // 520 since the budget-airline routes (15 Oct 2026); the scout still trims to 850 KB.
-  assert.ok(MAX_OFFERS<=520);
+  // 600 since the budget-airline routes and Aviasales (15 Oct 2026); the scout still trims to 850 KB.
+  assert.ok(MAX_OFFERS<=600);
 });

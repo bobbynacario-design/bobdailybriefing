@@ -86,4 +86,4 @@ export const SOURCES = [
 ];
 export const USER_AGENT = 'DaybookFlightScout/1.0 (+https://github.com/bobbynacario-design/bobdailybriefing)';
 // Firestore rejects documents over 1 MiB; the scout trims fares well before that.
-export const MAX_OFFERS = 520;
+export const MAX_OFFERS = 560;
