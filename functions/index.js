@@ -1491,6 +1491,20 @@ async function todayFor(db, uid, meetings, dayKey, owner) {
   }
 }
 
+// His body line (lib/health-core.js bodyLine), only when it is worth a push:
+// steps well off his usual or short nights repeating. Owner only, since
+// Apple Health is. Best effort: a failed read leaves it off.
+async function bodyFor(db, uid, now) {
+  try {
+    const snap = await db.collection(BRIEFINGS_COLL).doc(HealthLink.HEALTH_PREFIX + uid).get();
+    const line = snap.exists ? HealthCore.bodyLine(snap.data(), now) : null;
+    return line && line.notable ? line.text : "";
+  } catch (error) {
+    logger.warn("Body line failed", {message: error.message});
+    return "";
+  }
+}
+
 // His next booked trip's countdown and open to-dos. Best effort.
 async function bookedTripFor(db, uid, dayKey) {
   try {
@@ -1560,6 +1574,8 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   // A test push shows met fare watches even if a morning push carried them.
   const fares = await fareWatchFor(db, prefs.uid, options.test ? [] : state.fareAlerted, now);
   const trip = await bookedTripFor(db, prefs.uid, dayKey);
+  // Rides only on a push already going out, like this week's commitment.
+  const body = role === "owner" ? await bodyFor(db, prefs.uid, now) : "";
   // Only reminders no push has carried yet.
   const reminders = newReminders(boost.reminders, state.lastReminderIds);
   // One morning push a day; after it, only a meeting about to start.
@@ -1574,7 +1590,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   // No spark line since 11 Oct: Daily Boost was done on 0 of 13 days, and the
   // push he chose reads lead, today, this week.
   const copy = kind === "urgent" ? notificationCopy(urgent, false, {urgent: true}) :
-    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, fares: fares && fares.line, trip, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment});
+    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, fares: fares && fares.line, trip, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment, body});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
@@ -1873,17 +1889,24 @@ exports.healthIngest = onRequest(
     const link = await linkRef.get();
     if (!link.exists) { say(401, "This link code is not connected any more. Connect again on About you → Apple Health and paste the new code."); return; }
     const uid = link.data().uid, ref = db.collection(BRIEFINGS_COLL).doc(HealthLink.HEALTH_PREFIX + uid), now = Date.now();
+    const reviewRef = db.collection(BRIEFINGS_COLL).doc("review-" + uid);
     const body = HealthLink.bodyOf(request.body, request.rawBody);
     const receipt = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
+      const [snap, review] = await Promise.all([tx.get(ref), tx.get(reviewRef)]);
       const stored = snap.exists ? snap.data() : {};
       const out = HealthCore.ingest(stored, body, now);
+      const next = Object.assign({}, stored, out.doc, {uid});
+      // His weekly commitments that name steps, distance or a bedtime tick
+      // themselves (lib/health-core.js autoTicks): only ever added, in the same
+      // transaction, so a tap on Today cannot be lost.
+      const ticked = review.exists ? HealthCore.autoTicks(WeeklyReviewCore, review.data().weeks, next, now) : {added: []};
       // The whole document, so days past the keep limit really go.
-      tx.set(ref, Object.assign({}, stored, out.doc, {uid}));
+      tx.set(ref, next);
       tx.update(linkRef, {lastUsedAt: out.receipt.at});
-      return out.receipt;
+      if (ticked.added.length) tx.set(reviewRef, {uid, weeks: ticked.weeks, updatedAt: out.receipt.at}, {merge: true});
+      return Object.assign({}, out.receipt, {ticked: ticked.added.length, message: out.receipt.message + HealthCore.ticksMessage(ticked.added)});
     });
-    logger.info("Health send", {uid, lines: receipt.lines, used: receipt.used, rejected: receipt.rejected, changedDays: receipt.changedDays});
+    logger.info("Health send", {uid, lines: receipt.lines, used: receipt.used, rejected: receipt.rejected, changedDays: receipt.changedDays, ticked: receipt.ticked});
     say(200, receipt.message);
   }
 );

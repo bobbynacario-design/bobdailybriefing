@@ -236,7 +236,8 @@ function pushedAfter(pushed, items, dayKey) {
   return {day: dayKey, ids: ids.slice(-40)};
 }
 
-// extra (optional): {spark, reminders, experiment, remindersOnly}, or just the spark title.
+// extra (optional): {spark, reminders, experiment, remindersOnly, body, …}, or just the spark title.
+//   body          his body line from Apple Health, when notable (bodyFor in index.js)
 //   spark         today's Daily Boost spark, as a last line
 //   reminders     due watch-metric reminders (dueReminders), as a "To check" line
 //   remindersOnly the Morning 5 had nothing new but reminders came due, so the
@@ -267,7 +268,9 @@ function notificationCopy(items, test, extra) {
   const askLines = (Array.isArray(extra.asks) ? extra.asks : []).map((item) => "\n" + askLine(item)).join("");
   const watchLine = (extra.trip ? "\n" + extra.trip : "") + (extra.pse ? "\n" + extra.pse : "") + (extra.fares ? "\n" + extra.fares : "");
   // The lead, then today's plan and this week, then what is due, then his PSE watchlist and fare watches.
-  const lines = todayLine + commitmentLine + askLines + watchLine + reminderLine + experimentLine + weeklyLine + sparkLine;
+  // His body line (only when notable) sits with this week's commitment.
+  const bodyLine = extra.body ? "\n" + extra.body : "";
+  const lines = todayLine + commitmentLine + bodyLine + askLines + watchLine + reminderLine + experimentLine + weeklyLine + sparkLine;
   if (!lead) return {title, body: lines ? lines.slice(1) : "No priority items currently clear your delivery thresholds."};
   const remaining = Math.max(0, items.length - 1);
   return {

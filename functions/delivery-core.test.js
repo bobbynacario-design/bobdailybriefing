@@ -136,6 +136,8 @@ test("notification copy leads with the highest ranked source", () => {
     body: "Radar: NVDA confirmed · +1 more",
   });
   assert.equal(notificationCopy([], true).title, "Test · Morning 5");
+  assert.equal(notificationCopy([{source: "News", title: "BI reserves"}], false, {commitment: {text: "Walk 8,000 steps on four days", ticked: 2, elapsed: 4}, body: "Body: 3,100 steps yesterday (well under your usual 8,100)", asks: []}).body,
+    "News: BI reserves\nThis week: Walk 8,000 steps on four days · ticked 2 days so far\nBody: 3,100 steps yesterday (well under your usual 8,100)", "the body line follows this week");
 });
 
 // Uses the synced twin of lib/daily-boost.js, exactly as the deployed function does.
