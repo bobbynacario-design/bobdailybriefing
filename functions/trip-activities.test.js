@@ -158,3 +158,27 @@ test('shared backups exclude reserved poker days and departure',()=>{
   const plan=A.clean({activities:[{...activity,role:'if-you-bust'}]},context,[source]);
   assert.deepEqual(plan.activities[0].eligibleDates,['2026-11-20','2026-11-22']);
 });
+
+test('Macau source identity and evidence come from the retrieved entry rather than AI quote copying',()=>{
+  const source={id:'s7',name:'St. Lazarus Church',source:'Wikivoyage',url:'https://en.wikivoyage.org/wiki/Macau/Peninsula',distanceKm:0.4,
+    content:'St. Lazarus Church (望德聖母堂). A historic church in a neighbourhood with old streets, local shops and other buildings. This longer description continues beyond the evidence limit.'};
+  const context=A.normalize({...trip,city:'Macau',base:'Hotel Royal Macau',busy:[]});
+  const choice={...activity,sourceId:source.id};delete choice.name;delete choice.evidence;
+  const plan=A.clean({activities:[choice]},context,[source]);
+  assert.equal(plan.activities[0].name,source.name);assert.equal(plan.activities[0].url,source.url);
+  const evidence=plan.activities[0].evidence;assert.ok(source.content.includes(evidence));assert.ok(evidence.startsWith(source.name));assert.ok(evidence.split(/\s+/).length<=20);
+  assert.equal(A.clean({activities:[{...choice,evidence:'Made up quote supplied by AI'}]},context,[source]).activities[0].evidence,evidence);
+  assert.throws(()=>A.clean({activities:[{...choice,sourceId:'unknown'}]},context,[source]));
+  assert.throws(()=>A.clean({activities:[{...choice,name:'Invented Museum'}]},context,[source]));
+  assert.throws(()=>A.clean({activities:[{...choice,whyFit:'Admission costs $50 per person.'}]},context,[source]));
+  const schema=A.schemaFor([source]);assert.deepEqual(schema.properties.activities.items.properties.sourceId.enum,['s7']);
+  assert.equal(Object.hasOwn(schema.properties.activities.items.properties,'name'),false);assert.equal(Object.hasOwn(schema.properties.activities.items.properties,'evidence'),false);
+});
+
+test('the paid pipeline uses source IDs constrained to its retrieved entries and needs no generated quote',async()=>{
+  const result=await A.run({db:database(),uid:'bob',data:trip,period:'2026-10-16',fetchImpl:wiki,generate:async(prompt,schema)=>{
+    const sourceId=pick(prompt,'Intramuros');assert.ok(schema.properties.activities.items.properties.sourceId.enum.includes(sourceId));
+    const choice={...activity,sourceId};delete choice.name;delete choice.evidence;return {activities:[choice]};
+  }});
+  assert.equal(result.plan.activities[0].name,'Intramuros');assert.match(result.plan.activities[0].evidence,/Intramuros/);assert.equal(result.quota.used,1);
+});
