@@ -116,7 +116,7 @@
       if (!start || !end) { bad('dates'); return; }
       if (end.ms < start.ms) { var t = start; start = end; end = t; }
       var unit = String(f[4] || '').toLowerCase() || String(f[3] || '').replace(/^[\s\d,.\-]+/, '').toLowerCase();
-      var s = {metric: metric, start: start.ms, end: end.ms, startOff: start.off, endOff: end.off};
+      var s = {metric: metric, start: start.ms, end: end.ms, startOff: start.off, endOff: end.off, source: String(f[5] || '').toLowerCase().slice(0, 60)};
       if (metric === 'sleep') {
         s.kind = sleepKind(f[3]);
         if (!s.kind) return; // awake, or a stage it does not count: not a fault
@@ -165,15 +165,43 @@
     }).filter(function(n) { return n.sleepMin >= MIN_NIGHT_MIN && n.sleepMin <= MAX_NIGHT_MIN; });
   }
 
+  // Steps or distance per local day. Two sources (the iPhone and an app)
+  // can record the same walk, so readings that overlap in time are one
+  // cluster, and a cluster counts its largest source's total, not the sum,
+  // which is close to how Health itself picks one source per moment. Without
+  // a source field each reading is its own source. A single reading from
+  // local midnight to midnight (Health's own daily total, Group By Day) marks
+  // the day whole: {day: {value, whole}}.
+  function cumulative(samples, metric) {
+    var list = samples.filter(function(s) { return s.metric === metric; }).sort(function(a, b) { return a.start - b.start || b.end - a.end; });
+    var clusters = [], cur = null;
+    list.forEach(function(s, i) {
+      if (cur && s.start < cur.end) { cur.items.push(s); if (s.end > cur.end) cur.end = s.end; }
+      else { cur = {start: s.start, off: s.startOff, end: s.end, items: [s]}; clusters.push(cur); }
+      s._key = s.source || 'reading-' + i;
+    });
+    var out = {};
+    clusters.forEach(function(c) {
+      var bySource = {}, best = 0;
+      c.items.forEach(function(s) { bySource[s._key] = (bySource[s._key] || 0) + s.value; });
+      Object.keys(bySource).forEach(function(k) { if (bySource[k] > best) best = bySource[k]; });
+      var day = localDay(c.start, c.off), d = out[day] || (out[day] = {value: 0, whole: false});
+      d.value += best;
+      if (c.items.length === 1 && localTime(c.start, c.off) === '00:00' && c.end - c.start >= 23 * 3600000) d.whole = true;
+    });
+    return out;
+  }
+
   // Samples → {day: {steps, distanceKm, sleepMin, sleepKind, bed, wake, weightKg, restingHr}}.
   function summarize(samples) {
     var days = {}, hr = {};
     var row = function(day) { return days[day] || (days[day] = {}); };
+    var steps = cumulative(samples, 'steps'), distance = cumulative(samples, 'distance');
+    Object.keys(steps).forEach(function(day) { row(day).steps = steps[day].value; if (steps[day].whole) row(day)._stepsWhole = true; });
+    Object.keys(distance).forEach(function(day) { row(day).distanceKm = distance[day].value; if (distance[day].whole) row(day)._distanceWhole = true; });
     samples.forEach(function(s) {
       var day = localDay(s.start, s.startOff);
-      if (s.metric === 'steps') row(day).steps = (row(day).steps || 0) + s.value;
-      else if (s.metric === 'distance') row(day).distanceKm = (row(day).distanceKm || 0) + s.value;
-      else if (s.metric === 'weight') {
+      if (s.metric === 'weight') {
         var r = row(day);
         if (r._weightAt == null || s.start >= r._weightAt) { r.weightKg = s.value; r._weightAt = s.start; }
       } else if (s.metric === 'restingHr') (hr[day] || (hr[day] = [])).push(s.value);
@@ -213,7 +241,8 @@
     return out;
   }
 
-  // The stored days with one send merged in. Only days from two weeks back to
+  // The stored days with one send merged in. Steps and distance only rise,
+  // unless the send carries Health's whole-day total for that day. Only days from two weeks back to
   // tomorrow are taken (a phone with a wrong clock cannot write next year);
   // the newest KEEP_DAYS are kept.
   function mergeDays(stored, incoming, nowMs) {
@@ -222,8 +251,11 @@
     Object.keys(incoming || {}).forEach(function(day) {
       if (!isDay(day) || day < from || day > to) return;
       var old = out[day] || {}, add = incoming[day], next = Object.assign({}, old), fields = [];
+      // A whole-day total from Health replaces what is stored, so a lower,
+      // corrected count lands; a partial reading only ever raises it.
       ['steps', 'distanceKm'].forEach(function(f) {
-        if (add[f] != null && (old[f] == null || add[f] > old[f])) { next[f] = add[f]; fields.push(f); }
+        var whole = add[f === 'steps' ? '_stepsWhole' : '_distanceWhole'];
+        if (add[f] != null && (old[f] == null || add[f] > old[f] || (whole && add[f] !== old[f]))) { next[f] = add[f]; fields.push(f); }
       });
       if (add.sleepMin != null && (old.sleepMin == null || add.sleepMin > old.sleepMin)) {
         next.sleepMin = add.sleepMin; next.sleepKind = add.sleepKind; next.bed = add.bed; next.wake = add.wake; fields.push('sleepMin');
@@ -269,10 +301,13 @@
   function ingest(stored, body, nowMs) {
     stored = stored || {};
     var lines = linesOf(body), parsed = parseLines(lines), summary = summarize(parsed.samples);
-    var outOfRange = 0;
+    var outOfRange = 0, sent = Object.keys(summary).sort();
     Object.keys(summary).forEach(function(d) { if (summary[d]._outOfRange) { outOfRange++; delete summary[d]._outOfRange; } });
+    // "The last 3 days" starts part-way through its first day, and Health may
+    // still label that bucket from midnight: never let it lower a stored day.
+    if (sent.length > 1) { delete summary[sent[0]]._stepsWhole; delete summary[sent[0]]._distanceWhole; }
     var merged = mergeDays(stored.days, summary, nowMs), t = today(nowMs);
-    var used = Object.keys(summary).filter(function(d) { return Object.keys(summary[d]).length; }).sort();
+    var used = Object.keys(summary).filter(function(d) { return FIELDS.some(function(f) { return summary[d][f] != null; }); }).sort();
     var latest = function(f) {
       var d = used.filter(function(day) { return summary[day][f] != null; }).pop();
       return d ? Object.assign({day: d}, summary[d]) : null;
@@ -329,15 +364,17 @@
       var km = Number(m[1]);
       if (km > 0 && km <= 60) return {kind: 'km', value: km, label: km + ' km walked'};
     }
-    if ((m = /\b(?:in bed|bed|asleep|sleep)\s+by\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/.exec(t))) {
-      var h = Number(m[1]) % 12 + (m[3] === 'pm' || (!m[3] && Number(m[1]) >= 7 && Number(m[1]) <= 11) ? 12 : 0);
-      if (!m[3] && Number(m[1]) === 12) h = 0;
-      var hm = pad(h % 24) + ':' + (m[2] || '00');
-      return {kind: 'bedBy', value: hm, label: 'in bed by ' + hm};
+    // "in bed" goals are met by time in bed; "sleep" or "asleep" goals only by
+    // recorded sleep (an Apple Watch or a sleep app), never by time in bed.
+    if ((m = /\b(in bed|bed|asleep|sleep)\s+by\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/.exec(t))) {
+      var h = Number(m[2]) % 12 + (m[4] === 'pm' || (!m[4] && Number(m[2]) >= 7 && Number(m[2]) <= 11) ? 12 : 0);
+      if (!m[4] && Number(m[2]) === 12) h = 0;
+      var hm = pad(h % 24) + ':' + (m[3] || '00'), asleepBy = /sleep/.test(m[1]);
+      return {kind: 'bedBy', value: hm, basis: asleepBy ? 'asleep' : 'inBed', label: (asleepBy ? 'asleep by ' : 'in bed by ') + hm};
     }
-    if ((m = /(\d+(?:\.\d+)?)\s*(?:h|hrs?|hours?)\s*(?:of\s+)?(?:sleep|in bed|asleep)/.exec(t))) {
-      var hours = Number(m[1]);
-      if (hours >= 4 && hours <= 12) return {kind: 'sleepHours', value: hours, label: hours + ' h in bed'};
+    if ((m = /(\d+(?:\.\d+)?)\s*(?:h|hrs?|hours?)\s*(?:of\s+)?(sleep|in bed|asleep)/.exec(t))) {
+      var hours = Number(m[1]), inBed = m[2] === 'in bed';
+      if (hours >= 4 && hours <= 12) return {kind: 'sleepHours', value: hours, basis: inBed ? 'inBed' : 'asleep', label: hours + (inBed ? ' h in bed' : ' h asleep')};
     }
     return null;
   }
@@ -351,6 +388,8 @@
     }
     var night = cleanRow(days && days[offsetDay(day, 1)]);
     if (night.sleepMin == null) return null;
+    // A sleep goal cannot be judged from time in bed.
+    if (target.basis === 'asleep' && night.sleepKind !== 'asleep') return null;
     if (target.kind === 'sleepHours') return night.sleepMin >= target.value * 60;
     var bed = eveningMin(night.bed), by = eveningMin(target.value);
     return bed == null || by == null ? null : bed <= by;
