@@ -1,0 +1,308 @@
+(function(root) {
+  'use strict';
+  // Apple Health, sent by an iOS Shortcut, as one row of numbers per day.
+  //
+  // The Shortcut does as little as it can: for each kind of reading it sends
+  // one text line per Health sample, "metric|start|end|value|unit", with the
+  // dates in ISO 8601. Everything that needs care is done here, where it is
+  // tested: summing steps per day, merging overlapping sleep records into one
+  // night, putting that night on the day he woke up, using the time zone each
+  // reading carries (so a trip abroad lands on the right local day), and
+  // turning away numbers no body produces.
+  //
+  // Each send covers the last few days, so the first of those days is usually
+  // cut short by the window. Steps and distance only grow within a day, and a
+  // night only gets longer as its records sync, so the larger reading of a day
+  // is kept. Weight and resting heart rate are taken as sent.
+  //
+  // Pure: the server passes in the stored document and the request body and
+  // writes back what comes out. The app uses the same file to show the rows.
+  var KEEP_DAYS = 400, BACK_DAYS = 14, MAX_LINES = 3000, MAX_LINE = 300;
+  var NIGHT_GAP_MIN = 180, MIN_NIGHT_MIN = 90, MAX_NIGHT_MIN = 960;
+  var MANILA_MIN = 480;
+  var FIELDS = ['steps', 'distanceKm', 'sleepMin', 'weightKg', 'restingHr'];
+  var LIMITS = {steps: [0, 100000], distanceKm: [0, 150], weightKg: [30, 250], restingHr: [30, 130]};
+  // Health's own names as the Shortcut may write them, reduced to letters.
+  var METRICS = {steps: 'steps', step: 'steps', stepcount: 'steps',
+    distance: 'distance', walkingrunningdistance: 'distance', walkingandrunningdistance: 'distance',
+    sleep: 'sleep', sleepanalysis: 'sleep',
+    weight: 'weight', bodymass: 'weight', bodyweight: 'weight',
+    restinghr: 'restingHr', restingheartrate: 'restingHr'};
+  var DAY_NAMES = 'Sun Mon Tue Wed Thu Fri Sat'.split(' ');
+  var MONTH_NAMES = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function isDay(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
+  // The local calendar day at an offset (minutes east of UTC).
+  function localDay(ms, off) {
+    var d = new Date(ms + off * 60000);
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+  function localTime(ms, off) {
+    var d = new Date(ms + off * 60000);
+    return pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+  }
+  function today(nowMs) { return localDay(nowMs == null ? Date.now() : nowMs, MANILA_MIN); }
+  function offsetDay(day, n) {
+    var d = new Date(Date.parse(day + 'T00:00:00Z') + n * 86400000);
+    return d.toISOString().slice(0, 10);
+  }
+  // "Thu 15 Oct".
+  function dayLabel(day) {
+    if (!isDay(day)) return '';
+    var d = new Date(Date.parse(day + 'T00:00:00Z'));
+    return DAY_NAMES[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MONTH_NAMES[d.getUTCMonth()];
+  }
+
+  // An ISO 8601 date and time as {ms, off}. A date with no offset is read as
+  // Manila time; one in UTC (Z) is shown on Manila's day, since it says
+  // nothing about where he was. Anything else (a date written out in words,
+  // which is what the Shortcut sends if its date format is left alone) is null.
+  function parseWhen(text) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/i.exec(String(text || '').trim());
+    if (!m) return null;
+    var off = MANILA_MIN, zone = m[7];
+    if (zone && /z/i.test(zone)) off = 0;
+    else if (zone) {
+      var z = zone.replace(':', '');
+      off = (z[0] === '-' ? -1 : 1) * (Number(z.slice(1, 3)) * 60 + Number(z.slice(3, 5)));
+      if (Math.abs(off) > 14 * 60) return null;
+    }
+    var wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+    if (isNaN(wall) || +m[2] > 12 || +m[3] > 31 || +m[4] > 23 || +m[5] > 59) return null;
+    var ms = wall - off * 60000;
+    // A UTC time says nothing about where he was, so show it on Manila's day.
+    return {ms: ms, off: zone && /z/i.test(zone) ? MANILA_MIN : off};
+  }
+  // "6,210", "72.4 kg", "6210 count" → a number. Commas are thousands
+  // separators here: the Shortcut writes numbers the way the phone's region
+  // does, and his regions (Philippines, Australia) use a full stop for decimals.
+  function parseNumber(text) {
+    var m = /^\s*(-?[\d,\s]*\.?\d+)/.exec(String(text || ''));
+    if (!m) return null;
+    var n = Number(m[1].replace(/[,\s]/g, ''));
+    return isFinite(n) ? n : null;
+  }
+  function metricOf(text) { return METRICS[String(text || '').toLowerCase().replace(/[^a-z]/g, '')] || ''; }
+  function sleepKind(value) {
+    var v = String(value == null ? '' : value).toLowerCase().trim();
+    // Health's own codes: 0 in bed, 1 asleep, 2 awake, 3 core, 4 deep, 5 REM.
+    if (/^\d$/.test(v)) return v === '0' ? 'inBed' : v === '2' ? '' : Number(v) <= 5 ? 'asleep' : '';
+    if (/awake/.test(v)) return '';
+    if (/in\s*bed/.test(v)) return 'inBed';
+    return /asleep|core|deep|rem|unspecified/.test(v) ? 'asleep' : '';
+  }
+
+  // Request body → the lines it carries. The Shortcut sends {lines: "…"}
+  // (its Combine Text output) or {lines: [...]} (a list); a bare string works too.
+  function linesOf(body) {
+    var raw = body && typeof body === 'object' && !Array.isArray(body) ? body.lines : body;
+    if (Array.isArray(raw)) raw = raw.map(function(v) { return String(v == null ? '' : v); }).join('\n');
+    return String(raw == null ? '' : raw).split(/\r?\n/).map(function(l) { return l.trim(); }).filter(Boolean);
+  }
+
+  // Lines → {samples, rejected, problems}. problems names the kinds of fault
+  // seen (format, dates, metric, value), so the reply can say what to fix.
+  function parseLines(lines) {
+    var samples = [], seen = {}, rejected = 0, problems = {};
+    var bad = function(kind) { rejected++; problems[kind] = (problems[kind] || 0) + 1; };
+    (lines || []).slice(0, MAX_LINES).forEach(function(line) {
+      if (line.length > MAX_LINE) { bad('value'); return; }
+      var f = line.split('|').map(function(s) { return s.trim(); });
+      if (f.length < 4) { bad('format'); return; }
+      var metric = metricOf(f[0]);
+      if (!metric) { bad('metric'); return; }
+      var start = parseWhen(f[1]), end = f[2] ? parseWhen(f[2]) : start;
+      if (!start || !end) { bad('dates'); return; }
+      if (end.ms < start.ms) { var t = start; start = end; end = t; }
+      var unit = String(f[4] || '').toLowerCase() || String(f[3] || '').replace(/^[\s\d,.\-]+/, '').toLowerCase();
+      var s = {metric: metric, start: start.ms, end: end.ms, startOff: start.off, endOff: end.off};
+      if (metric === 'sleep') {
+        s.kind = sleepKind(f[3]);
+        if (!s.kind) return; // awake, or a stage it does not count: not a fault
+      } else {
+        var n = parseNumber(f[3]);
+        if (n == null || n < 0) { bad('value'); return; }
+        if (metric === 'distance') n = /^mi/.test(unit) ? n * 1.609344 : /^(m|meter|metre)s?$/.test(unit) ? n / 1000 : n;
+        if (metric === 'weight' && /^(lb|lbs|pound)/.test(unit)) n = n * 0.45359237;
+        s.value = n;
+      }
+      var key = [metric, s.start, s.end, s.kind || s.value].join('|');
+      if (seen[key]) return;
+      seen[key] = true;
+      samples.push(s);
+    });
+    rejected += Math.max(0, (lines || []).length - MAX_LINES);
+    return {samples: samples, rejected: rejected, problems: problems};
+  }
+
+  // The nights in a set of sleep samples: records less than three hours apart
+  // are one night. A night counts its time asleep when the phone recorded any
+  // (a sleep tracking app can), otherwise its time in bed, which is what an
+  // iPhone on its own records from the sleep schedule. Overlaps count once.
+  function nights(samples) {
+    var list = samples.filter(function(s) { return s.metric === 'sleep'; }).sort(function(a, b) { return a.start - b.start; });
+    var groups = [], cur = null;
+    list.forEach(function(s) {
+      if (cur && s.start - cur.end <= NIGHT_GAP_MIN * 60000) {
+        cur.items.push(s);
+        if (s.end > cur.end) { cur.end = s.end; cur.endOff = s.endOff; }
+      } else {
+        cur = {start: s.start, startOff: s.startOff, end: s.end, endOff: s.endOff, items: [s]};
+        groups.push(cur);
+      }
+    });
+    return groups.map(function(g) {
+      var asleep = g.items.filter(function(s) { return s.kind === 'asleep'; });
+      var use = asleep.length ? asleep : g.items, total = 0, upTo = -Infinity;
+      use.forEach(function(s) {
+        var from = Math.max(s.start, upTo);
+        if (s.end > from) total += s.end - from;
+        if (s.end > upTo) upTo = s.end;
+      });
+      return {day: localDay(g.end, g.endOff), sleepMin: Math.round(total / 60000), sleepKind: asleep.length ? 'asleep' : 'inBed',
+        bed: localTime(g.start, g.startOff), wake: localTime(g.end, g.endOff)};
+    }).filter(function(n) { return n.sleepMin >= MIN_NIGHT_MIN && n.sleepMin <= MAX_NIGHT_MIN; });
+  }
+
+  // Samples → {day: {steps, distanceKm, sleepMin, sleepKind, bed, wake, weightKg, restingHr}}.
+  function summarize(samples) {
+    var days = {}, hr = {};
+    var row = function(day) { return days[day] || (days[day] = {}); };
+    samples.forEach(function(s) {
+      var day = localDay(s.start, s.startOff);
+      if (s.metric === 'steps') row(day).steps = (row(day).steps || 0) + s.value;
+      else if (s.metric === 'distance') row(day).distanceKm = (row(day).distanceKm || 0) + s.value;
+      else if (s.metric === 'weight') {
+        var r = row(day);
+        if (r._weightAt == null || s.start >= r._weightAt) { r.weightKg = s.value; r._weightAt = s.start; }
+      } else if (s.metric === 'restingHr') (hr[day] || (hr[day] = [])).push(s.value);
+    });
+    Object.keys(hr).forEach(function(day) {
+      row(day).restingHr = hr[day].reduce(function(a, b) { return a + b; }, 0) / hr[day].length;
+    });
+    nights(samples).forEach(function(n) {
+      var r = row(n.day);
+      if (!r.sleepMin || n.sleepMin > r.sleepMin) { r.sleepMin = n.sleepMin; r.sleepKind = n.sleepKind; r.bed = n.bed; r.wake = n.wake; }
+    });
+    Object.keys(days).forEach(function(day) {
+      var r = days[day];
+      delete r._weightAt;
+      if (r.steps != null) r.steps = Math.round(r.steps);
+      if (r.distanceKm != null) r.distanceKm = Math.round(r.distanceKm * 100) / 100;
+      if (r.weightKg != null) r.weightKg = Math.round(r.weightKg * 10) / 10;
+      if (r.restingHr != null) r.restingHr = Math.round(r.restingHr);
+      Object.keys(LIMITS).forEach(function(f) {
+        if (r[f] != null && (r[f] < LIMITS[f][0] || r[f] > LIMITS[f][1])) { delete r[f]; r._outOfRange = true; }
+      });
+    });
+    return days;
+  }
+
+  // A day's stored row, cleaned (the app reads the document as it is).
+  function cleanRow(r) {
+    var out = {};
+    if (!r || typeof r !== 'object') return out;
+    FIELDS.forEach(function(f) { if (typeof r[f] === 'number' && isFinite(r[f])) out[f] = r[f]; });
+    if (out.sleepMin != null) {
+      out.sleepKind = r.sleepKind === 'asleep' ? 'asleep' : 'inBed';
+      if (/^\d{2}:\d{2}$/.test(r.bed || '')) out.bed = r.bed;
+      if (/^\d{2}:\d{2}$/.test(r.wake || '')) out.wake = r.wake;
+    }
+    if (typeof r.at === 'string') out.at = r.at;
+    return out;
+  }
+
+  // The stored days with one send merged in. Only days from two weeks back to
+  // tomorrow are taken (a phone with a wrong clock cannot write next year);
+  // the newest KEEP_DAYS are kept.
+  function mergeDays(stored, incoming, nowMs) {
+    var out = {}, changed = {}, t = today(nowMs), from = offsetDay(t, -BACK_DAYS), to = offsetDay(t, 1), at = new Date(nowMs).toISOString();
+    Object.keys(stored || {}).forEach(function(day) { if (isDay(day)) out[day] = cleanRow(stored[day]); });
+    Object.keys(incoming || {}).forEach(function(day) {
+      if (!isDay(day) || day < from || day > to) return;
+      var old = out[day] || {}, add = incoming[day], next = Object.assign({}, old), fields = [];
+      ['steps', 'distanceKm'].forEach(function(f) {
+        if (add[f] != null && (old[f] == null || add[f] > old[f])) { next[f] = add[f]; fields.push(f); }
+      });
+      if (add.sleepMin != null && (old.sleepMin == null || add.sleepMin > old.sleepMin)) {
+        next.sleepMin = add.sleepMin; next.sleepKind = add.sleepKind; next.bed = add.bed; next.wake = add.wake; fields.push('sleepMin');
+      }
+      ['weightKg', 'restingHr'].forEach(function(f) {
+        if (add[f] != null && add[f] !== old[f]) { next[f] = add[f]; fields.push(f); }
+      });
+      if (fields.length) { next.at = at; out[day] = next; changed[day] = fields; }
+    });
+    var keep = Object.keys(out).sort().slice(-KEEP_DAYS), kept = {};
+    keep.forEach(function(day) { kept[day] = out[day]; });
+    return {days: kept, changed: changed};
+  }
+
+  function sleepText(min) {
+    if (min == null) return '';
+    return Math.floor(min / 60) + 'h' + pad(min % 60);
+  }
+  function stepsText(n) { return Math.round(n).toLocaleString('en-AU') + ' steps'; }
+
+  // What the Shortcut shows him after a send: the newest steps and night it
+  // has, or what to fix when nothing could be used.
+  function receiptMessage(r) {
+    if (!r.lines) return 'Daybook got an empty send. Check the Shortcut adds its lines to the Text it sends.';
+    if (!r.used) {
+      var p = r.problems || {};
+      if (p.dates) return 'Daybook could not read the dates. In the Shortcut, set each date to ISO 8601 with time (About you → Apple Health, step 3).';
+      if (p.format) return 'Daybook could not read the lines. Each must be: kind|start|end|value|unit, joined with | (About you → Apple Health).';
+      if (p.metric) return 'Daybook did not recognise the readings. Each line must start with steps, distance, sleep or weight.';
+      return 'Daybook got ' + r.lines + ' lines but none it could use.';
+    }
+    var bits = [];
+    if (r.latestSteps) bits.push(stepsText(r.latestSteps.steps) + ' ' + (r.latestSteps.day === r.today ? 'today' : dayLabel(r.latestSteps.day)));
+    if (r.latestSleep) bits.push(sleepText(r.latestSleep.sleepMin) + (r.latestSleep.sleepKind === 'asleep' ? ' asleep' : ' in bed') +
+      (r.latestSleep.day === r.today ? ' last night' : ' to ' + dayLabel(r.latestSleep.day)));
+    if (r.latestWeight) bits.push(r.latestWeight.weightKg + ' kg');
+    var head = 'Daybook got: ' + (bits.length ? bits.join(' · ') : r.days.length + ' days');
+    return head + (r.changedDays ? '' : ' (no change)') + (r.rejected ? '. ' + r.rejected + ' lines skipped.' : '.');
+  }
+
+  // One send: the stored document and the request body in, the document to
+  // write and the reply out.
+  function ingest(stored, body, nowMs) {
+    stored = stored || {};
+    var lines = linesOf(body), parsed = parseLines(lines), summary = summarize(parsed.samples);
+    var outOfRange = 0;
+    Object.keys(summary).forEach(function(d) { if (summary[d]._outOfRange) { outOfRange++; delete summary[d]._outOfRange; } });
+    var merged = mergeDays(stored.days, summary, nowMs), t = today(nowMs);
+    var used = Object.keys(summary).filter(function(d) { return Object.keys(summary[d]).length; }).sort();
+    var latest = function(f) {
+      var d = used.filter(function(day) { return summary[day][f] != null; }).pop();
+      return d ? Object.assign({day: d}, summary[d]) : null;
+    };
+    var fields = FIELDS.filter(function(f) { return used.some(function(d) { return summary[d][f] != null; }); });
+    var receipt = {at: new Date(nowMs).toISOString(), today: t, lines: lines.length, samples: parsed.samples.length, used: used.length,
+      rejected: parsed.rejected + outOfRange, problems: parsed.problems, days: used, fields: fields,
+      changedDays: Object.keys(merged.changed).length,
+      latestSteps: latest('steps'), latestSleep: latest('sleepMin'), latestWeight: latest('weightKg')};
+    receipt.message = receiptMessage(receipt);
+    var last = {at: receipt.at, lines: receipt.lines, used: receipt.used, rejected: receipt.rejected, fields: fields,
+      days: used, changedDays: receipt.changedDays, message: receipt.message};
+    var doc = {kind: 'health', source: 'apple-health', days: merged.days, lastReceived: last, updatedAt: receipt.at};
+    if (receipt.used) doc.lastUsedAt = receipt.at;
+    return {doc: doc, receipt: receipt};
+  }
+
+  // The newest n days, newest first, for the table on About you.
+  function recentRows(days, todayKey, n) {
+    var out = [], d = todayKey || today();
+    for (var i = 0; i < (n || 14); i++) {
+      var key = offsetDay(d, -i), r = cleanRow(days && days[key]);
+      out.push(Object.assign({day: key, label: dayLabel(key), empty: !FIELDS.some(function(f) { return r[f] != null; })}, r));
+    }
+    return out;
+  }
+
+  root.HealthCore = {KEEP_DAYS: KEEP_DAYS, BACK_DAYS: BACK_DAYS, MAX_LINES: MAX_LINES, FIELDS: FIELDS, LIMITS: LIMITS,
+    today: today, offsetDay: offsetDay, dayLabel: dayLabel, parseWhen: parseWhen, parseNumber: parseNumber, metricOf: metricOf,
+    linesOf: linesOf, parseLines: parseLines, nights: nights, summarize: summarize, cleanRow: cleanRow, mergeDays: mergeDays,
+    sleepText: sleepText, receiptMessage: receiptMessage, ingest: ingest, recentRows: recentRows};
+  if (typeof module !== 'undefined' && module.exports) module.exports = root.HealthCore;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
