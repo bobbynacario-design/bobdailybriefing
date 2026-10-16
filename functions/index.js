@@ -773,8 +773,15 @@ exports.buildHealthResearch = onSchedule(
     const db = getFirestore();
     for (const email of GENERATION_OWNERS) {
       try {
-        const user = await getAuth().getUserByEmail(email);
-        await makeHealthResearch(db, user.uid, Date.now(), false);
+        const user = await getAuth().getUserByEmail(email), now = Date.now();
+        const weekKey = WeeklyReviewCore.weekStart(phtDateKey(now));
+        const built = await db.collection(BRIEFINGS_COLL).doc("health-research-" + user.uid).get()
+          .then((snap) => !!(snap.exists && (snap.data().weeks || {})[weekKey])).catch(() => false);
+        if (built) continue;
+        // The same monthly budget as the callable (protectGeneration "health"),
+        // one request per week, so a retry of the job cannot run it twice.
+        await guardedGeneration({db, uid: user.uid, feature: "health", period: phtDateKey(now).slice(0, 7), cap: HEALTH_RESEARCH_MONTHLY_CAP,
+          requestId: "sunday-" + weekKey, input: {week: weekKey, refresh: false}}, () => makeHealthResearch(db, user.uid, now, false));
       } catch (error) {
         logger.warn("Sunday health research not built", {code: error.code, message: error.message});
       }

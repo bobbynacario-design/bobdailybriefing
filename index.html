@@ -4277,7 +4277,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p>Once it sends, <b>Today</b> shows a <b>Body</b> line under This week: yesterday's steps and last night's time in bed. It turns amber when steps were well under or over your usual (the middle of your last 14 days) or when short nights (under 6 hours in bed) repeat, and only then does it ride on the morning push. A weekly commitment that names a number Apple Health can check (<i>8,000 steps</i>, <i>3 km</i>, <i>in bed by 11:30 pm</i>, <i>7 hours in bed</i>, in its words or in How you'll know) <b>ticks itself</b>: a step goal once the day is over and a send has come in, a sleep goal for the evening you went to bed. Those ticks show as ringed dots, and the morning check-in stops asking about them. Untick one and it stays off. "Walk 30 minutes" cannot tick itself: an iPhone without a Watch does not record exercise minutes.</p>
       <p><b>Health basics</b> — your birth year, which screenings to include, and the month you last had each check-up. Daybook works out what is next due from Australian guidelines for adults at average risk (blood pressure, heart and diabetes risk checks, bowel screening, dental, eyes, the flu vaccine, the screenings for women, and the pneumococcal and two-dose shingles vaccines from 65), each linking its source. If your doctor gave you a different date, put it in <b>Next due</b>; it replaces the schedule for that check until you mark it done. What is due shows on <b>Today</b> with a <b>Done</b> button (it records this month), on <b>Calendar</b>, and as the health idea in your weekly review. It never reads results, and your doctor may set a different schedule: untick a check with <b>Not for me</b>.</p>
       <p><b>Lifestyle questions</b> — once the morning check-in's commitment question is done (or when there is none), it asks one question about yesterday, a different one each day: drinks, a late meal, protein at breakfast, 20 minutes of daylight, and your energy. One tap, or <b>Not now</b>. Nothing is counted or scored; the answers add up as a line each in your Sunday review (“Drinks: None on 3 days, 3 or more on 1”) and, once Apple Health has a few weeks of your sleep and steps, will be set against them.</p>
-      <p><b>This week's health research</b> — every Sunday at 5:15 a web search finds up to three findings from the last two weeks on sleep, activity, nutrition, alcohol, ageing or stress. Only meta-analyses, systematic reviews, randomised trials, large cohort studies and health-body guidelines count; animal studies, supplements and medicines are left out, and a source is kept only if the search really returned it. The AI is told only your age band (from Health basics) and a fixed line about how you live (desk work, travel, late poker), never your steps, sleep, answers or check-ups. It shows on <b>Today</b> for two days (<b>Got it</b> hides it), its headlines sit in the Sunday review, and one “Try” is offered as a commitment idea. It reports what studies found; it is not medical advice. On the cost card as health-research.</p>
+      <p><b>This week's health research</b> — every Sunday at 5:15 a web search finds up to three findings from the last two weeks on sleep, activity, nutrition, alcohol, ageing or stress. Only meta-analyses, systematic reviews, randomised trials, large cohort studies and health-body guidelines count; animal studies, supplements and medicines are left out, and a link is kept only if the search really returned it. That is all that is checked: the date, design, numbers and summary are the AI's reading of the page, not checked against the paper, so open the source before acting on one. Each finding says what it can show: a cohort study only a link, not cause; trials can show cause. The AI is told only your age band (from Health basics) and a fixed line about how you live (desk work, travel, late poker), never your steps, sleep, answers or check-ups. It shows on <b>Today</b> for two days with the week it covers (<b>Got it</b> hides it); the Sunday review lists the headlines for that week only, and one “Try” from the latest Sunday is offered as a commitment idea. An older week is never shown as this week's. The Sunday job and your own builds share one budget of 8 a month. It reports what studies found; it is not medical advice. On the cost card as health-research.</p>
       <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
     </div>
     <div class="help-card help-wide" id="invites-card" hidden>
@@ -6936,26 +6936,44 @@ function latestResearch(weeks) {
   var k = keys[keys.length - 1];
   return k ? Object.assign({weekKey: k}, weeks[k]) : null;
 }
+// One week's research, or nothing: an older week is never shown as this week's.
+function researchFor(weeks, weekKey) {
+  var r = weeks && weekKey && weeks[weekKey];
+  return r ? Object.assign({weekKey: weekKey}, r) : null;
+}
+// The week whose research the coming week's ideas may use: this week's on
+// Sunday (built that morning), else last Sunday's.
+function researchWeekForIdeas() {
+  var R = WeeklyReviewCore, d = R.today(), start = R.weekStart(d);
+  return new Date(d + 'T00:00:00Z').getUTCDay() === 0 ? start : R.offset(start, -7);
+}
+function researchWeekLabel(weekKey) {
+  var R = WeeklyReviewCore, f = function(d) { return new Date(d + 'T00:00:00Z').toLocaleDateString('en-AU', {day: 'numeric', month: 'short', timeZone: 'UTC'}); };
+  return f(weekKey) + ' – ' + f(R.offset(weekKey, 6));
+}
 window.healthResearchTry = function(weeks) {
-  var r = latestResearch(weeks), i = r && (r.items || []).filter(function(x) { return x.try; })[0];
-  return i ? {text: i.try, why: 'From this week\'s health research: ' + i.headline} : null;
+  var r = researchFor(weeks, researchWeekForIdeas()), i = r && (r.items || []).filter(function(x) { return x.try; })[0];
+  return i ? {text: i.try, why: 'From the health research for ' + researchWeekLabel(r.weekKey) + ': ' + i.headline} : null;
 };
+var RESEARCH_SHOWS = {association: 'Shows a link, not cause', cause: 'Trial evidence of cause', guidance: 'Health-body guidance'};
 var RESEARCH_EVIDENCE = {'meta-analysis': 'Meta-analysis', 'systematic review': 'Systematic review', 'randomised trial': 'Randomised trial', 'large cohort': 'Large cohort study', 'guideline': 'Guideline'};
 function researchItemsHtml(r) {
   return '<ul class="research-list">' + (r.items || []).map(function(i) {
     var when = i.published ? new Date(i.published + 'T00:00:00Z').toLocaleDateString('en-AU', {day: 'numeric', month: 'short', timeZone: 'UTC'}) : '';
     return '<li class="research-item"><div class="research-headline"><span class="weekly-area">' + esc(i.topic) + '</span> ' + esc(i.headline) + '</div>' +
       '<p class="research-finding">' + esc(i.finding) + '</p>' +
-      '<div class="research-meta"><span>' + esc(RESEARCH_EVIDENCE[i.evidence] || i.evidence) + (i.whoStudied ? ' · ' + esc(i.whoStudied) : '') + '</span>' + (when ? '<span>' + esc(when) + '</span>' : '') +
+      '<div class="research-meta"><span>' + esc(RESEARCH_EVIDENCE[i.evidence] || i.evidence) + (i.whoStudied ? ' · ' + esc(i.whoStudied) : '') + '</span>' +
+      '<span>' + esc(RESEARCH_SHOWS[i.shows] || RESEARCH_SHOWS.association) + '</span>' + (when ? '<span>' + esc(when) + '</span>' : '') +
       '<a href="' + esc(i.url) + '" target="_blank" rel="noopener" data-track="research_source">' + esc(i.sourceTitle || 'Source') + ' ↗</a></div>' +
       (i.forYou ? '<p class="research-you"><b>For you:</b> ' + esc(i.forYou) + '</p>' : '') + (i.try ? '<p class="research-you"><b>Try:</b> ' + esc(i.try) + '</p>' : '') + '</li>';
   }).join('') + '</ul>';
 }
-window.healthResearchReviewHtml = function(weeks) {
-  var r = latestResearch(weeks);
+// The research for the week under review only (its Monday is weekKey).
+window.healthResearchReviewHtml = function(weeks, weekKey) {
+  var r = researchFor(weeks, weekKey);
   if (!r || !(r.items || []).length) return '';
-  return '<div class="weekly-research"><span class="about-sublabel">This week\'s health research</span><ul>' + r.items.map(function(i) {
-    return '<li><a href="' + esc(i.url) + '" target="_blank" rel="noopener">' + esc(i.headline) + '</a> <span class="flights-note">· ' + esc(RESEARCH_EVIDENCE[i.evidence] || i.evidence) + '</span></li>';
+  return '<div class="weekly-research"><span class="about-sublabel">Health research · ' + esc(researchWeekLabel(r.weekKey)) + '</span><ul>' + r.items.map(function(i) {
+    return '<li><a href="' + esc(i.url) + '" target="_blank" rel="noopener">' + esc(i.headline) + '</a> <span class="flights-note">· ' + esc(RESEARCH_EVIDENCE[i.evidence] || i.evidence) + ' · ' + esc((RESEARCH_SHOWS[i.shows] || RESEARCH_SHOWS.association).toLowerCase()) + '</span></li>';
   }).join('') + '</ul></div>';
 };
 async function renderTodayResearch(force) {
@@ -6975,7 +6993,7 @@ async function renderTodayResearch(force) {
   }
   if (fresh && r.weekKey !== seen) {
     var items = (r.items || []).length;
-    el.innerHTML = RESEARCH_HEAD + '<span class="flights-note">Recent studies, checked sources · not medical advice</span></div>' +
+    el.innerHTML = RESEARCH_HEAD + '<span class="flights-note">' + esc(researchWeekLabel(r.weekKey)) + ' · links checked against the search; the summaries are written by AI and not checked against the papers · not medical advice</span></div>' +
       (items ? researchItemsHtml(r) : '<p class="flights-note">Nothing this week met the bar (large, recent, well-designed studies).</p>') +
       (r.note ? '<p class="flights-note">' + esc(r.note) + '</p>' : '') +
       '<div class="research-actions"><button type="button" class="tool-chip" data-research-act="seen" data-track="research_seen">Got it</button>' +

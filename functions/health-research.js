@@ -14,6 +14,9 @@ const {urlKey} = require("./briefing-evidence");
 
 const TOPICS = ["sleep", "activity", "nutrition", "alcohol", "ageing", "stress"];
 const EVIDENCE = ["meta-analysis", "randomised trial", "large cohort", "guideline", "systematic review"];
+// What a finding can show: a cohort only a link; a guideline is guidance; a
+// trial (or a pooled analysis of trials) can show cause.
+const SHOWS = ["association", "cause", "guidance"];
 const MAX_ITEMS = 3;
 const KEEP_WEEKS = 12;
 
@@ -56,6 +59,7 @@ function buildResearchPrompt(input) {
     "  \"finding\": what was found and how big the effect was, at most 60 words,",
     "  \"evidence\": one of " + EVIDENCE.join(", ") + ",",
     "  \"who_studied\": who was studied and how many, at most 20 words,",
+    "  \"shows\": association (an observational link), cause (randomised trials, or a pooled analysis of trials, showed it), or guidance (a health body's advice),",
     "  \"source_title\": the page's title,",
     "  \"url\": the page's address, from your search,",
     "  \"published\": YYYY-MM-DD,",
@@ -80,7 +84,10 @@ function cleanResearch(raw, searched, todayKey) {
     const published = /^\d{4}-\d{2}-\d{2}$/.test(item.published || "") ? item.published : "";
     const age = published ? (today - Date.parse(published + "T00:00:00Z")) / 86400000 : null;
     if (!topic || !evidence || !published || age == null || age < -1 || age > 45) return null;
-    const out = {topic, evidence, published, url, headline: text(item.headline, 110), finding: text(item.finding, 480),
+    // The study design caps what it can show, whatever the model said.
+    const said = SHOWS.indexOf(String(item.shows || "").toLowerCase()) >= 0 ? String(item.shows).toLowerCase() : "association";
+    const shows = evidence === "large cohort" ? "association" : evidence === "guideline" ? "guidance" : said === "guidance" ? "association" : said;
+    const out = {topic, evidence, shows, published, url, headline: text(item.headline, 110), finding: text(item.finding, 480),
       whoStudied: text(item.who_studied, 160), sourceTitle: text(item.source_title, 160), forYou: text(item.for_you, 320), try: text(item.try, 160)};
     return out.headline && out.finding ? out : null;
   }).filter(Boolean);
@@ -98,4 +105,4 @@ function keepWeeks(stored, key, entry) {
   return out;
 }
 
-module.exports = {TOPICS, EVIDENCE, MAX_ITEMS, KEEP_WEEKS, SYSTEM, ageBand, buildResearchPrompt, cleanResearch, keepWeeks};
+module.exports = {TOPICS, EVIDENCE, SHOWS, MAX_ITEMS, KEEP_WEEKS, SYSTEM, ageBand, buildResearchPrompt, cleanResearch, keepWeeks};

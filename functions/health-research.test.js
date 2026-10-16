@@ -31,10 +31,21 @@ test("kept only with a searched source, a known topic and evidence, and a recent
   const out = R.cleanResearch(raw, searched, T);
   assert.equal(out.items.length, 1);
   assert.equal(out.dropped, 5);
-  assert.deepEqual(Object.keys(out.items[0]).sort(), ["evidence", "finding", "forYou", "headline", "published", "sourceTitle", "topic", "try", "url", "whoStudied"]);
+  assert.deepEqual(Object.keys(out.items[0]).sort(), ["evidence", "finding", "forYou", "headline", "published", "shows", "sourceTitle", "topic", "try", "url", "whoStudied"]);
+  assert.equal(out.items[0].shows, "association", "a cohort shows a link, not cause");
   assert.equal(out.items[0].whoStudied, "88,000 UK adults followed for 6 years");
   assert.equal(out.note, "Thin week.");
   assert.deepEqual(R.cleanResearch(null, searched, T), {items: [], note: "", dropped: 0});
+});
+
+test("what a finding can show is capped by its design (Codex review)", () => {
+  const searched = ["https://a.org/1", "https://a.org/2", "https://a.org/3", "https://a.org/4"];
+  const raw = {items: [good({url: "https://a.org/1", evidence: "large cohort", shows: "cause"}), good({url: "https://a.org/2", evidence: "randomised trial", shows: "cause"}),
+    good({url: "https://a.org/3", evidence: "guideline", shows: "cause"}), good({url: "https://a.org/4", evidence: "meta-analysis"})]};
+  assert.deepEqual(R.cleanResearch(raw, searched, T).items.map((i) => i.shows), ["association", "cause", "guidance"]);
+  const pooled = R.cleanResearch({items: [good({url: "https://a.org/4", evidence: "meta-analysis", shows: "nonsense"})]}, searched, T).items[0];
+  assert.equal(pooled.shows, "association", "unknown or missing: the cautious reading");
+  assert.match(R.buildResearchPrompt({todayKey: T}), /"shows": association/);
 });
 
 test("at most three findings, and twelve weeks kept", () => {
