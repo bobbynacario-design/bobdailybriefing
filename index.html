@@ -42,6 +42,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/daybook-calendar-core.js"></script>
 <script src="./lib/daybook-calendar-ui.js"></script>
 <script src="./lib/weekly-review-core.js"></script>
+<script src="./lib/health-core.js"></script>
 <script src="./lib/weekly-review-ui.js"></script>
 <script src="./lib/client-note.js"></script>
 
@@ -484,6 +485,25 @@ window.fbLoadMeetings = async function(uid) {
 window.fbCheckCalendarNow = async function() {
   var check = httpsCallable(functions, 'checkCalendarNow', {timeout: 70000});
   return (await check({})).data;
+};
+// Apple Health (functions/health-link.js): the days the Shortcut has sent, and
+// the private code it sends with. The code is shown once; the server keeps
+// only its hash.
+window.fbLoadHealth = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'health-' + uid));
+    return snap.exists() ? snap.data() : null;
+  } catch (e) {
+    if (e && e.code === 'permission-denied') return null;
+    throw e;
+  }
+};
+window.fbCreateHealthLink = async function() {
+  return (await httpsCallable(functions, 'createHealthLink', {timeout: 30000})({})).data;
+};
+window.fbRevokeHealthLink = async function() {
+  return (await httpsCallable(functions, 'revokeHealthLink', {timeout: 30000})({})).data;
 };
 window.fbLoadDossiers = async function(uid) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
@@ -3028,7 +3048,8 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 .accounts-panel{margin-bottom:1rem}.accounts-panel .command-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}.acct-group{margin:.5rem 0 .2rem}.acct-group-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.2rem}.acct-row{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;padding:.3rem 0;border-bottom:1px solid var(--rim)}.acct-name{flex:1 1 9rem;font-size:13px;color:var(--txt)}.acct-count{font-family:var(--mono);font-size:10.5px;color:var(--txt3)}.acct-chips{display:flex;flex-wrap:wrap;gap:.3rem}.acct-more{margin-top:.6rem}.acct-more summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--txt2)}.acct-quiet{font-size:12.5px;color:var(--txt3);margin:.3rem 0}.acct-edit-label{display:block;font-size:12px;color:var(--txt2);margin:.4rem 0 .3rem}#accounts-text{width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:.5rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt)}
 /* About you: a status strip, the profile as cards that read as text until
    Edit, calendars as status rows, and what it picked up as a card grid. */
-.about-glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;margin:0 0 1rem}
+.about-glance{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;margin:0 0 1rem}
+@media(min-width:1100px){.about-glance{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .about-glance-tile{display:flex;align-items:center;gap:.7rem;min-width:0;padding:.75rem .9rem;border:1px solid var(--rim);border-radius:12px;background:var(--bg2);color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
 .about-glance-tile:hover{border-color:var(--line-hover);background:var(--bg3)}
 .about-glance-tile>.ico{width:32px;height:32px;padding:7px;border-radius:9px;background:var(--gold-dim);color:var(--gold)}
@@ -3103,6 +3124,19 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 .calendar-title{display:block;font-size:14px;font-weight:600;color:var(--txt);overflow-wrap:anywhere}
 .calendar-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .6rem;margin-top:.3rem;font-size:12px;color:var(--txt3)}
 .calendar-meta .is-ready{color:var(--green)}
+.health-code{display:grid;gap:.55rem;margin:.75rem 0 0;padding:.8rem .9rem;border:1px solid var(--gold);border-radius:11px;background:var(--bg3)}
+.health-code .about-hint{color:var(--txt2)}
+.health-code-row{display:grid;grid-template-columns:7.5rem minmax(0,1fr) auto;align-items:center;gap:.5rem}
+.health-code-row input{width:100%;min-width:0;background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.5rem .7rem;font-family:var(--mono);font-size:12px}
+.health-days-wrap{margin-top:.9rem;overflow-x:auto}
+.health-days{width:100%;border-collapse:collapse;font-size:13px}
+.health-days th{text-align:right;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);padding:.35rem .55rem;border-bottom:1px solid var(--rim)}
+.health-days td{text-align:right;padding:.42rem .55rem;border-bottom:1px solid var(--rim);color:var(--txt);font-variant-numeric:tabular-nums;white-space:nowrap}
+.health-days th:first-child,.health-days td:first-child{text-align:left}
+.health-days .is-none{color:var(--txt3)}
+.health-sub{display:block;font-size:11.5px;color:var(--txt3)}
+.health-how ol{margin:.5rem 0;padding-left:1.3rem;line-height:1.6;max-width:80ch}.health-how li{margin:.3rem 0}.health-how code{font-family:var(--mono);font-size:12px;color:var(--gold)}
+@media(max-width:560px){.health-code-row{grid-template-columns:minmax(0,1fr) auto}.health-code-row .about-sublabel{grid-column:1/-1}.health-days{font-size:12.5px}.health-days th,.health-days td{padding:.4rem .3rem}.health-days th{letter-spacing:.03em}}
 .calendar-none{margin:0;padding:.7rem .85rem;font-size:13px;color:var(--txt3);border:1px dashed var(--rim2);border-radius:10px}
 .calendar-how{margin-top:.9rem;padding-top:.8rem;border-top:1px solid var(--rim);font-size:13px;color:var(--txt2)}.calendar-how summary{cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--txt)}.calendar-how p,.calendar-how ul{margin:.5rem 0;line-height:1.6;max-width:80ch}
 .about-learned{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
@@ -3186,6 +3220,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9.5 3.5v3M14.5 3.5v3M9.5 17.5v3M14.5 17.5v3M3.5 9.5h3M3.5 14.5h3M17.5 9.5h3M17.5 14.5h3"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.8v5.2c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6.3z"/><path d="M9 12l2 2 4-4.2"/></symbol>
   <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3.5L5.5 13.5H12l-1 7 7.5-10H12z"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10.2A4.1 4.1 0 0 1 12 7.4a4.1 4.1 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5"/><path d="M12 17.2v.1"/></symbol>
   <symbol id="i-bars" viewBox="0 0 24 24"><path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="6.5" rx=".8"/><rect x="10.5" y="7" width="3" height="10.5" rx=".8"/><rect x="15.5" y="13" width="3" height="4.5" rx=".8"/></symbol>
   <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4.5h8v4.5a4 4 0 0 1-8 0z"/><path d="M8 6.5H5.5a2.5 2.5 0 0 0 2.6 3.4M16 6.5h2.5a2.5 2.5 0 0 1-2.6 3.4"/><path d="M12 13v3.5M8.5 20h7M9.5 20l.5-3.5h4l.5 3.5"/></symbol>
@@ -4064,6 +4099,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <nav class="about-glance owner-only" aria-label="On this page">
     <button type="button" class="about-glance-tile" onclick="aboutJump('about-profile')"><svg class="ico" aria-hidden="true"><use href="#i-note"/></svg><span class="about-glance-text"><span class="about-glance-k">Your profile</span><span class="about-glance-v" id="about-glance-profile">Loading…</span></span></button>
     <button type="button" class="about-glance-tile" onclick="aboutJump('about-calendar')"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg><span class="about-glance-text"><span class="about-glance-k">Your calendars</span><span class="about-glance-v" id="about-glance-calendar">Loading…</span></span></button>
+    <button type="button" class="about-glance-tile" onclick="aboutJump('about-health')"><svg class="ico" aria-hidden="true"><use href="#i-heart"/></svg><span class="about-glance-text"><span class="about-glance-k">Apple Health</span><span class="about-glance-v" id="about-glance-health">Loading…</span></span></button>
     <button type="button" class="about-glance-tile" onclick="aboutJump('about-learned-panel')"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg><span class="about-glance-text"><span class="about-glance-k">Picked up from you</span><span class="about-glance-v" id="about-glance-learned">Loading…</span></span></button>
   </nav>
   <section class="command-panel about-panel owner-only" id="about-profile" aria-labelledby="about-profile-title">
@@ -4089,6 +4125,30 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       </ul>
       <p>If there is no Publish option anywhere, your employer has switched it off.</p>
       <p>Each link lets anyone who has it read that calendar, so treat it like a password: it is kept only in your account here and never shown back in full. If one is ever exposed, reset it in Google or Outlook and paste the new one.</p>
+    </details>
+  </section>
+  <section class="command-panel about-panel owner-only" id="about-health" aria-labelledby="about-health-title">
+    <div class="command-panel-head"><div class="command-panel-title" id="about-health-title">Apple Health</div></div>
+    <p class="about-intro">A Shortcut on your iPhone sends your steps, walking distance and time in bed (from your sleep schedule) to Daybook, plus weight if you log it in Health. Only your account can read them, and nothing here goes to an AI. Each send replaces that day's numbers, so it can run as often as you like.</p>
+    <div id="health-link"></div>
+    <div id="health-code" hidden></div>
+    <span class="about-status" id="health-status" role="status"></span>
+    <div id="health-days"></div>
+    <details class="calendar-how health-how" id="health-how"><summary>Set up the Shortcut on your iPhone</summary>
+      <p>Once, on the iPhone, about 10 minutes. For time in bed, open <b>Health → Browse → Sleep</b>, set up a <b>Sleep Schedule</b>, and turn on <b>Track Time in Bed with iPhone</b> if you see it. Without an Apple Watch the iPhone records time in bed, not time asleep.</p>
+      <ol>
+        <li>Tap <b>Connect</b> above (on this iPhone, so you can copy and paste). Then open <b>Shortcuts</b>, tap <b>+</b> and name the shortcut <b>Daybook Health</b>.</li>
+        <li>Add <b>Find Health Samples</b>: Type <b>Steps</b>, add the filter <b>Start Date is in the last 3 days</b>, and set <b>Group By</b> to <b>Day</b>.</li>
+        <li>Add <b>Repeat with Each</b> (on the Health Samples). Inside it, add <b>Text</b> and build: <code>steps|</code> Repeat Item → <b>Start Date</b> <code>|</code> Repeat Item → <b>End Date</b> <code>|</code> Repeat Item → <b>Value</b> <code>|</code> Repeat Item → <b>Unit</b>. Tap each date and set <b>Date Format</b> to <b>ISO 8601</b> with <b>Include ISO 8601 Time</b> on.</li>
+        <li>After <b>End Repeat</b>, add <b>Add to Variable</b>: Repeat Results, to a new variable named <b>Lines</b>.</li>
+        <li>Do steps 2–4 again for <b>Walking + Running Distance</b> (Group By Day, the text starts <code>distance|</code>) and for <b>Sleep</b> (no Group By, the text starts <code>sleep|</code>). Add <b>Weight</b> the same way (<code>weight|</code>) only if you log it.</li>
+        <li>Add <b>Combine Text</b>: Lines, separated by <b>New Lines</b>.</li>
+        <li>Add <b>Get Contents of URL</b> and paste the <b>Address</b>. Tap <b>Show More</b>: Method <b>POST</b>; under Headers add <b>Authorization</b> and paste its value (it starts <code>Bearer dbh_</code>); Request Body <b>JSON</b>, add a <b>Text</b> field named <code>lines</code> set to Combined Text.</li>
+        <li>Add <b>Show Notification</b> with <b>Contents of URL</b>. That is Daybook's reply, e.g. “Daybook got: 6,210 steps today · 7h05 in bed last night.”</li>
+        <li>Tap <b>▶</b> once. Allow Health access for each kind, and <b>Always Allow</b> the send to Daybook. The table here fills in when you reopen this page.</li>
+        <li>Make it automatic: <b>Shortcuts → Automation → +</b> → <b>App</b> → pick <b>Outlook</b> (or any app you open every morning) → <b>Is Opened</b> → <b>Run Immediately</b> → <b>Daybook Health</b>. Your iPhone keeps Health locked while the phone is locked, so a time-of-day automation can fail; an app you open means the phone is unlocked.</li>
+      </ol>
+      <p>The code works like a password: whoever has it can send readings into your Daybook (not read them). If it is ever exposed, tap <b>New code</b> and paste the new one into step 7.</p>
     </details>
   </section>
   <section class="command-panel about-panel owner-only" id="about-learned-panel" aria-labelledby="about-learned-title">
@@ -4121,6 +4181,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p><b>More → About you</b> holds one profile in five parts: your work, your clients and files, what moves your numbers, what to look out for, and anything else. Each reads as text and is marked <b>Starting text</b> or <b>Your words</b>; tap <b>Edit</b> on one to change it, then <b>Save profile</b>. The briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research all read it from their next run, so a change in your work mix reaches all of them at once. It starts as the profile those features already used; <b>Put back the starting profile</b> returns to it. Your words change only the facts about you: the rules (sources, no invented links, no trading advice) stay fixed.</p>
       <p>Below it, <b>What it has picked up from you</b> lists what already steers Daybook, each with what it steers: your story votes (with <b>Take back</b>), open calls, Radar setups, accounts, goals and Morning 5 priorities, plus what you open most. Nothing there is guessed. Later, Daybook will suggest profile lines from what you use, for you to approve.</p>
       <p><b>Your calendars</b> — paste your Google Calendar secret iCal address and your Outlook published ICS link (<b>Where to find each link</b> shows how). Daybook reads them read-only at 6:00 and 18:00 and keeps the title and times of every meeting, and the title and dates of every all-day entry, for the next 90 days, so your meetings, leave and holidays show on <b>Calendar</b>. Meetings in the next 36 hours whose title names one of your accounts (other names count: AAMI for Suncorp) get a brief built the evening before. To bring in Zoho People leave and company holidays, open Zoho People → Leave → Leave Summary → Calendar view → ⋯ and sync to the Google or Microsoft 365 calendar linked here. Descriptions, locations, dial-in links and guests are never read, and nothing from your calendars is sent anywhere. Treat each link like a password; it is never shown back in full.</p>
+      <p><b>Apple Health</b> — tap <b>Connect</b> on your iPhone and follow <b>Set up the Shortcut on your iPhone</b>: a Shortcut called Daybook Health sends the last 3 days of steps, walking distance, time in bed (from your sleep schedule) and, if you log it, weight, each time you open Outlook. Daybook adds them up per day on the day where you were (a night counts on the day you woke up), keeps the larger reading when a day is sent twice, and turns away numbers no body produces. The reply shows as a notification, and <b>About you</b> lists the last 14 days. Only your account can read them and no AI sees them yet. The code is shown once and works only for sending; <b>New code</b> or <b>Disconnect</b> stops the old one at once.</p>
       <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
     </div>
     <div class="help-card help-wide" id="invites-card" hidden>
@@ -6546,8 +6607,100 @@ async function renderAbout() {
   if (!_aboutDirty) paintAboutProfile(core.cleanProfile(_aboutProfile));
   await loadCalendar();
   paintCalendar();
+  await loadHealth();
+  paintHealth();
   await renderAboutLearned();
 }
+// ── Apple Health (lib/health-core.js, functions/health-link.js) ──
+var _health = null, _healthFor = null, _healthCode = null;
+async function loadHealth(force) {
+  var uid = window._firebaseUid || null;
+  if (!uid || window.daybookMember || typeof window.fbLoadHealth !== 'function' || (!force && _healthFor === uid)) return;
+  _healthFor = uid;
+  try { _health = await window.fbLoadHealth(uid); } catch (e) { _health = null; _healthFor = null; }
+}
+// Connected or not, and what the last send brought (the server's own reply).
+function healthLinkHtml(h) {
+  var link = h && h.link, last = h && h.lastReceived;
+  var state = !link ? 'is-off' : !last ? 'is-saved' : last.used ? 'is-ok' : 'is-error';
+  var sub = !link ? '<span>Not connected. Tap Connect, then set up the Shortcut below.</span>'
+    : '<span>Connected ' + esc(meetingTime(link.connectedAt)) + ' · code ending …' + esc(link.hint || '') + '</span>' + (!last
+      ? '<span class="calendar-read">Nothing received yet. Run the Shortcut once by hand to check it.</span>'
+      : '<span class="calendar-read' + (last.used ? '' : ' is-error') + '">Last send ' + esc(meetingTime(last.at)) + ': ' + esc(last.message || '') + '</span>');
+  var actions = !link ? '<button type="button" class="tool-chip about-primary" data-health-act="connect">Connect</button>'
+    : '<button type="button" class="tool-chip" data-health-act="connect">New code</button><button type="button" class="tool-chip" data-health-act="disconnect">Disconnect</button>';
+  return '<div class="calendar-row ' + state + '"><span class="calendar-dot" aria-hidden="true"></span><div><div class="calendar-row-name">iPhone · Apple Health</div><div class="calendar-row-sub">' + sub + '</div></div>' +
+    '<div class="calendar-row-actions">' + actions + '</div></div>';
+}
+// Shown once, straight after Connect or New code.
+function healthCodeHtml(code) {
+  var row = function(label, value, key) {
+    return '<div class="health-code-row"><span class="about-sublabel">' + label + '</span><input type="text" readonly value="' + esc(value) + '" aria-label="' + label + '" onfocus="this.select()">' +
+      '<button type="button" class="tool-chip" data-health-copy="' + key + '">Copy</button></div>';
+  };
+  return '<div class="health-code"><p class="about-hint">Shown only now. Paste both into the Shortcut (step 7 below). If you lose them, tap New code: the old code stops working.</p>' +
+    row('Address', code.endpoint, 'endpoint') + row('Authorization', 'Bearer ' + code.token, 'token') + '</div>';
+}
+// The last 14 days, newest first. Weight shows only once there is one.
+function healthDaysHtml(h) {
+  var H = window.HealthCore;
+  if (!H || !h || !h.days || !Object.keys(h.days).length) return '';
+  var rows = H.recentRows(h.days, H.today(), 14), weight = rows.some(function(r) { return r.weightKg != null; });
+  var none = '<td class="is-none">—</td>';
+  var body = rows.map(function(r) {
+    var sleep = r.sleepMin == null ? none : '<td>' + esc(H.sleepText(r.sleepMin)) + '<span class="health-sub">' + (r.sleepKind === 'asleep' ? 'asleep' : 'in bed') + '</span>' +
+      (r.bed && r.wake ? '<span class="health-sub">' + esc(r.bed) + '–' + esc(r.wake) + '</span>' : '') + '</td>';
+    return '<tr><td>' + esc(r.label) + '</td>' + (r.steps == null ? none : '<td>' + Math.round(r.steps).toLocaleString('en-AU') + '</td>') +
+      (r.distanceKm == null ? none : '<td>' + r.distanceKm.toFixed(1) + ' km</td>') + sleep + (weight ? (r.weightKg == null ? none : '<td>' + r.weightKg.toFixed(1) + ' kg</td>') : '') + '</tr>';
+  }).join('');
+  return '<div class="health-days-wrap"><table class="health-days"><caption class="about-sublabel" style="text-align:left;padding-bottom:.35rem">Last 14 days</caption><thead><tr><th>Day</th><th>Steps</th><th>Walk + run</th><th>Sleep</th>' +
+    (weight ? '<th>Weight</th>' : '') + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+}
+function paintHealth() {
+  var h = _health, link = h && h.link, last = h && h.lastReceived;
+  var linkEl = document.getElementById('health-link'), codeEl = document.getElementById('health-code'), daysEl = document.getElementById('health-days'), how = document.getElementById('health-how');
+  if (linkEl) linkEl.innerHTML = healthLinkHtml(h);
+  if (codeEl) { codeEl.hidden = !_healthCode; codeEl.innerHTML = _healthCode ? healthCodeHtml(_healthCode) : ''; }
+  if (daysEl) daysEl.innerHTML = healthDaysHtml(h);
+  if (how && (!link || _healthCode)) how.open = true;
+  setText('about-glance-health', !link ? 'Not connected' : !last ? 'Connected · nothing received yet' : 'Last send ' + meetingTime(last.at));
+}
+async function connectHealth() {
+  if (_health && _health.link && !confirm('Make a new code? The Shortcut stops working until you paste the new one into it.')) return;
+  setText('health-status', 'Making your code…');
+  try {
+    var made = await window.fbCreateHealthLink();
+    _healthCode = {token: made.token, endpoint: made.endpoint};
+    _health = Object.assign({}, _health || {}, {link: made.link});
+    setText('health-status', 'Connected. Copy the address and code into the Shortcut now; they are not shown again.');
+  } catch (e) {
+    console.error('Health connect failed:', e);
+    setText('health-status', 'Could not connect (' + ((e && e.message) || 'try again') + ').');
+  }
+  paintHealth();
+}
+async function disconnectHealth() {
+  if (!confirm('Disconnect Apple Health? The Shortcut stops working. The days already here stay.')) return;
+  setText('health-status', 'Disconnecting…');
+  try {
+    await window.fbRevokeHealthLink();
+    _healthCode = null;
+    if (_health) _health = Object.assign({}, _health, {link: null});
+    setText('health-status', 'Disconnected. The code no longer works.');
+  } catch (e) {
+    console.error('Health disconnect failed:', e);
+    setText('health-status', 'Could not disconnect (' + ((e && e.message) || 'try again') + ').');
+  }
+  paintHealth();
+}
+document.addEventListener('click', function(event) {
+  var target = event.target && event.target.closest ? event.target.closest('#about-health [data-health-act], #about-health [data-health-copy]') : null;
+  if (!target) return;
+  var act = target.getAttribute('data-health-act'), copy = target.getAttribute('data-health-copy');
+  if (act === 'connect') connectHealth();
+  else if (act === 'disconnect') disconnectHealth();
+  else if (copy && _healthCode) copyCardText(copy === 'token' ? 'Bearer ' + _healthCode.token : _healthCode.endpoint, target, copy === 'token' ? 'Authorization copied' : 'Address copied');
+});
 // ── Your calendars (functions/calendar.js) ──
 var CALENDAR_SERVICES = [
   {service: 'Google', label: 'Google Calendar', hosts: ['calendar.google.com'], placeholder: 'https://calendar.google.com/calendar/ical/…/private-…/basic.ics'},
