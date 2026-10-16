@@ -6,7 +6,7 @@ const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const {initializeApp} = require("firebase-admin/app");
-const {getFirestore} = require("firebase-admin/firestore");
+const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
 const {getAuth} = require("firebase-admin/auth");
 const OpenAI = require("openai");
@@ -33,6 +33,9 @@ const WeeklyReviewCore = require("./weekly-review-core");
 const LifeRecordsCore = require("./life-records-core");
 const DaybookCalendarCore = require("./daybook-calendar-core");
 const FlightsCore = require("./flights-core");
+// Apple Health from an iOS Shortcut: daily rows and the private link.
+const HealthCore = require("./health-core");
+const HealthLink = require("./health-link");
 const PsePaper = require("./pse-paper");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 const Ask = require("./ask-daybook");
@@ -1821,6 +1824,70 @@ exports.checkCalendarNow = onCall(
     return readCalendars(getFirestore(), request.auth.uid, Date.now());
   }
 );
+
+// ── Apple Health (lib/health-core.js, health-link.js) ──
+// Connect makes a new private code for the iOS Shortcut and shows it once;
+// any earlier code stops working. Owner only, like the calendars.
+async function deleteHealthLinks(db, uid) {
+  const snap = await db.collection(HealthLink.LINKS_COLL).where("uid", "==", uid).get();
+  await Promise.all(snap.docs.map((d) => d.ref.delete()));
+  return snap.size;
+}
+exports.createHealthLink = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 30, memory: "256MiB"},
+  async (request) => {
+    const role = await requireDaybookMember(request.auth, "connecting Apple Health");
+    if (role !== "owner") throw new HttpsError("permission-denied", "Apple Health is on the owner's account only.");
+    const uid = request.auth.uid, db = getFirestore(), now = Date.now();
+    const token = HealthLink.newToken(), info = HealthLink.linkInfo(token, now, process.env.GCLOUD_PROJECT);
+    const replaced = await deleteHealthLinks(db, uid);
+    await db.collection(HealthLink.LINKS_COLL).doc(HealthLink.tokenHash(token)).create({uid, createdAt: info.connectedAt, lastUsedAt: null});
+    await db.collection(BRIEFINGS_COLL).doc(HealthLink.HEALTH_PREFIX + uid).set({uid, kind: "health", link: info}, {merge: true});
+    logger.info("Health link made", {uid, replaced});
+    return {token, endpoint: info.endpoint, link: info};
+  }
+);
+exports.revokeHealthLink = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 30, memory: "256MiB"},
+  async (request) => {
+    const role = await requireDaybookMember(request.auth, "disconnecting Apple Health");
+    if (role !== "owner") throw new HttpsError("permission-denied", "Apple Health is on the owner's account only.");
+    const uid = request.auth.uid, db = getFirestore();
+    const removed = await deleteHealthLinks(db, uid);
+    await db.collection(BRIEFINGS_COLL).doc(HealthLink.HEALTH_PREFIX + uid).set({uid, kind: "health", link: FieldValue.delete()}, {merge: true});
+    logger.info("Health link removed", {uid, removed});
+    return {removed};
+  }
+);
+// The Shortcut's send. The reply is one plain sentence, so the Shortcut can
+// show it as a notification as it is.
+exports.healthIngest = onRequest(
+  {region: "asia-southeast1", timeoutSeconds: 30, memory: "256MiB", maxInstances: 2},
+  async (request, response) => {
+    const say = (status, text) => response.status(status).set("Content-Type", "text/plain; charset=utf-8").send(text);
+    if (request.method !== "POST") { response.set("Allow", "POST"); say(405, "Send with the POST method."); return; }
+    if (request.rawBody && request.rawBody.length > HealthLink.MAX_BODY) { say(413, "Daybook got too much at once. Send the last 3 days only."); return; }
+    const token = HealthLink.bearer(request.get("authorization"));
+    if (!token) { say(401, "Daybook needs your link code in the Authorization header (About you → Apple Health)."); return; }
+    const db = getFirestore(), linkRef = db.collection(HealthLink.LINKS_COLL).doc(HealthLink.tokenHash(token));
+    const link = await linkRef.get();
+    if (!link.exists) { say(401, "This link code is not connected any more. Connect again on About you → Apple Health and paste the new code."); return; }
+    const uid = link.data().uid, ref = db.collection(BRIEFINGS_COLL).doc(HealthLink.HEALTH_PREFIX + uid), now = Date.now();
+    const body = HealthLink.bodyOf(request.body, request.rawBody);
+    const receipt = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const stored = snap.exists ? snap.data() : {};
+      const out = HealthCore.ingest(stored, body, now);
+      // The whole document, so days past the keep limit really go.
+      tx.set(ref, Object.assign({}, stored, out.doc, {uid}));
+      tx.update(linkRef, {lastUsedAt: out.receipt.at});
+      return out.receipt;
+    });
+    logger.info("Health send", {uid, lines: receipt.lines, used: receipt.used, rejected: receipt.rejected, changedDays: receipt.changedDays});
+    say(200, receipt.message);
+  }
+);
+// ── end health
 
 // 06:00 and 18:00 Manila: the morning catches today's meetings, the evening
 // tomorrow's (so a brief can be ready the night before).
