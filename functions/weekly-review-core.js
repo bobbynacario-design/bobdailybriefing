@@ -90,6 +90,8 @@
     if(done.length)facts.push({area:'work',source:'Calendar',text:done.filter(function(e){return e.done;}).length+' of '+done.length+' calendar tasks marked done'});
     var due=arr(input.decisions).filter(function(x){return x && x.reviewDate>=start && x.reviewDate<=end;});
     if(due.length)facts.push({area:'money',source:'Decisions',text:due.length+' decision review'+(due.length===1?'':'s')+' due · '+due.filter(function(x){return x.verdict;}).length+' with a verdict'});
+    // His one-tap answers at the morning check-in (lib/lifestyle-core.js weekFacts).
+    arr(input.lifestyleFacts).forEach(function(t){if(text(t,200))facts.push({area:'health',source:'Check-in',text:text(t,200)});});
     var played=arr(input.pokerStarred).filter(function(t){return t.day>=start && t.day<=end;});
     if(played.length)facts.push({area:'poker',source:'PokerHQ',text:'Starred to play: '+played.map(function(t){return t.name;}).join(', ')});
     return {start:start,end:end,facts:byFocus(facts),thin:facts.filter(function(f){return f.source!=='Daybook';}).length<2};
