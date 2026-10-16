@@ -1935,7 +1935,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .weekly-item:first-child{border-top:0}.weekly-item .flights-note{margin:.1rem 0 0}
 .weekly-area{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--gold);margin-right:.25rem}
 .weekly-dots{display:flex;gap:4px}.weekly-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--rim2);background:transparent}
-.weekly-dot.is-on{background:var(--green);border-color:var(--green)}.weekly-dot.is-today{outline:2px solid var(--gold-dim);outline-offset:1px;border-color:var(--gold)}.weekly-dot.is-future{opacity:.45}
+.weekly-dot.is-on{background:var(--green);border-color:var(--green)}.today-body{margin:0 0 1rem;padding:.55rem .85rem;border:1px solid var(--rim);border-left:3px solid var(--green);border-radius:10px;background:var(--bg2);font-size:13px;line-height:1.5;color:var(--txt2)}.today-body.is-notable{border-left-color:var(--amber);color:var(--txt)}.today-body.is-stale{border-left-color:var(--txt3)}.today-body a{color:inherit}
+.weekly-dot.is-auto{background:var(--bg2);border:3px solid var(--green)}.weekly-auto-note{color:var(--green)}.weekly-dot.is-today{outline:2px solid var(--gold-dim);outline-offset:1px;border-color:var(--gold)}.weekly-dot.is-future{opacity:.45}
 .weekly-step{margin-top:.9rem;padding-top:.8rem;border-top:1px dashed var(--rim2)}.weekly-step h3{font-size:14px;margin:0 0 .45rem}
 .weekly-facts{margin:.2rem 0 .4rem 1rem;padding:0}
 .weekly-result{border:1px solid var(--rim);border-radius:8px;padding:.45rem .7rem;margin:.4rem 0}.weekly-result legend{font-size:13px;padding:0 .3rem}.weekly-result label{margin-right:1rem;font-size:13px}
@@ -3435,6 +3436,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="today-ask-chips" id="today-ask-chips"></div>
   </section>
   <section class="weekly-card" id="weekly-card" hidden aria-labelledby="weekly-title"></section>
+  <p class="today-body owner-only" id="today-body" hidden role="status"></p>
   <section class="weekly-review" id="weekly-review" hidden aria-label="Weekly review"></section>
   <section class="today-five" id="today-five" aria-label="Morning 5">
     <div id="command-load-status" role="status"></div>
@@ -4182,6 +4184,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p>Below it, <b>What it has picked up from you</b> lists what already steers Daybook, each with what it steers: your story votes (with <b>Take back</b>), open calls, Radar setups, accounts, goals and Morning 5 priorities, plus what you open most. Nothing there is guessed. Later, Daybook will suggest profile lines from what you use, for you to approve.</p>
       <p><b>Your calendars</b> — paste your Google Calendar secret iCal address and your Outlook published ICS link (<b>Where to find each link</b> shows how). Daybook reads them read-only at 6:00 and 18:00 and keeps the title and times of every meeting, and the title and dates of every all-day entry, for the next 90 days, so your meetings, leave and holidays show on <b>Calendar</b>. Meetings in the next 36 hours whose title names one of your accounts (other names count: AAMI for Suncorp) get a brief built the evening before. To bring in Zoho People leave and company holidays, open Zoho People → Leave → Leave Summary → Calendar view → ⋯ and sync to the Google or Microsoft 365 calendar linked here. Descriptions, locations, dial-in links and guests are never read, and nothing from your calendars is sent anywhere. Treat each link like a password; it is never shown back in full.</p>
       <p><b>Apple Health</b> — tap <b>Connect</b> on your iPhone and follow <b>Set up the Shortcut on your iPhone</b>: a Shortcut called Daybook Health sends the last 3 days of steps, walking distance, time in bed (from your sleep schedule) and, if you log it, weight, each time you open Outlook. Daybook adds them up per day on the day where you were (a night counts on the day you woke up), keeps the larger reading when a day is sent twice, and turns away numbers no body produces. The reply shows as a notification, and <b>About you</b> lists the last 14 days. Only your account can read them and no AI sees them yet. The code is shown once and works only for sending; <b>New code</b> or <b>Disconnect</b> stops the old one at once.</p>
+      <p>Once it sends, <b>Today</b> shows a <b>Body</b> line under This week: yesterday's steps and last night's time in bed. It turns amber when steps were well under or over your usual (the middle of your last 14 days) or when short nights (under 6 hours in bed) repeat, and only then does it ride on the morning push. A weekly commitment that names a number Apple Health can check (<i>8,000 steps</i>, <i>3 km</i>, <i>in bed by 11:30 pm</i>, <i>7 hours in bed</i>, in its words or in How you'll know) <b>ticks itself</b>: a step goal once the day is over and a send has come in, a sleep goal for the evening you went to bed. Those ticks show as ringed dots, and the morning check-in stops asking about them. Untick one and it stays off. "Walk 30 minutes" cannot tick itself: an iPhone without a Watch does not record exercise minutes.</p>
       <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
     </div>
     <div class="help-card help-wide" id="invites-card" hidden>
@@ -4741,6 +4744,7 @@ function onSignedIn() {
   if (window.renderWeeklyMirror) window.renderWeeklyMirror();
   if (window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard(true)).then(function () { if (window.renderCheckin) window.renderCheckin(); });
   renderTodayAsk();
+  renderTodayBody();
   setApplicationLocked(false);
   document.querySelectorAll('.page').forEach(function(el) { el.inert = false; });
   document.getElementById('auth-overlay').classList.add('hidden');
@@ -5097,7 +5101,7 @@ function switchPage(id, el) {
   if (id==='today' && window.renderDailyBoost) window.renderDailyBoost();
   if (id==='today' && window.renderWeeklyMirror) window.renderWeeklyMirror();
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') renderTodayAsk();
+  if (id==='today') { renderTodayAsk(); renderTodayBody(); }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -5112,7 +5116,7 @@ function switchPage(id, el) {
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') renderTodayAsk();
+  if (id==='today') { renderTodayAsk(); renderTodayBody(); }
   if (id==='research') pending = renderResearchList();
   if (id==='radar') pending = renderRadar();
   if (id==='journal') pending = renderJournal();
@@ -6612,7 +6616,24 @@ async function renderAbout() {
   await renderAboutLearned();
 }
 // ── Apple Health (lib/health-core.js, functions/health-link.js) ──
-var _health = null, _healthFor = null, _healthCode = null;
+var _health = null, _healthFor = null, _healthCode = null, _healthReadAt = 0;
+// Today's body line under This week: always shown once Apple Health is
+// connected, amber when it is worth a look (the push carries only those).
+// Nothing at all until he connects; a quiet note when sends have stopped.
+async function renderTodayBody() {
+  var el = document.getElementById('today-body'), H = window.HealthCore, uid = window._firebaseUid || null;
+  if (!el) return;
+  if (!uid || window.daybookMember || !H || typeof window.fbLoadHealth !== 'function') { el.hidden = true; return; }
+  if (_healthFor !== uid || Date.now() - _healthReadAt > 5 * 60000) {
+    try { _health = await window.fbLoadHealth(uid); _healthFor = uid; _healthReadAt = Date.now(); } catch (e) { el.hidden = true; return; }
+  }
+  var h = _health, line = h && h.link ? H.bodyLine(h, Date.now()) : null;
+  if (!line || (!line.text && !line.stale)) { el.hidden = true; return; }
+  el.className = 'today-body owner-only' + (line.notable ? ' is-notable' : '') + (line.stale ? ' is-stale' : '');
+  el.innerHTML = line.text ? esc(line.text)
+    : 'Apple Health has not sent since ' + esc(H.dayLabel(line.since)) + '. Check the Daybook Health automation on your iPhone (<a href="#about" onclick="switchPage(\'about\'); return false;">About you</a>).';
+  el.hidden = false;
+}
 async function loadHealth(force) {
   var uid = window._firebaseUid || null;
   if (!uid || window.daybookMember || typeof window.fbLoadHealth !== 'function' || (!force && _healthFor === uid)) return;
