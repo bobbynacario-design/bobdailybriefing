@@ -43,6 +43,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/daybook-calendar-ui.js"></script>
 <script src="./lib/weekly-review-core.js"></script>
 <script src="./lib/health-core.js"></script>
+<script src="./lib/checkup-core.js"></script>
 <script src="./lib/weekly-review-ui.js"></script>
 <script src="./lib/client-note.js"></script>
 
@@ -391,6 +392,23 @@ window.fbLoadGoals = async function(uid) {
 window.fbSaveGoals = async function(uid, goals) {
   if (!uid || uid !== getUid()) throw new Error('Account changed');
   await setDoc(doc(db, COLL, 'goals-' + uid), {uid: uid, kind: 'goals', goals: goals, updatedAt: new Date().toISOString()}, {merge: true});
+};
+// Health basics (lib/checkup-core.js): birth year, which screenings, and the
+// month he last had each check. Written whole, so a cleared month really goes.
+window.fbLoadHealthBasics = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'health-basics-' + uid));
+    return snap.exists() ? snap.data() : null;
+  } catch (e) {
+    if (e && e.code === 'permission-denied') return null;
+    throw e;
+  }
+};
+window.fbSaveHealthBasics = async function(basics) {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  await setDoc(doc(db, COLL, 'health-basics-' + uid), Object.assign({}, basics, {uid: uid, kind: 'health-basics', updatedAt: new Date().toISOString()}));
 };
 
 // Go deeper (functions/story-dossier.js): a working dossier on one story, and
@@ -3136,6 +3154,20 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 .health-days th:first-child,.health-days td:first-child{text-align:left}
 .health-days .is-none{color:var(--txt3)}
 .health-sub{display:block;font-size:11.5px;color:var(--txt3)}
+.checkup-top{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:end;margin:.2rem 0 .8rem}
+.checkup-top label{display:grid;gap:.25rem}
+.checkup-top input,.checkup-top select,.checkup-row input[type=month]{background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.45rem .6rem;font:inherit;font-size:13px}
+.checkup-top input{width:7rem}
+.checkup-list{display:grid;gap:.45rem}
+.checkup-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:.4rem .8rem;padding:.6rem .8rem;border:1px solid var(--rim);border-radius:10px;background:var(--bg3)}
+.checkup-row.is-off{opacity:.6;border-style:dashed}
+.checkup-name{font-size:13.5px;font-weight:600;color:var(--txt)}
+.checkup-why{display:block;margin-top:.1rem;font-size:12px;line-height:1.45;color:var(--txt3)}
+.checkup-state{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3)}
+.checkup-state.is-due{color:var(--amber)}.checkup-state.is-ok{color:var(--green)}
+.checkup-off{display:flex;gap:.3rem;align-items:center;font-size:12px;color:var(--txt3);grid-column:1/-1}
+.today-checkups button{margin-left:.35rem}
+@media(max-width:560px){.checkup-row{grid-template-columns:minmax(0,1fr) auto}.checkup-row input[type=month]{grid-column:1/-1}}
 .health-how ol{margin:.5rem 0;padding-left:1.3rem;line-height:1.6;max-width:80ch}.health-how li{margin:.3rem 0}.health-how code{font-family:var(--mono);font-size:12px;color:var(--gold)}
 @media(max-width:560px){.health-code-row{grid-template-columns:minmax(0,1fr) auto}.health-code-row .about-sublabel{grid-column:1/-1}.health-days{font-size:12.5px}.health-days th,.health-days td{padding:.4rem .3rem}.health-days th{letter-spacing:.03em}}
 .calendar-none{margin:0;padding:.7rem .85rem;font-size:13px;color:var(--txt3);border:1px dashed var(--rim2);border-radius:10px}
@@ -3437,6 +3469,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   </section>
   <section class="weekly-card" id="weekly-card" hidden aria-labelledby="weekly-title"></section>
   <p class="today-body owner-only" id="today-body" hidden role="status"></p>
+  <p class="today-body today-checkups owner-only is-notable" id="today-checkups" hidden></p>
   <section class="weekly-review" id="weekly-review" hidden aria-label="Weekly review"></section>
   <section class="today-five" id="today-five" aria-label="Morning 5">
     <div id="command-load-status" role="status"></div>
@@ -4153,6 +4186,16 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p>The code works like a password: whoever has it can send readings into your Daybook (not read them). If it is ever exposed, tap <b>New code</b> and paste the new one into step 7.</p>
     </details>
   </section>
+  <section class="command-panel about-panel owner-only" id="about-checkups" aria-labelledby="about-checkups-title">
+    <div class="command-panel-head"><div class="command-panel-title" id="about-checkups-title">Health basics</div></div>
+    <p class="about-intro">When you last had each check-up. Daybook works out when the next is due from Australian guidelines (the RACGP Red Book and the national screening programs) and puts it on Calendar and Today. It never reads results, and your doctor may set a different schedule for you. Leave a month empty if you are not sure.</p>
+    <div class="checkup-top">
+      <label><span class="about-sublabel">Birth year</span><input type="number" id="checkup-year" inputmode="numeric" min="1920" max="2010" placeholder="1980"></label>
+      <label><span class="about-sublabel">Screenings for</span><select id="checkup-include"><option value="male">Men</option><option value="female">Women</option><option value="all">Both</option></select></label>
+    </div>
+    <div class="checkup-list" id="checkup-list"><p class="rel-none-txt">Loading…</p></div>
+    <div class="about-actions" style="margin-top:.8rem"><button type="button" class="tool-chip about-primary" id="checkup-save" onclick="saveHealthBasics()">Save</button><span class="about-status" id="checkup-status" role="status"></span></div>
+  </section>
   <section class="command-panel about-panel owner-only" id="about-learned-panel" aria-labelledby="about-learned-title">
     <div class="command-panel-head"><div class="command-panel-title" id="about-learned-title">What it has picked up from you</div></div>
     <p class="about-intro">Each one says what it steers. Nothing here is guessed: it is what you recorded or tapped.</p>
@@ -4185,6 +4228,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p><b>Your calendars</b> — paste your Google Calendar secret iCal address and your Outlook published ICS link (<b>Where to find each link</b> shows how). Daybook reads them read-only at 6:00 and 18:00 and keeps the title and times of every meeting, and the title and dates of every all-day entry, for the next 90 days, so your meetings, leave and holidays show on <b>Calendar</b>. Meetings in the next 36 hours whose title names one of your accounts (other names count: AAMI for Suncorp) get a brief built the evening before. To bring in Zoho People leave and company holidays, open Zoho People → Leave → Leave Summary → Calendar view → ⋯ and sync to the Google or Microsoft 365 calendar linked here. Descriptions, locations, dial-in links and guests are never read, and nothing from your calendars is sent anywhere. Treat each link like a password; it is never shown back in full.</p>
       <p><b>Apple Health</b> — tap <b>Connect</b> on your iPhone and follow <b>Set up the Shortcut on your iPhone</b>: a Shortcut called Daybook Health sends the last 3 days of steps, walking distance, time in bed (from your sleep schedule) and, if you log it, weight, each time you open Outlook. Daybook adds them up per day on the day where you were (a night counts on the day you woke up), keeps the larger reading when a day is sent twice, and turns away numbers no body produces. The reply shows as a notification, and <b>About you</b> lists the last 14 days. Only your account can read them and no AI sees them yet. The code is shown once and works only for sending; <b>New code</b> or <b>Disconnect</b> stops the old one at once.</p>
       <p>Once it sends, <b>Today</b> shows a <b>Body</b> line under This week: yesterday's steps and last night's time in bed. It turns amber when steps were well under or over your usual (the middle of your last 14 days) or when short nights (under 6 hours in bed) repeat, and only then does it ride on the morning push. A weekly commitment that names a number Apple Health can check (<i>8,000 steps</i>, <i>3 km</i>, <i>in bed by 11:30 pm</i>, <i>7 hours in bed</i>, in its words or in How you'll know) <b>ticks itself</b>: a step goal once the day is over and a send has come in, a sleep goal for the evening you went to bed. Those ticks show as ringed dots, and the morning check-in stops asking about them. Untick one and it stays off. "Walk 30 minutes" cannot tick itself: an iPhone without a Watch does not record exercise minutes.</p>
+      <p><b>Health basics</b> — your birth year, which screenings to include, and the month you last had each check-up. Daybook works out what is next due from Australian guidelines for adults at average risk (blood pressure, heart and diabetes risk checks, bowel screening, dental, eyes, the flu vaccine, the screenings for women, and the shingles and pneumococcal vaccines at 65 and 70), each with its source. What is due shows on <b>Today</b> with a <b>Done</b> button (it records this month), on <b>Calendar</b>, and as the health idea in your weekly review. It never reads results, and your doctor may set a different schedule: untick a check with <b>Not for me</b>.</p>
       <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
     </div>
     <div class="help-card help-wide" id="invites-card" hidden>
@@ -4745,6 +4789,7 @@ function onSignedIn() {
   if (window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard(true)).then(function () { if (window.renderCheckin) window.renderCheckin(); });
   renderTodayAsk();
   renderTodayBody();
+  renderTodayCheckups();
   setApplicationLocked(false);
   document.querySelectorAll('.page').forEach(function(el) { el.inert = false; });
   document.getElementById('auth-overlay').classList.add('hidden');
@@ -5101,7 +5146,7 @@ function switchPage(id, el) {
   if (id==='today' && window.renderDailyBoost) window.renderDailyBoost();
   if (id==='today' && window.renderWeeklyMirror) window.renderWeeklyMirror();
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') { renderTodayAsk(); renderTodayBody(); }
+  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -5116,7 +5161,7 @@ function switchPage(id, el) {
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') { renderTodayAsk(); renderTodayBody(); }
+  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); }
   if (id==='research') pending = renderResearchList();
   if (id==='radar') pending = renderRadar();
   if (id==='journal') pending = renderJournal();
@@ -6613,6 +6658,8 @@ async function renderAbout() {
   paintCalendar();
   await loadHealth();
   paintHealth();
+  await loadHealthBasics();
+  paintHealthBasics();
   await renderAboutLearned();
 }
 // ── Apple Health (lib/health-core.js, functions/health-link.js) ──
@@ -6722,6 +6769,106 @@ document.addEventListener('click', function(event) {
   else if (act === 'disconnect') disconnectHealth();
   else if (copy && _healthCode) copyCardText(copy === 'token' ? 'Bearer ' + _healthCode.token : _healthCode.endpoint, target, copy === 'token' ? 'Authorization copied' : 'Address copied');
 });
+// ── Health basics (lib/checkup-core.js) ──
+var _basics = null, _basicsFor = null, _basicsReadAt = 0;
+async function loadHealthBasics(force) {
+  var uid = window._firebaseUid || null;
+  if (!uid || window.daybookMember || typeof window.fbLoadHealthBasics !== 'function') return;
+  if (!force && _basicsFor === uid && Date.now() - _basicsReadAt < 5 * 60000) return;
+  try { _basics = await window.fbLoadHealthBasics(uid); _basicsFor = uid; _basicsReadAt = Date.now(); } catch (e) { _basicsFor = null; }
+}
+function checkupToday() { return window.WeeklyReviewCore ? window.WeeklyReviewCore.today() : new Date().toISOString().slice(0, 10); }
+// The box as typed, cleaned the same way as when it is read.
+function healthBasicsFromForm() {
+  var K = window.CheckupCore, year = document.getElementById('checkup-year'), inc = document.getElementById('checkup-include');
+  // Checks not on screen (another age or set) keep what was saved for them.
+  var kept = K.cleanBasics(_basics, checkupToday());
+  var raw = {birthYear: year && year.value ? Number(year.value) : null, include: inc ? inc.value : 'all', last: Object.assign({}, kept.last), off: Object.assign({}, kept.off)};
+  document.querySelectorAll('#checkup-list [data-checkup]').forEach(function(row) {
+    var id = row.getAttribute('data-checkup'), month = row.querySelector('input[type=month]'), off = row.querySelector('input[type=checkbox]');
+    if (month && month.value) raw.last[id] = month.value; else delete raw.last[id];
+    if (off && off.checked) raw.off[id] = true; else delete raw.off[id];
+  });
+  return K.cleanBasics(raw, checkupToday());
+}
+var CHECKUP_STATE = {overdue: 'Overdue', due: 'Due now', soon: 'Due soon', ok: 'Up to date', unknown: 'No date yet', done: 'Done'};
+// Every check his age and screening set call for, including those he turned
+// off (so he can turn them back on), each with its status and source.
+function healthBasicsRowsHtml(basics) {
+  var K = window.CheckupCore, today = checkupToday(), on = K.plan(Object.assign({}, basics, {off: {}}), today);
+  if (!on.length) return '<p class="rel-none-txt">Enter your birth year to see your check-ups.</p>';
+  var max = today.slice(0, 7);
+  return on.map(function(i) {
+    var off = !!basics.off[i.id], state = off ? 'Off' : CHECKUP_STATE[i.status], due = !off && K.isDue(i);
+    var dueMonth = i.due ? K.monthLabel(i.due.slice(0, 7)) : '';
+    var when = off || !i.due || i.once ? '' : i.status === 'overdue' ? ' since ' + dueMonth : i.status === 'due' ? '' : ' · ' + (i.status === 'soon' ? '' : 'next ') + dueMonth;
+    return '<div class="checkup-row' + (off ? ' is-off' : '') + '" data-checkup="' + esc(i.id) + '"><div><span class="checkup-name">' + esc(i.title) + '</span><span class="checkup-why">' + esc(i.why) + ' (' + esc(i.source) + ')</span></div>' +
+      '<span class="checkup-state' + (due ? ' is-due' : i.status === 'ok' && !off ? ' is-ok' : '') + '">' + esc(state + when) + '</span>' +
+      '<input type="month" max="' + max + '" value="' + esc(basics.last[i.id] || '') + '" aria-label="' + esc(i.title + ': month last done') + '">' +
+      '<label class="checkup-off"><input type="checkbox"' + (off ? ' checked' : '') + '> Not for me (your doctor said so, or you do it elsewhere)</label></div>';
+  }).join('');
+}
+function paintHealthBasics(keepForm) {
+  var K = window.CheckupCore, list = document.getElementById('checkup-list');
+  if (!K || !list) return;
+  var basics = keepForm ? healthBasicsFromForm() : K.cleanBasics(_basics, checkupToday());
+  if (!keepForm) {
+    var year = document.getElementById('checkup-year'), inc = document.getElementById('checkup-include');
+    if (year) year.value = basics.birthYear || '';
+    if (inc) inc.value = _basics && _basics.include ? basics.include : 'male';
+  }
+  list.innerHTML = healthBasicsRowsHtml(basics);
+}
+async function saveHealthBasics() {
+  var button = document.getElementById('checkup-save');
+  if (!window._firebaseUid || typeof window.fbSaveHealthBasics !== 'function') { setText('checkup-status', 'Sign in to keep your health basics.'); return; }
+  var basics = healthBasicsFromForm();
+  if (button) button.disabled = true;
+  try {
+    await window.fbSaveHealthBasics(basics);
+    _basics = basics; _basicsFor = window._firebaseUid; _basicsReadAt = Date.now();
+    paintHealthBasics();
+    var due = window.CheckupCore.plan(basics, checkupToday()).filter(window.CheckupCore.isDue).length;
+    setText('checkup-status', 'Saved. ' + (due ? due + (due === 1 ? ' check-up is' : ' check-ups are') + ' due now: see Today and Calendar.' : 'Nothing is due now; Calendar shows what comes next.'));
+  } catch (e) {
+    console.error('Health basics save failed:', e);
+    setText('checkup-status', 'Could not save. Check the connection and try again.');
+  }
+  if (button) button.disabled = false;
+}
+document.addEventListener('change', function(event) {
+  var t = event.target;
+  if (t && (t.id === 'checkup-year' || t.id === 'checkup-include' || (t.closest && t.closest('#checkup-list')))) { paintHealthBasics(true); setText('checkup-status', 'Not saved yet.'); }
+});
+// Today: what is due now, each with one tap for "had it this month".
+async function renderTodayCheckups() {
+  var el = document.getElementById('today-checkups'), K = window.CheckupCore, uid = window._firebaseUid || null;
+  if (!el) return;
+  if (!uid || window.daybookMember || !K) { el.hidden = true; return; }
+  await loadHealthBasics();
+  var line = _basics ? K.todayLine(K.plan(_basics, checkupToday())) : null;
+  if (!line) { el.hidden = true; return; }
+  el.innerHTML = 'Check-ups due: ' + line.items.map(function(i) {
+    return '<span>' + esc(i.title) + ' (last ' + esc(i.lastLabel) + ')<button type="button" class="tool-chip" data-checkup-done="' + esc(i.id) + '">Done</button></span>';
+  }).join(' · ') + (line.more ? ' · <a href="#about" onclick="switchPage(\'about\'); return false;">+' + line.more + ' more</a>' : '');
+  el.hidden = false;
+}
+document.addEventListener('click', async function(event) {
+  var b = event.target && event.target.closest ? event.target.closest('[data-checkup-done]') : null;
+  if (!b || !window.CheckupCore || typeof window.fbSaveHealthBasics !== 'function') return;
+  var next = window.CheckupCore.markDone(_basics, b.getAttribute('data-checkup-done'), checkupToday());
+  b.disabled = true;
+  try {
+    await window.fbSaveHealthBasics(next);
+    _basics = next; _basicsReadAt = Date.now();
+    showToast('Marked done this month. Calendar moves it to when it is next due.', 'ok');
+  } catch (e) {
+    console.error('Check-up done failed:', e);
+    showToast('Could not save. Try again.', 'warn');
+  }
+  renderTodayCheckups();
+});
+
 // ── Your calendars (functions/calendar.js) ──
 var CALENDAR_SERVICES = [
   {service: 'Google', label: 'Google Calendar', hosts: ['calendar.google.com'], placeholder: 'https://calendar.google.com/calendar/ical/…/private-…/basic.ics'},
