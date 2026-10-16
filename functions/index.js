@@ -36,6 +36,7 @@ const FlightsCore = require("./flights-core");
 // Apple Health from an iOS Shortcut: daily rows and the private link.
 const HealthCore = require("./health-core");
 const HealthLink = require("./health-link");
+const HealthResearch = require("./health-research");
 const PsePaper = require("./pse-paper");
 const {buildMirrorInput, buildMirrorPrompt, cleanMirror, keepRecent, MIRROR_SCHEMA, SYSTEM: MIRROR_SYSTEM} = require("./weekly-mirror");
 const Ask = require("./ask-daybook");
@@ -102,16 +103,18 @@ function protectGeneration(feature, handler) {
       if (feature === "meeting" && !cleanTopic(data.topic)) throw new HttpsError("invalid-argument", "Name the client, insurer or topic (at least three characters).");
       if (feature === "ask" && !Ask.cleanQuestion(data.question)) throw new HttpsError("invalid-argument", "Type a question first (at least three characters).");
       if (feature === "note" && !Note.cleanNoteRequest(data)) throw new HttpsError("invalid-argument", "Choose who the note is for.");
+      if (feature === "health" && data.refresh !== undefined && typeof data.refresh !== "boolean") throw new HttpsError("invalid-argument", "Invalid request.");
       const daily = feature === "briefing" || feature === "mirror" || feature === "dossier" || feature === "meeting" || feature === "ask" || feature === "note";
       return await guardedGeneration({db:getFirestore(), uid:request.auth.uid, feature,
         period:daily ? phtDateKey() : phtDateKey().slice(0,7),
         cap:feature === "briefing" ? Number(process.env.BRIEFING_DAILY_CAP || 5) : feature === "mirror" ? MIRROR_DAILY_CAP : feature === "dossier" ? DOSSIER_DAILY_CAP :
-          feature === "meeting" ? MEETING_DAILY_CAP : feature === "ask" ? ASK_DAILY_CAP : feature === "note" ? NOTE_DAILY_CAP : DEEP_RESEARCH_CAP,
+          feature === "meeting" ? MEETING_DAILY_CAP : feature === "ask" ? ASK_DAILY_CAP : feature === "note" ? NOTE_DAILY_CAP : feature === "health" ? HEALTH_RESEARCH_MONTHLY_CAP : DEEP_RESEARCH_CAP,
         requestId:data.requestId,
         input:feature === "briefing" ? {date:data.date || "",model:DEFAULT_MODEL} : feature === "mirror" ? {week:phtDateKey()} : feature === "dossier" ? {story:storyDossierKey(cleanStory(data.story)),refresh:data.refresh === true} :
           feature === "meeting" ? {topic:cleanTopic(data.topic),items:cleanMaterial(data.material).length} :
           feature === "ask" ? {question:Ask.cleanQuestion(data.question),web:data.web === true,thread:Ask.cleanThread(data.thread).length} :
-          feature === "note" ? Note.cleanNoteRequest(data) : {topic:data.topic.trim(),premium:!!data.premium}
+          feature === "note" ? Note.cleanNoteRequest(data) :
+          feature === "health" ? {week:WeeklyReviewCore.weekStart(phtDateKey()),refresh:data.refresh === true} : {topic:data.topic.trim(),premium:!!data.premium}
       }, () => handler(request));
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -129,6 +132,8 @@ const DEEP_RESEARCH_CAP = parseInt(process.env.DEEP_RESEARCH_CAP || "20", 10);
 const MIRROR_DAILY_CAP = parseInt(process.env.MIRROR_DAILY_CAP || "3", 10);
 // Go deeper dossiers a day: plenty for the stories worth taking further.
 const DOSSIER_DAILY_CAP = parseInt(process.env.DOSSIER_DAILY_CAP || "10", 10);
+// This week's health research: the Sunday job plus his own builds and rebuilds.
+const HEALTH_RESEARCH_MONTHLY_CAP = parseInt(process.env.HEALTH_RESEARCH_MONTHLY_CAP || "8", 10);
 // Meeting briefs: one page before a call; five a day is plenty.
 const MEETING_DAILY_CAP = parseInt(process.env.MEETING_DAILY_CAP || "5", 10);
 // Meeting briefs built from his calendar the evening before (Bob chose up to 3 a day).
@@ -697,6 +702,84 @@ exports.generateStoryDossier = onCall(
     await ref.set({uid, kind: "dossiers", items: keepDossiers(stored, key, dossier), updatedAt: dossier.generatedAt});
     return {key, dossier};
   })
+);
+
+// ─────────────────────────────────────────────────────────────
+// This week's health research (functions/health-research.js)
+// ─────────────────────────────────────────────────────────────
+// Up to three recent, well-evidenced findings, kept per week (latest twelve)
+// on briefings-bob/health-research-<uid>, keyed by the week's Monday. Only his
+// age band goes to the model, never his Apple Health numbers or answers.
+async function makeHealthResearch(db, uid, now, refresh) {
+  const todayKey = phtDateKey(now), weekKey = WeeklyReviewCore.weekStart(todayKey);
+  const ref = db.collection(BRIEFINGS_COLL).doc("health-research-" + uid);
+  const stored = await ref.get().then((snap) => (snap.exists ? snap.data().weeks || {} : {})).catch(() => ({}));
+  if (stored[weekKey] && !refresh) return {weekKey, research: stored[weekKey], saved: true};
+  const basics = await db.collection(BRIEFINGS_COLL).doc("health-basics-" + uid).get()
+    .then((snap) => (snap.exists ? snap.data() : {})).catch(() => ({}));
+  const model = DEFAULT_MODEL;
+  let response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {"Authorization": "Bearer " + OPENAI_API_KEY.value(), "Content-Type": "application/json"},
+      body: JSON.stringify({
+        model,
+        input: [{role: "system", content: HealthResearch.SYSTEM},
+          {role: "user", content: HealthResearch.buildResearchPrompt({todayKey, ageBand: HealthResearch.ageBand(basics.birthYear, todayKey)})}],
+        tools: [{type: "web_search", search_context_size: "medium"}],
+        tool_choice: "auto",
+        include: ["web_search_call.action.sources"],
+      }),
+      signal: AbortSignal.timeout(220000),
+    });
+  } catch (err) {
+    logger.error("OpenAI network error (health research)", err);
+    throw new HttpsError("unavailable", "OpenAI request failed before receiving a response.");
+  }
+  const responseText = await response.text();
+  let json;
+  try { json = JSON.parse(responseText); } catch (err) { json = {error: {message: responseText || "Non-JSON OpenAI response"}}; }
+  if (!response.ok) {
+    const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
+    logger.error("OpenAI API error (health research)", {status: response.status, message: msg});
+    throw new HttpsError("internal", msg);
+  }
+  await recordUsage(db, "health-research", model, extractUsage(json), todayKey);
+  await recordSearches(db, "health-research", webSearchCount(json), todayKey);
+  let research;
+  try {
+    research = HealthResearch.cleanResearch(parseBriefing(extractText(json)), searchUrls(json), todayKey);
+  } catch (err) {
+    research = null;
+  }
+  if (!research) {
+    logger.error("health research JSON unusable");
+    throw new HttpsError("internal", "This week's health research came back unusable. Try again in a minute.");
+  }
+  Object.assign(research, {weekKey, model, generatedAt: new Date(now).toISOString()});
+  await ref.set({uid, kind: "health-research", weeks: HealthResearch.keepWeeks(stored, weekKey, research), updatedAt: research.generatedAt});
+  logger.info("Health research built", {uid, items: research.items.length, dropped: research.dropped});
+  return {weekKey, research};
+}
+exports.generateHealthResearch = onCall(
+  {region: "asia-southeast1", timeoutSeconds: 240, memory: "512MiB", secrets: [OPENAI_API_KEY]},
+  protectGeneration("health", async (request) => makeHealthResearch(getFirestore(), request.auth.uid, Date.now(), request.data.refresh === true))
+);
+// Sunday 05:15 Manila, for the owner, so it is there when he opens Today.
+exports.buildHealthResearch = onSchedule(
+  {schedule: "15 5 * * 0", timeZone: "Asia/Manila", region: "asia-southeast1", timeoutSeconds: 300, memory: "512MiB", secrets: [OPENAI_API_KEY]},
+  async () => {
+    const db = getFirestore();
+    for (const email of GENERATION_OWNERS) {
+      try {
+        const user = await getAuth().getUserByEmail(email);
+        await makeHealthResearch(db, user.uid, Date.now(), false);
+      } catch (error) {
+        logger.warn("Sunday health research not built", {code: error.code, message: error.message});
+      }
+    }
+  }
 );
 
 // ─────────────────────────────────────────────────────────────

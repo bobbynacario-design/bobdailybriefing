@@ -91,7 +91,7 @@ test("a ledger failure never reaches the feature", async () => {
 // $10-per-1,000 fee reaches the Help-tab cost table.
 test("every web-searching feature records its searches", () => {
   const source = fs.readFileSync(path.resolve(__dirname, "index.js"), "utf8");
-  ["\"briefing\"", "\"story-dossier\"", "usageFeature || \"meeting-brief\"", "\"ask-daybook\"", "\"deep-research\""].forEach((feature) => {
+  ["\"briefing\"", "\"story-dossier\"", "usageFeature || \"meeting-brief\"", "\"ask-daybook\"", "\"deep-research\"", "\"health-research\""].forEach((feature) => {
     assert.ok(source.includes("recordSearches(db, " + feature + ", "), feature + " records its web searches");
   });
   const offered = (source.match(/type: "web_search"/g) || []).length;
