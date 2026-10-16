@@ -300,9 +300,135 @@
     return out;
   }
 
+  // ---- Lane 2: what the numbers do ------------------------------------------
+  // A day's steps are final once a send arrived after it ended (Manila day),
+  // so a day before the last send's day is complete; a night is known once
+  // its wake-up day has a sleep row.
+  function completeBefore(doc) {
+    var at = doc && doc.lastReceived && Date.parse(doc.lastReceived.at);
+    return isFinite(at) ? today(at) : '';
+  }
+  // Minutes after 18:00, so 00:30 counts as later than 23:30.
+  function eveningMin(hm) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(hm || '');
+    if (!m) return null;
+    var min = Number(m[1]) * 60 + Number(m[2]);
+    return (min - 18 * 60 + 1440) % 1440;
+  }
+  // A commitment Apple Health can check, from its words or its "How you'll
+  // know": "8,000 steps", "8k steps", "3 km", "in bed by 11:30 pm", "7 hours
+  // in bed". "Walk 30 minutes" is not one: an iPhone alone does not record
+  // exercise minutes, and a guess would tick days he did not earn.
+  function targetOf(text) {
+    var t = String(text || '').toLowerCase(), m;
+    if ((m = /(\d[\d,]*(?:\.\d+)?)\s*(k\b)?\s*steps?\b/.exec(t))) {
+      var n = Number(m[1].replace(/,/g, '')) * (m[2] ? 1000 : 1);
+      if (n >= 1000 && n <= 50000) return {kind: 'steps', value: n, label: Math.round(n).toLocaleString('en-AU') + ' steps'};
+    }
+    if ((m = /(\d+(?:\.\d+)?)\s*(?:km|kilomet(?:er|re)s?)\b/.exec(t))) {
+      var km = Number(m[1]);
+      if (km > 0 && km <= 60) return {kind: 'km', value: km, label: km + ' km walked'};
+    }
+    if ((m = /\b(?:in bed|bed|asleep|sleep)\s+by\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/.exec(t))) {
+      var h = Number(m[1]) % 12 + (m[3] === 'pm' || (!m[3] && Number(m[1]) >= 7 && Number(m[1]) <= 11) ? 12 : 0);
+      if (!m[3] && Number(m[1]) === 12) h = 0;
+      var hm = pad(h % 24) + ':' + (m[2] || '00');
+      return {kind: 'bedBy', value: hm, label: 'in bed by ' + hm};
+    }
+    if ((m = /(\d+(?:\.\d+)?)\s*(?:h|hrs?|hours?)\s*(?:of\s+)?(?:sleep|in bed|asleep)/.exec(t))) {
+      var hours = Number(m[1]);
+      if (hours >= 4 && hours <= 12) return {kind: 'sleepHours', value: hours, label: hours + ' h in bed'};
+    }
+    return null;
+  }
+  // Whether a day met a target, or null when the data is not in yet. Sleep
+  // goals count for the evening he went to bed: the night on the next day's row.
+  function metOn(days, day, target, complete) {
+    if (target.kind === 'steps' || target.kind === 'km') {
+      if (!complete || day >= complete) return null;
+      var r = cleanRow(days && days[day]), v = target.kind === 'steps' ? r.steps : r.distanceKm;
+      return v == null ? null : v >= target.value;
+    }
+    var night = cleanRow(days && days[offsetDay(day, 1)]);
+    if (night.sleepMin == null) return null;
+    if (target.kind === 'sleepHours') return night.sleepMin >= target.value * 60;
+    var bed = eveningMin(night.bed), by = eveningMin(target.value);
+    return bed == null || by == null ? null : bed <= by;
+  }
+  // Ticks his commitments this week and last from the health days. A tick is
+  // only ever added, never taken away; the days it adds are kept in `auto` so
+  // the card can say where they came from, and a day he unticked himself
+  // (`autoOff`) is never ticked again. W is the weekly review core; weeks are
+  // the review doc's weeks. Returns {weeks, added: [{id, text, day}]}.
+  function autoTicks(W, weeks, doc, nowMs) {
+    var out = W.cleanWeeks(weeks || {}), added = [], d = W.today(nowMs), complete = completeBefore(doc), days = doc && doc.days;
+    [W.offset(W.weekStart(d), -7), W.weekStart(d)].forEach(function(start) {
+      var week = out[start];
+      if (!week) return;
+      week.commitments.forEach(function(c) {
+        var target = targetOf(c.text + ' ' + (c.measure || ''));
+        if (!target) return;
+        W.weekDays(start).filter(function(x) { return x <= d; }).forEach(function(x) {
+          if (c.ticks.indexOf(x) >= 0 || (c.autoOff || []).indexOf(x) >= 0) return;
+          if (metOn(days, x, target, complete) !== true) return;
+          c.ticks = c.ticks.concat(x).sort();
+          c.auto = (c.auto || []).concat(x).sort();
+          added.push({id: c.id, text: c.text, day: x});
+        });
+      });
+    });
+    return {weeks: out, added: added};
+  }
+  function ticksMessage(added) {
+    if (!added || !added.length) return '';
+    var byText = {};
+    added.forEach(function(a) { (byText[a.text] = byText[a.text] || []).push(dayLabel(a.day).split(' ')[0]); });
+    return ' Ticked from Apple Health: ' + Object.keys(byText).map(function(t) { return '“' + t + '” (' + byText[t].join(', ') + ')'; }).join('; ') + '.';
+  }
+
+  function median(list) {
+    var s = list.slice().sort(function(a, b) { return a - b; }), n = s.length;
+    return !n ? null : n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  }
+  var SHORT_NIGHT_MIN = 360;
+  // One line about his body for Today and the morning push, from his own
+  // numbers only. {text, notable, stale}: notable when the last full day's
+  // steps were well under or over his usual (the median of his last 14 full
+  // days, once there are 5), or when the latest night was short (under 6 h in
+  // bed, which overstates sleep) and it is the second or more in 7 nights.
+  // The push carries it only when notable; Today always shows it. Numbers
+  // older than three days are not a line at all, only `stale`.
+  function bodyLine(doc, nowMs) {
+    var days = (doc && doc.days) || {}, t = today(nowMs), complete = completeBefore(doc);
+    if (!complete || complete < offsetDay(t, -3)) return {text: '', notable: false, stale: !!complete, since: complete};
+    var bits = [], notable = false, lastFull = offsetDay(complete, -1), row = cleanRow(days[lastFull]);
+    if (row.steps != null) {
+      var past = [];
+      for (var i = 1; i <= 14; i++) { var r = cleanRow(days[offsetDay(lastFull, -i)]); if (r.steps != null) past.push(r.steps); }
+      var usual = past.length >= 5 ? median(past) : null, s = Math.round(row.steps).toLocaleString('en-AU') + ' steps ' + (lastFull === offsetDay(t, -1) ? 'yesterday' : dayLabel(lastFull).split(' ')[0]);
+      if (usual && (row.steps < usual * 0.6 || row.steps > usual * 1.4)) {
+        notable = true;
+        s += ' (' + (row.steps < usual ? 'well under' : 'well over') + ' your usual ' + (Math.round(usual / 100) * 100).toLocaleString('en-AU') + ')';
+      }
+      bits.push(s);
+    }
+    var nightDay = [t, offsetDay(t, -1)].filter(function(x) { return cleanRow(days[x]).sleepMin != null; })[0];
+    if (nightDay) {
+      var n = cleanRow(days[nightDay]), short = n.sleepMin < SHORT_NIGHT_MIN;
+      var count = 0;
+      for (var j = 0; j < 7; j++) { var k = cleanRow(days[offsetDay(nightDay, -j)]); if (k.sleepMin != null && k.sleepMin < SHORT_NIGHT_MIN) count++; }
+      var ord = ['', '', '2nd', '3rd'][count] || count + 'th';
+      var night = sleepText(n.sleepMin) + (n.sleepKind === 'asleep' ? ' asleep ' : ' in bed ') + (nightDay === t ? 'last night' : 'the night before');
+      if (short && count >= 2) { notable = true; night += ' (' + ord + ' short night in 7)'; }
+      bits.push(night);
+    }
+    return {text: bits.length ? 'Body: ' + bits.join(' · ') : '', notable: notable && !!bits.length, stale: false, since: complete};
+  }
+
   root.HealthCore = {KEEP_DAYS: KEEP_DAYS, BACK_DAYS: BACK_DAYS, MAX_LINES: MAX_LINES, FIELDS: FIELDS, LIMITS: LIMITS,
     today: today, offsetDay: offsetDay, dayLabel: dayLabel, parseWhen: parseWhen, parseNumber: parseNumber, metricOf: metricOf,
     linesOf: linesOf, parseLines: parseLines, nights: nights, summarize: summarize, cleanRow: cleanRow, mergeDays: mergeDays,
-    sleepText: sleepText, receiptMessage: receiptMessage, ingest: ingest, recentRows: recentRows};
+    sleepText: sleepText, receiptMessage: receiptMessage, ingest: ingest, recentRows: recentRows,
+    completeBefore: completeBefore, targetOf: targetOf, metOn: metOn, autoTicks: autoTicks, ticksMessage: ticksMessage, bodyLine: bodyLine};
   if (typeof module !== 'undefined' && module.exports) module.exports = root.HealthCore;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
