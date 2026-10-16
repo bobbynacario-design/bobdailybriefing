@@ -425,6 +425,20 @@ window.fbSaveLifestyle = async function(day, id, value, today) {
   var days = {}; days[day] = row;
   await setDoc(doc(db, COLL, 'lifestyle-' + uid), {uid: uid, kind: 'lifestyle', askedOn: today, days: days, updatedAt: new Date().toISOString()}, {merge: true});
 };
+// This week's health research (functions/health-research.js), by week.
+window.fbLoadHealthResearch = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  try {
+    var snap = await getDoc(doc(db, COLL, 'health-research-' + uid));
+    return snap.exists() ? (snap.data().weeks || {}) : {};
+  } catch (e) {
+    if (e && e.code === 'permission-denied') return {};
+    throw e;
+  }
+};
+window.fbGenerateHealthResearch = async function(refresh) {
+  return (await httpsCallable(functions, 'generateHealthResearch', {timeout: 250000})({refresh: refresh === true})).data;
+};
 window.fbSaveHealthBasics = async function(basics) {
   var uid = getUid();
   if (!uid) throw new Error('Sign in first');
@@ -3188,6 +3202,17 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 .checkup-off{display:flex;gap:.3rem;align-items:center;font-size:12px;color:var(--txt3);grid-column:1/-1}
 .today-checkups button{margin-left:.35rem}
 @media(max-width:560px){.checkup-row{grid-template-columns:minmax(0,1fr) auto}.checkup-row input[type=month]{grid-column:1/-1}}
+.research-card{margin:0 0 1rem;padding:.9rem 1rem;border:1px solid var(--rim);border-left:3px solid var(--green);border-radius:12px;background:var(--bg2)}
+.research-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.4rem .8rem;margin-bottom:.5rem}
+.research-head h2{margin:0;font-size:16px;color:var(--txt)}
+.research-list{list-style:none;margin:0;padding:0;display:grid;gap:.7rem}
+.research-item{padding-top:.6rem;border-top:1px solid var(--rim)}.research-item:first-child{padding-top:0;border-top:0}
+.research-headline{font-size:14px;font-weight:600;color:var(--txt)}
+.research-finding{margin:.25rem 0;font-size:13px;line-height:1.55;color:var(--txt2)}
+.research-meta{display:flex;flex-wrap:wrap;gap:.3rem .7rem;font-size:12px;color:var(--txt3)}.research-meta a{color:var(--txt2)}
+.research-you{margin:.3rem 0 0;font-size:12.5px;line-height:1.5;color:var(--txt2)}.research-you b{color:var(--txt)}
+.research-actions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.7rem}
+.weekly-research{margin-top:.8rem}.weekly-research ul{margin:.3rem 0 0;padding-left:1.1rem;font-size:13px;line-height:1.55}
 .health-how ol{margin:.5rem 0;padding-left:1.3rem;line-height:1.6;max-width:80ch}.health-how li{margin:.3rem 0}.health-how code{font-family:var(--mono);font-size:12px;color:var(--gold)}
 @media(max-width:560px){.health-code-row{grid-template-columns:minmax(0,1fr) auto}.health-code-row .about-sublabel{grid-column:1/-1}.health-days{font-size:12.5px}.health-days th,.health-days td{padding:.4rem .3rem}.health-days th{letter-spacing:.03em}}
 .calendar-none{margin:0;padding:.7rem .85rem;font-size:13px;color:var(--txt3);border:1px dashed var(--rim2);border-radius:10px}
@@ -3490,6 +3515,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <section class="weekly-card" id="weekly-card" hidden aria-labelledby="weekly-title"></section>
   <p class="today-body owner-only" id="today-body" hidden role="status"></p>
   <p class="today-body today-checkups owner-only is-notable" id="today-checkups" hidden></p>
+  <section class="research-card owner-only" id="today-research" hidden aria-labelledby="health-research-title"></section>
   <section class="weekly-review" id="weekly-review" hidden aria-label="Weekly review"></section>
   <section class="today-five" id="today-five" aria-label="Morning 5">
     <div id="command-load-status" role="status"></div>
@@ -4250,6 +4276,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p>Once it sends, <b>Today</b> shows a <b>Body</b> line under This week: yesterday's steps and last night's time in bed. It turns amber when steps were well under or over your usual (the middle of your last 14 days) or when short nights (under 6 hours in bed) repeat, and only then does it ride on the morning push. A weekly commitment that names a number Apple Health can check (<i>8,000 steps</i>, <i>3 km</i>, <i>in bed by 11:30 pm</i>, <i>7 hours in bed</i>, in its words or in How you'll know) <b>ticks itself</b>: a step goal once the day is over and a send has come in, a sleep goal for the evening you went to bed. Those ticks show as ringed dots, and the morning check-in stops asking about them. Untick one and it stays off. "Walk 30 minutes" cannot tick itself: an iPhone without a Watch does not record exercise minutes.</p>
       <p><b>Health basics</b> — your birth year, which screenings to include, and the month you last had each check-up. Daybook works out what is next due from Australian guidelines for adults at average risk (blood pressure, heart and diabetes risk checks, bowel screening, dental, eyes, the flu vaccine, the screenings for women, and the shingles and pneumococcal vaccines at 65 and 70), each with its source. What is due shows on <b>Today</b> with a <b>Done</b> button (it records this month), on <b>Calendar</b>, and as the health idea in your weekly review. It never reads results, and your doctor may set a different schedule: untick a check with <b>Not for me</b>.</p>
       <p><b>Lifestyle questions</b> — once the morning check-in's commitment question is done (or when there is none), it asks one question about yesterday, a different one each day: drinks, a late meal, protein at breakfast, 20 minutes of daylight, and your energy. One tap, or <b>Not now</b>. Nothing is counted or scored; the answers add up as a line each in your Sunday review (“Drinks: None on 3 days, 3 or more on 1”) and, once Apple Health has a few weeks of your sleep and steps, will be set against them.</p>
+      <p><b>This week's health research</b> — every Sunday at 5:15 a web search finds up to three findings from the last two weeks on sleep, activity, nutrition, alcohol, ageing or stress. Only meta-analyses, systematic reviews, randomised trials, large cohort studies and health-body guidelines count; animal studies, supplements and medicines are left out, and a source is kept only if the search really returned it. The AI is told only your age band (from Health basics) and a fixed line about how you live (desk work, travel, late poker), never your steps, sleep, answers or check-ups. It shows on <b>Today</b> for two days (<b>Got it</b> hides it), its headlines sit in the Sunday review, and one “Try” is offered as a commitment idea. It reports what studies found; it is not medical advice. On the cost card as health-research.</p>
       <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
     </div>
     <div class="help-card help-wide" id="invites-card" hidden>
@@ -4811,6 +4838,7 @@ function onSignedIn() {
   renderTodayAsk();
   renderTodayBody();
   renderTodayCheckups();
+  renderTodayResearch();
   setApplicationLocked(false);
   document.querySelectorAll('.page').forEach(function(el) { el.inert = false; });
   document.getElementById('auth-overlay').classList.add('hidden');
@@ -5167,7 +5195,7 @@ function switchPage(id, el) {
   if (id==='today' && window.renderDailyBoost) window.renderDailyBoost();
   if (id==='today' && window.renderWeeklyMirror) window.renderWeeklyMirror();
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); }
+  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayResearch(); }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -5182,7 +5210,7 @@ function switchPage(id, el) {
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); }
+  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayResearch(); }
   if (id==='research') pending = renderResearchList();
   if (id==='radar') pending = renderRadar();
   if (id==='journal') pending = renderJournal();
@@ -6888,6 +6916,88 @@ document.addEventListener('click', async function(event) {
     showToast('Could not save. Try again.', 'warn');
   }
   renderTodayCheckups();
+});
+
+// ── This week's health research (functions/health-research.js) ──
+// Built every Sunday at 05:15 Manila. Today shows the newest week for two
+// days after it was built, until he taps Got it (this device). The Sunday
+// review lists the headlines, and a "try" can become a commitment.
+var _research = null, _researchFor = null, _researchAt = 0, _researchBusy = false;
+var RESEARCH_SEEN = 'daybook-research-seen';
+var RESEARCH_HEAD = '<div class="research-head"><h2 id="health-research-title">This week\'s health research</h2>';
+function latestResearch(weeks) {
+  var keys = Object.keys(weeks || {}).filter(function(k) { return /^\d{4}-\d{2}-\d{2}$/.test(k); }).sort();
+  var k = keys[keys.length - 1];
+  return k ? Object.assign({weekKey: k}, weeks[k]) : null;
+}
+window.healthResearchTry = function(weeks) {
+  var r = latestResearch(weeks), i = r && (r.items || []).filter(function(x) { return x.try; })[0];
+  return i ? {text: i.try, why: 'From this week\'s health research: ' + i.headline} : null;
+};
+var RESEARCH_EVIDENCE = {'meta-analysis': 'Meta-analysis', 'systematic review': 'Systematic review', 'randomised trial': 'Randomised trial', 'large cohort': 'Large cohort study', 'guideline': 'Guideline'};
+function researchItemsHtml(r) {
+  return '<ul class="research-list">' + (r.items || []).map(function(i) {
+    var when = i.published ? new Date(i.published + 'T00:00:00Z').toLocaleDateString('en-AU', {day: 'numeric', month: 'short', timeZone: 'UTC'}) : '';
+    return '<li class="research-item"><div class="research-headline"><span class="weekly-area">' + esc(i.topic) + '</span> ' + esc(i.headline) + '</div>' +
+      '<p class="research-finding">' + esc(i.finding) + '</p>' +
+      '<div class="research-meta"><span>' + esc(RESEARCH_EVIDENCE[i.evidence] || i.evidence) + (i.whoStudied ? ' · ' + esc(i.whoStudied) : '') + '</span>' + (when ? '<span>' + esc(when) + '</span>' : '') +
+      '<a href="' + esc(i.url) + '" target="_blank" rel="noopener" data-track="research_source">' + esc(i.sourceTitle || 'Source') + ' ↗</a></div>' +
+      (i.forYou ? '<p class="research-you"><b>For you:</b> ' + esc(i.forYou) + '</p>' : '') + (i.try ? '<p class="research-you"><b>Try:</b> ' + esc(i.try) + '</p>' : '') + '</li>';
+  }).join('') + '</ul>';
+}
+window.healthResearchReviewHtml = function(weeks) {
+  var r = latestResearch(weeks);
+  if (!r || !(r.items || []).length) return '';
+  return '<div class="weekly-research"><span class="about-sublabel">This week\'s health research</span><ul>' + r.items.map(function(i) {
+    return '<li><a href="' + esc(i.url) + '" target="_blank" rel="noopener">' + esc(i.headline) + '</a> <span class="flights-note">· ' + esc(RESEARCH_EVIDENCE[i.evidence] || i.evidence) + '</span></li>';
+  }).join('') + '</ul></div>';
+};
+async function renderTodayResearch(force) {
+  var el = document.getElementById('today-research'), uid = window._firebaseUid || null;
+  if (!el) return;
+  if (!uid || window.daybookMember || typeof window.fbLoadHealthResearch !== 'function') { el.hidden = true; return; }
+  if (force || _researchFor !== uid || Date.now() - _researchAt > 10 * 60000) {
+    try { _research = await window.fbLoadHealthResearch(uid); _researchFor = uid; _researchAt = Date.now(); } catch (e) { el.hidden = true; return; }
+  }
+  var r = latestResearch(_research), seen = '';
+  try { seen = localStorage.getItem(RESEARCH_SEEN) || ''; } catch (e) {}
+  var fresh = r && r.generatedAt && Date.now() - Date.parse(r.generatedAt) < 2 * 86400000;
+  var sunday = new Date(Date.now() + 8 * 3600000).getUTCDay() === 0;
+  if (_researchBusy) {
+    el.innerHTML = RESEARCH_HEAD + '</div>' + aiWorkingHtml('Searching recent studies', {since: _researchBusy, slow: 180});
+    el.hidden = false; return;
+  }
+  if (fresh && r.weekKey !== seen) {
+    var items = (r.items || []).length;
+    el.innerHTML = RESEARCH_HEAD + '<span class="flights-note">Recent studies, checked sources · not medical advice</span></div>' +
+      (items ? researchItemsHtml(r) : '<p class="flights-note">Nothing this week met the bar (large, recent, well-designed studies).</p>') +
+      (r.note ? '<p class="flights-note">' + esc(r.note) + '</p>' : '') +
+      '<div class="research-actions"><button type="button" class="tool-chip" data-research-act="seen" data-track="research_seen">Got it</button>' +
+      (items ? '<span class="flights-note">A “Try” can become one of next week\'s commitments in your Sunday review.</span>' : '') + '</div>';
+    el.hidden = false; return;
+  }
+  // Sunday with nothing built (the 05:15 job did not run): build it on a tap.
+  if (sunday && !(r && r.weekKey === WeeklyReviewCore.weekStart(WeeklyReviewCore.today()))) {
+    el.innerHTML = RESEARCH_HEAD + '</div><div class="research-actions"><span class="flights-note">Not built yet this week.</span>' +
+      '<button type="button" class="tool-chip" data-research-act="build" data-track="research_build">Find it now</button></div>';
+    el.hidden = false; return;
+  }
+  el.hidden = true;
+}
+document.addEventListener('click', async function(event) {
+  var b = event.target && event.target.closest ? event.target.closest('[data-research-act]') : null;
+  if (!b) return;
+  var act = b.getAttribute('data-research-act'), r = latestResearch(_research);
+  if (act === 'seen') {
+    try { if (r) localStorage.setItem(RESEARCH_SEEN, r.weekKey); } catch (e) {}
+    document.getElementById('today-research').hidden = true;
+    return;
+  }
+  if (act === 'build' && !_researchBusy) {
+    _researchBusy = Date.now(); renderTodayResearch();
+    try { await window.fbGenerateHealthResearch(false); } catch (e) { showToast('Could not build it: ' + ((e && e.message) || 'try again'), 'warn'); }
+    _researchBusy = false; renderTodayResearch(true);
+  }
 });
 
 // ── Your calendars (functions/calendar.js) ──
