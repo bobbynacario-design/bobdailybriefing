@@ -1887,6 +1887,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .radar-wildcard{border-left-color:var(--purple);border-color:rgba(155,111,232,.2);background:linear-gradient(180deg,var(--bg2),var(--bg3))}
 .radar-wildcard .radar-taker-title{color:var(--purple)}
 .radar-wildcard .radar-nugget{border-color:rgba(155,111,232,.22)}
+.radar-wildcard .radar-near-miss{border-style:dashed}
 .radar-wildcard .radar-nugget-action{color:var(--purple);border-color:rgba(155,111,232,.32);background:var(--purple-dim)}
 .radar-wildcard .radar-nugget-upside{color:var(--green)}
 .radar-wildcard-score{font-family:var(--mono);font-size:10px;color:var(--txt3);letter-spacing:.04em;margin-top:.25rem;white-space:nowrap}
@@ -4462,7 +4463,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       </ul>
       <p><b>What changed since the previous update?</b> compares today&rsquo;s radar with the previous trading day&rsquo;s. Status changes and names crossing their earlier stop or target come first. Smaller moves sit in a collapsed list: price moves of 3% or more, score moves of 8 points or more, benchmark-lead moves of 3 points or more, and news dated after the previous close. A new article does not prove what moved the price.</p>
       <p><b>Conditional watch plan</b> (collapsed on each card) — what the next daily snapshot must show to confirm the setup, which checks are still missing, and the close that breaks it. A plan lapses 36 hours after the morning run, so at weekends the plans are hidden until the next run.</p>
-      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box. It never repeats a name already in Taker Nuggets, and it picks only from <b>early</b> names: still <b>forming</b>, but with volume on up days already at least 1.6× volume on down days over the last 20 sessions. Those names carry an <span class="help-pill" style="color:var(--green)">early</span> chip on their card.</p>
+      <p><b>Wildcard Upside</b> is the edge-before-it's-obvious box. It never repeats a name already in Taker Nuggets, and it picks only from <b>early</b> names: still <b>forming</b>, but with volume on up days already at least 1.6× volume on down days over the last 20 sessions. Those names carry an <span class="help-pill" style="color:var(--green)">early</span> chip on their card. When nothing clears every bar, the box shows the <b>closest miss</b> on a dashed card: the forming name outside Taker that misses the fewest bars, then has the most up-day volume. It says which bar it missed and by how much, and it is a name to watch, not a pick.</p>
       <ul>
         <li><b>Why that zone</b> — tested on about three years of history, early names earned most of what confirmed names did, and nearly half became confirmed within a week. Every other forming name earned about nothing.</li>
         <li><b>Ranked by score</b> within the zone. The old ranking rewarded distance to target (mostly a measure of how jumpy a name is), names scoring under 75, and names <i>not</i> stretched above their average. All three pointed the wrong way when tested.</li>
@@ -8268,6 +8269,54 @@ function radarWildcardPicks(list, taken) {
     floor: upsideFloor
   };
 }
+// The early line: up-day volume at least this many times down-day volume over
+// 20 sessions (radar/config.js EARLY_ACCUMULATION_MIN; a UI test keeps them equal).
+var RADAR_EARLY_MIN = 1.6;
+// When no name clears every Wildcard bar, the forming name outside Taker that
+// comes closest, so the box still points somewhere (17 Oct 2026: it was empty
+// on 13, 15 and 16 Oct, each time because no forming name reached the early
+// line). Closest = fewest bars missed, then the most up-day volume (the bar
+// history backs), then score. A name to watch, not a pick.
+function radarWildcardNearMiss(list, taken, floor) {
+  var best = null;
+  (list || []).forEach(function (s) {
+    var upside = radarUpsidePct(s);
+    if (!s || s.status !== 'forming' || (taken || {})[s.symbol] || upside === null) return;
+    var misses = [];
+    if (s.early !== true) misses.push('early');
+    if (upside < floor) misses.push('upside');
+    if ((s.score || 0) < 42) misses.push('score');
+    if (!misses.length) return;
+    var c = {s: s, misses: misses, upside: upside, acc: typeof s.accumulation === 'number' ? s.accumulation : -1};
+    if (!best || c.misses.length < best.misses.length ||
+      (c.misses.length === best.misses.length && (c.acc > best.acc || (c.acc === best.acc && (s.score || 0) > (best.s.score || 0))))) best = c;
+  });
+  return best;
+}
+function radarNearMissCard(nm, floor) {
+  var s = nm.s, missed = [], clears = [];
+  if (nm.misses.indexOf('early') >= 0) missed.push(nm.acc >= 0 ? 'up-day volume ' + nm.acc.toFixed(2) + '× down-day volume, under the ' + RADAR_EARLY_MIN + '× early line' : 'no up-day/down-day volume reading');
+  if (nm.misses.indexOf('upside') >= 0) missed.push(nm.upside.toFixed(1) + '% to target, under today’s ' + floor.toFixed(1) + '% bar');
+  if (nm.misses.indexOf('score') >= 0) missed.push('score ' + (s.score || 0) + ', under 42');
+  if (nm.misses.indexOf('score') < 0) clears.push('score ' + s.score);
+  if (nm.misses.indexOf('upside') < 0) clears.push(nm.upside.toFixed(1) + '% to target');
+  if (s.relStrength20d != null) clears.push(s.relStrength20d > 0 ? 'leading its benchmark by +' + s.relStrength20d.toFixed(1) + ' pts (20d)' : 'still trailing its benchmark');
+  var watch = nm.misses.length === 1 && nm.misses[0] === 'early'
+    ? 'It becomes an early pick when up-day volume reaches ' + RADAR_EARLY_MIN + '× down-day volume.'
+    : 'It needs ' + nm.misses.length + ' more bars cleared before it is a pick.';
+  return '<div class="radar-nuggets"><div class="radar-nugget radar-near-miss">' +
+    '<div class="radar-nugget-top">' +
+      '<div><div class="radar-nugget-symbol">' + esc(s.symbol) + '<span class="radar-theme">' + esc(s.theme || '') + '</span></div>' +
+      '<span class="rel-badge ' + radarStatusClass(s.status) + '">' + esc(s.status) + '</span></div>' +
+      '<div><div class="radar-nugget-action">Closest miss</div>' +
+      '<div class="radar-nugget-upside">' + esc(radarUpsideLabel(s)) + '</div>' +
+      '<div class="radar-wildcard-score">score ' + esc(s.score) + '</div></div>' +
+    '</div>' +
+    '<div class="radar-nugget-body">Missed on ' + esc(missed.join('; ')) + '.' + (clears.length ? ' Clears: ' + esc(clears.join(', ')) + '.' : '') + ' ' + esc(watch) + '</div>' +
+    radarReadHtml(s) +
+    (nm.misses.indexOf('early') >= 0 ? '<div class="radar-nugget-risk">Watch, not a pick: forming names under the early line have earned about nothing so far.</div>' : '') +
+  '</div></div>';
+}
 function renderRadarWildcards(list) {
   var el = document.getElementById('radar-wildcards');
   if (!el) return;
@@ -8280,7 +8329,10 @@ function renderRadarWildcards(list) {
   var wild = radarWildcardPicks(list, radarTakerSymbols);
   var base = wild.picks, standoutSym = wild.standout, upsideFloor = wild.floor;
   if (!base.length) {
-    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No forming names with heavy up-day volume outside the Taker list clear today&rsquo;s upside bar (&ge;' + upsideFloor.toFixed(1) + '%). Nothing is setting up early in this filter.</div></div></div></div>';
+    var nm = radarWildcardNearMiss(list, radarTakerSymbols, upsideFloor);
+    el.innerHTML = '<div class="radar-taker radar-wildcard"><div class="radar-taker-head"><div><div class="radar-taker-title">Wildcard Upside</div><div class="radar-taker-sub">No forming name outside the Taker list clears every bar today (early line ' + RADAR_EARLY_MIN + '×, upside &ge;' + upsideFloor.toFixed(1) + '%, score 42+)' +
+      (nm ? '. The closest one, to watch:' : '. Nothing is setting up early in this filter.') + '</div></div></div>' +
+      (nm ? radarNearMissCard(nm, upsideFloor) : '') + '</div>';
     return;
   }
   var activeFilter = [radarFilter === 'All' ? '' : radarFilter, radarStatusFilter === 'All' ? '' : radarStatusFilter]

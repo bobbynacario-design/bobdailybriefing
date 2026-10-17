@@ -1083,8 +1083,9 @@ test('a card saved to Evidence points at the saved briefing, or the key autoSave
   assert.equal(context.currentBriefingKey(),'stored-key');
 });
 // Wildcard Upside (October 2026): early forming names only, ranked by score.
-const WILD=['radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarWildcardPicks','radarReadHtml','radarForecastHtml','radarForecastText','radarForecastBaselineHtml','radarWatchPlanHtml','radarSourceLink','radarSourceHost'];
-const wildEnv=(signals,taker={})=>environment(WILD,{esc:v=>String(v ?? ''),uiIcon:()=>'',URL,radarSignals:signals,radarTakerSymbols:taker,radarFilter:'All',radarStatusFilter:'All'});
+const WILD=['radarWildcardNearMiss','radarNearMissCard','radarUpsidePct','radarUpsideLabel','radarMedian','radarWildcardFloor','radarWildcardRank','radarWildcardWhy','radarWildcardCard','radarStatusClass','radarLevel','renderRadarWildcards','radarWildcardPicks','radarReadHtml','radarForecastHtml','radarForecastText','radarForecastBaselineHtml','radarWatchPlanHtml','radarSourceLink','radarSourceHost'];
+const EARLY_MIN=Number(html.match(/var RADAR_EARLY_MIN = ([\d.]+);/)[1]);
+const wildEnv=(signals,taker={})=>environment(WILD,{esc:v=>String(v ?? ''),uiIcon:()=>'',URL,radarSignals:signals,radarTakerSymbols:taker,radarFilter:'All',radarStatusFilter:'All',RADAR_EARLY_MIN:EARLY_MIN});
 const sig=(symbol,o)=>Object.assign({symbol,theme:'T',status:'forming',early:false,score:60,entry:100,stop:96,target:108,accumulation:1.2,relStrength20d:2},o);
 test('Wildcard picks only early forming names, by score, never a Taker name', () => {
   const list=[
@@ -1111,7 +1112,34 @@ test('Wildcard says when the radar doc predates the early flag, instead of showi
   const none=[sig('PLAIN',{})];
   const fresh=wildEnv(none);
   fresh.context.renderRadarWildcards(none);
-  assert.match(fresh.element('radar-wildcards').innerHTML,/No forming names with heavy up-day volume/);
+  const empty=fresh.element('radar-wildcards').innerHTML;
+  assert.match(empty,/No forming name outside the Taker list clears every bar today/);
+  assert.match(empty,/The closest one, to watch:[\s\S]*PLAIN[\s\S]*Closest miss/,'an empty box shows its closest miss');
+});
+// The closest miss (17 Oct 2026): on 13, 15 and 16 Oct no forming name reached
+// the early line, so the box was empty. The 16 Oct field, as the scan wrote it.
+test('an empty Wildcard shows the closest miss: fewest bars missed, then most up-day volume, then score', () => {
+  const field=[
+    sig('XLY',{score:57,accumulation:1.35,relStrength20d:0.6,entry:113.4,target:118.8}),   // misses only the early line
+    sig('XLE',{score:69,accumulation:1.28,entry:100,target:108.5}),                        // same, less up-day volume
+    sig('XLI',{score:42,accumulation:1.4,entry:100,target:102.5}),                         // more volume, but under the upside bar too
+    sig('XLV',{score:66,accumulation:1.5,entry:100,target:105}),                           // in Taker
+    sig('ZZ',{status:'confirmed',score:80,accumulation:1.55}),                             // confirmed: not a Wildcard candidate
+    sig('NOTGT',{target:null,accumulation:1.59})];                                         // no target
+  const {context}=wildEnv(field,{XLV:true});
+  const nm=context.radarWildcardNearMiss(field,{XLV:true},3.9);
+  assert.equal(nm.s.symbol,'XLY');assert.deepEqual([...nm.misses],['early']);
+  const tie=context.radarWildcardNearMiss([sig('A',{score:50,accumulation:1.3}),sig('B',{score:60,accumulation:1.3})],{},3);
+  assert.equal(tie.s.symbol,'B','equal volume: the higher score');
+  assert.equal(context.radarWildcardNearMiss([sig('C',{status:'confirmed'})],{},3),null,'nothing forming, nothing to show');
+  const card=context.radarNearMissCard(nm,3.9);
+  assert.ok(card.includes('Missed on up-day volume 1.35× down-day volume, under the 1.6× early line. Clears: score 57, 4.8% to target, leading its benchmark by +0.6 pts (20d). It becomes an early pick when up-day volume reaches 1.6× down-day volume.'),card);
+  assert.ok(card.includes('Watch, not a pick') && card.includes('radar-near-miss'));
+  const two=context.radarNearMissCard(context.radarWildcardNearMiss([sig('D',{score:30,accumulation:1.1,target:101})],{},3),3);
+  assert.ok(two.includes('Missed on up-day volume 1.10× down-day volume, under the 1.6× early line; 1.0% to target, under today’s 3.0% bar; score 30, under 42.') && two.includes('It needs 3 more bars cleared'),two);
+  // The page's early line is the scan's.
+  const cfg=readFileSync(new URL('../radar/config.js',import.meta.url),'utf8');
+  assert.equal(EARLY_MIN,Number(cfg.match(/var EARLY_ACCUMULATION_MIN = ([\d.]+);/)[1]));
 });
 // Explain the moves (October 2026): the read the radar run writes for the six
 // names shown first, with its sources; a name without one falls back to its catalyst.
