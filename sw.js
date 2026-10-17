@@ -1,7 +1,8 @@
 /* Daybook service worker.
-   App-shell requests are network-first so deploys update cleanly; cache is the
+   The app page opens from the cache and refreshes behind itself (openShell);
+   other requests of Daybook's own are network-first, with the cache as the
    offline fallback. Firebase and Google auth traffic always bypasses the cache. */
-var CACHE_NAME = 'bob-briefing-shell-v287';
+var CACHE_NAME = 'bob-briefing-shell-v288';
 
 var briefingMessaging = null;
 try {
@@ -85,7 +86,9 @@ var BYPASS_HOSTS = [
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(PRECACHE);
+      // Past the browser's own cache (GitHub Pages allows 10 minutes), so a new
+      // release never stores the page it replaces.
+      return cache.addAll(PRECACHE.map(function(path) { return new Request(path, { cache: 'reload' }); }));
     }).then(function() {
       return self.skipWaiting();
     })
@@ -142,6 +145,41 @@ self.addEventListener('activate', function(event) {
   );
 });
 
+// The app itself (index.html) opens from the cache at once. From the network
+// it took 3–4 s after each release on Bob's connection (17 Oct 2026: the page
+// is about 517 KB compressed), and a weak signal held it up with no limit. A
+// fresh copy is fetched behind it and kept for the next open; when that copy
+// is a new release, open Daybook windows are told, so they can offer it.
+function shellKey() { return new URL('./', self.registration.scope).href; }
+function isShell(url) {
+  var page = url.href.split(/[?#]/)[0], base = shellKey();
+  return page === base || page === base + 'index.html';
+}
+function versionOf(res) { return (res && res.headers && (res.headers.get('etag') || res.headers.get('last-modified'))) || ''; }
+function tellUpdated() {
+  return clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(windows) {
+    windows.filter(function(w) { return w.url && w.url.indexOf(self.registration.scope) === 0; })
+      .forEach(function(w) { w.postMessage({ type: 'daybook-update' }); });
+  });
+}
+function openShell(event) {
+  var key = shellKey();
+  return caches.open(CACHE_NAME).then(function(cache) {
+    return cache.match(key).then(function(hit) {
+      var fresh = fetch(key, { cache: 'no-cache', credentials: 'same-origin' }).then(function(res) {
+        if (!res || res.status !== 200) return res;
+        var changed = !!hit && versionOf(hit) !== '' && versionOf(res) !== versionOf(hit);
+        return cache.put(key, res.clone()).then(function() { return changed ? tellUpdated() : null; }).then(function() { return res; });
+      });
+      if (hit) {
+        event.waitUntil(fresh.catch(function() {}));
+        return hit;
+      }
+      return fresh.catch(function() { return caches.match(new URL('./offline.html', self.registration.scope).href); });
+    });
+  });
+}
+
 self.addEventListener('fetch', function(event) {
   var req = event.request;
   if (req.method !== 'GET') return;
@@ -149,6 +187,13 @@ self.addEventListener('fetch', function(event) {
   var url = new URL(req.url);
   if (BYPASS_HOSTS.indexOf(url.hostname) !== -1) return;
 
+  if (req.mode === 'navigate' && isShell(url)) {
+    event.respondWith(openShell(event));
+    return;
+  }
+
+  // Everything else of Daybook's own (data such as the shared sports feed,
+  // reports, icons) stays network-first, with the cache as the offline copy.
   if (req.mode === 'navigate' || url.origin === self.location.origin) {
     event.respondWith(
       fetch(req.mode === 'navigate' ? req : req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function(res) {

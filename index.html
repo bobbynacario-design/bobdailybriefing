@@ -3435,7 +3435,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 <div class="feed-health" id="feed-health" hidden></div>
 
 <div class="update-banner" id="update-banner">
-  <span>New briefing app version available</span>
+  <span>Daybook has been updated</span>
   <button id="update-banner-btn" onclick="applyAppUpdate()">Reload</button>
 </div>
 
@@ -4305,6 +4305,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p><b>Waiting on the AI</b> — Go deeper, the briefing, the weekly read, a meeting brief and deep research all show a turning ring and a timer counting up while they work. Past the usual time for that job the line adds <b>longer than usual</b>; it does not invent progress steps, because the server does not report any.</p>
       <p><b>Morning 5</b> (on Today, below the briefing) — the five items that matter most today, each with <b>Acted</b>, <b>Reviewed</b> and <b>Ignored</b> on its card; tap the lit one again to clear it. The <b>Attention Queue</b> holds everything beyond those five, so nothing shows twice. Items you dismissed, or that have dropped off today’s feeds, wait under <b>Also on today’s list</b>; <b>Close review</b> marks anything left as ignored. <b>Weekly discipline</b> is folded at the bottom. <b>Morning push</b>, next to Refresh, turns the Morning 5 notification on for this device or mutes it; its settings stay under <b>Personal priority controls</b>. It comes once each morning, plus a second only for a meeting about to start. Work leads it: a meeting, today’s top briefing story, a changed number or insurance news, and never one that led a push in the last two weeks while something new can; Radar and Markets follow as “+N more”. Under it are <b>Today:</b> (your calendar and starred PokerHQ picks) and <b>This week:</b> (your commitment). Feed problems never go in it (they stay here and in the daily check). An open call or a due review gets one <b>Due:</b> line in one push only, then stays on this list until you act on it; a <b>To check</b> reminder is in one push too. Each tap on a push is counted as <b>Opened from a push</b> under What you use, so you can see whether the push earns its place.</p>
       <p><b>On a phone</b> only the row of sections stays at the top while you scroll; scroll back up for search, the theme and the lock. The sync mark shows just its icon (✓ saved, ⟳ working) and spells out a problem only when there is one.</p>
+      <p><b>Opening fast</b> — Daybook opens from your device at once and fetches any new version behind it. If one arrives just after you open, the page reloads into it; later on, a <b>Daybook has been updated · Reload</b> note appears instead, so nothing you are reading or typing is lost.</p>
       <p class="help-key">Nothing here is a streak to keep. A missed day is just a missed day.</p>
     </div>
 
@@ -15976,18 +15977,35 @@ function showUpdateBanner() {
   if (el) el.classList.add('show');
 }
 
+// A new release arrived while this page is open: the page opens from the
+// cache now (sw.js openShell), so a release shows up a moment after opening.
+// Just opened and not typing: reload into it. Otherwise offer Reload, so
+// nothing being read or typed (an Ask question, a note) is lost.
+var briefingOpenedAt = Date.now();
+function appUpdateArrived() {
+  if (window.__briefingUpdateReloading) { window.location.reload(); return; }
+  var el = document.activeElement, tag = el && el.tagName ? String(el.tagName).toUpperCase() : '';
+  var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!(el && el.isContentEditable);
+  if (Date.now() - briefingOpenedAt < 30000 && !typing) { window.__briefingUpdateReloading = true; window.location.reload(); return; }
+  showUpdateBanner();
+}
+
 function applyAppUpdate() {
   var btn = document.getElementById('update-banner-btn');
   if (btn) { btn.textContent = 'Updating...'; btn.disabled = true; }
   window.__briefingUpdateReloading = true;
-  if (window.__briefingSwWaiting) window.__briefingSwWaiting.postMessage({ type: 'SKIP_WAITING' });
+  // A worker still waiting takes over first (controllerchange then reloads);
+  // one already in charge has the new page in its cache, so reload now.
+  var waiting = window.__briefingSwWaiting;
+  if (waiting && waiting.state === 'installed') waiting.postMessage({ type: 'SKIP_WAITING' });
   else window.location.reload();
 }
 
+// A new worker is ready: let it take over. The page itself moves to the new
+// release through appUpdateArrived when the controller changes.
 function applyWaitingServiceWorker(worker) {
   if (!worker) return;
   window.__briefingSwWaiting = worker;
-  window.__briefingUpdateReloading = true;
   worker.postMessage({ type: 'SKIP_WAITING' });
 }
 
@@ -16012,9 +16030,15 @@ function registerBriefingServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   var canRegister = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   if (!canRegister) return;
-  navigator.serviceWorker.addEventListener('message', function(event) { openFromServiceWorker(event.data); });
+  navigator.serviceWorker.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'daybook-update') { appUpdateArrived(); return; }
+    openFromServiceWorker(event.data);
+  });
+  // The first worker taking over a page it did not serve is not a release.
+  var hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', function() {
-    if (window.__briefingUpdateReloading) window.location.reload();
+    if (hadController || window.__briefingUpdateReloading) appUpdateArrived();
+    hadController = true;
   });
   navigator.serviceWorker.register('./sw.js').then(function(reg) {
     function watch(worker) {

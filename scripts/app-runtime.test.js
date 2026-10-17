@@ -1657,6 +1657,81 @@ test('with no Daybook window open, a tap opens one; Mute and stray links stay in
   assert.deepEqual(opened,[SCOPE+'?from=push#today',SCOPE+'?mute=delivery&from=push#command',SCOPE+'?from=push#command',SCOPE+'?from=push#command']);
   assert.deepEqual(calls,[],'the other app’s window is never raised or moved');
 });
+// The app page opens from the cache and refreshes behind itself (sw.js
+// openShell, 17 Oct 2026): from the network it took 3–4 s after each release.
+function shellWorker({cached=null,network,windows=[]}={}){
+  const handlers={}, store=new Map(), posted=[], fetched=[], added=[];
+  if(cached) store.set(SCOPE,cached);
+  store.set(SCOPE+'offline.html',page('',`offline`));
+  const key=k=>typeof k==='string'?new URL(k,SCOPE).href:k.url;
+  const cache={match:async k=>store.get(key(k)),put:async(k,v)=>{store.set(key(k),v);},addAll:async reqs=>{reqs.forEach(r=>added.push([r.url,r.cache]));}};
+  const self={addEventListener:(type,fn)=>{handlers[type]=fn;},registration:{scope:SCOPE},location:{origin:'https://bobbynacario-design.github.io'},skipWaiting:async()=>{}};
+  const context={self,URL,Promise,console:{warn(){}},importScripts:()=>{throw new Error('offline');},
+    caches:{open:async()=>cache,match:async k=>store.get(key(k)),keys:async()=>[],delete:async()=>true},
+    Request:function(u,init){this.url=new URL(u,SCOPE).href;this.cache=init&&init.cache;},
+    fetch:async(u,init)=>{fetched.push([typeof u==='string'?u:u.url,init&&init.cache]);if(network instanceof Error)throw network;return network;},
+    clients:{matchAll:async()=>windows.map(w=>({url:w,postMessage:m=>posted.push(m.type+' '+w)}))}};
+  vm.createContext(context);
+  vm.runInContext(readFileSync(new URL('../sw.js',import.meta.url),'utf8'),context);
+  const open=async(url,mode='navigate')=>{
+    let response; const waits=[];
+    handlers.fetch({request:{method:'GET',url,mode},respondWith:p=>{response=p;},waitUntil:p=>{waits.push(p);}});
+    const res=await response; await Promise.all(waits); return res;
+  };
+  return {open,store,posted,fetched,added,handlers};
+}
+function page(etag,body){return {status:200,body,headers:{get:h=>h==='etag'?etag||null:null},clone(){return this;}};}
+test('the app page opens from the cache at once, refreshes behind itself, and says so only when a release arrived',async()=>{
+  const daybook=SCOPE+'#today', poker='https://bobbynacario-design.github.io/pokerhq/';
+  const w=shellWorker({cached:page('W/"v1"','old'),network:page('W/"v2"','new'),windows:[daybook,poker]});
+  const res=await w.open(SCOPE+'?from=push');
+  assert.equal(res.body,'old','the cached page, without waiting for the network');
+  assert.deepEqual(w.fetched,[[SCOPE,'no-cache']],'one fresh copy fetched behind it, revalidated with the server');
+  assert.equal(w.store.get(SCOPE).body,'new','kept for the next open');
+  assert.deepEqual(w.posted,['daybook-update '+daybook],'Daybook is told; PokerHQ never is');
+  // The same release again: refreshed quietly.
+  const same=shellWorker({cached:page('W/"v1"','old'),network:page('W/"v1"','old'),windows:[daybook]});
+  assert.equal((await same.open(SCOPE+'index.html')).body,'old'); assert.deepEqual(same.posted,[]);
+  // Offline with a cached page: the page, and no error.
+  const off=shellWorker({cached:page('W/"v1"','old'),network:new TypeError('offline')});
+  assert.equal((await off.open(SCOPE)).body,'old');
+});
+test('with nothing cached the app page comes from the network, or the offline page; other requests stay network-first',async()=>{
+  const first=shellWorker({network:page('W/"v1"','new')});
+  assert.equal((await first.open(SCOPE)).body,'new'); assert.equal(first.store.get(SCOPE).body,'new');
+  const none=shellWorker({network:new TypeError('offline')});
+  assert.equal((await none.open(SCOPE)).body,'offline');
+  // The shared sports feed is data: always asked of the network first.
+  const data=shellWorker({cached:page('W/"v1"','old'),network:page('W/"d2"','feed')});
+  assert.equal((await data.open(SCOPE+'sports-public.json','cors')).body,'feed');
+  assert.deepEqual(data.fetched,[[SCOPE+'sports-public.json','no-cache']]);
+  // Another page under Daybook (the public sports page) is not the app shell.
+  const other=shellWorker({cached:page('W/"v1"','old'),network:page('W/"s1"','sports page')});
+  assert.equal((await other.open(SCOPE+'sports.html')).body,'sports page');
+});
+test('a new release precaches past the browser cache, so it never stores the page it replaces',async()=>{
+  const w=shellWorker();
+  let done; w.handlers.install({waitUntil:p=>{done=p;}}); await done;
+  assert.ok(w.added.length>10 && w.added.every(([,mode])=>mode==='reload'),JSON.stringify(w.added.slice(0,3)));
+  assert.ok(w.added.some(([url])=>url===SCOPE),'the app page itself');
+});
+test('a release arriving while open reloads only a page just opened and not being typed in; otherwise it offers Reload',()=>{
+  const run=({age,active})=>{
+    const reloads=[];
+    const {context,element}=environment(['appUpdateArrived','showUpdateBanner'],{briefingOpenedAt:Date.now()-age});
+    element('update-banner').classList={added:[],add(c){this.added.push(c);}};
+    context.document.activeElement=active;
+    context.location={reload:()=>reloads.push('reload')};
+    context.appUpdateArrived();
+    return {reloads,banner:element('update-banner').classList.added};
+  };
+  assert.deepEqual(run({age:2000,active:{tagName:'BODY'}}),{reloads:['reload'],banner:[]},'just opened: straight into the new release');
+  assert.deepEqual(run({age:2000,active:{tagName:'INPUT'}}),{reloads:[],banner:['show']},'typing an Ask question: offered, not forced');
+  assert.deepEqual(run({age:120000,active:{tagName:'BODY'}}),{reloads:[],banner:['show']},'reading for a while: offered, not forced');
+  assert.ok(html.includes("if (hadController || window.__briefingUpdateReloading) appUpdateArrived();"),'the first worker taking over is not a release');
+  assert.ok(html.includes("if (event.data && event.data.type === 'daybook-update') { appUpdateArrived(); return; }"));
+  assert.ok(html.includes("if (waiting && waiting.state === 'installed') waiting.postMessage({ type: 'SKIP_WAITING' });"),'Reload never waits on a worker already in charge');
+});
 test('a Daybook window told to open a page goes there, and only within Daybook',()=>{
   const used=[];
   const {context}=environment(['openFromServiceWorker'],{URL,trackUse:name=>used.push(name)});
@@ -1675,7 +1750,9 @@ test('a Daybook window told to open a page goes there, and only within Daybook',
   ['https://bobbynacario-design.github.io/pokerhq/#x','https://evil.example.com/bobdailybriefing/','not a url'].forEach(url=>assert.equal(context.openFromServiceWorker({type:'daybook-open',url}),false,url));
   assert.equal(context.openFromServiceWorker({type:'other',url:SCOPE}),false); assert.equal(context.openFromServiceWorker(null),false);
   assert.equal(loc.assigned,null); assert.equal(loc.hash,'#command');
-  assert.ok(html.includes("navigator.serviceWorker.addEventListener('message', function(event) { openFromServiceWorker(event.data); });"));
+  // The worker's messages: a release notice (17 Oct), otherwise a page to open.
+  assert.ok(html.includes("if (event.data && event.data.type === 'daybook-update') { appUpdateArrived(); return; }\r\n    openFromServiceWorker(event.data);") ||
+    html.includes("if (event.data && event.data.type === 'daybook-update') { appUpdateArrived(); return; }\n    openFromServiceWorker(event.data);"));
 });
 // Step 3 of the 11 Oct audit: Ask was only behind Search (17 asks in 16 days, most of them tests).
 test('Ask on Today opens Search with the question and asks it as a new thread, with three one-tap questions',()=>{
