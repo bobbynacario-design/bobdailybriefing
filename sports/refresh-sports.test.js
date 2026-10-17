@@ -158,6 +158,29 @@ test('ranks a winning NBA team above a losing team', function () {
   assert.equal(momentum[1].recentForm, 'LL');
 });
 
+// Opening night 2026-10-21: a team with one or two games has no trend yet, so
+// the label waits for three. The score stays, because projections gate on
+// recentGames themselves.
+test('holds NBA momentum labels until a team has played three games', function () {
+  var games = [
+    normNbaGame(event('1', '2026-10-21T00:00:00Z', 'post', 'Knicks', 'Celtics', '130', '90')),
+    normNbaGame(event('2', '2026-10-21T00:00:00Z', 'post', 'Lakers', 'Suns', '101', '100')),
+    normNbaGame(event('3', '2026-10-23T00:00:00Z', 'post', 'Lakers', 'Suns', '110', '100')),
+    normNbaGame(event('4', '2026-10-25T00:00:00Z', 'post', 'Lakers', 'Suns', '108', '100'))
+  ];
+  var momentum = buildNbaMomentum(games, []);
+  var byTeam = Object.fromEntries(momentum.map(function (row) { return [row.team, row]; }));
+  assert.equal(byTeam.Knicks.label, 'EARLY');
+  assert.equal(byTeam.Knicks.recentGames, 1);
+  assert.ok(byTeam.Knicks.score > 72, 'score is kept for projections');
+  assert.match(byTeam.Knicks.note, /Only 1 game played; the label waits for 3/);
+  assert.equal(byTeam.Celtics.label, 'EARLY');
+  assert.equal(byTeam.Lakers.label, 'RISING');
+  assert.equal(byTeam.Suns.label, 'FADING');
+  // Labelled teams lead the table, early ones follow, whatever their score.
+  assert.deepEqual(momentum.map(function (row) { return row.team; }), ['Lakers', 'Suns', 'Knicks', 'Celtics']);
+});
+
 test('uses ESPN ending-year season labels', function () {
   assert.equal(nbaSeasonYear(new Date('2026-07-18T00:00:00Z')), 2026);
   assert.equal(nbaSeasonYear(new Date('2026-10-01T00:00:00Z')), 2027);

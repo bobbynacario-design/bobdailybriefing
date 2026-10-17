@@ -355,6 +355,8 @@ function nbaPointDiff(match, team) {
   return match.home === team ? match.score.home - match.score.away : match.score.away - match.score.home;
 }
 
+var NBA_MIN_LABEL_GAMES = 3;
+
 function buildNbaMomentum(matches, standings) {
   var byTeam = {};
   (matches || []).filter(function (m) { return m.status === 'FINISHED'; }).forEach(function (m) {
@@ -375,7 +377,10 @@ function buildNbaMomentum(matches, standings) {
     var standing = standingByTeam[team] || {};
     var seasonPct = standing.pct == null ? 0.5 : standing.pct;
     var score = Math.round(clamp((wins / Math.max(1, games.length)) * 65 + clamp(50 + averageDiff * 2.5, 0, 100) * 0.25 + seasonPct * 100 * 0.10, 0, 100));
-    var label = score >= 72 ? 'RISING' : (score >= 58 ? 'WATCH' : (score <= 38 ? 'FADING' : 'STEADY'));
+    // One or two games cannot carry RISING/FADING (a 1-0 opener read 85,
+    // RISING). The score stays for projections, which apply their own 3-game rule.
+    var early = games.length < NBA_MIN_LABEL_GAMES;
+    var label = early ? 'EARLY' : (score >= 72 ? 'RISING' : (score >= 58 ? 'WATCH' : (score <= 38 ? 'FADING' : 'STEADY')));
     return {
       team: team,
       score: score,
@@ -385,14 +390,16 @@ function buildNbaMomentum(matches, standings) {
       recentWins: wins,
       averagePointDiff: round2(averageDiff),
       seasonPct: round2(seasonPct),
-      note: label === 'RISING'
-        ? 'Recent wins and point differential are both trending positively.'
-        : (label === 'FADING'
-          ? 'Recent results and scoring margin are below the league momentum line.'
-          : 'Recent form is mixed and needs another result for confirmation.')
+      note: early
+        ? 'Only ' + games.length + (games.length === 1 ? ' game' : ' games') + ' played; the label waits for ' + NBA_MIN_LABEL_GAMES + '.'
+        : (label === 'RISING'
+          ? 'Recent wins and point differential are both trending positively.'
+          : (label === 'FADING'
+            ? 'Recent results and scoring margin are below the league momentum line.'
+            : 'Recent form is mixed and needs another result for confirmation.'))
     };
   }).sort(function (a, b) {
-    return b.score - a.score || b.averagePointDiff - a.averagePointDiff;
+    return (a.label === 'EARLY') - (b.label === 'EARLY') || b.score - a.score || b.averagePointDiff - a.averagePointDiff;
   });
 }
 
