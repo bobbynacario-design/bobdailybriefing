@@ -255,6 +255,13 @@ test("life data: the server reads his calendar, commitments, PokerHQ picks and F
   assert.ok(pse["pse:watch:bdo"].detail.startsWith("close PHP 113.50 on Wed 30 Sep"), pse["pse:watch:bdo"].detail);
   assert.ok(pse["pse:paper:p1"].detail.includes("waiting for its entry close"));
   assert.ok(!Ask.askIndexInput(lifeDocs, boostCore, life).records.some((r) => r.source === "PSE"), "no PSE documents, no PSE records");
+  // His health: with the health cores, an overview always exists, so Ask can say Apple Health is not connected yet.
+  const healthLife = Object.assign({}, life, {health: require("./health-core"), checkup: require("./checkup-core"), lifestyle: require("./lifestyle-core")});
+  const bare = Ask.askIndexInput(lifeDocs, boostCore, healthLife).records.find((r) => r.id === "health:overview");
+  assert.ok(bare && bare.body.startsWith("No Apple Health readings have arrived yet"), bare && bare.body);
+  const withHealth = Ask.askIndexInput(Object.assign({}, lifeDocs, {healthDays: {days: {"2026-09-30": {steps: 7000, sleepMin: 420, sleepKind: "asleep"}}}}), boostCore, healthLife).records;
+  assert.ok(withHealth.some((r) => r.id === "health:day:2026-09-30" && r.detail === "7,000 steps · slept 7h00"));
+  assert.ok(Ask.originOf("Health", "health:research:x").startsWith("A health-research summary written for him by AI"), "research is marked AI-written");
 
   const index = Core.buildIndex(input);
   const registry = Ask.newRegistry();
@@ -286,6 +293,8 @@ test("the prompt says how to ask about his time and plans, and keeps PokerHQ and
   assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("Trips"), "Trips can be asked for by name");
   assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("PSE") && Ask.SEARCH_TOOL.description.includes("PSE watchlist and paper picks"));
   assert.ok(prompt.includes("A close is a completed PSE session on the date given, never a live price") && prompt.includes("never tell him to buy, sell or hold"), "PSE answers report, never advise");
+  assert.ok(prompt.includes("an association is never a cause") && prompt.includes("Never diagnose or advise treatment"), "health answers stay within the records");
+  assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("Health"));
 });
 
 test("refs written together are split, so each is kept, listed and checked", () => {

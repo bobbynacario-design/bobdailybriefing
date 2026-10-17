@@ -35,6 +35,9 @@ const DaybookCalendarCore = require("./daybook-calendar-core");
 const FlightsCore = require("./flights-core");
 // Apple Health from an iOS Shortcut: daily rows and the private link.
 const HealthCore = require("./health-core");
+// Ask reads his check-up schedule and check-in answers (lib twins, synced).
+const CheckupCore = require("./checkup-core");
+const LifestyleCore = require("./lifestyle-core");
 const HealthLink = require("./health-link");
 const HealthResearch = require("./health-research");
 const PsePaper = require("./pse-paper");
@@ -944,7 +947,7 @@ async function loadAskIndex(db, uid) {
   const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
     profile, accounts, usage, goals, radarJournal,
     calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-    tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper] = await Promise.all([
+    tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch] = await Promise.all([
     own(BRIEFINGS_COLL, 100), own(REPORTS_COLL, 50), own(JOURNAL_COLL, 100),
     get(COMMAND_PREF_PREFIX + uid), get("dossiers-" + uid), get("meeting-briefs-" + uid), get("weekly-mirror-" + uid), get("daily-boost-" + uid),
     get("grounding-latest"), latest("news"), latest("radar"), latest("miro"), latest("sports"),
@@ -962,13 +965,15 @@ async function loadAskIndex(db, uid) {
     get("trips-booked-" + uid), get("flights-watch-" + uid), get("exact-prices-" + uid), get("hotel-trips-" + uid), get("hotel-stays-" + uid),
     // His PSE watchlist (closes come from radar-ph, read above as fx) and his paper record.
     get("pse-watch-" + uid), PsePaper.listPicks(db, uid).catch(() => null),
+    // His health: Apple Health days, Health basics, check-in answers, this week's research.
+    get("health-" + uid), get("health-basics-" + uid), get("lifestyle-" + uid), get("health-research-" + uid),
   ]);
   const index = IntelligenceSearchCore.buildIndex(Ask.askIndexInput(
     {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
       profile, accounts, usage, goals, radarJournal, todayKey: phtDateKey(), now: Date.now(),
       calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-      tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper}, DailyBoostCore,
-    {core: LifeRecordsCore, calendar: DaybookCalendarCore, flights: FlightsCore, review: WeeklyReviewCore}));
+      tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch}, DailyBoostCore,
+    {core: LifeRecordsCore, calendar: DaybookCalendarCore, flights: FlightsCore, review: WeeklyReviewCore, health: HealthCore, checkup: CheckupCore, lifestyle: LifestyleCore}));
   askIndexCache = {uid, at: Date.now(), index};
   return index;
 }

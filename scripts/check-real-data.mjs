@@ -28,6 +28,9 @@ const Life = require('./life-records-core.js');
 const Calendar = require('./daybook-calendar-core.js');
 const Flights = require('./flights-core.js');
 const Review = require('./weekly-review-core.js');
+const HealthCore = require('./health-core.js');
+const CheckupCore = require('./checkup-core.js');
+const LifestyleCore = require('./lifestyle-core.js');
 const {initializeApp, cert} = require('firebase-admin/app');
 const {getFirestore} = require('firebase-admin/firestore');
 
@@ -71,20 +74,21 @@ const own = (name, n) => db.collection(name).where('uid', '==', uid).orderBy('sa
 const latest = async (prefix) => { const p = await get(COLL, prefix + '-latest'); return p && p.value ? get(COLL, prefix + '-' + p.value) : null; };
 const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports, profile, accounts, usage, goals, radarJournal,
   calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx, askDoc,
-  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper] = await Promise.all([
+  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch] = await Promise.all([
   own(COLL, 100), own('reports-bob', 50), own('journal-bob', 100), get(COLL, 'command-prefs-' + uid), get(COLL, 'dossiers-' + uid), get(COLL, 'meeting-briefs-' + uid),
   get(COLL, 'weekly-mirror-' + uid), get(COLL, 'daily-boost-' + uid), get(COLL, 'grounding-latest'), latest('news'), latest('radar'), latest('miro'), latest('sports'),
   get(COLL, 'profile-' + uid), get(COLL, 'accounts-' + uid), get(COLL, 'usage-' + uid), get(COLL, 'goals-' + uid), get(COLL, 'radar-journal'),
   get(COLL, 'calendar-events-' + uid), get(COLL, 'meetings-' + uid), get(COLL, 'review-' + uid), get('pokerhq-bob', 'tourneys'), get('pokerhq-bob', 'bankroll'),
   get('pokerhq-bob', 'sessions'), get(COLL, 'flights-latest'), get(COLL, 'flights-saved-' + uid), get(COLL, 'flights-history'), get(COLL, 'radar-ph'), get(COLL, 'ask-' + uid),
   get(COLL, 'trips-booked-' + uid), get(COLL, 'flights-watch-' + uid), get(COLL, 'exact-prices-' + uid), get(COLL, 'hotel-trips-' + uid), get(COLL, 'hotel-stays-' + uid),
-  get(COLL, 'pse-watch-' + uid), require('./pse-paper.js').listPicks(db, uid).catch(() => null)]);
+  get(COLL, 'pse-watch-' + uid), require('./pse-paper.js').listPicks(db, uid).catch(() => null),
+  get(COLL, 'health-' + uid), get(COLL, 'health-basics-' + uid), get(COLL, 'lifestyle-' + uid), get(COLL, 'health-research-' + uid)]);
 
 // Ask's index, built exactly as the askDaybook function builds it.
 const docs = {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports, profile, accounts, usage, goals, radarJournal,
   todayKey: today, now, calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper};
-const index = Search.buildIndex(Ask.askIndexInput(docs, DailyBoostCore, {core: Life, calendar: Calendar, flights: Flights, review: Review}));
+  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch};
+const index = Search.buildIndex(Ask.askIndexInput(docs, DailyBoostCore, {core: Life, calendar: Calendar, flights: Flights, review: Review, health: HealthCore, checkup: CheckupCore, lifestyle: LifestyleCore}));
 const byId = Object.fromEntries(index.map((i) => [i.id, i]));
 check('Ask index builds under its cap', index.length > 0 && index.length < 5000, index.length + ' records');
 Life.OVERVIEW_IDS.forEach((id) => check('Overview present: ' + id, byId[id], byId[id] ? '' : 'missing'));
@@ -252,6 +256,29 @@ if (fl && flights && Array.isArray(flights.offers)) {
     pseRecs.length + ' records, ' + quoted.length + ' figures' + (unknown.length ? '; not found: ' + unknown.join(', ') : ''));
   const ov = byId['pse:overview'];
   if (ov) check('PSE overview names every watched stock and paper pick', [...watched, ...((psePaper && psePaper.picks) || []).map((p) => p.pick && p.pick.symbol)].filter(Boolean).every((s) => ov.body.includes(s)), watched.length + ' watched');
+}
+
+// Health (Ask): with no Apple Health readings the overview says so plainly;
+// with readings, its 7-day averages are worked out here by hand from the raw
+// days (steps and resting heart rate rounded, sleep as hours and minutes).
+{
+  const ov = byId['health:overview'];
+  check('Overview present: health:overview (Ask can say what is and is not connected)', !!ov, ov ? ov.detail : 'missing');
+  if (ov) {
+    const days = (healthDays && healthDays.days) || {};
+    const week = Object.keys(days).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today && (Date.parse(today) - Date.parse(d)) / 86400000 <= 6);
+    const mean = (f) => { const v = week.map((d) => days[d] && days[d][f]).filter((x) => typeof x === 'number' && Number.isFinite(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    if (!week.length) check('Health overview: no readings in the last 7 days, and it says so', /No Apple Health readings have arrived yet|sent nothing in the last two weeks|of the last 7 days have readings/.test(ov.body), ov.body.slice(0, 160));
+    else {
+      const want = [];
+      const st = mean('steps'), sl = mean('sleepMin'), hr = mean('restingHr');
+      if (st != null) want.push('steps average ' + Math.round(st).toLocaleString('en-PH') + ' a day');
+      if (sl != null) want.push('sleep average ' + Math.floor(Math.round(sl) / 60) + 'h' + String(Math.round(sl) % 60).padStart(2, '0') + ' a night');
+      if (hr != null) want.push('resting heart rate average ' + Math.round(hr));
+      check('Health overview: 7-day averages match a recomputation by hand', want.every((w) => ov.body.includes(w)), want.filter((w) => !ov.body.includes(w)).join('; ') || want.join('; '));
+    }
+    if (!healthBasics) check('Health overview: no Health basics, so no check-up schedule is claimed', ov.body.includes('Health basics are not filled in'), ov.body.slice(0, 120));
+  }
 }
 
 // Hotels: the shared document holds only scouted fare dates; your trips and

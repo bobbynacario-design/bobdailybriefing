@@ -43,17 +43,17 @@ const LOOKUP_LIMIT = 12;
 // lookups cheap; a Radar name is short and every labelled part of it answers
 // some question (the score's reason, catalyst, read, levels, tripwire).
 const CLIP_TEXT = 450;
-const CLIP_FOR = {Radar: 1200, Calendar: 600, Commitments: 900, Poker: 600, Flights: 600, Trips: 900, PSE: 1200};
+const CLIP_FOR = {Radar: 1200, Calendar: 600, Commitments: 900, Poker: 600, Flights: 600, Trips: 900, PSE: 1200, Health: 900};
 // The overviews of his life data are computed across all their records
 // (lib/life-records-core.js), so they run long and are returned whole,
 // without a matched-word excerpt repeating part of them.
-const LIFE_OVERVIEWS = ["calendar:overview", "commitments:overview", "poker:overview", "flights:overview", "trips:overview", "pse:overview"];
+const LIFE_OVERVIEWS = ["calendar:overview", "commitments:overview", "poker:overview", "flights:overview", "trips:overview", "pse:overview", "health:overview"];
 const CLIP_OVERVIEW = 2400;
 const MAX_THREAD = 3;
 const KEEP_ANSWERS = 20;
 // The search index's source names, as the lookup tool offers them.
 const ASK_SOURCES = ["Profile", "Activity", "Briefing", "News", "Research", "Decisions", "Reflections", "Evidence", "Dossier", "Meeting",
-  "Weekly read", "Numbers", "Radar", "Markets", "Sports", "Calendar", "Commitments", "Poker", "Flights", "Trips", "PSE"];
+  "Weekly read", "Numbers", "Radar", "Markets", "Sports", "Calendar", "Commitments", "Poker", "Flights", "Trips", "PSE", "Health"];
 // What he has told Daybook about himself, and what it has picked up from him
 // (the About you page). Few records, so a lookup may read them all at once.
 const ABOUT_SOURCES = ["Profile", "Activity"];
@@ -96,6 +96,7 @@ const ORIGIN = {
   Flights: "A fare he saved on Flights (an airline's advertised sample, not a booking)",
   Trips: "His own Trips: a trip he booked, a trip the app prices for his time off or a poker trip (exact-date Google Flights price and hotel rooms), or a fare watch he set",
   PSE: "His PSE watchlist (a stock he chose to watch, with its last completed close), a PSE Edge notice for one of those stocks, or a paper pick he recorded (his thesis; the return is the app's price-only paper record)",
+  Health: "His Apple Health readings for a day (the numbers his phone sent)",
 };
 // A record whose kind is not its source's: the Radar overview is computed by
 // the app across the scan, not one name and not AI-written.
@@ -107,8 +108,11 @@ const ORIGIN_BY_ID = {
   "flights:overview": "An overview of the Flights scout computed by the app: fares for his time off, cheapest cities and poker trips (not AI-written)",
   "trips:overview": "An overview of his Trips computed by the app: booked trips and their checklists, flight and hotel prices for his planned trips with totals, and his fare watches (not AI-written)",
   "pse:overview": "An overview of his PSE watchlist and paper picks computed by the app from completed closes and his paper record (not AI-written)",
+  "health:overview": "An overview of his health records computed by the app: Apple Health averages over the last 7 days, check-ups due from his Health basics, his check-in answers and this week's research headlines (not AI-written)",
 };
 function originOf(source, id) {
+  // This week's health research is written by AI from a published study.
+  if (/^health:research:/.test(id || "")) return "A health-research summary written for him by AI from a published study; it states what the study can show (association, cause or guidance)";
   return ORIGIN_BY_ID[id] || ORIGIN[source] || "An item from his app (" + source + ")";
 }
 
@@ -120,7 +124,7 @@ const SEARCH_TOOL = {
   name: "search_daybook",
   description: "Look up Bob's own Daybook: his profile and what the app has picked up from him (Profile, Activity), his briefings, " +
     "news he was shown, research reports, decisions, notes, saved evidence, dossiers, meeting briefs, weekly reads, Your numbers, " +
-    "the Radar, Markets and Sports feeds, and his life data: his calendar (events, leave, holidays), weekly commitments, PokerHQ ★ picks, Flights (the fare scout) and Trips (his booked trips, flight and hotel prices for his planned trips, his fare watches), and his PSE watchlist and paper picks (PSE). Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
+    "the Radar, Markets and Sports feeds, and his life data: his calendar (events, leave, holidays), weekly commitments, PokerHQ ★ picks, Flights (the fare scout) and Trips (his booked trips, flight and hotel prices for his planned trips, his fare watches), his PSE watchlist and paper picks (PSE), and his health (Health: Apple Health readings, check-ups due, check-in answers, this week's health research). Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
   parameters: {
     type: "object",
     properties: {
@@ -324,6 +328,7 @@ function buildAskPrompt({question, today, accounts, web}) {
     "- Flights fares are airlines' advertised samples on the airlines' own dates, checked on the scout's date: \"the scout saw Taipei from ≈ PHP … on …\", never that a seat is available at that price. Exact dates are searched with the Google Flights links on Flights.",
     "- Trips prices are checks, not bookings: a Google Flights price is for one traveller, economy return, on those exact dates, as checked on the date given; a hotel price is the cheapest room a night for the stated guests, from the site named; a total is the app's own sum, quoted as given with what it includes. A trip is booked only when the record says \"Booked trip\".",
     "- A question about his PSE stocks, watchlist or paper picks: look up source PSE with the term \"overview\" plus the question's own words. A close is a completed PSE session on the date given, never a live price; a paper pick's thesis is his own words, and its return is the app's price-only paper record with assumed costs, not a real trade. Say what the records show; never tell him to buy, sell or hold.",
+    "- A question about his health, sleep, steps, weight or check-ups: look up source Health with the term \"overview\" plus the question's own words. Apple Health numbers are what his phone sent (sleep is time in bed unless the record says slept); if the overview says no readings have arrived, say so and that the Shortcut is set up on About you. A check-up is due by the schedule from his Health basics and the guideline it names. A research item is an AI summary of one study: keep its \"shows\" (an association is never a cause). Never diagnose or advise treatment; for a worrying reading, say to talk to his doctor.",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
     "  - His profile, his own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\", \"you describe yourself as…\" is right.",
     "  - Activity is what he did in the app (votes, open calls, what he opens): describe it as what he did, never as what he said.",
@@ -550,7 +555,9 @@ function lifeRecords(docs, life) {
       exact: docs.exactPrices || null, hotelTrips: docs.hotelTrips || null, hotelStays: docs.hotelStays || null, latest: docs.flights || null, fx: docs.fx || null},
     // His PSE watchlist (closes on radar-ph's board, the same snapshot as fx) and paper picks.
     pse: docs.pseWatch || docs.psePaper ? {watch: docs.pseWatch || null, board: docs.fx || null, paper: docs.psePaper || null} : null,
-  }, {calendar: life.calendar, flights: life.flights, review: life.review});
+    // His health, always passed so Ask can say when Apple Health is not connected yet.
+    health: life.health ? {apple: docs.healthDays || null, basics: docs.healthBasics || null, lifestyle: docs.lifestyle || null, research: docs.healthResearch || null} : null,
+  }, {calendar: life.calendar, flights: life.flights, review: life.review, health: life.health, checkup: life.checkup, lifestyle: life.lifestyle});
 }
 
 // One lookup. With no terms, it reads every Profile and Activity record (they
