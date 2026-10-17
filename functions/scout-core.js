@@ -61,6 +61,13 @@
   // confirmed, not-found, or unchecked when the page could not be read (no
   // page, or too few words: an app shell that draws itself in the browser).
   function dateCheck(page,iso){return !date(iso)?'':typeof page!=='string'||page.length<200?'unchecked':dateOnPage(page,iso)?'confirmed':'not-found';}
+  // A community is a pick only while it meets: a meeting in the last 60 days
+  // or one in the next 90 (18 Oct: one group had not met since August's end
+  // and another "community" was a PHP 5,000 membership page). Join, sign-up
+  // and membership pages are never the link.
+  var SIGNUP=/\/(?:become-?a-?member|membership|join(?:-us|-now)?|sign-?up|register|registration|apply|pricing|plans|subscribe|checkout)(?:[\/.?#]|$)/i;
+  function shift(day,n){return new Date(Date.parse(day+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);}
+  function active(v,day){return !!((v.lastActive&&v.lastActive<=day&&v.lastActive>=shift(day,-60))||(v.nextActive&&v.nextActive>=day&&v.nextActive<=shift(day,90)));}
   function theme(v){var hay=v.title+' '+v.topic+' '+v.organizer;return POKER_TAG.test(hay)||POKER_WORDS.test(hay)?'poker':AI_TAG.test(hay)||AI_WORDS.test(hay)?'ai':'';}
   function clean(raw,allowed,day){
     var seen={},out=[],ai=0;
@@ -77,6 +84,12 @@
         cost:text(v.cost,140)||'Cost not listed',organizer:text(v.organizer,140),why:text(v.why,400),topic:text(v.topic,100)};
       if(start&&CHECKS.indexOf(v.dateCheck)>=0)item.dateCheck=v.dateCheck;
       if(deadline&&CHECKS.indexOf(v.deadlineCheck)>=0)item.deadlineCheck=v.deadlineCheck;
+      if(item.kind==='community'){
+        if(SIGNUP.test(new URL(source).pathname))return;
+        item.lastActive=date(v.lastActive);item.nextActive=date(v.nextActive);
+        if(CHECKS.indexOf(v.activityCheck)>=0)item.activityCheck=v.activityCheck;
+        if(day&&!active(item,day))return;
+      }
       var kind=theme(item);
       if(kind==='poker'||(kind==='ai'&&++ai>1))return;
       seen[source]=true;
@@ -87,7 +100,7 @@
   function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16);}
   function expired(v,day){return !!((v.end&&v.end<day)||(v.deadline&&v.deadline<day));}
   function due(items,choices,day){var until=new Date(Date.parse(day+'T00:00:00Z')+7*86400000).toISOString().slice(0,10);return items.filter(function(v){var c=choices[v.id]||{};return (c.saved||c.interested)&&!c.hidden&&!expired(v,day)&&v.deadline&&v.deadlineCheck!=='not-found'&&v.deadline>=day&&v.deadline<=until;}).sort(function(a,b){return a.deadline.localeCompare(b.deadline);}).slice(0,3);}
-  var api={lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,theme:theme,clean:clean,expired:expired,due:due};
+  var api={lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,theme:theme,clean:clean,expired:expired,due:due};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.ScoutCore=api;
 })(typeof window!=='undefined'?window:globalThis);

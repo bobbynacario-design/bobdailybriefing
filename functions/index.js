@@ -23,9 +23,8 @@ async function makeScout(db, uid) {
   let raw;try{raw=parseBriefing(extractText(json));}catch(e){throw new HttpsError('internal','Scout returned an unreadable shortlist. Your previous shortlist is kept.');}
   if(!raw||!Array.isArray(raw.items))throw new HttpsError('internal','Scout returned no valid shortlist.');
   const allowed=searchUrls(json).map(ScoutCore.url).filter(Boolean);
-  const items=ScoutCore.clean(raw.items,allowed,phtDateKey());
+  const items=await Scout.checkDates(ScoutCore.clean(raw.items,allowed,phtDateKey()),fetch);
   if(raw.items.length&&!items.length)throw new HttpsError('internal','No opportunities passed source and date checks. Your previous shortlist is kept.');
-  await Scout.checkDates(items,fetch);
   const result={uid,kind:'scout-latest',items,generatedAt:new Date().toISOString(),week:WeeklyReviewCore.weekStart(phtDateKey())};
   await db.collection(BRIEFINGS_COLL).doc('scout-latest-'+uid).set(result);
   return result;

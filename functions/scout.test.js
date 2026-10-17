@@ -7,7 +7,7 @@ const Core=require('./scout-core');
 test('Scout search uses the work profile, bounded preferences and explicit interest feedback',()=>{
   const out=prompt(null,{interests:'Photography',geography:'Metro Manila'},{a:{more:true,item:{topic:'Museums'}},b:{saved:true,item:{topic:'Not requested'}}},'2026-10-18');
   assert.match(out,/Photography/);assert.match(out,/Museums/);assert.doesNotMatch(out,/Not requested/);
-  assert.match(out,/2026-10-18/);assert.match(out,/Communities may have blank dates/);assert.match(out,/Do not invent dates/);
+  assert.match(out,/2026-10-18/);assert.match(out,/A community counts only when its own page shows a meeting/);assert.match(out,/Do not invent dates/);
 });
 test('Scout saves only search-returned sources and keeps the existing feed when all results fail validation',async()=>{
   const index=fs.readFileSync(__dirname+'/index.js','utf8');
@@ -49,4 +49,15 @@ test('Scout reads each pick page from public https hosts only and records what i
   assert.equal(items[0].deadlineCheck,'confirmed');
   assert.ok(!calls.some(u=>/localhost|169\.254|group/.test(u)),'private hosts and undated picks are never fetched');
   assert.ok(publicHost('anziif.com'));assert.ok(!publicHost('metadata.google.internal'));assert.ok(!publicHost('10.0.0.1'));assert.ok(!publicHost('[::1]'));
+});
+test('Scout drops a community whose readable page does not show its meeting date, and asks for meeting dates',async()=>{
+  const {checkDates}=require('./scout');
+  const words=' members'.repeat(40);
+  const pages={'https://meetup.example/dep':'<h2>Past events</h2><p>Mon, Aug 31 · 7:00 PM PHT · Online</p>'+words,'https://group.example/quiet':'<p>About us</p>'+words};
+  const fetchImpl=async url=>{if(url.includes('fb'))return {ok:false,headers:{get:()=>'text/html'},text:async()=>''};return {ok:true,headers:{get:()=>'text/html'},text:async()=>pages[url]||''};};
+  const kept=await checkDates([{url:'https://meetup.example/dep',kind:'community',lastActive:'2026-08-31'},{url:'https://group.example/quiet',kind:'community',lastActive:'2026-10-01'},
+    {url:'https://fb.example/group',kind:'community',nextActive:'2026-11-12'}],fetchImpl,1000);
+  assert.deepEqual(kept.map(v=>[v.url,v.activityCheck]),[['https://meetup.example/dep','confirmed'],['https://fb.example/group','unchecked']]);
+  const out=prompt(null,null,{},'2026-10-18',[]);
+  assert.match(out,/"lastActive"/);assert.match(out,/last 60 days or one scheduled in the next 90/);assert.match(out,/never a membership application, join, sign-up/);
 });
