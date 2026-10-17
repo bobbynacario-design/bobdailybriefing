@@ -24,4 +24,9 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       - run: npm --prefix flights ci
+      - name: Install the standard Chromium renderer
+        working-directory: flights
+        run: npx playwright install --with-deps chromium
       - run: node flights/refresh-clothing.js
+        env:
+          CLOTHING_BROWSER: '1'

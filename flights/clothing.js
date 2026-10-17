@@ -2,11 +2,14 @@ import {load} from 'cheerio';
 import {createHash} from 'node:crypto';
 export const SOURCES=[
   {id:'hm',brand:'H&M',url:'https://www2.hm.com/en_ph/men/sale/view-all.html'},
-  {id:'uniqlo',brand:'UNIQLO',url:'https://www.uniqlo.com/ph/en/feature/limited-offers/men'},
+  {id:'uniqlo',brand:'UNIQLO',browser:true,url:'https://www.uniqlo.com/ph/en/feature/limited-offers/men'},
   {id:'nike',brand:'Nike',url:'https://www.nike.com/ph/w/mens-sale-3yaepz8nb9wznik1'},
-  {id:'adidas',brand:'Adidas',url:'https://www.adidas.com.ph/men-outlet'},
-  {id:'crocs',brand:'Crocs',url:'https://crocs.com.ph/collections/shop-sale',fetchUrl:'https://crocs.com.ph/collections/shop-sale/products.json?limit=100'},
-  {id:'zalora',brand:'ZALORA',url:'https://www.zalora.com.ph/sale/big-fashion-sale'},
+  {id:'adidas',brand:'Adidas',browser:true,url:'https://www.adidas.com.ph/men-deals-outlet'},
+  {id:'crocs',brand:'Crocs',browser:true,url:'https://crocs.com.ph/collections/shop-sale',fetchUrl:'https://crocs.com.ph/collections/shop-sale/products.json?limit=100'},
+  {id:'zalora-adidas',brand:'ZALORA · Adidas',browser:true,url:'https://www.zalora.com.ph/c/men/adidas/b-678'},
+  {id:'zalora-crocs',brand:'ZALORA · Crocs',browser:true,url:'https://www.zalora.com.ph/c/men/crocs/b-378'},
+  {id:'zalora-nike',brand:'ZALORA · Nike',browser:true,url:'https://www.zalora.com.ph/c/men/nike/b-126'},
+  {id:'zalora-hm',brand:'ZALORA · H&M',browser:true,url:'https://www.zalora.com.ph/c/men/hm/b-6777'},
   {id:'sm',brand:'Mall promotions',url:'https://www.smsupermalls.com/smdeals'}
 ];
 const id=s=>createHash('sha256').update(s).digest('hex').slice(0,24);
