@@ -70,16 +70,19 @@ const own = (name, n) => db.collection(name).where('uid', '==', uid).orderBy('sa
   .then((s) => s.docs.map((d) => Object.assign({id: d.id}, d.data()))).catch(() => []);
 const latest = async (prefix) => { const p = await get(COLL, prefix + '-latest'); return p && p.value ? get(COLL, prefix + '-' + p.value) : null; };
 const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports, profile, accounts, usage, goals, radarJournal,
-  calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx, askDoc] = await Promise.all([
+  calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx, askDoc,
+  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays] = await Promise.all([
   own(COLL, 100), own('reports-bob', 50), own('journal-bob', 100), get(COLL, 'command-prefs-' + uid), get(COLL, 'dossiers-' + uid), get(COLL, 'meeting-briefs-' + uid),
   get(COLL, 'weekly-mirror-' + uid), get(COLL, 'daily-boost-' + uid), get(COLL, 'grounding-latest'), latest('news'), latest('radar'), latest('miro'), latest('sports'),
   get(COLL, 'profile-' + uid), get(COLL, 'accounts-' + uid), get(COLL, 'usage-' + uid), get(COLL, 'goals-' + uid), get(COLL, 'radar-journal'),
   get(COLL, 'calendar-events-' + uid), get(COLL, 'meetings-' + uid), get(COLL, 'review-' + uid), get('pokerhq-bob', 'tourneys'), get('pokerhq-bob', 'bankroll'),
-  get('pokerhq-bob', 'sessions'), get(COLL, 'flights-latest'), get(COLL, 'flights-saved-' + uid), get(COLL, 'flights-history'), get(COLL, 'radar-ph'), get(COLL, 'ask-' + uid)]);
+  get('pokerhq-bob', 'sessions'), get(COLL, 'flights-latest'), get(COLL, 'flights-saved-' + uid), get(COLL, 'flights-history'), get(COLL, 'radar-ph'), get(COLL, 'ask-' + uid),
+  get(COLL, 'trips-booked-' + uid), get(COLL, 'flights-watch-' + uid), get(COLL, 'exact-prices-' + uid), get(COLL, 'hotel-trips-' + uid), get(COLL, 'hotel-stays-' + uid)]);
 
 // Ask's index, built exactly as the askDaybook function builds it.
 const docs = {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports, profile, accounts, usage, goals, radarJournal,
-  todayKey: today, now, calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx};
+  todayKey: today, now, calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
+  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays};
 const index = Search.buildIndex(Ask.askIndexInput(docs, DailyBoostCore, {core: Life, calendar: Calendar, flights: Flights, review: Review}));
 const byId = Object.fromEntries(index.map((i) => [i.id, i]));
 check('Ask index builds under its cap', index.length > 0 && index.length < 5000, index.length + ' records');
@@ -178,10 +181,54 @@ if (fl && flights && Array.isArray(flights.offers)) {
     quoted.length + ' quoted' + (unknown.length ? '; not found: ' + unknown.join(', ') : ''));
 }
 
+// Trips (Ask): every peso figure in the Trips records is one the app holds —
+// a Google Flights price or its usual range, a watch target, a scouted fare
+// (foreign ones at the snapshot rate), a hotel's cheapest room worked out by
+// hand from the raw rates — or is worked out by hand from those: a fare over
+// its target, and a trip total (one traveller: flight + room × nights; two
+// sharing: two flights + room × nights).
+{
+  const tripsRecs = index.filter((i) => i.source === 'Trips');
+  const exactRows = Object.values((exactPrices && exactPrices.items) || {}).filter((e) => e && e.result && e.result.price > 0);
+  const targets = Object.values((flightsWatch && flightsWatch.items) || {}).map((w) => Math.round(Number(w && w.target))).filter((n) => n > 0);
+  const rates = (fx && fx.fx) || {};
+  const scouted = ((flights && flights.offers) || []).map((o) => {
+    if (o.currency === 'PHP') return Math.round(o.amount);
+    const r = rates[String(o.currency || '').toLowerCase() + 'php'];
+    return r && Number(r.level) > 0 ? Math.round(o.amount * Number(r.level)) : null;
+  }).filter((n) => n != null);
+  const fresh = fx && /^\d{4}-\d{2}-\d{2}$/.test(fx.asOf || '') && (Date.parse(today) - Date.parse(fx.asOf)) / 86400000 < 4;
+  const usd = fresh ? Number(rates.usdphp && rates.usdphp.level) : 0;
+  const rooms = {};
+  ((hotelStays && hotelStays.trips) || []).filter((t) => t.pricedAt && now - Date.parse(t.pricedAt) <= 40 * 3600000).forEach((t) => {
+    const lows = (t.quotes || []).map((q) => {
+      const h = (t.hotels || []).find((x) => x.key === q.key) || {};
+      const ok = (q.rates || []).map((r) => r.rate).filter((r) => r > 0 && !(h.typicalMax > 0 && r > h.typicalMax * 2.5));
+      return ok.length ? Math.min(...ok) : null;
+    }).filter((n) => n != null);
+    if (lows.length && usd > 0) rooms[t.id] = {php: Math.round(Math.min(...lows) * usd), nights: Math.round((Date.parse(t.checkOut) - Date.parse(t.checkIn)) / 86400000), t};
+  });
+  const allowed = new Set([...exactRows.flatMap((e) => [e.result.price, e.result.typical && e.result.typical.low, e.result.typical && e.result.typical.high]), ...targets, ...scouted,
+    ...Object.values(rooms).map((r) => r.php)].filter((n) => n > 0).map(Math.round));
+  [...exactRows.map((e) => e.result.price), ...scouted].forEach((p) => targets.forEach((t) => { if (p > t) allowed.add(Math.round(p - t)); }));
+  // A priced stay has no airports; the planned trip it prices has them.
+  const airportsOf = (id) => (((hotelTrips && hotelTrips.trips) || []).find((t) => t && t.id === id) || {}).airports || [];
+  Object.values(rooms).forEach((r) => exactRows.filter((e) => airportsOf(r.t.id).includes(e.destination) && e.depart === r.t.checkIn && e.ret === r.t.checkOut)
+    .forEach((e) => { allowed.add(Math.round(e.result.price + r.php * r.nights)); allowed.add(Math.round(e.result.price * 2 + r.php * r.nights)); }));
+  const quoted = tripsRecs.flatMap((i) => [...(i.detail + ' ' + i.body).matchAll(/PHP ([\d,]+)(?:–([\d,]+))?/g)].flatMap((m) => [m[1], m[2]].filter(Boolean).map((v) => Number(v.replace(/,/g, '')))));
+  const unknown = quoted.filter((n) => !allowed.has(n));
+  check('Trips: every peso figure is a price the app holds, or a total or gap worked out by hand', tripsRecs.length && !unknown.length,
+    tripsRecs.length + ' records, ' + quoted.length + ' figures' + (unknown.length ? '; not found: ' + unknown.join(', ') : ''));
+  const ov = byId['trips:overview'];
+  const cities = [...Object.values((flightsWatch && flightsWatch.items) || {}).map((w) => w && w.city), ...((hotelTrips && hotelTrips.trips) || []).filter((t) => t && t.checkOut >= today).map((t) => t.city)].filter(Boolean);
+  if (ov) check('Trips overview names every fare watch and every planned trip', cities.every((c) => ov.body.includes(c)), cities.filter((c) => !ov.body.includes(c)).join(', ') || cities.length + ' named');
+}
+
 // Hotels: the shared document holds only scouted fare dates; your trips and
 // their prices live in your own documents; the cheapest room the app shows
 // is recomputed from the raw site rates (whole-stay totals left out).
-const [hotelsShared, hotelTrips, hotelStays] = await Promise.all([get(COLL, 'hotels-latest'), get(COLL, 'hotel-trips-' + uid), get(COLL, 'hotel-stays-' + uid)]);
+// (hotelTrips and hotelStays were read with Ask's documents above.)
+const hotelsShared = await get(COLL, 'hotels-latest');
 if (hotelsShared && flights) {
   const fareDates = new Set((flights.offers || []).map((o) => o.departureDate + '|' + o.returnDate));
   // Domestic and Metro Manila cities also price the next two Friday–Sunday

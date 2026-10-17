@@ -3,7 +3,8 @@
   // His life data as search records, for Ask Daybook (and any Search that
   // wants them): his calendar (own events, account meetings, all-day entries
   // such as leave and holidays), his weekly commitments, the tournaments he
-  // starred in PokerHQ, and his Flights. Each part also gets an overview
+  // starred in PokerHQ, the Flights scout and his own Trips (booked trips,
+  // flight and hotel prices for his trips, fare watches). Each part also gets an overview
   // computed here across all its records, so a planning question is answered
   // from figures the app worked out rather than ones a model pieced together.
   // Pure: the caller reads the documents and passes the cores in.
@@ -12,8 +13,8 @@
   // is ever written into a record.
   var arr=function(v){return Array.isArray(v)?v:[];};
   var text=function(v,n){return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,n || 400);};
-  var OVERVIEW_IDS=['calendar:overview','commitments:overview','poker:overview','flights:overview'];
-  var SOURCES=['Calendar','Commitments','Poker','Flights'];
+  var OVERVIEW_IDS=['calendar:overview','commitments:overview','poker:overview','flights:overview','trips:overview'];
+  var SOURCES=['Calendar','Commitments','Poker','Flights','Trips'];
   var POKERHQ_URL='https://bobbynacario-design.github.io/pokerhq/';
   var ORIGIN_CITY={MNL:'Manila',CEB:'Cebu',CRK:'Clark'};
   var MONTH_NAMES='Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
@@ -279,6 +280,86 @@
     return out;
   }
 
+  // ---- Trips --------------------------------------------------------------
+  // His own trips on the Trips tab: trips he booked (with what is left to do
+  // before going), the trips Trips prices for him (time off and poker trips:
+  // the exact-date Google Flights price and the cheapest hotel room), and his
+  // fare watches against the scout's fares. The overview lines them up, with
+  // the trip totals worked out the way Trips works them out (tripTotal).
+  var TRIP_KIND={leave:'Time off','leave-fare':'Time off, fare dates',poker:'Poker trip'};
+  function tripsRecords(input,K,F,today,now) {
+    var trips=input.trips;
+    if(!trips || !F || !K)return [];
+    var L=labeller(F,now),fx=trips.fx || null,out=[],lines=[];
+    var nightsOf=function(a,b){return Math.round((Date.parse(b)-Date.parse(a))/86400000);};
+    var range=function(lo,hi){return 'PHP '+Math.round(lo).toLocaleString('en-PH')+'–'+Math.round(hi).toLocaleString('en-PH');};
+    var checkedDay=function(at){var t=Date.parse(at || '');return Number.isFinite(t)?L.day(K.pht(t).day):'';};
+    // The exact-date Google Flights prices (one adult, economy, return).
+    var exact=Object.keys((trips.exact && trips.exact.items) || {}).map(function(k){return trips.exact.items[k];})
+      .filter(function(e){return e && e.result && e.result.price>0 && K.date(e.depart) && K.date(e.ret);});
+    var exactFor=function(airports,depart,ret){return exact.filter(function(e){return airports.indexOf(e.destination)>=0 && e.depart===depart && e.ret===ret;})
+      .sort(function(a,b){return a.result.price-b.result.price;})[0] || null;};
+    var flightText=function(e){var r=e.result;return peso(r.price)+' per traveller on Google Flights ('+[r.airline,r.stops===0?'nonstop':r.stops>0?r.stops+(r.stops===1?' stop':' stops'):''].filter(Boolean).join(', ')+
+      ' from '+(ORIGIN_CITY[e.origin] || e.origin)+(r.level?'; Google rates this price '+text(r.level,20)+(r.typical && r.typical.low>0 && r.typical.high>0?', the usual range being '+range(r.typical.low,r.typical.high):''):'')+(checkedDay(e.checkedAt)?'; checked '+checkedDay(e.checkedAt):'')+')';};
+    // The cheapest current hotel room for one of his priced trips.
+    var stays=trips.hotelStays && Array.isArray(trips.hotelStays.trips)?trips.hotelStays.trips:[];
+    var hotelFor=function(id){
+      var s=stays.filter(function(x){return x && x.id===id && Array.isArray(x.hotels);})[0];if(!s)return null;
+      var q=F.stayQuotes({city:s.city,hotels:s.hotels,stays:[s]},s.checkIn,s.checkOut,{currency:trips.hotelStays.currency || 'USD',adults:trips.hotelStays.adults || 2},fx,now);
+      return q && q.cheapest && q.cheapest.php>0?{name:text(q.cheapest.hotel.name,80),php:q.cheapest.php,site:q.cheapest.best && q.cheapest.best.site,adults:trips.hotelStays.adults || 2}:null;
+    };
+    // Trips he booked.
+    var booked=Object.keys(trips.booked || {}).map(function(id){var t=F.cleanBooked(trips.booked[id]);return t?{id:id,t:t}:null;}).filter(Boolean)
+      .sort(function(a,b){return a.t.depart.localeCompare(b.t.depart);});
+    booked.forEach(function(b) {
+      var t=b.t,end=t.ret || t.depart,st=F.bookedStatus(t,today),list=F.bookedChecklist(t,today),done=list.filter(function(i){return i.done;}).length;
+      var when=st.phase==='upcoming'?'in '+st.days+(st.days===1?' day':' days'):st.phase==='away'?'away now, day '+st.day+' of '+st.of:'trip over';
+      var todo=list.map(function(i){return i.text+' ('+(i.done?'done':i.state==='late'?'overdue since '+L.day(i.by):i.by?'by '+L.day(i.by):'any time')+')';});
+      out.push({id:'trips:booked:'+slug(b.id),source:'Trips',title:'Booked trip: '+t.city+', '+L.span(t.depart,end),
+        detail:[when,'from '+(ORIGIN_CITY[t.origin] || t.origin),text([t.airline,t.flight].filter(Boolean).join(' '),120),t.hotel?'staying at '+t.hotel:'no hotel entered',
+          t.travellers+(t.travellers===1?' traveller':' travellers'),done+' of '+list.length+' things done before going'].filter(Boolean).join(' · '),
+        body:'Before you go: '+todo.join('; ')+'.',meta:'Trips · booked · '+months(t.depart,end),page:'flights',ref:b.id,saved:t.depart,rank:0,entities:[]});
+      if(st.phase!=='done')lines.push('Booked: '+t.city+' '+L.span(t.depart,end)+', '+when+'; '+done+' of '+list.length+' things done before going'+
+        (list.some(function(i){return !i.done && i.state==='late';})?', with '+list.filter(function(i){return !i.done && i.state==='late';}).map(function(i){return i.text.split(/[(:.]/)[0].trim();}).join(', ')+' overdue':'')+'.');
+    });
+    if(!booked.length)lines.push('No booked trips are saved on Trips.');
+    // The trips Trips prices for him: his time off and his poker trips.
+    var planned=(trips.hotelTrips && Array.isArray(trips.hotelTrips.trips)?trips.hotelTrips.trips:[])
+      .filter(function(t){return t && typeof t.id==='string' && K.date(t.checkIn) && K.date(t.checkOut) && t.checkOut>=today && Array.isArray(t.airports);})
+      .sort(function(a,b){return a.checkIn.localeCompare(b.checkIn) || String(a.city).localeCompare(String(b.city));});
+    planned.forEach(function(t) {
+      var e=exactFor(t.airports,t.checkIn,t.checkOut),h=hotelFor(t.id),nights=nightsOf(t.checkIn,t.checkOut),kind=TRIP_KIND[t.kind] || 'Trip';
+      var total=e && h?F.tripTotal(e.result.price,h.php,nights):null;
+      var parts=[nights+(nights===1?' night':' nights'),e?'flight '+flightText(e):'no exact flight price checked yet',
+        h?'cheapest room '+peso(h.php)+' a night at '+h.name+' (one room, '+h.adults+' adults'+(h.site?', '+h.site:'')+')':'no current hotel price',
+        total?'together about '+peso(total.one)+' for one traveller, '+peso(total.two)+' for two sharing the room':''];
+      out.push({id:'trips:plan:'+slug(t.id),source:'Trips',title:kind+': '+text(t.city,60)+', '+L.span(t.checkIn,t.checkOut)+(t.label?' ('+text(t.label,80)+')':''),
+        detail:parts.filter(Boolean).join(' · '),body:t.venue?'Venue: '+text(t.venue,80)+'.':'',meta:'Trips · '+kind.toLowerCase()+' · '+months(t.checkIn,t.checkOut),
+        page:'flights',ref:t.id,saved:t.checkIn,rank:0,entities:[]});
+      lines.push(kind+' '+text(t.city,60)+' '+L.span(t.checkIn,t.checkOut)+(t.label?' ('+text(t.label,80)+')':'')+': '+parts.filter(Boolean).join('; ')+'.');
+    });
+    // His fare watches: the best scouted fare that fits, and Google's price on the dates the app chose.
+    var watches=Object.keys(trips.watches || {}).map(function(id) {
+      var r=trips.latest?F.fareWatch(trips.watches[id],trips.latest,fx,now):null,w=r?r.watch:F.cleanWatch(trips.watches[id]);
+      return w?{id:id,w:w,r:r,e:exact.filter(function(x){return x.reason==='watch' && x.ref===id;}).sort(function(a,b){return a.result.price-b.result.price;})[0] || null}:null;
+    }).filter(Boolean).sort(function(a,b){return a.w.city.localeCompare(b.w.city);});
+    watches.forEach(function(x) {
+      var w=x.w,best=x.r && x.r.best,vs=function(php){return php<=w.target?'at or under your target':peso(php-w.target)+' over your target';};
+      var parts=['target '+peso(w.target)+' per traveller','leaving '+L.span(w.from,w.to)+', '+w.minNights+'–'+w.maxNights+' nights'+(w.origin!=='All'?', from '+(ORIGIN_CITY[w.origin] || w.origin):''),
+        best?'best scouted fare ≈ '+peso(best.php)+' ('+[F.tripLabel(best.fare,now),text(best.fare.airline,60)].filter(Boolean).join(', ')+'), '+vs(best.php):'no scouted fare fits yet',
+        x.e?'for '+L.span(x.e.depart,x.e.ret)+': '+flightText(x.e)+', '+vs(x.e.result.price):''];
+      out.push({id:'trips:watch:'+slug(x.id),source:'Trips',title:'Fare watch: '+text(w.city,60)+' at '+peso(w.target)+' or less',detail:parts.filter(Boolean).join(' · '),body:'',
+        meta:'Trips · fare watch · '+months(w.from,w.to),page:'flights',ref:x.id,saved:w.from,rank:0,entities:[]});
+      lines.push('Fare watch '+text(w.city,60)+': '+parts.filter(Boolean).join('; ')+'.');
+    });
+    if(!watches.length)lines.push('No fare watches are set.');
+    out.push({id:'trips:overview',source:'Trips',title:'Trips overview: booked trips, flight and hotel prices for your trips, and fare watches',
+      detail:booked.length+' booked; '+planned.length+' planned '+(planned.length===1?'trip':'trips')+' priced for time off and poker; '+watches.length+' fare '+(watches.length===1?'watch':'watches')+
+        ' ('+watches.filter(function(x){return (x.r && x.r.hit) || (x.e && x.e.result.price<=x.w.target);}).length+' at or under target).',
+      body:lines.join(' '),meta:'Computed from Trips · as of '+today,page:'flights',ref:'',saved:'',rank:1000,entities:[]});
+    return out;
+  }
+
   // Every record, each part on its own so one unreadable document never
   // costs the others. input.today is the Manila date and input.now the time
   // (ms) fares are judged fresh at. cores: {calendar, flights, review}; in the
@@ -293,7 +374,8 @@
       guarded(function(){return calendarRecords(input,K,F,today,now);}),
       guarded(function(){return commitmentsRecords(input,W,F,today,now,K);}),
       guarded(function(){return pokerRecords(input,K,F,today,now);}),
-      guarded(function(){return flightsRecords(input,K,F,today,now);}));
+      guarded(function(){return flightsRecords(input,K,F,today,now);}),
+      guarded(function(){return tripsRecords(input,K,F,today,now);}));
   }
 
   var api={records:records,OVERVIEW_IDS:OVERVIEW_IDS,SOURCES:SOURCES,POKERHQ_URL:POKERHQ_URL};

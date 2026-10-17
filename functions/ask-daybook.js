@@ -43,17 +43,17 @@ const LOOKUP_LIMIT = 12;
 // lookups cheap; a Radar name is short and every labelled part of it answers
 // some question (the score's reason, catalyst, read, levels, tripwire).
 const CLIP_TEXT = 450;
-const CLIP_FOR = {Radar: 1200, Calendar: 600, Commitments: 900, Poker: 600, Flights: 600};
+const CLIP_FOR = {Radar: 1200, Calendar: 600, Commitments: 900, Poker: 600, Flights: 600, Trips: 900};
 // The overviews of his life data are computed across all their records
 // (lib/life-records-core.js), so they run long and are returned whole,
 // without a matched-word excerpt repeating part of them.
-const LIFE_OVERVIEWS = ["calendar:overview", "commitments:overview", "poker:overview", "flights:overview"];
+const LIFE_OVERVIEWS = ["calendar:overview", "commitments:overview", "poker:overview", "flights:overview", "trips:overview"];
 const CLIP_OVERVIEW = 2400;
 const MAX_THREAD = 3;
 const KEEP_ANSWERS = 20;
 // The search index's source names, as the lookup tool offers them.
 const ASK_SOURCES = ["Profile", "Activity", "Briefing", "News", "Research", "Decisions", "Reflections", "Evidence", "Dossier", "Meeting",
-  "Weekly read", "Numbers", "Radar", "Markets", "Sports", "Calendar", "Commitments", "Poker", "Flights"];
+  "Weekly read", "Numbers", "Radar", "Markets", "Sports", "Calendar", "Commitments", "Poker", "Flights", "Trips"];
 // What he has told Daybook about himself, and what it has picked up from him
 // (the About you page). Few records, so a lookup may read them all at once.
 const ABOUT_SOURCES = ["Profile", "Activity"];
@@ -94,6 +94,7 @@ const ORIGIN = {
   Commitments: "His own weekly commitments (his words) and the days he ticked",
   Poker: "A tournament he starred in PokerHQ (★ Playing These: his decision to play)",
   Flights: "A fare he saved on Flights (an airline's advertised sample, not a booking)",
+  Trips: "His own Trips: a trip he booked, a trip the app prices for his time off or a poker trip (exact-date Google Flights price and hotel rooms), or a fare watch he set",
 };
 // A record whose kind is not its source's: the Radar overview is computed by
 // the app across the scan, not one name and not AI-written.
@@ -103,6 +104,7 @@ const ORIGIN_BY_ID = {
   "commitments:overview": "An overview of his weekly commitments computed by the app, with his focus order (not AI-written)",
   "poker:overview": "An overview of his PokerHQ ★ picks computed by the app: buy-ins, PokerHQ's grades and series abroad (not AI-written)",
   "flights:overview": "An overview of the Flights scout computed by the app: fares for his time off, cheapest cities and poker trips (not AI-written)",
+  "trips:overview": "An overview of his Trips computed by the app: booked trips and their checklists, flight and hotel prices for his planned trips with totals, and his fare watches (not AI-written)",
 };
 function originOf(source, id) {
   return ORIGIN_BY_ID[id] || ORIGIN[source] || "An item from his app (" + source + ")";
@@ -116,7 +118,7 @@ const SEARCH_TOOL = {
   name: "search_daybook",
   description: "Look up Bob's own Daybook: his profile and what the app has picked up from him (Profile, Activity), his briefings, " +
     "news he was shown, research reports, decisions, notes, saved evidence, dossiers, meeting briefs, weekly reads, Your numbers, " +
-    "the Radar, Markets and Sports feeds, and his life data: his calendar (events, leave, holidays), weekly commitments, PokerHQ ★ picks and Flights. Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
+    "the Radar, Markets and Sports feeds, and his life data: his calendar (events, leave, holidays), weekly commitments, PokerHQ ★ picks, Flights (the fare scout) and Trips (his booked trips, flight and hotel prices for his planned trips, his fare watches). Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
   parameters: {
     type: "object",
     properties: {
@@ -313,11 +315,12 @@ function buildAskPrompt({question, today, accounts, web}) {
     "- A question about the Radar (the app's daily market scan: a name's score, status, reason, catalyst, levels or tripwire, or today's Taker and Wildcard picks): look up sources Radar; the term \"radar\" reads today's names, highest score first, and \"Taker\" or \"Wildcard\" finds those picks. Its \"Radar overview\" record is computed across the whole scan: the picks with their scores, grouped by score band with each band's record, volume, early flags, themes and status counts. A name is early only when its meta says early. The Radar holds today's scan only, so it cannot say how a name has changed; say so if asked. Its levels are the scan's own, never a recommendation.",
     "- A question about one Radar name: open with its score, status and pick (from meta). State as a caveat what its record shows against it: volume below its 20-day norm (under 1×), and a score band with no clear edge (under 50% beat their benchmark, or average excess between -0.25 and +0.25 points, the card's own noise line). Give the band's record as how names in that band have done before, never as a forecast.",
     "- A question about today's picks, several Radar names or the Radar as a whole: build the answer from the Radar overview record and cite it. Give the picks grouped by score band as it groups them, with each band's record, and say plainly which group has no clear edge; then how many are on volume below their norm, and the themes. Name each pick once, with its score. Say once what all share (e.g. \"all six are early\"); never repeat status words such as forming or early for each name, and never open each name with its own status.",
-    "- A question about his time, plans or week (leave, holidays, what is coming up, his commitments, poker plans, trips, fares): look up sources Calendar, Commitments, Poker and Flights as fits, with the term \"overview\" plus the question's own words. Each has an overview record computed by the app across all its records: his time off (leave joined with weekends and holidays) and what is coming up; this week's commitments with the days ticked, last week's results and his focus order; his ★ PokerHQ picks with buy-ins, PokerHQ's grades and series abroad; and the Flights scout's fares that fit his time off, cheapest cities and poker trips. Build the answer from the overview and cite it; dated questions (\"in December\") can also narrow by dates.",
+    "- A question about his time, plans or week (leave, holidays, what is coming up, his commitments, poker plans, trips, fares): look up sources Calendar, Commitments, Poker, Flights and Trips as fits, with the term \"overview\" plus the question's own words. Each has an overview record computed by the app across all its records: his time off (leave joined with weekends and holidays) and what is coming up; this week's commitments with the days ticked, last week's results and his focus order; his ★ PokerHQ picks with buy-ins, PokerHQ's grades and series abroad; the Flights scout's fares that fit his time off, cheapest cities and poker trips; and his Trips: booked trips with what is left to do before going, the flight and hotel prices for his planned trips with the totals, and his fare watches. Build the answer from the overview and cite it; dated questions (\"in December\") can also narrow by dates.",
     "- His calendar in Daybook holds his own Daybook events, meetings matched to his accounts and all-day entries from his linked calendars, not every appointment: never call a day free or say he has nothing on; say what is listed.",
     "- Commitments are his own words; a tick is a day he marked doing something toward one. Never infer progress beyond the ticks and the results he marked. For \"what should I focus on\", follow his focus order as the overview states it (money, then work, then health, then poker): give his commitments, then the overview's ideas from his records, each with where it comes from, and say plainly that a starter idea is only a starter. A date range, a count or a first or last date must be one the records state; never round to a month's start or end.",
     "- PokerHQ: a ★ (Playing These) is his decision to play; a grade (target, stretch, skip) is only PokerHQ's check of a buy-in against his bankroll rule, not a decision. Daybook never sees his bankroll amount; never state or guess it, and give no advice on stakes beyond PokerHQ's own grade.",
     "- Flights fares are airlines' advertised samples on the airlines' own dates, checked on the scout's date: \"the scout saw Taipei from ≈ PHP … on …\", never that a seat is available at that price. Exact dates are searched with the Google Flights links on Flights.",
+    "- Trips prices are checks, not bookings: a Google Flights price is for one traveller, economy return, on those exact dates, as checked on the date given; a hotel price is the cheapest room a night for the stated guests, from the site named; a total is the app's own sum, quoted as given with what it includes. A trip is booked only when the record says \"Booked trip\".",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
     "  - His profile, his own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\", \"you describe yourself as…\" is right.",
     "  - Activity is what he did in the app (votes, open calls, what he opens): describe it as what he did, never as what he said.",
@@ -539,6 +542,9 @@ function lifeRecords(docs, life) {
     poker: Array.isArray(tourneys) ? {tourneys, sessions: arr(value(docs.pokerSessions)),
       bankroll: bankroll && Number(bankroll.amount) > 0 ? {amount: Number(bankroll.amount), rule: Number(bankroll.rule) || 5} : null} : null,
     flights: docs.flights ? {latest: docs.flights, saved: (docs.flightsSaved && docs.flightsSaved.savedOffers) || {}, history: docs.flightsHistory || null, fx: docs.fx || null} : null,
+    // His own Trips: booked trips, fare watches, exact-date prices, hotel prices for his trips.
+    trips: {booked: (docs.tripsBooked && docs.tripsBooked.items) || {}, watches: (docs.flightsWatch && docs.flightsWatch.items) || {},
+      exact: docs.exactPrices || null, hotelTrips: docs.hotelTrips || null, hotelStays: docs.hotelStays || null, latest: docs.flights || null, fx: docs.fx || null},
   }, {calendar: life.calendar, flights: life.flights, review: life.review});
 }
 

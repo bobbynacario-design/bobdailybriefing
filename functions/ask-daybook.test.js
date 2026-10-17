@@ -237,6 +237,14 @@ test("life data: the server reads his calendar, commitments, PokerHQ picks and F
   assert.ok(!ids.some((id) => /not-starred/.test(id)), "only starred tournaments");
   assert.ok(!JSON.stringify(input.records).includes("76543") && !JSON.stringify(input.records).includes("76,543"), "the bankroll amount never reaches a record");
   assert.deepEqual(Ask.askIndexInput(lifeDocs, boostCore).records.filter((r) => /^(calendar|poker):/.test(r.id)), [], "without the cores, no life records");
+  // His Trips (17 Oct 2026): the server passes his booked trips and fare watches through.
+  const withTrips = Ask.askIndexInput(Object.assign({}, lifeDocs, {
+    tripsBooked: {items: {b1: {destination: "TPE", city: "Taipei", depart: "2026-12-21", ret: "2026-12-24", travellers: 1}}},
+    flightsWatch: {items: {w1: {city: "Taipei", airports: ["TPE"], from: "2026-12-01", to: "2026-12-31", minNights: 2, maxNights: 5, target: 17000}}}}), boostCore, life).records;
+  const trips = Object.fromEntries(withTrips.filter((r) => r.source === "Trips").map((r) => [r.id, r]));
+  assert.deepEqual(Object.keys(trips).sort(), ["trips:booked:b1", "trips:overview", "trips:watch:w1"]);
+  assert.ok(trips["trips:watch:w1"].detail.includes("best scouted fare ≈ PHP 16,000") && trips["trips:watch:w1"].detail.includes("at or under your target"), trips["trips:watch:w1"].detail);
+  assert.ok(Ask.originOf("Trips", "trips:overview").startsWith("An overview of his Trips computed by the app"));
 
   const index = Core.buildIndex(input);
   const registry = Ask.newRegistry();
@@ -257,13 +265,15 @@ test("life data: the server reads his calendar, commitments, PokerHQ picks and F
 
 test("the prompt says how to ask about his time and plans, and keeps PokerHQ and fares honest", () => {
   const prompt = Ask.buildAskPrompt({question: "When is my next leave?", today: "t", accounts: [], web: false});
-  assert.ok(prompt.includes("look up sources Calendar, Commitments, Poker and Flights as fits, with the term \"overview\""), "planning lookups start from the overviews");
+  assert.ok(prompt.includes("look up sources Calendar, Commitments, Poker, Flights and Trips as fits, with the term \"overview\""), "planning lookups start from the overviews");
+  assert.ok(prompt.includes("Trips prices are checks, not bookings") && prompt.includes("A trip is booked only when the record says \"Booked trip\""), "a priced trip is not a booking");
   assert.ok(prompt.includes("never call a day free or say he has nothing on"), "the calendar is not every appointment");
   assert.ok(prompt.includes("follow his focus order as the overview states it (money, then work, then health, then poker)"));
   assert.ok(prompt.includes("a grade (target, stretch, skip) is only PokerHQ's check of a buy-in against his bankroll rule") && prompt.includes("never state or guess it"));
   assert.ok(prompt.includes("never that a seat is available at that price"));
   assert.ok(prompt.includes("\"you committed to…\""), "commitments are his words");
-  assert.match(Ask.SEARCH_TOOL.description, /his calendar \(events, leave, holidays\), weekly commitments, PokerHQ ★ picks and Flights/);
+  assert.match(Ask.SEARCH_TOOL.description, /his calendar \(events, leave, holidays\), weekly commitments, PokerHQ ★ picks, Flights \(the fare scout\) and Trips/);
+  assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("Trips"), "Trips can be asked for by name");
 });
 
 test("refs written together are split, so each is kept, listed and checked", () => {
