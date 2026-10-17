@@ -43,17 +43,17 @@ const LOOKUP_LIMIT = 12;
 // lookups cheap; a Radar name is short and every labelled part of it answers
 // some question (the score's reason, catalyst, read, levels, tripwire).
 const CLIP_TEXT = 450;
-const CLIP_FOR = {Radar: 1200, Calendar: 600, Commitments: 900, Poker: 600, Flights: 600, Trips: 900};
+const CLIP_FOR = {Radar: 1200, Calendar: 600, Commitments: 900, Poker: 600, Flights: 600, Trips: 900, PSE: 1200};
 // The overviews of his life data are computed across all their records
 // (lib/life-records-core.js), so they run long and are returned whole,
 // without a matched-word excerpt repeating part of them.
-const LIFE_OVERVIEWS = ["calendar:overview", "commitments:overview", "poker:overview", "flights:overview", "trips:overview"];
+const LIFE_OVERVIEWS = ["calendar:overview", "commitments:overview", "poker:overview", "flights:overview", "trips:overview", "pse:overview"];
 const CLIP_OVERVIEW = 2400;
 const MAX_THREAD = 3;
 const KEEP_ANSWERS = 20;
 // The search index's source names, as the lookup tool offers them.
 const ASK_SOURCES = ["Profile", "Activity", "Briefing", "News", "Research", "Decisions", "Reflections", "Evidence", "Dossier", "Meeting",
-  "Weekly read", "Numbers", "Radar", "Markets", "Sports", "Calendar", "Commitments", "Poker", "Flights", "Trips"];
+  "Weekly read", "Numbers", "Radar", "Markets", "Sports", "Calendar", "Commitments", "Poker", "Flights", "Trips", "PSE"];
 // What he has told Daybook about himself, and what it has picked up from him
 // (the About you page). Few records, so a lookup may read them all at once.
 const ABOUT_SOURCES = ["Profile", "Activity"];
@@ -95,6 +95,7 @@ const ORIGIN = {
   Poker: "A tournament he starred in PokerHQ (★ Playing These: his decision to play)",
   Flights: "A fare he saved on Flights (an airline's advertised sample, not a booking)",
   Trips: "His own Trips: a trip he booked, a trip the app prices for his time off or a poker trip (exact-date Google Flights price and hotel rooms), or a fare watch he set",
+  PSE: "His PSE watchlist (a stock he chose to watch, with its last completed close), a PSE Edge notice for one of those stocks, or a paper pick he recorded (his thesis; the return is the app's price-only paper record)",
 };
 // A record whose kind is not its source's: the Radar overview is computed by
 // the app across the scan, not one name and not AI-written.
@@ -105,6 +106,7 @@ const ORIGIN_BY_ID = {
   "poker:overview": "An overview of his PokerHQ ★ picks computed by the app: buy-ins, PokerHQ's grades and series abroad (not AI-written)",
   "flights:overview": "An overview of the Flights scout computed by the app: fares for his time off, cheapest cities and poker trips (not AI-written)",
   "trips:overview": "An overview of his Trips computed by the app: booked trips and their checklists, flight and hotel prices for his planned trips with totals, and his fare watches (not AI-written)",
+  "pse:overview": "An overview of his PSE watchlist and paper picks computed by the app from completed closes and his paper record (not AI-written)",
 };
 function originOf(source, id) {
   return ORIGIN_BY_ID[id] || ORIGIN[source] || "An item from his app (" + source + ")";
@@ -118,7 +120,7 @@ const SEARCH_TOOL = {
   name: "search_daybook",
   description: "Look up Bob's own Daybook: his profile and what the app has picked up from him (Profile, Activity), his briefings, " +
     "news he was shown, research reports, decisions, notes, saved evidence, dossiers, meeting briefs, weekly reads, Your numbers, " +
-    "the Radar, Markets and Sports feeds, and his life data: his calendar (events, leave, holidays), weekly commitments, PokerHQ ★ picks, Flights (the fare scout) and Trips (his booked trips, flight and hotel prices for his planned trips, his fare watches). Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
+    "the Radar, Markets and Sports feeds, and his life data: his calendar (events, leave, holidays), weekly commitments, PokerHQ ★ picks, Flights (the fare scout) and Trips (his booked trips, flight and hotel prices for his planned trips, his fare watches), and his PSE watchlist and paper picks (PSE). Any term may match; a term may be a phrase. Returns the best matches, newest first among equals.",
   parameters: {
     type: "object",
     properties: {
@@ -321,6 +323,7 @@ function buildAskPrompt({question, today, accounts, web}) {
     "- PokerHQ: a ★ (Playing These) is his decision to play; a grade (target, stretch, skip) is only PokerHQ's check of a buy-in against his bankroll rule, not a decision. Daybook never sees his bankroll amount; never state or guess it, and give no advice on stakes beyond PokerHQ's own grade.",
     "- Flights fares are airlines' advertised samples on the airlines' own dates, checked on the scout's date: \"the scout saw Taipei from ≈ PHP … on …\", never that a seat is available at that price. Exact dates are searched with the Google Flights links on Flights.",
     "- Trips prices are checks, not bookings: a Google Flights price is for one traveller, economy return, on those exact dates, as checked on the date given; a hotel price is the cheapest room a night for the stated guests, from the site named; a total is the app's own sum, quoted as given with what it includes. A trip is booked only when the record says \"Booked trip\".",
+    "- A question about his PSE stocks, watchlist or paper picks: look up source PSE with the term \"overview\" plus the question's own words. A close is a completed PSE session on the date given, never a live price; a paper pick's thesis is his own words, and its return is the app's price-only paper record with assumed costs, not a real trade. Say what the records show; never tell him to buy, sell or hold.",
     "- Each lookup result has a ref (S1, S2…) and a kind that says whose words it is:",
     "  - His profile, his own note, his decision journal, and the \"Note:\" part of a saved page are his words: \"you noted…\", \"you decided…\", \"you describe yourself as…\" is right.",
     "  - Activity is what he did in the app (votes, open calls, what he opens): describe it as what he did, never as what he said.",
@@ -545,6 +548,8 @@ function lifeRecords(docs, life) {
     // His own Trips: booked trips, fare watches, exact-date prices, hotel prices for his trips.
     trips: {booked: (docs.tripsBooked && docs.tripsBooked.items) || {}, watches: (docs.flightsWatch && docs.flightsWatch.items) || {},
       exact: docs.exactPrices || null, hotelTrips: docs.hotelTrips || null, hotelStays: docs.hotelStays || null, latest: docs.flights || null, fx: docs.fx || null},
+    // His PSE watchlist (closes on radar-ph's board, the same snapshot as fx) and paper picks.
+    pse: docs.pseWatch || docs.psePaper ? {watch: docs.pseWatch || null, board: docs.fx || null, paper: docs.psePaper || null} : null,
   }, {calendar: life.calendar, flights: life.flights, review: life.review});
 }
 

@@ -944,7 +944,7 @@ async function loadAskIndex(db, uid) {
   const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
     profile, accounts, usage, goals, radarJournal,
     calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-    tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays] = await Promise.all([
+    tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper] = await Promise.all([
     own(BRIEFINGS_COLL, 100), own(REPORTS_COLL, 50), own(JOURNAL_COLL, 100),
     get(COMMAND_PREF_PREFIX + uid), get("dossiers-" + uid), get("meeting-briefs-" + uid), get("weekly-mirror-" + uid), get("daily-boost-" + uid),
     get("grounding-latest"), latest("news"), latest("radar"), latest("miro"), latest("sports"),
@@ -960,12 +960,14 @@ async function loadAskIndex(db, uid) {
     get("flights-latest"), get("flights-saved-" + uid), get("flights-history"), get("radar-ph"),
     // His own Trips: booked trips, fare watches, exact-date flight prices, hotel prices for his trips.
     get("trips-booked-" + uid), get("flights-watch-" + uid), get("exact-prices-" + uid), get("hotel-trips-" + uid), get("hotel-stays-" + uid),
+    // His PSE watchlist (closes come from radar-ph, read above as fx) and his paper record.
+    get("pse-watch-" + uid), PsePaper.listPicks(db, uid).catch(() => null),
   ]);
   const index = IntelligenceSearchCore.buildIndex(Ask.askIndexInput(
     {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
       profile, accounts, usage, goals, radarJournal, todayKey: phtDateKey(), now: Date.now(),
       calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-      tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays}, DailyBoostCore,
+      tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper}, DailyBoostCore,
     {core: LifeRecordsCore, calendar: DaybookCalendarCore, flights: FlightsCore, review: WeeklyReviewCore}));
   askIndexCache = {uid, at: Date.now(), index};
   return index;

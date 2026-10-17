@@ -245,6 +245,16 @@ test("life data: the server reads his calendar, commitments, PokerHQ picks and F
   assert.deepEqual(Object.keys(trips).sort(), ["trips:booked:b1", "trips:overview", "trips:watch:w1"]);
   assert.ok(trips["trips:watch:w1"].detail.includes("best scouted fare ≈ PHP 16,000") && trips["trips:watch:w1"].detail.includes("at or under your target"), trips["trips:watch:w1"].detail);
   assert.ok(Ask.originOf("Trips", "trips:overview").startsWith("An overview of his Trips computed by the app"));
+  // His PSE watchlist and paper picks: closes from radar-ph (read as fx), the paper record as listPicks returns it.
+  const withPse = Ask.askIndexInput(Object.assign({}, lifeDocs, {
+    fx: {asOf: "2026-10-01", board: [{symbol: "BDO", name: "BDO Unibank", asOf: "2026-09-30", close: 113.5}]},
+    pseWatch: {items: {BDO: {addedAt: "2026-09-29T00:00:00Z"}}},
+    psePaper: {picks: [{id: "p1", pick: {symbol: "ICT", approach: "quality", horizon: 60, thesis: "Profit up", recordedDay: "2026-09-29"}, outcome: {status: "waiting-entry"}}]}}), boostCore, life).records;
+  const pse = Object.fromEntries(withPse.filter((r) => r.source === "PSE").map((r) => [r.id, r]));
+  assert.deepEqual(Object.keys(pse).sort(), ["pse:overview", "pse:paper:p1", "pse:watch:bdo"]);
+  assert.ok(pse["pse:watch:bdo"].detail.startsWith("close PHP 113.50 on Wed 30 Sep"), pse["pse:watch:bdo"].detail);
+  assert.ok(pse["pse:paper:p1"].detail.includes("waiting for its entry close"));
+  assert.ok(!Ask.askIndexInput(lifeDocs, boostCore, life).records.some((r) => r.source === "PSE"), "no PSE documents, no PSE records");
 
   const index = Core.buildIndex(input);
   const registry = Ask.newRegistry();
@@ -274,6 +284,8 @@ test("the prompt says how to ask about his time and plans, and keeps PokerHQ and
   assert.ok(prompt.includes("\"you committed to…\""), "commitments are his words");
   assert.match(Ask.SEARCH_TOOL.description, /his calendar \(events, leave, holidays\), weekly commitments, PokerHQ ★ picks, Flights \(the fare scout\) and Trips/);
   assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("Trips"), "Trips can be asked for by name");
+  assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("PSE") && Ask.SEARCH_TOOL.description.includes("PSE watchlist and paper picks"));
+  assert.ok(prompt.includes("A close is a completed PSE session on the date given, never a live price") && prompt.includes("never tell him to buy, sell or hold"), "PSE answers report, never advise");
 });
 
 test("refs written together are split, so each is kept, listed and checked", () => {

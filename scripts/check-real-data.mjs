@@ -71,18 +71,19 @@ const own = (name, n) => db.collection(name).where('uid', '==', uid).orderBy('sa
 const latest = async (prefix) => { const p = await get(COLL, prefix + '-latest'); return p && p.value ? get(COLL, prefix + '-' + p.value) : null; };
 const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports, profile, accounts, usage, goals, radarJournal,
   calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx, askDoc,
-  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays] = await Promise.all([
+  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper] = await Promise.all([
   own(COLL, 100), own('reports-bob', 50), own('journal-bob', 100), get(COLL, 'command-prefs-' + uid), get(COLL, 'dossiers-' + uid), get(COLL, 'meeting-briefs-' + uid),
   get(COLL, 'weekly-mirror-' + uid), get(COLL, 'daily-boost-' + uid), get(COLL, 'grounding-latest'), latest('news'), latest('radar'), latest('miro'), latest('sports'),
   get(COLL, 'profile-' + uid), get(COLL, 'accounts-' + uid), get(COLL, 'usage-' + uid), get(COLL, 'goals-' + uid), get(COLL, 'radar-journal'),
   get(COLL, 'calendar-events-' + uid), get(COLL, 'meetings-' + uid), get(COLL, 'review-' + uid), get('pokerhq-bob', 'tourneys'), get('pokerhq-bob', 'bankroll'),
   get('pokerhq-bob', 'sessions'), get(COLL, 'flights-latest'), get(COLL, 'flights-saved-' + uid), get(COLL, 'flights-history'), get(COLL, 'radar-ph'), get(COLL, 'ask-' + uid),
-  get(COLL, 'trips-booked-' + uid), get(COLL, 'flights-watch-' + uid), get(COLL, 'exact-prices-' + uid), get(COLL, 'hotel-trips-' + uid), get(COLL, 'hotel-stays-' + uid)]);
+  get(COLL, 'trips-booked-' + uid), get(COLL, 'flights-watch-' + uid), get(COLL, 'exact-prices-' + uid), get(COLL, 'hotel-trips-' + uid), get(COLL, 'hotel-stays-' + uid),
+  get(COLL, 'pse-watch-' + uid), require('./pse-paper.js').listPicks(db, uid).catch(() => null)]);
 
 // Ask's index, built exactly as the askDaybook function builds it.
 const docs = {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports, profile, accounts, usage, goals, radarJournal,
   todayKey: today, now, calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays};
+  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper};
 const index = Search.buildIndex(Ask.askIndexInput(docs, DailyBoostCore, {core: Life, calendar: Calendar, flights: Flights, review: Review}));
 const byId = Object.fromEntries(index.map((i) => [i.id, i]));
 check('Ask index builds under its cap', index.length > 0 && index.length < 5000, index.length + ' records');
@@ -222,6 +223,35 @@ if (fl && flights && Array.isArray(flights.offers)) {
   const ov = byId['trips:overview'];
   const cities = [...Object.values((flightsWatch && flightsWatch.items) || {}).map((w) => w && w.city), ...((hotelTrips && hotelTrips.trips) || []).filter((t) => t && t.checkOut >= today).map((t) => t.city)].filter(Boolean);
   if (ov) check('Trips overview names every fare watch and every planned trip', cities.every((c) => ov.body.includes(c)), cities.filter((c) => !ov.body.includes(c)).join(', ') || cities.length + ' named');
+}
+
+// PSE (Ask): every figure in the PSE records is a field the PSE job or the
+// paper record wrote, for a stock he watches or a pick he made, to two
+// decimals — or, by hand, a close's distance above his buy-below price.
+{
+  const pseRecs = index.filter((i) => i.source === 'PSE');
+  const watched = Object.keys((pseWatch && pseWatch.items) || {});
+  const rowOf = (s) => ((fx && fx.board) || []).find((b) => b && b.symbol === s) || ((pseWatch && pseWatch.rows) || {})[s] || null;
+  const fields = ['close', 'dayChangePct', 'ret1w', 'ret1m', 'ret3m', 'retYtd', 'low52', 'high52', 'pctFromHigh', 'yield12m'];
+  const allowed = new Set();
+  const add = (v) => { if (typeof v === 'number' && Number.isFinite(v)) allowed.add(Math.abs(v).toFixed(2)); };
+  watched.forEach((s) => {
+    const r = rowOf(s), target = Number(pseWatch.items[s] && pseWatch.items[s].target);
+    if (!r) return;
+    fields.forEach((f) => add(r[f]));
+    if (target > 0) { add(target); if (r.close > target) add(r.close - target); }
+  });
+  ((psePaper && psePaper.picks) || []).forEach((p) => {
+    add(p.pick && p.pick.observedClose);
+    ['entryPrice', 'markPrice', 'netPriceReturn', 'benchmarkPriceReturn', 'netExcessReturn', 'maxCloseDrawdown'].forEach((f) => add(p.outcome && p.outcome[f]));
+  });
+  // His thesis text is his own words; the computed figures are in each record's detail.
+  const quoted = pseRecs.flatMap((i) => [...String(i.detail).matchAll(/(\d[\d,]*\.\d{2})/g)].map((m) => Number(m[1].replace(/,/g, '')).toFixed(2)));
+  const unknown = quoted.filter((n) => !allowed.has(n));
+  check('PSE: every figure is a close, return or paper-record field as written, or a gap to his buy-below', pseRecs.length && !unknown.length,
+    pseRecs.length + ' records, ' + quoted.length + ' figures' + (unknown.length ? '; not found: ' + unknown.join(', ') : ''));
+  const ov = byId['pse:overview'];
+  if (ov) check('PSE overview names every watched stock and paper pick', [...watched, ...((psePaper && psePaper.picks) || []).map((p) => p.pick && p.pick.symbol)].filter(Boolean).every((s) => ov.body.includes(s)), watched.length + ' watched');
 }
 
 // Hotels: the shared document holds only scouted fare dates; your trips and
