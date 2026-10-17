@@ -25,6 +25,7 @@ async function makeScout(db, uid) {
   const allowed=searchUrls(json).map(ScoutCore.url).filter(Boolean);
   const items=ScoutCore.clean(raw.items,allowed,phtDateKey());
   if(raw.items.length&&!items.length)throw new HttpsError('internal','No opportunities passed source and date checks. Your previous shortlist is kept.');
+  await Scout.checkDates(items,fetch);
   const result={uid,kind:'scout-latest',items,generatedAt:new Date().toISOString(),week:WeeklyReviewCore.weekStart(phtDateKey())};
   await db.collection(BRIEFINGS_COLL).doc('scout-latest-'+uid).set(result);
   return result;

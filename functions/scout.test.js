@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {prompt}=require('./scout');
+const {prompt,checkDates}=require('./scout');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const Core=require('./scout-core');
@@ -15,7 +15,7 @@ test('Scout saves only search-returned sources and keeps the existing feed when 
   let writes=[],raw={items:[{title:'Seminar',lane:'work',start:'2026-10-25',url:'https://official.example/event'}]};
   const db={collection:()=>({doc:id=>({get:async()=>({exists:false}),set:async value=>writes.push({id,value})})})};
   const {cleanAccounts,DEFAULT_ACCOUNTS}=require('./briefing-prompt-core');
-  const ctx={ScoutCore:Core,Scout:{prompt},BRIEFINGS_COLL:'briefings-bob',loadProfile:async()=>null,cleanAccounts,DEFAULT_ACCOUNTS,phtDateKey:()=> '2026-10-18',DEFAULT_MODEL:'fixture',
+  const ctx={ScoutCore:Core,Scout:{prompt,checkDates},BRIEFINGS_COLL:'briefings-bob',loadProfile:async()=>null,cleanAccounts,DEFAULT_ACCOUNTS,phtDateKey:()=> '2026-10-18',DEFAULT_MODEL:'fixture',
     OPENAI_API_KEY:{value:()=> 'test'},AbortSignal,Date,WeeklyReviewCore:{weekStart:()=> '2026-10-12'},HttpsError:class extends Error{constructor(code,msg){super(msg);this.code=code;}},
     recordUsage:async()=>{},recordSearches:async()=>{},extractUsage:()=>({}),webSearchCount:()=>1,
     searchUrls:()=>['https://official.example/event'],extractText:()=>JSON.stringify(raw),parseBriefing:JSON.parse,
@@ -33,4 +33,20 @@ test('Scout work lane searches Australian bodies online, names his insurers and 
   assert.match(out,/At most ONE pick in the whole list may be about AI/);assert.match(out,/Nothing about poker/);
   assert.match(out,/"timezone"/);assert.match(out,/never to growing a business, sales or consulting income/);
   assert.doesNotMatch(prompt(null,null,{},'2026-10-18',[]),/organisations he works with/);
+});
+test('Scout reads each pick page from public https hosts only and records what it found',async()=>{
+  const {checkDates,publicHost}=require('./scout');
+  const words=' details'.repeat(40),calls=[];
+  const pages={'https://ok.example/a':'<p>Tuesday, 17 November 2026</p><p>Register by 10 November 2026</p>'+words,'https://ok.example/b':'<p>10 November 2026</p>'+words};
+  const fetchImpl=async(url,opts)=>{calls.push(url);assert.ok(opts.signal);if(url.includes('down'))throw new Error('timeout');
+    if(url.includes('pdf'))return {ok:true,headers:{get:()=>'application/pdf'},text:async()=>''};
+    return {ok:true,headers:{get:()=>'text/html; charset=utf-8'},text:async()=>pages[url]||''};};
+  const items=[{url:'https://ok.example/a',start:'2026-11-17',deadline:'2026-11-10'},{url:'https://ok.example/b',start:'2026-10-22'},
+    {url:'https://down.example/c',start:'2026-11-01'},{url:'https://ok.example/pdf',start:'2026-11-01'},{url:'https://localhost/x',start:'2026-11-01'},
+    {url:'https://169.254.169.254/latest',start:'2026-11-01'},{url:'https://ok.example/group',start:''}];
+  await checkDates(items,fetchImpl,1000);
+  assert.deepEqual(items.map(v=>v.dateCheck),['confirmed','not-found','unchecked','unchecked','unchecked','unchecked',undefined]);
+  assert.equal(items[0].deadlineCheck,'confirmed');
+  assert.ok(!calls.some(u=>/localhost|169\.254|group/.test(u)),'private hosts and undated picks are never fetched');
+  assert.ok(publicHost('anziif.com'));assert.ok(!publicHost('metadata.google.internal'));assert.ok(!publicHost('10.0.0.1'));assert.ok(!publicHost('[::1]'));
 });

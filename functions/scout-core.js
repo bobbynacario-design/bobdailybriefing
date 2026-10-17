@@ -31,6 +31,36 @@
     var shift=local<day?' (previous day)':local>day?' (next day)':'';
     return at.slice(11,16)+' PHT'+shift+(off===480?'':' ('+('0'+t[1]).slice(-2)+':'+t[2]+' '+text(zone,20).toUpperCase().replace(/\s+/g,'')+')');
   }
+  var MONTHS=['january','february','march','april','may','june','july','august','september','october','november','december'],CHECKS=['confirmed','not-found','unchecked'];
+  // A page's visible words plus the ISO dates in its scripts (event data in
+  // JSON-LD or app state), lower-cased with entities and dashes made plain.
+  function pageText(html){
+    var s=String(html||''),iso=(s.match(/\b20\d\d-\d\d-\d\d/g)||[]).join(' ');
+    s=s.replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1\s*>/gi,' ').replace(/<[^>]+>/g,' ')
+      .replace(/&nbsp;|&#160;|&#xa0;/gi,' ').replace(/&ndash;|&mdash;/gi,'-').replace(/&amp;/gi,'&')
+      .replace(/&#(\d+);/g,function(m,n){return +n<65536?String.fromCharCode(+n):' ';}).replace(/[\u2013\u2014\u2212]/g,'-').replace(/\s+/g,' ');
+    return (s+' '+iso).toLowerCase();
+  }
+  // Does the page carry this date? Day and month in either order (ranges such
+  // as "16-30 October" or "Nov. 07 -30" count), ISO, or d/m/y numbers. A match
+  // followed closely by another year belongs to another year's event.
+  function dateOnPage(page,iso){
+    if(!page||!date(iso))return false;
+    var y=iso.slice(0,4),m=+iso.slice(5,7),d=+iso.slice(8,10),full=MONTHS[m-1];
+    var mon='(?:'+full+'|'+full.slice(0,3)+(m===9?'|sept':'')+')\\.?',day='0?'+d+'(?:st|nd|rd|th)?',other='\\d{1,2}(?:st|nd|rd|th)?',join='(?:-|to|and|&)';
+    var re=new RegExp(['\\b'+iso+'(?!\\d)',
+      '\\b'+day+'\\s*(?:'+join+'\\s*'+other+'\\s*)?(?:of\\s+)?'+mon+'(?![a-z])',
+      '(?:^|[^a-z])'+mon+'\\s*(?:'+other+'\\s*'+join+'\\s*)?'+day+'(?!\\d)',
+      '\\b0?'+d+'[/.]0?'+m+'[/.]'+y+'\\b','\\b0?'+m+'/0?'+d+'/'+y+'\\b'].join('|'),'g'),hit;
+    while((hit=re.exec(page))){
+      var after=page.slice(re.lastIndex,re.lastIndex+16).match(/\b(20\d\d)\b/);
+      if(!after||after[1]===y)return true;
+    }
+    return false;
+  }
+  // confirmed, not-found, or unchecked when the page could not be read (no
+  // page, or too few words: an app shell that draws itself in the browser).
+  function dateCheck(page,iso){return !date(iso)?'':typeof page!=='string'||page.length<200?'unchecked':dateOnPage(page,iso)?'confirmed':'not-found';}
   function theme(v){var hay=v.title+' '+v.topic+' '+v.organizer;return POKER_TAG.test(hay)||POKER_WORDS.test(hay)?'poker':AI_TAG.test(hay)||AI_WORDS.test(hay)?'ai':'';}
   function clean(raw,allowed,day){
     var seen={},out=[],ai=0;
@@ -45,6 +75,8 @@
       var item={id:'s'+hash(source),title:title,lane:v.lane,kind:v.kind==='community'?'community':'event',url:source,
         start:start,end:end,deadline:deadline,when:text(v.when,160),format:formats[v.format]?v.format:'',time:time,zone:zone,pht:phtTime(start,time,zone,location),location:location,
         cost:text(v.cost,140)||'Cost not listed',organizer:text(v.organizer,140),why:text(v.why,400),topic:text(v.topic,100)};
+      if(start&&CHECKS.indexOf(v.dateCheck)>=0)item.dateCheck=v.dateCheck;
+      if(deadline&&CHECKS.indexOf(v.deadlineCheck)>=0)item.deadlineCheck=v.deadlineCheck;
       var kind=theme(item);
       if(kind==='poker'||(kind==='ai'&&++ai>1))return;
       seen[source]=true;
@@ -54,8 +86,8 @@
   }
   function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16);}
   function expired(v,day){return !!((v.end&&v.end<day)||(v.deadline&&v.deadline<day));}
-  function due(items,choices,day){var until=new Date(Date.parse(day+'T00:00:00Z')+7*86400000).toISOString().slice(0,10);return items.filter(function(v){var c=choices[v.id]||{};return (c.saved||c.interested)&&!c.hidden&&!expired(v,day)&&v.deadline&&v.deadline>=day&&v.deadline<=until;}).sort(function(a,b){return a.deadline.localeCompare(b.deadline);}).slice(0,3);}
-  var api={lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,theme:theme,clean:clean,expired:expired,due:due};
+  function due(items,choices,day){var until=new Date(Date.parse(day+'T00:00:00Z')+7*86400000).toISOString().slice(0,10);return items.filter(function(v){var c=choices[v.id]||{};return (c.saved||c.interested)&&!c.hidden&&!expired(v,day)&&v.deadline&&v.deadlineCheck!=='not-found'&&v.deadline>=day&&v.deadline<=until;}).sort(function(a,b){return a.deadline.localeCompare(b.deadline);}).slice(0,3);}
+  var api={lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,theme:theme,clean:clean,expired:expired,due:due};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.ScoutCore=api;
 })(typeof window!=='undefined'?window:globalThis);
