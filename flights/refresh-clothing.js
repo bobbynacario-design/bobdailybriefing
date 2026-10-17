@@ -2,7 +2,7 @@ import {readFileSync,existsSync} from 'node:fs';
 import {initializeApp,cert,applicationDefault} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {SOURCES,readSource,parseMall,priceHistory} from './clothing.js';
-import {browserSources} from './clothing-browser.js';
+import {browserSources,nikeSizes} from './clothing-browser.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 const dry=process.argv.includes('--dry-run'),started=Date.now(),checkedAt=new Date().toISOString();
 let db;
@@ -21,6 +21,15 @@ async function main(){
       if(r.items.length || r.campaigns.length)results[index]={...r,items:r.items.length?r.items:old.items,candidates:old.candidates || []};
       else if(!old.items.length)results[index]={...r,candidates:old.candidates || []};
     }
+    // Nike's sale listing names no sizes; its product pages do. Deepest
+    // markdowns first, so a cut-short round still covers the likely leaders.
+    const nike=results.find(r=>r.id==='nike');
+    if(nike && nike.items.length){
+      const {found,stopped}=await nikeSizes([...nike.items].sort((a,b)=>a.price/a.originalPrice-b.price/b.originalPrice));
+      nike.items=nike.items.map(i=>found.has(i.id)?{...i,...found.get(i.id),sizeSystem:i.category==='Footwear'?'US men':'Labelled clothing',sizesCheckedAt:checkedAt}:i);
+      nike.sizesChecked=found.size;
+      nike.message='Published PHP markdowns read; sizes in stock checked on '+found.size+' of '+nike.items.length+' product pages'+(stopped?' (stopped: '+stopped+')':'')+'.';
+    }
   }
   const campaigns=results.flatMap(r=>r.campaigns || []).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).slice(0,60);
   const promos=[];
@@ -30,7 +39,7 @@ async function main(){
   const tracked=priceHistory(results.flatMap(r=>r.items).slice(0,240),prior,checkedAt);
   const sources=results.map(({items,candidates,campaigns,fetchUrl,browser,...row})=>row);
   const feed={kind:'shopping-feed',generatedAt:checkedAt,items:tracked.items,promos,campaigns,sources,modelCalls:0,coverage:'A bounded sample of official Philippine sale pages; not a complete catalogue or live branch inventory. Shipping and vouchers are unverified unless explicitly shown.'};
-  console.log(JSON.stringify({items:feed.items.length,promos:promos.length,campaigns:campaigns.length,sources:sources.map(s=>({brand:s.brand,status:s.status,count:s.count})),bytes:Buffer.byteLength(JSON.stringify(feed)),modelCalls:0}));
+  console.log(JSON.stringify({items:feed.items.length,promos:promos.length,campaigns:campaigns.length,sources:sources.map(s=>({brand:s.brand,status:s.status,count:s.count,...(s.sizesChecked!=null?{sizesChecked:s.sizesChecked}:{})})),bytes:Buffer.byteLength(JSON.stringify(feed)),modelCalls:0}));
   if(dry)return;
   if(results.every(r=>r.status==='unavailable'))throw Error('All clothing sources unavailable; previous feed preserved.');
   if(Buffer.byteLength(JSON.stringify(feed))>850000)throw Error('Clothing feed exceeds size budget; previous feed preserved.');

@@ -1,6 +1,35 @@
 // Ordinary public browser rendering in the scheduled job. No user sessions,
 // credentials, stealth plugins, proxies, CAPTCHA solving or security bypass.
-import {parseRendered} from './clothing-rendered.js';
+import {parseRendered,parseNikeSizes} from './clothing-rendered.js';
+const HUMAN_CHECK=/access denied|verify (?:that )?you are human|unusual traffic|complete the captcha|press & hold/i;
+// Nike product pages, one at a time, for which sizes are in stock. ZALORA
+// product pages put up a "Press & Hold" human check after a few visits, so
+// they are not opened. The first human check or HTTP error stops the round.
+export async function nikeSizes(items,{limit=30,budgetMs=240000}={}){
+  const started=Date.now(),found=new Map();let browser,stopped='';
+  try{
+    const {chromium}=await import('playwright');browser=await chromium.launch({headless:true});
+    const context=await browser.newContext({locale:'en-PH',viewport:{width:1280,height:900}});
+    for(const item of items.slice(0,limit)){
+      if(Date.now()-started>budgetMs){stopped='time budget reached';break;}
+      const page=await context.newPage();
+      try{
+        const response=await page.goto(item.url,{waitUntil:'domcontentloaded',timeout:30000});
+        if(response && response.status()>=400){stopped='HTTP '+response.status();break;}
+        const grid=page.locator('[data-testid="pdp-grid-selector-item"]');
+        await grid.first().waitFor({state:'attached',timeout:15000}).catch(()=>{});
+        if(HUMAN_CHECK.test((await page.locator('body').innerText()).slice(0,3000))){stopped='human check';break;}
+        // Two identical reads 1.5 s apart, so a grid still settling never counts.
+        const read=async()=>parseNikeSizes(await grid.evaluateAll(nodes=>nodes.map(n=>n.outerHTML).join('')));
+        const first=await read();await page.waitForTimeout(1500);const second=await read();
+        if(first && JSON.stringify(first)===JSON.stringify(second))found.set(item.id,first);
+      }catch{/* One unreadable page leaves that item's size unchecked. */}
+      finally{await page.close();}
+    }
+  }catch(e){stopped='browser unavailable: '+String(e.message).slice(0,80);}
+  finally{if(browser)await browser.close();}
+  return {found,stopped};
+}
 export async function browserSources(sources,checkedAt){
   let browser;const out=[];
   try{

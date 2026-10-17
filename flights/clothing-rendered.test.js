@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {offerDates,parseUniqlo,parseAdidas,parseZalora,parseCrocsCollection} from './clothing-rendered.js';
+import {offerDates,parseUniqlo,parseAdidas,parseZalora,parseCrocsCollection,parseNikeSizes} from './clothing-rendered.js';
 const at='2026-10-17T03:00:00Z';
 test('UNIQLO requires current published dates and an actual crossed-out price; printed size ranges are not stock',()=>{
  const tile=(dates,original='<s>PHP 2,990.00</s>')=>`<a class="product-tile__link" href="/ph/en/products/E488726-000/00" aria-label="Denim Jacket, PHP 2,490.00, ${dates}"><h2>Denim Jacket</h2><p>Men S-3XL</p>${original}</a>`;
@@ -35,4 +35,13 @@ test('ZALORA separates voucher and member prices from unconditional markdowns an
 });
 test('Crocs collection titles never manufacture dated offers or item reductions',()=>{
  const r=parseCrocsCollection('<h1>10.10 sale</h1>','https://crocs.com.ph/collections/sale',at);assert.equal(r.items.length,0);assert.equal(r.campaigns[0].validTo,'');assert.match(r.campaigns[0].condition,/not checked/);
+});
+test('Nike sizes come from the rendered grid: struck-out sizes are sold out, and no grid is not checked',()=>{
+ // Markup as rendered for Air Max Bia IO9416-003 on 17 Oct 2026.
+ const cell=(v,off)=>`<div class="${off?' disabled ':' '}css-ovr0gm nds-grid-item" data-testid="pdp-grid-selector-item"><input class="visually-hidden" id="grid-selector-input-${v}" name="grid-selector-input" type="radio"${off?' aria-disabled="true"':''} value="${v}"><label for="grid-selector-input-${v}">US ${v}</label></div>`;
+ const r=parseNikeSizes(['8','8.5','9','13'].map(v=>cell(v,v==='13')).join(''));
+ assert.deepEqual(r,{sizeRun:['8','8.5','9','13'],availableSizes:['8','8.5','9']});
+ assert.equal(parseNikeSizes('<div>Loading</div>'),null);
+ assert.deepEqual(parseNikeSizes(cell('M 8 / W 9.5',false)+cell('W 7',false)).sizeRun,['8']);
+ assert.deepEqual(parseNikeSizes(cell('S',false)+cell('M',true)).availableSizes,['S']);
 });

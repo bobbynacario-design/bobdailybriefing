@@ -66,6 +66,22 @@ export function parseCrocsCollection(html,url,checkedAt){
   // dates are current or every item in the collection is discounted.
   return {items:[],campaigns:title?[{id:id('crocs-collection:'+url),brand:'Crocs',retailer:'Crocs',name:title,url,checkedAt,kind:'collection',validFrom:'',validTo:'',condition:'Sale collection; dates and markdowns not checked'}]:[]};
 }
+// Nike's size grid as rendered on a PH product page (checked 17 Oct): one
+// [data-testid="pdp-grid-selector-item"] per size, and a sold-out size carries
+// a "disabled" class plus aria-disabled="true" on its input. The grid only
+// renders once stock has loaded, so its absence is "not checked", never stock.
+export function parseNikeSizes(html){
+  const $=load(html),sizeRun=[],availableSizes=[];
+  $('[data-testid="pdp-grid-selector-item"]').each((_,node)=>{
+    const item=$(node),input=item.find('input').first(),raw=clean(input.attr('value') || item.text()).replace(/^US\s*/i,'');
+    // Unisex shoes read "M 8 / W 9.5": keep the men's size; women's-only is skipped.
+    const label=/^M\s?(\d+(?:\.5)?)\b/i.exec(raw)?.[1] || (/^\d+(?:\.5)?$|^[A-Z0-9 ()]{1,12}$/i.test(raw) && !/^W\s?\d/i.test(raw)?raw.toUpperCase():'');
+    if(!label || sizeRun.includes(label))return;
+    sizeRun.push(label);
+    if(!/\bdisabled\b/.test(item.attr('class') || '') && input.attr('aria-disabled')!=='true' && input.attr('disabled')===undefined)availableSizes.push(label);
+  });
+  return sizeRun.length?{sizeRun,availableSizes}:null;
+}
 export function parseRendered(source,html,checkedAt,url=source.url){
   return source.id==='uniqlo'?parseUniqlo(html,checkedAt):source.id==='adidas'?parseAdidas(html,checkedAt):source.id.startsWith('zalora')?parseZalora(html,checkedAt):source.id==='crocs'?parseCrocsCollection(html,url,checkedAt):{items:[],campaigns:[]};
 }
