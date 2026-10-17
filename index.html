@@ -3289,6 +3289,31 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 .boost-goal-edit{grid-template-columns:minmax(180px,1.2fr) minmax(180px,1fr) auto auto}
 @media(max-width:700px){.boost-goal-edit{grid-template-columns:1fr;padding-bottom:.7rem;margin-bottom:.7rem;border-bottom:1px solid var(--rim)}}
 #page-shopping .shopping-photo{display:block;width:100%;height:240px;object-fit:contain;background:var(--bg2);border-radius:8px;margin-bottom:.8rem}#page-shopping .hero{margin-bottom:1rem}#page-shopping fieldset{border:1px solid var(--rim);border-radius:9px;padding:1rem}#page-shopping input,#page-shopping select{max-width:100%}#page-shopping .shopping-options{display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:1rem}#page-shopping .shopping-price{font-size:20px;color:var(--gold)}#page-shopping .shopping-price del,#page-shopping .shopping-price span{font-size:12px;color:var(--txt3)}#shopping-needs,#shopping-stores,#shopping-coverage{margin:1.25rem 0}#shopping-results details{margin-top:1rem}#page-shopping .shopping-leads{margin:.5rem 0 0;padding-left:1.1rem}#page-shopping .shopping-leads li{margin:.45rem 0;line-height:1.55}#page-shopping .shopping-leads del{color:var(--txt3);font-size:12px}#shopping-campaigns a,#shopping-stores a{color:var(--gold)}
+/* Clothing keeps its own compact reading scale. */
+#page-shopping{font-size:13px;line-height:1.5}
+#page-shopping .shopping-title{font-size:20px;line-height:1.3}
+#page-shopping .hero{margin-bottom:.65rem}
+#page-shopping .hero p{font-size:13px;line-height:1.5;margin:.35rem 0}
+#page-shopping h3{font-size:15px;line-height:1.35;margin:.6rem 0 .4rem}
+#page-shopping p,#page-shopping li{font-size:13px;line-height:1.5}
+#page-shopping .flights-note{font-size:11.5px;line-height:1.5}
+#page-shopping summary,#page-shopping legend{font-size:12px;line-height:1.5}
+#page-shopping .deal-card{padding:.7rem .8rem;gap:.2rem}
+#page-shopping .deal-card h3{font-size:14px;margin:.1rem 0 .3rem;font-weight:600}
+#page-shopping .deal-card p{font-size:12px;margin:.15rem 0}
+#page-shopping .deal-card .flights-note{font-size:11px}
+#page-shopping .deal-card .shopping-price{font-size:17px;font-weight:600;margin:.25rem 0}
+#page-shopping .shopping-price del,#page-shopping .shopping-price span{font-size:11px;font-weight:400}
+#page-shopping .shopping-photo{height:180px;margin-bottom:.35rem}
+#page-shopping .tool-chip,#page-shopping .flight-actions a{font-size:11px;text-transform:none;letter-spacing:.02em}
+#page-shopping .flights-controls label,#page-shopping .flights-toolbar label{font-size:12px;line-height:1.4}
+#page-shopping input,#page-shopping select,#page-shopping textarea{font-size:13px}
+#page-shopping .shopping-filters{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:1rem}
+#page-shopping .shopping-filters label{min-width:0}
+#page-shopping .shopping-filters select{width:100%;box-sizing:border-box}
+#page-shopping .shopping-leads li{font-size:12px}
+#shopping-needs,#shopping-stores,#shopping-coverage{margin:1rem 0}
+@media(max-width:600px){#page-shopping .shopping-title{font-size:18px}#page-shopping .shopping-filters{grid-template-columns:repeat(2,minmax(0,1fr))}#page-shopping .shopping-filters label:last-child{grid-column:1/-1}#page-shopping .deal-grid{grid-template-columns:minmax(0,1fr)}#page-shopping .shopping-photo{height:160px}#page-shopping input,#page-shopping select,#page-shopping textarea{font-size:16px}}
 </style>
 </head>
 <body>
@@ -4184,7 +4209,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
 <!-- ═══════════════ HELP PAGE ═══════════════ -->
 <div class="page owner-only" id="page-shopping">
-  <div class="hero"><div class="hero-date" style="font-size:22px"><svg class="ico" aria-hidden="true"><use href="#i-shopping"/></svg> Clothing deal scout</div><p>Your brands, your sizes, worthwhile markdowns. Online delivery to QC; verified store announcements in QC, Ortigas, Makati and Pasay.</p></div>
+  <div class="hero"><div class="hero-date shopping-title"><svg class="ico" aria-hidden="true"><use href="#i-shopping"/></svg> Clothing deal scout</div><p>Your brands, your sizes, worthwhile markdowns. Online delivery to QC; verified store announcements in QC, Ortigas, Makati and Pasay.</p></div>
   <p class="flights-note">UNIQLO · H&amp;M · ZALORA · Nike · Adidas · Crocs. Twice-weekly public-page checks, Monday and Thursday at 08:00 PHT; scheduled runs may be delayed. No AI calls or paid shopping-data subscription. Coverage varies by retailer.</p>
   <button class="tool-chip" type="button" onclick="renderShopping()">Reload latest scout</button>
   <button class="tool-chip" type="button" onclick="openUniqloImport()">Update UNIQLO · browser import</button>
@@ -4203,7 +4228,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <p id="shopping-status" class="flights-note" role="status"></p>
   <details id="shopping-profile" class="flight-trip-settings"></details>
   <section id="shopping-needs" class="flight-trip-settings"></section>
-  <div class="flights-controls"><label>Shopping need<select id="shopping-need" onchange="renderShoppingDeals()"><option value="">All my needs / browse</option></select></label><label>Category<select id="shopping-category" onchange="renderShoppingDeals()"><option>All</option><option>Tops</option><option>Trousers</option><option>Shorts</option><option>Footwear</option><option>Outerwear</option></select></label></div>
+  <div class="flights-controls shopping-filters"><label>Brand<select id="shopping-brand" onchange="renderShoppingDeals()"><option value="">All brands</option><option>UNIQLO</option><option>H&amp;M</option><option>Nike</option><option>Adidas</option><option>Crocs</option><option value="ZALORA">ZALORA · all listed brands</option></select></label><label>Category<select id="shopping-category" onchange="renderShoppingDeals()"><option>All</option><option>Tops</option><option>Trousers</option><option>Shorts</option><option>Footwear</option><option>Outerwear</option></select></label><label>Shopping need<select id="shopping-need" onchange="renderShoppingDeals()"><option value="">All my needs / browse</option></select></label></div>
   <div class="flights-toolbar"><label><input type="checkbox" id="shopping-confirmed" onchange="renderShoppingDeals()"> Only my listed size</label><label><input type="checkbox" id="shopping-saved" onchange="renderShoppingDeals()"> Saved deals</label></div>
   <p id="shopping-summary" class="flights-note" role="status"></p>
   <div id="shopping-results"></div><section id="shopping-campaigns"></section><section id="shopping-stores"></section><details id="shopping-coverage"></details>
