@@ -101,7 +101,12 @@ export async function readSource(source,checkedAt,fetchImpl=fetch){
 export function priceHistory(items,prior,checkedAt){
   const day=checkedAt.slice(0,10),cut=new Date(Date.parse(checkedAt)-30*86400000).toISOString().slice(0,10),history={};
   for(const [key,rows] of Object.entries(prior || {})){const keep=rows.filter(r=>r.day>=cut && r.day<=day && r.price>0).slice(-30);if(keep.length)history[key]=keep;}
-  const updated=items.map(i=>{const rows=history[i.id] || [],last=rows[rows.length-1];const lows=rows.map(r=>r.price);const out={...i,...(last?{previousPrice:last.price,previousChecked:last.at,priorLow:Math.min(...lows)}:{})};history[i.id]=rows.filter(r=>r.day!==day).concat({day,price:i.price,at:checkedAt});return out;});
+  // Compare with earlier days only: a same-day rerun replaces today's row.
+  // priorLowAt is the latest day the low was seen ("Was ₱990 on 13 Oct").
+  const updated=items.map(i=>{const before=(history[i.id] || []).filter(r=>r.day!==day),last=before[before.length-1];
+    const low=before.reduce((m,r)=>!m || r.price<=m.price?r:m,null),high=Math.max(...before.map(r=>r.price));
+    const out={...i,firstSeen:before[0]?.at || checkedAt,checks:before.length,...(last?{previousPrice:last.price,previousChecked:last.at,priorLow:low.price,priorLowAt:low.at,priorHigh:high}:{})};
+    history[i.id]=before.concat({day,price:i.price,at:checkedAt});return out;});
   // Bound the shared history document independently of retailer growth.
   const keep=Object.keys(history).sort((a,b)=>history[b].at(-1).at.localeCompare(history[a].at(-1).at)).slice(0,300);
   return {items:updated,history:Object.fromEntries(keep.map(k=>[k,history[k]]))};

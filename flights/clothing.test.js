@@ -26,6 +26,14 @@ test('blocked and script-only pages report coverage gaps, not invented offers',a
  assert.equal((await readSource({id:'nike',brand:'Nike',url:'https://www.nike.com/ph/'},at,async()=>new Response('blocked',{status:403}))).status,'unavailable');
  assert.equal((await readSource({id:'adidas',brand:'Adidas',url:'https://www.adidas.com.ph/'},at,async()=>new Response('<html>Enable JavaScript</html>'))).status,'unpriced');
 });
+test('price memory: first seen, lowest and highest on earlier days, and a same-day rerun is not a comparison',()=>{
+ const d1=priceHistory([{id:'a',price:900}],{},'2026-10-13T00:05:00Z'),d2=priceHistory([{id:'a',price:700}],d1.history,'2026-10-16T00:05:00Z');
+ const d3=priceHistory([{id:'a',price:800}],d2.history,'2026-10-19T00:05:00Z');
+ assert.deepEqual([d3.items[0].firstSeen,d3.items[0].checks,d3.items[0].priorLow,d3.items[0].priorLowAt,d3.items[0].priorHigh,d3.items[0].previousPrice],['2026-10-13T00:05:00Z',2,700,'2026-10-16T00:05:00Z',900,700]);
+ const rerun=priceHistory([{id:'a',price:750}],d3.history,'2026-10-19T06:00:00Z');
+ assert.equal(rerun.items[0].checks,2);assert.equal(rerun.items[0].previousPrice,700);assert.equal(rerun.history.a.length,3);assert.equal(rerun.history.a.at(-1).price,750);
+ assert.deepEqual([d1.items[0].checks,d1.items[0].firstSeen,d1.items[0].priorLow],[0,'2026-10-13T00:05:00Z',undefined]);
+});
 test('price history compares the exact observed product and retains a bounded thirty-day record',()=>{
  const first=priceHistory([{id:'a',price:500}],{},at);assert.equal(first.items[0].previousPrice,undefined);
  const next=priceHistory([{id:'a',price:450},{id:'b',price:300}],first.history,'2026-10-18T03:00:00Z');assert.equal(next.items[0].previousPrice,500);assert.equal(next.items[1].previousPrice,undefined);assert.equal(next.history.a.length,2);
