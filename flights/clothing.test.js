@@ -61,3 +61,7 @@ test('H&M keeps menswear and drops the kids care items and accessories on the sa
  const rows=parseHM(hm([{...product,mainCatCode:'men_tshirtstanks_poloshirts_shortsleeve',productName:'Regular-Fit Polo Shirt'},{...product,id:'k',mainCatCode:'kids_boys_clothing_takecare',productName:'2-Pack Mesh Laundry Bags'},{...product,id:'s',mainCatCode:'men_accessories_sunglasses',productName:'Polarized Sunglasses'}]),at);
  assert.deepEqual(rows.map(r=>[r.name,r.category]),[['Regular-Fit Polo Shirt','Tops']]);
 });
+test('H&M rows keep the whole size run as well as the sizes in stock',()=>{
+ const rows=parseHM(hm([{...product,mainCatCode:'men_trousers_casual',productName:'Slim Fit Wool-Blend Pants',sizes:[{label:'28',stock:2},{label:'30',stock:2},{label:'34',stock:0}]}]),at);
+ assert.deepEqual(rows[0].availableSizes,['28','30']);assert.deepEqual(rows[0].sizeRun,['28','30','34']);
+});

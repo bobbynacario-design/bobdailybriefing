@@ -40,11 +40,14 @@ export function parseHM(html,checkedAt){
     // H&M stock code 2 is explicitly available in the public listing. Other
     // codes are not guessed to mean stock. Listing availability isn't a hold.
     const sizes=Array.isArray(p.sizes)?p.sizes.filter(s=>s.stock===2).map(s=>String(s.label)):null;
+    // The whole run, stocked or not, tells a line cut in even waists only
+    // (28/30/32) from a sold-out 31.
+    const sizeRun=Array.isArray(p.sizes)?[...new Set(p.sizes.map(s=>String(s.label)))]:null;
     if(sizes && !sizes.length)return [];
     // The men's sale page also lists kids' care items and men's accessories.
     const code=String(p.mainCatCode || ''),kind=category(String(p.productName || ''),code);
     if(code && (!code.startsWith('men_') || code.startsWith('men_accessories')) || !kind)return [];
-    return [{id:id('hm:'+p.id),brand:'H&M',name:String(p.productName || '').slice(0,140),color:String(p.colorName || '').slice(0,60),category:kind,image:p.productImage || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:sizes,sizeSystem:'Labelled clothing',shipping:null}];
+    return [{id:id('hm:'+p.id),brand:'H&M',name:String(p.productName || '').slice(0,140),color:String(p.colorName || '').slice(0,60),category:kind,image:p.productImage || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:sizes,...(sizeRun?{sizeRun}:{}),sizeSystem:'Labelled clothing',shipping:null}];
   });
 }
 export function parseCrocs(body,checkedAt){
