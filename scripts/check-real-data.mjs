@@ -184,8 +184,20 @@ if (fl && flights && Array.isArray(flights.offers)) {
 const [hotelsShared, hotelTrips, hotelStays] = await Promise.all([get(COLL, 'hotels-latest'), get(COLL, 'hotel-trips-' + uid), get(COLL, 'hotel-stays-' + uid)]);
 if (hotelsShared && flights) {
   const fareDates = new Set((flights.offers || []).map((o) => o.departureDate + '|' + o.returnDate));
-  const stray = (hotelsShared.cities || []).flatMap((c) => (c.stays || []).filter((s) => !fareDates.has(s.checkIn + '|' + s.checkOut)).map((s) => c.city + ' ' + s.checkIn));
-  check('Hotels: the shared document holds only scouted fare dates', !('uid' in hotelsShared) && !stray.length, stray.length ? 'not a fare: ' + stray.join(', ') : (hotelsShared.cities || []).length + ' cities');
+  // Domestic and Metro Manila cities also price the next two Friday–Sunday
+  // weekends (b1b09c7). Those dates come from the calendar alone, so they say
+  // nothing about you. By hand: the first two Fridays after the scout's date.
+  const weekends = new Set();
+  for (let i = 1, from = Date.parse(hotelsShared.asOf + 'T00:00:00Z'); i <= 14 && weekends.size < 2 && from > 0; i++) {
+    const fri = new Date(from + i * 86400000);
+    if (fri.getUTCDay() === 5) weekends.add(fri.toISOString().slice(0, 10) + '|' + new Date(from + (i + 2) * 86400000).toISOString().slice(0, 10));
+  }
+  const weekend = (c, s) => s.kind === 'weekend' && !!c.market && c.market !== 'international' && weekends.has(s.checkIn + '|' + s.checkOut);
+  const all = (hotelsShared.cities || []).flatMap((c) => (c.stays || []).map((s) => ({c, s})));
+  const stray = all.filter(({c, s}) => !fareDates.has(s.checkIn + '|' + s.checkOut) && !weekend(c, s)).map(({c, s}) => c.city + ' ' + s.checkIn + (s.kind ? ' (' + s.kind + ')' : ''));
+  const weekendCount = all.filter(({c, s}) => weekend(c, s)).length;
+  check('Hotels: the shared document holds only scouted fare dates and the next two weekends', !('uid' in hotelsShared) && !stray.length,
+    stray.length ? 'not a fare or an upcoming weekend: ' + stray.join(', ') : (hotelsShared.cities || []).length + ' cities; ' + (all.length - weekendCount) + ' fare stays, ' + weekendCount + ' weekend stays');
 }
 if (hotelTrips) check('Hotels: your saved trips are scoped to you', hotelTrips.uid === uid && hotelTrips.kind === 'hotel-trips', (hotelTrips.trips || []).length + ' trips saved ' + hotelTrips.updatedAt);
 if (hotelStays) {
