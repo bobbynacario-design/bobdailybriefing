@@ -7,11 +7,13 @@ const Scout = require('./scout');
 // One bounded weekly shortlist per owner, stored privately like other research.
 async function makeScout(db, uid) {
   const read = async prefix => { const s=await db.collection(BRIEFINGS_COLL).doc(prefix+uid).get(); return s.exists?s.data():{}; };
-  const [profile,prefs,saved]=await Promise.all([loadProfile(db,uid),read('scout-prefs-'),read('scout-saved-')]);
+  const [profile,prefs,saved,accountsDoc]=await Promise.all([loadProfile(db,uid),read('scout-prefs-'),read('scout-saved-'),read('accounts-').catch(()=>({}))]);
+  // His insurers and solicitors name the work-lane organisers to look for.
+  const kept=cleanAccounts(accountsDoc.accounts),accounts=kept.length?kept:DEFAULT_ACCOUNTS;
   const response=await fetch('https://api.openai.com/v1/responses',{
     method:'POST',headers:{Authorization:'Bearer '+OPENAI_API_KEY.value(),'Content-Type':'application/json'},
     body:JSON.stringify({model:DEFAULT_MODEL,input:[{role:'system',content:'Search official public pages and return factual upcoming opportunities as strict JSON.'},
-      {role:'user',content:Scout.prompt(profile,prefs,saved.items,phtDateKey())}],
+      {role:'user',content:Scout.prompt(profile,prefs,saved.items,phtDateKey(),accounts)}],
     tools:[{type:'web_search',search_context_size:'medium'}],tool_choice:'required',include:['web_search_call.action.sources']}),signal:AbortSignal.timeout(220000)
   });
   if(!response.ok)throw new HttpsError('unavailable','Scout search failed. Try again later.');
