@@ -1276,8 +1276,10 @@ window.fbLoadMiroJournal = async function() {
 // Shared official sale observations; personal profile and saves are UID-scoped.
 window.fbLoadShopping = async function() {
   var uid = getUid(); if (!uid) throw new Error('Sign in to load clothing offers.');
-  var snaps = await Promise.all([getDoc(doc(db, COLL, 'shopping-latest')),getDoc(doc(db, COLL, 'shopping-uniqlo-' + uid))]);
-  return UniqloImport.merge(snaps[0].exists() ? snaps[0].data() : null, snaps[1].exists() ? snaps[1].data() : null);
+  // Query by UID rather than reading a missing private document: the shared
+  // project's rules can deny reads of nonexistent documents on first use.
+  var snaps = await Promise.all([getDoc(doc(db, COLL, 'shopping-latest')),getDocs(query(collection(db, COLL),where('uid','==',uid),where('kind','==','shopping-uniqlo-import'),limit(1)))]);
+  return UniqloImport.merge(snaps[0].exists() ? snaps[0].data() : null, snaps[1].empty ? null : snaps[1].docs[0].data());
 };
 window.fbSaveShoppingUniqlo = async function(data) {
   var uid = getUid(); if (!uid) throw new Error('Sign in to save your UNIQLO import.');
