@@ -62,4 +62,18 @@ function buildShadowJournal(prior, markets, resolutions, asOf, liveModel, hc, re
     stats: { nOpen: Object.keys(open).length, nResolved: resolved.length, newlyResolved: newly, live: live, models: models } };
 }
 
-export { buildShadowJournal };
+// Which of the markets about to be read the shadow models should read
+// (17 Oct 2026). A market joins the contest once, at its first shadow read,
+// so a later shadow read of it adds nothing to the contest: only markets not
+// yet in it are read, and none once the contest has closed to new markets
+// (`until`, a YYYY-MM-DD Manila date; blank = no end). Locked markets are
+// still scored, free, as they resolve.
+function shadowTargets(markets, journal, asOf, until) {
+  if (until && asOf > until) return [];
+  var locked = {};
+  Object.keys((journal && journal.open) || {}).forEach(function (slug) { locked[slug] = true; });
+  ((journal && journal.resolved) || []).forEach(function (r) { if (r && r.slug) locked[r.slug] = true; });
+  return (markets || []).filter(function (m) { return m && m.slug && !locked[m.slug]; });
+}
+
+export { buildShadowJournal, shadowTargets };

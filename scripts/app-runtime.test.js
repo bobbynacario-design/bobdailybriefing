@@ -148,7 +148,7 @@ test('Markets shows when each panel read was made, the fact sheet it read, and h
 });
 
 test('Markets accuracy stays cautious below 30 resolved forecasts',()=>{
-  const {context}=environment(['miroHealthHtml','miroContestHtml','miroModelName'],{esc:String});
+  const {context}=environment(['miroHealthHtml','miroContestHtml','miroContestDates','miroModelName'],{esc:String});
   for(const nResolved of [0,1,7,29])for(const skill of [-.1,.1]){
     const out=context.miroHealthHtml({stats:{nResolved,skill}},{meta:{}});
     assert.match(out,/Too few outcomes to assess/);assert.doesNotMatch(out,/Beating market baseline|Not beating market baseline/);
@@ -2138,7 +2138,7 @@ test('Markets: each panel card says its numbers in plain words, and one glossary
 });
 
 test('Markets model contest: shadow reads shown but never used, and the contest scored after the haircut beside the price',()=>{
-  const {context}=environment(['miroPanelPlain','miroPct','miroVerdict','miroModelName','miroContestHtml'],{esc:escHtml});
+  const {context}=environment(['miroPanelPlain','miroPct','miroVerdict','miroModelName','miroContestHtml','miroContestDates'],{esc:escHtml});
   const m={impliedYes:0.625,panelProb:0.104,haircutProb:0.33,panelN:5,edge:0.28,edgeSide:'NO',gate:'GO',yesBid:0.62,yesAsk:0.63,spread:0.01,
     panelRead:{shadow:{'claude-sonnet-5-5':[0.2,0.2,0.2],'claude-fable-5-1':[0.18,0.25,0.2]}}};
   const h=context.miroPanelPlain(m);
@@ -2151,4 +2151,8 @@ test('Markets model contest: shadow reads shown but never used, and the contest 
   assert.ok(done.indexOf('Claude Fable 5.1 0.18 vs price 0.2 on 2')<done.indexOf('Claude Haiku 5.5 (live) 0.3'));
   assert.ok(done.includes('Under 20 resolved, this is not yet a basis for switching.'));
   assert.equal(context.miroContestHtml(null),'');
+  // Its end date (17 Oct 2026): when it stops taking markets, when the open ones close, and what 7 markets can show.
+  const dated=context.miroContestHtml({nOpen:7,nResolved:0,live:'claude-haiku-5-5',models:[],closesToNewAfter:'2026-12-31',openMarketsCloseBy:'2027-01-31'});
+  assert.ok(dated.includes('No new markets join after 31 Dec 2026. The open markets close by 31 Jan 2027, so results arrive as they resolve. With 7 markets it can show a lean, not settle a switch (that needs about 20).'),dated);
+  assert.ok(!open.includes('No new markets join'),'an older record without the dates says nothing about them');
 });

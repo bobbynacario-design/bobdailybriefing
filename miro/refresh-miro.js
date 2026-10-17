@@ -30,7 +30,7 @@ import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { aggregatePanel, readSummary } from './scenario.js';
-import { buildShadowJournal } from './shadow-journal.js';
+import { buildShadowJournal, shadowTargets } from './shadow-journal.js';
 import { buildMiroJournal } from './journal-miro.js';
 import { enrichMarketChanges, marketResearchPaused } from './briefing.js';
 import { explainMarketMoves, ledgerUsage } from './catalysts.js';
@@ -132,6 +132,8 @@ var JOURNAL_VERSION = '1.2.0';
 // (blank = off).
 var SHADOW_MODELS = (process.env.MIRO_SHADOW_MODELS != null ? process.env.MIRO_SHADOW_MODELS.split(',') : (CONFIG.panel.shadowModels || []))
   .map(function (s) { return s.trim(); }).filter(Boolean);
+// The contest takes no new markets after this Manila date (config shadowUntil).
+var SHADOW_UNTIL = String(process.env.MIRO_SHADOW_UNTIL != null ? process.env.MIRO_SHADOW_UNTIL : (CONFIG.panel.shadowUntil || '')).trim();
 var ARGV = process.argv.slice(2);
 var DRY_RUN = ARGV.indexOf('--dry-run') !== -1;
 var NO_OPENAI = ARGV.indexOf('--no-openai') !== -1;
@@ -590,12 +592,22 @@ async function main() {
       evidence[m.slug] = [factEvidence(factsBySlug[m.slug])].filter(Boolean).concat(plan.evidence[m.slug] || []).slice(0, 4);
     });
     if (toRead.length) panel = await runPanel(toRead, CONFIG, { evidence: evidence });
-    // Shadows read exactly what the live panel read, only when it read.
+    // Shadows read exactly what the live panel read, only when it read, and
+    // only markets not yet in the contest (shadowTargets).
+    var shadowRead = [];
     if (IS_ANTHROPIC && panel.calls && SHADOW_MODELS.length) {
+      var contest = null;
+      try { var contestSnap = await db.collection(COLL).doc('miro-shadow-journal').get(); contest = contestSnap.exists ? contestSnap.data() : null; }
+      catch (e) { console.warn('Shadow: contest unreadable, no shadow reads this run: ' + (e.message || e)); contest = { open: {} }; toRead.forEach(function (m) { contest.open[m.slug] = true; }); }
+      shadowRead = shadowTargets(toRead, contest, dateKey, SHADOW_UNTIL);
+      console.log('Shadow: ' + (SHADOW_UNTIL && dateKey > SHADOW_UNTIL ? 'contest closed to new markets after ' + SHADOW_UNTIL + ', none read'
+        : shadowRead.length + ' of ' + toRead.length + ' to read (the rest are already in the contest)') + '.');
+    }
+    if (shadowRead.length) {
       for (var si = 0; si < SHADOW_MODELS.length; si++) {
         var sm = SHADOW_MODELS[si];
         if (sm === PANEL_MODEL) continue;
-        var sr = await runClaudePanel(toRead, CONFIG.panel.personas, { apiKey: PANEL_KEY, model: sm, evidence: evidence, log: function () {} });
+        var sr = await runClaudePanel(shadowRead, CONFIG.panel.personas, { apiKey: PANEL_KEY, model: sm, evidence: evidence, log: function () {} });
         shadowReads[sm] = sr.reads;
         shadowUsage.push({ model: sm, usage: sr.usage, calls: sr.calls });
         console.log('Shadow ' + sm + ': ' + sr.calls + ' calls, input ' + sr.usage.inputTokens + ', output ' + sr.usage.outputTokens + ', missing ' + sr.missing.length);
@@ -762,7 +774,13 @@ async function main() {
     if (!DRY_RUN) await db.collection(COLL).doc('miro-shadow-journal').set(shadowJournal);
     console.log('Shadow journal: ' + shadowJournal.stats.nOpen + ' open, ' + shadowJournal.stats.nResolved + ' resolved' + (DRY_RUN ? ' (dry run, not written)' : '') + '.');
   } catch (e) { console.warn('Shadow journal skipped: ' + (e.message || e)); }
-  if (shadowJournal) journalBody.shadow = shadowJournal.stats;
+  // The card says when the contest stops taking markets, and when its open
+  // markets close (so when the results can arrive).
+  if (shadowJournal) {
+    var contestEnds = Object.keys(shadowJournal.open).map(function (slug) { var m = marketsData.find(function (x) { return x.slug === slug; }); return m && m.endDate ? String(m.endDate).slice(0, 10) : ''; })
+      .filter(Boolean).sort();
+    journalBody.shadow = Object.assign({}, shadowJournal.stats, { closesToNewAfter: SHADOW_UNTIL || null, openMarketsCloseBy: contestEnds.length ? contestEnds[contestEnds.length - 1] : null });
+  }
   var journalDoc = Object.assign({ generatedAt: new Date().toISOString(), asOf: dateKey, meta: meta }, journalBody);
   if (DRY_RUN) {
     console.log('--dry-run: NOT writing miro-journal.');

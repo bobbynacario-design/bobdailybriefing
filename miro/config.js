@@ -116,6 +116,12 @@ var PANEL = {
   // read; miro-shadow-journal scores them against Haiku and the price so a
   // switch is decided by results. Blank MIRO_SHADOW_MODELS turns them off.
   shadowModels: ['claude-sonnet-5-5', 'claude-fable-5-1'],
+  // The contest closes to new markets after this Manila date (17 Oct 2026, Bob:
+  // "give the Markets model contest an end date"). Its 7 markets were locked on
+  // 14 Oct and all close by 31 Jan 2027, so the results arrive in January and
+  // need no further shadow reads; only a market not yet in the contest is ever
+  // shadow-read (shadowTargets). MIRO_SHADOW_UNTIL overrides; blank = no end.
+  shadowUntil: '2026-12-31',
   factSheet: true,
   factSheetModel: 'claude-sonnet-5-5',
   factSheetMaxSearches: 10,

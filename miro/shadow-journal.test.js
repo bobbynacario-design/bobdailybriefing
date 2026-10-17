@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildShadowJournal} from './shadow-journal.js';
+import {buildShadowJournal, shadowTargets} from './shadow-journal.js';
 import {readSummary} from './scenario.js';
 import {CONFIG} from './config.js';
 
@@ -36,4 +36,16 @@ test('resolution scores each model raw and after the haircut beside the price on
   assert.ok(sonnet.brierCut < sonnet.brierRaw);
   const again = buildShadowJournal(j2, [], [{slug: 'duterte', outcome: 1}], '2026-12-21', 'claude-haiku-5-5', hc, readSummary);
   assert.equal(again.stats.nResolved, 1, 'a resolution is counted once');
+});
+
+// 17 Oct 2026: a market joins the contest once, so only markets not yet in it
+// are shadow-read, and none after the contest closes to new markets.
+test('shadow models read only markets not yet in the contest, and none after it closes', () => {
+  const markets = [{slug: 'locked-open'}, {slug: 'locked-resolved'}, {slug: 'new-market'}, null, {}];
+  const journal = {open: {'locked-open': {}}, resolved: [{slug: 'locked-resolved'}]};
+  assert.deepEqual(shadowTargets(markets, journal, '2026-10-17', '2026-12-31').map((m) => m.slug), ['new-market']);
+  assert.deepEqual(shadowTargets(markets, journal, '2026-12-31', '2026-12-31').map((m) => m.slug), ['new-market'], 'the last day still counts');
+  assert.deepEqual(shadowTargets(markets, journal, '2027-01-01', '2026-12-31'), [], 'closed to new markets');
+  assert.deepEqual(shadowTargets(markets, null, '2027-01-01', '').map((m) => m.slug), ['locked-open', 'locked-resolved', 'new-market'], 'no contest yet and no end date: every market');
+  assert.equal(CONFIG.panel.shadowUntil, '2026-12-31');
 });

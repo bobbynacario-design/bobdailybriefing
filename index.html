@@ -11633,17 +11633,27 @@ function miroHealthHtml(j, d) {
 }
 // The model contest (miro/shadow-journal.js): every model locked at the same
 // read and price, scored after the card's haircut beside the price.
+// When the contest stops taking markets and when its open markets close
+// (17 Oct 2026: it was given an end date; locked markets cost nothing more).
+function miroContestDates(s) {
+  var day = function (iso) { return /^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}) : ''; };
+  var out = [];
+  if (day(s.closesToNewAfter)) out.push('No new markets join after ' + day(s.closesToNewAfter) + '.');
+  if (s.nOpen && day(s.openMarketsCloseBy)) out.push('The open ' + (s.nOpen === 1 ? 'market closes' : 'markets close') + ' by ' + day(s.openMarketsCloseBy) + ', so results arrive as they resolve.');
+  if (s.nOpen + (s.nResolved || 0) < 20) out.push('With ' + (s.nOpen + (s.nResolved || 0)) + ' markets it can show a lean, not settle a switch (that needs about 20).');
+  return out.length ? ' ' + out.join(' ') : '';
+}
 function miroContestHtml(s) {
   if (!s) return '';
   var live = miroModelName(s.live || '');
   var names = (s.models || []).map(function (x) { return x.model; });
   if (!s.nResolved) {
-    return '<div class="miro-health"><strong>Model contest:</strong> ' + esc(s.nOpen + ' market' + (s.nOpen === 1 ? '' : 's') + ' locked for ' + live + ' (live) and the shadow models on the same facts. Each is scored when its market resolves; the switch waits for results.') + '</div>';
+    return '<div class="miro-health"><strong>Model contest:</strong> ' + esc(s.nOpen + ' market' + (s.nOpen === 1 ? '' : 's') + ' locked for ' + live + ' (live) and the shadow models on the same facts. Each is scored when its market resolves; the switch waits for results.' + miroContestDates(s)) + '</div>';
   }
   var rows = (s.models || []).slice().sort(function (a, b) { return (a.brierCut == null ? 9 : a.brierCut) - (b.brierCut == null ? 9 : b.brierCut); }).map(function (x) {
     return esc(miroModelName(x.model)) + (x.model === s.live ? ' (live)' : '') + ' ' + (x.brierCut == null ? 'n/a' : x.brierCut) + ' vs price ' + (x.brierPrice == null ? 'n/a' : x.brierPrice) + ' on ' + x.n;
   }).join(' · ');
-  return '<div class="miro-health"><strong>Model contest</strong> (Brier after the haircut, lower is better): ' + rows + '. ' + esc(s.nOpen + ' still open.' + (s.nResolved < 20 ? ' Under 20 resolved, this is not yet a basis for switching.' : '')) + '</div>';
+  return '<div class="miro-health"><strong>Model contest</strong> (Brier after the haircut, lower is better): ' + rows + '. ' + esc(s.nOpen + ' still open.' + (s.nResolved < 20 ? ' Under 20 resolved, this is not yet a basis for switching.' : '') + miroContestDates(s)) + '</div>';
 }
 // How the panel's reads were produced. The LLM control says the panel is
 // "running", which is true but not the whole story: with web_search off the
