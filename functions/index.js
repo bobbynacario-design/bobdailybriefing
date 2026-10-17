@@ -1,6 +1,35 @@
 "use strict";
 
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
+const ScoutCore = require('./scout-core');
+const Scout = require('./scout');
+
+// One bounded weekly shortlist per owner, stored privately like other research.
+async function makeScout(db, uid) {
+  const read = async prefix => { const s=await db.collection(BRIEFINGS_COLL).doc(prefix+uid).get(); return s.exists?s.data():{}; };
+  const [profile,prefs,saved]=await Promise.all([loadProfile(db,uid),read('scout-prefs-'),read('scout-saved-')]);
+  const response=await fetch('https://api.openai.com/v1/responses',{
+    method:'POST',headers:{Authorization:'Bearer '+OPENAI_API_KEY.value(),'Content-Type':'application/json'},
+    body:JSON.stringify({model:DEFAULT_MODEL,input:[{role:'system',content:'Search official public pages and return factual upcoming opportunities as strict JSON.'},
+      {role:'user',content:Scout.prompt(profile,prefs,saved.items,phtDateKey())}],
+    tools:[{type:'web_search',search_context_size:'medium'}],tool_choice:'required',include:['web_search_call.action.sources']}),signal:AbortSignal.timeout(220000)
+  });
+  if(!response.ok)throw new HttpsError('unavailable','Scout search failed. Try again later.');
+  const json=await response.json();
+  await recordUsage(db,'scout',DEFAULT_MODEL,extractUsage(json),phtDateKey());
+  await recordSearches(db,'scout',webSearchCount(json),phtDateKey());
+  let raw;try{raw=parseBriefing(extractText(json));}catch(e){throw new HttpsError('internal','Scout returned an unreadable shortlist. Your previous shortlist is kept.');}
+  if(!raw||!Array.isArray(raw.items))throw new HttpsError('internal','Scout returned no valid shortlist.');
+  const allowed=searchUrls(json).map(ScoutCore.url).filter(Boolean);
+  const items=ScoutCore.clean(raw.items,allowed,phtDateKey());
+  if(raw.items.length&&!items.length)throw new HttpsError('internal','No opportunities passed source and date checks. Your previous shortlist is kept.');
+  const result={uid,kind:'scout-latest',items,generatedAt:new Date().toISOString(),week:WeeklyReviewCore.weekStart(phtDateKey())};
+  await db.collection(BRIEFINGS_COLL).doc('scout-latest-'+uid).set(result);
+  return result;
+}
+async function guardedScout(db,uid,requestId){
+  return guardedGeneration({db,uid,feature:'scout',period:phtDateKey().slice(0,7),cap:8,requestId,input:{week:WeeklyReviewCore.weekStart(phtDateKey())}},()=>makeScout(db,uid));
+}
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const {defineSecret} = require("firebase-functions/params");
@@ -2069,3 +2098,19 @@ exports.deliverMorningFive = onSchedule(
     }
   }
 );
+
+// Scout shares the existing owner-only generation limits and metering.
+exports.generateScout=onCall({region:'asia-southeast1',timeoutSeconds:240,memory:'512MiB',secrets:[OPENAI_API_KEY]},async request=>{
+  try{authorize(request.auth,GENERATION_OWNERS);return await guardedScout(getFirestore(),request.auth.uid,(request.data||{}).requestId);}
+  catch(e){if(e instanceof HttpsError)throw e;throw new HttpsError(['unauthenticated','permission-denied','invalid-argument','resource-exhausted','failed-precondition'].includes(e.code)?e.code:'internal',e.code?e.message:'Scout could not finish. Your previous shortlist is kept.');}
+});
+exports.buildWeeklyScout=onSchedule({schedule:'15 6 * * 0',timeZone:'Asia/Manila',region:'asia-southeast1',timeoutSeconds:540,memory:'512MiB',secrets:[OPENAI_API_KEY]},async()=>{
+  const db=getFirestore(),week=WeeklyReviewCore.weekStart(phtDateKey());
+  for(const email of GENERATION_OWNERS){
+    try{const user=await getAuth().getUserByEmail(email);if(!user.emailVerified||user.disabled)continue;
+      const snap=await db.collection(BRIEFINGS_COLL).doc('scout-latest-'+user.uid).get();
+      if(snap.exists&&snap.data().week===week)continue;
+      await guardedScout(db,user.uid,'weekly-scout-'+week);
+    }catch(e){logger.warn('Weekly Scout not built',{code:e.code||'',message:e.message});}
+  }
+});

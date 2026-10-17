@@ -32,6 +32,8 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/evidence-sets-core.js"></script>
 <script src="./lib/entity-timeline-core.js"></script>
 <script src="./lib/radar-assistant-core.js"></script>
+<script src="./lib/scout-core.js"></script>
+<script src="./lib/scout-ui.js"></script>
 <script src="./lib/flights-core.js"></script>
 <script src="./lib/sports-trust-core.js"></script>
 <script src="./lib/llm-trend-core.js"></script>
@@ -1340,6 +1342,31 @@ async function fbReadOwn(id) {
   try { var snap = await getDoc(doc(db,COLL,id + uid)); return snap.exists() ? snap.data() : null; }
   catch (e) { if (e.code === 'permission-denied') return null; throw e; }
 }
+window.fbLoadScout = async function() {
+  var rows=await Promise.all([fbReadOwn('scout-latest-'),fbReadOwn('scout-saved-'),fbReadOwn('scout-prefs-')]);
+  return {feed:rows[0],choices:rows[1]&&rows[1].items||{},prefs:rows[2]};
+};
+window.fbSaveScoutPrefs = async function(p) {
+  var uid=getUid();if(!uid)throw new Error('Sign in first');
+  await setDoc(doc(db,COLL,'scout-prefs-'+uid),Object.assign({uid:uid,kind:'scout-prefs'},ScoutCore.prefs(p)));
+};
+window.fbBuildScout = async function() {
+  if(!getUid())throw new Error('Sign in first');
+  return (await httpsCallable(functions,'generateScout',{timeout:250000})({requestId:crypto.randomUUID()})).data;
+};
+window.fbScoutChoice = async function(item,action,value) {
+  var uid=getUid();if(!uid)throw new Error('Sign in first');
+  if(!['saved','interested','more','hidden'].includes(action))throw new Error('Invalid choice');
+  var cleaned=ScoutCore.clean([item])[0];if(!cleaned)throw new Error('Invalid opportunity');
+  return runTransaction(db,async function(tx){
+    var ref=doc(db,COLL,'scout-saved-'+uid),snap=await tx.get(ref),items=snap.exists()?snap.data().items||{}:{};
+    var choice=Object.assign({},items[cleaned.id]||{},{item:cleaned,updatedAt:Date.now()});choice[action]=!!value;items[cleaned.id]=choice;
+    if(!choice.saved&&!choice.interested&&!choice.more&&!choice.hidden)delete items[cleaned.id];
+    if(Object.keys(items).length>100)throw new Error('Your Scout list is full (100). Clear a saved choice first.');
+    tx.set(ref,{uid:uid,kind:'scout-saved',items:items});return items;
+  });
+};
+
 window.fbLoadHotelTrips = function() { return fbReadOwn('hotel-trips-'); };
 // Fare watches, flights-watch-<uid>: {uid, kind, items:{id:{city, airports,
 // origin, from, to, minNights, maxNights, target}}}. The morning push reads it.
@@ -3336,6 +3363,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 #page-shopping .shopping-leads li{font-size:12px}
 #shopping-needs,#shopping-stores,#shopping-coverage{margin:1rem 0}
 @media(max-width:600px){#page-shopping .shopping-title{font-size:18px}#page-shopping .shopping-filters{grid-template-columns:repeat(2,minmax(0,1fr))}#page-shopping .shopping-filters label:last-child{grid-column:1/-1}#page-shopping .deal-grid{grid-template-columns:minmax(0,1fr)}#page-shopping .shopping-photo{height:160px}#page-shopping input,#page-shopping select,#page-shopping textarea{font-size:16px}}
+.scout-card h3{margin:0;font-size:18px}.scout-card p{font-size:13px;line-height:1.6}.scout-card dl{display:grid;grid-template-columns:80px 1fr;gap:.4rem;font-size:12px;line-height:1.5}.scout-card dt{color:var(--txt3)}.scout-card dd{margin:0}.scout-card a,#scout-today a{color:var(--gold)}#page-scout textarea{width:100%;background:var(--bg2);color:var(--txt);padding:.6rem;border:1px solid var(--rim);border-radius:8px}#page-scout [aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
 </style>
 </head>
 <body>
@@ -3469,6 +3497,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <button class="ntab" data-page="miro" onclick="switchPage('miro',this)">Markets</button>
     <button class="ntab" data-page="sports" onclick="switchPage('sports',this)">Sports</button>
     <button class="ntab" data-page="calendar" onclick="switchPage('calendar',this)">Calendar</button>
+    <button class="ntab owner-only" data-page="scout" onclick="switchPage('scout',this)">Scout</button>
     <button class="ntab" data-page="flights" onclick="switchPage('flights',this)">Trips</button>
     <button class="ntab owner-only" data-page="shopping" onclick="switchPage('shopping',this)">Clothing</button>
     <button class="ntab owner-only" data-page="about" onclick="switchPage('about',this)">About you</button>
@@ -3729,6 +3758,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
        morning, so they lead; This week stays above it (small, and the Sunday review starts there).
        A push still lands on Morning 5 (#command scrolls to it). -->
   <section class="research-card owner-only" id="today-research" hidden aria-labelledby="health-research-title"></section>
+  <section id="scout-today" class="today-five" aria-label="Scout deadlines" hidden></section>
   <section class="today-five" id="today-five" aria-label="Morning 5">
     <div id="command-load-status" role="status"></div>
     <section class="command-panel">
@@ -4167,6 +4197,20 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 </div>
 
 <!-- ═══════════════ FLIGHTS PAGE ═══════════════ -->
+<div class="page" id="page-scout">
+  <div class="hero"><div class="hero-label">YOUR NEXT OPPORTUNITY</div><h1>Scout</h1><div class="hero-sub">Connections, learning and discoveries worth making time for.</div></div>
+  <p class="flights-note">A small weekly shortlist around your work and interests. Updated Sundays at 06:15 PHT; build a fresh shortlist whenever your plans change.</p>
+  <details class="flight-fold" open><summary class="flights-group">What should Scout look for?</summary>
+    <div class="flights-controls"><label>Interests<textarea id="scout-interests" maxlength="600" rows="3"></textarea></label><label>Where<input id="scout-geography" maxlength="300"></label></div>
+    <div class="flight-actions"><button class="tool-chip" id="scout-save-prefs" onclick="saveScoutPreferences()">Save preferences</button><button class="tool-chip owner-only" id="scout-build" onclick="buildScout()">Scout opportunities</button></div>
+    <p class="flights-note">Your work profile from About you shapes professional picks. More like this nudges future shortlists. Up to eight builds per month, including weekly runs.</p>
+  </details>
+  <div class="flights-controls"><label>Lane<select id="scout-lane" onchange="paintScout()"><option value="">All opportunities</option><option value="work">Work &amp; learning</option><option value="people">People &amp; communities</option><option value="interests">Interests &amp; discovery</option></select></label><label>View<select id="scout-view" onchange="paintScout()"><option value="all">Upcoming &amp; ongoing</option><option value="saved">Saved &amp; interested</option><option value="hidden">Hidden</option></select></label></div>
+  <button class="tool-chip" onclick="reloadScout()">Reload saved shortlist</button>
+  <p id="scout-status" class="flights-note" role="status" aria-live="polite"></p><p id="scout-updated" class="flights-note"></p>
+  <div id="scout-results"></div>
+</div>
+
 <div class="page" id="page-flights">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">Your trip planner</div>
@@ -4621,6 +4665,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     </div>
 
     <div class="help-card">
+      <div class="help-h">Scout — opportunities around your work and interests</div><p>Explore → Scout finds seminars, professional communities, exhibits and talks. Edit your interests and geography; your work profile comes from About you. Save and Interested keep picks across weekly refreshes; More like this shapes future searches, and Hide removes a pick from upcoming results. Saved deadlines within seven days appear on Today. Past events remain in Saved. Each pick links to its source; check it for registration and availability. Sunday 06:15 PHT and manual builds share an eight-build monthly limit and use metered web search and AI. Opening Scout only reads the saved shortlist.</p>
       <div class="help-h">Clothing — your shopping scout</div><p>Open Explore → Clothing for a bounded sample of official Philippine retailer markdowns. Your private profile starts with the sizes and brands you confirmed: Medium, Small when explicitly American sizing, US men’s 8.5, plus an optional waist (inches) and EU jacket size for trousers and tailoring sold in numeric sizes; UNIQLO, H&amp;M, ZALORA, Nike, Adidas and Crocs. Add up to ten needs with a category and optional item-price budget; the text is your reference, while category and budget filter the deals. Your style guide sets buy rules (would you pay full price; two outfits with what you own; your colours; a gap, not a duplicate; right for Manila or a trip or event you have), outfit formulas for home and calls, poker nights and trips, the gym and going out, and a wardrobe count of 19 core pieces. Each deal then gets a verdict: Worth it (known wardrobe gap, at least two supported outfit formulas, no known taste conflict or unverified preferred colour, fit or pattern, listed size available, and a fixed item price; these lead the list), Check first (warm fabric for Manila, black-tie only, outside your colours, patterned, already covered, or no outfit uses it yet) or Likely to sit unworn (such as track spikes, sorted last). Promising marks details still needing confirmation, including size and variant pricing. Each card also says what to Pair it with: partner colours for its main colour, kept to your palette (plain menswear rules; black tie for a tuxedo), and the pieces you own from the outfit formulas that use it, plus one tip where it matters (keep the rest plain with a pattern, balance a roomy or slim cut). Add optional colours for each category under Your wardrobe. A specific pairing such as your navy chinos uses recorded colours and a positive category count; otherwise the suggested colours need checking. Your style guide also reads the trips on your Trips tab for the next 90 days (overlapping saves for the same city count as one trip; different cities stay separate): typical climate for the city and month, what each trip needs from your wardrobe (a top a day up to a week, chinos or jeans for cool or casino evenings, a warm layer for cool air or casino air-con, a light jacket below about 15°C, closed shoes), and what is short with an order-by date a week before you leave. Select Use for clothing planning and save your trip choices to include a trip in purchase advice; unselected trips are previews. An incomplete wardrobe group cannot establish a shortage, although recorded pieces can establish that you already have enough. A deal that fills a selected trip gap says so on its card and is not treated as a duplicate. Warm fabric still needs a comfort and weight check, even when the trip needs another piece. The seven-day delivery allowance is guidance, not a promised arrival date. Only Worth it deals shows the strongest verdicts. Blank wardrobe counts are unknown; enter 0 to record none. Bought it records an existing purchase after you confirm its category and total owned, updates that wardrobe count, and moves already-bought listings down. Undo purchase restores the earlier count only if no later edit changed it. Your taste adds optional fit, colour, design, material/technology and occasion choices plus category price limits. Recommendations explain named product traits and flag missing information. My style and Not for me feedback are private, undoable, and shared traits affect other items after two examples; a saved deal is only a weak signal. Your style guide’s Worth it deals come first; within them and after them, deals rank by discount: your size listed adds 15 points, a price fall since the last check adds 5, a price that was lower on an earlier check takes 5 off, and taste moves an item by at most 20, so it reorders similar deals without burying a much deeper markdown. Ticking every option in a group counts as no preference, only an item's main colour counts, and items you mark Not for me go last. Invalid prices, stale offers and known wrong sizes remain excluded. No extra AI calls. Save deals, filter for your listed size, and check the coverage panel when a retailer blocks the reader or needs an interactive catalogue. Each run opens Nike's sale product pages to read which shoe sizes are in stock; a range made in whole sizes only shows your 8.5 as unchecked rather than sold out. ZALORA product pages put up a human check, so ZALORA sizes stay unchecked. Prices exclude unknown delivery fees and conditional vouchers. A price that needs a voucher at checkout, and a sale lead with unchecked dates, sit below the deals as one line per promotion. Update UNIQLO opens a separate browser import: copy its offers page and paste it, or choose a saved HTML page, review the parsed offers and save. The UID-scoped import survives automatic scout refreshes and lasts until each published offer end date, with a 35-day safety bound. An online listing does not establish branch stock. Store announcements require published dates and explicit participation in QC, Ortigas, Makati or Pasay. The Monday/Thursday 08:00 PHT job uses no AI or paid shopping-data API; Reload only reads its saved result. Product price observations are retained for up to thirty days (from 17 Oct 2026), and each card says what they show: lowest price seen, back to its lowest, the same price at every check (that sale price is the usual price), or cheaper before (worth waiting); the quoted discount is against the retailer’s listed regular price.</p>
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Trips — fares, hotels and seat sales</div>
       <p><b>Trips worth checking first</b> ranks up to three distinct destinations using fresh economy return samples, your trip length and an optional PHP budget. Set an extra-cost allowance for planning; it is added to the fare when checking your budget, but is not a verified ticket total. The cards explain why each option was selected and which taxes, baggage or stops remain unconfirmed. Checked-baggage preference highlights gaps; confirmed-nonstop-only excludes flights with unknown stops. Below it, <b>All destinations</b> lists cities by region (tap a region header to fold it; <b>Expand all</b> and <b>Collapse all</b> act on every region, folded regions are remembered on this device, and open cities stay open when you change filters), with separate journey and cabin groups ranked cheapest first, and each group's best fare, dates (weekday and nights) and how many fares were seen; open a city for every observed date pair, each with its own airline link, Save, and expandable fare restrictions, source-check timestamp and dated exchange rate. "All N fares to …" on a shortlist card opens that city. Cabin defaults to Economy; the status line counts the business and premium fares it hides. Destination mode, departure, cabin, trip and your trip settings are remembered on this device (not the destination text or dates); Reset filters restores the defaults.</p>
@@ -5043,6 +5088,7 @@ function clearPrivateSession() {
   if (window.resetShopping) window.resetShopping();
   if (window.resetPseResearch) window.resetPseResearch();
   if (window.resetClientNotes) window.resetClientNotes();
+  if (window.resetScout) window.resetScout();
   if (window.resetDaybookCalendar) window.resetDaybookCalendar();
   if (window.resetWeeklyReview) window.resetWeeklyReview();
   decisionEntries = []; decisionEditingId = null; decisionLinkedSignal = null; decisionDatedCache = {};
@@ -5337,6 +5383,7 @@ function switchPage(id, el) {
   if (id==='pse') pending = renderPh();
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
+  if (id==='scout') pending = renderScout();
   if (id==='flights') pending = renderFlights();
   if (id==='shopping') pending = renderShopping();
   if (id==='calendar') pending = renderDaybookCalendar();
@@ -5370,6 +5417,7 @@ function switchPageMobile(id, el) {
   if (id==='pse') pending = renderPh();
   if (id==='miro') pending = renderMiro();
   if (id==='sports') pending = renderSports();
+  if (id==='scout') pending = renderScout();
   if (id==='flights') pending = renderFlights();
   if (id==='shopping') pending = renderShopping();
   if (id==='calendar') pending = renderDaybookCalendar();
@@ -9550,6 +9598,7 @@ function setCommandFilter(filter, button) {
 // feeds again. renderCommandCenter stamps commandLoadedAt.
 var commandLoadedAt = 0;
 function renderTodayFive(force) {
+  if (window.fbIsDaybookOwner && window.fbIsDaybookOwner() && window.renderScout) window.renderScout();
   if (!force && commandCenterInputs && Date.now() - commandLoadedAt < 300000) {
     commandCenterInputs.briefing = _currentData || ((window._briefingHistory || [])[0] || {}).data || commandCenterInputs.briefing;
     rebuildCommandCenter();

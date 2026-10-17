@@ -26,7 +26,7 @@ assert.deepEqual(duplicateIds(html), [], 'index.html must not contain duplicate 
 assert.deepEqual(duplicateIds(sports), [], 'sports.html must not contain duplicate ids');
 
 [
-  'page-today', 'page-history', 'page-trends', 'page-research', 'page-radar',
+  'page-scout', 'page-today', 'page-history', 'page-trends', 'page-research', 'page-radar',
   'today-five', 'page-calendar', 'page-evidence', 'page-timeline', 'page-journal', 'page-pse', 'page-miro', 'page-flights', 'page-shopping', 'page-sports', 'page-help', 'page-decisions', 'page-about'
 ].forEach(function (id) {
   assert.ok(html.includes('id="' + id + '"'), 'missing application page #' + id);
@@ -43,7 +43,7 @@ assert.ok(html.includes('./lib/entity-timeline-core.js'), 'Entity timeline core 
 assert.ok(html.includes("if (id==='today') pending = renderTodayFive()"), 'Today must render the Morning 5');
 // Eleven tabs since the 11 Oct prune; the folded pages open from their family's strip and from Search.
 const navTabs = (html.slice(html.indexOf('<div class="nav-center">'), html.indexOf('<div class="nav-right">')).match(/data-page="([a-z]+)"/g) || []).map((m) => m.slice(11, -1)).sort();
-assert.deepEqual(navTabs, ['about', 'calendar', 'decisions', 'evidence', 'flights', 'help', 'miro', 'radar', 'research', 'shopping', 'sports', 'today'], 'the bar holds twelve tabs');
+assert.deepEqual(navTabs, ['about', 'calendar', 'decisions', 'evidence', 'flights', 'help', 'miro', 'radar', 'research', 'scout', 'shopping', 'sports', 'today'], 'the bar holds thirteen tabs');
 const shell = readFileSync(new URL('../lib/ui-shell.js', import.meta.url), 'utf8');
 ['history', 'trends', 'timeline', 'journal', 'pse'].forEach((page) => {
   assert.ok(new RegExp("\\['" + page + "',").test(shell), page + ' must sit in a page family');

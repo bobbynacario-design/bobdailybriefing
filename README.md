@@ -5,6 +5,8 @@ Private daily briefing desk: briefing, markets, decisions and a daily spark.
 
 ## Features
 
+- **Scout** — owner-only weekly opportunities across Work & learning, People & communities, and Interests & discovery. Uses About you plus editable interests/geography (Metro Manila, online and travel-worthy by default). `generateScout` and Sunday 06:15 PHT `buildWeeklyScout` share a metered eight-build monthly budget. Search-returned HTTPS links and dated upcoming/ongoing events only; undated public communities are allowed. Private `scout-latest-<uid>`, `scout-prefs-<uid>` and transactional `scout-saved-<uid>` documents keep picks and Save/Interested/More like this/Hide feedback (100 choices). Saved deadlines within seven days surface on Today; saved history survives refreshes. Deploy the two Functions alongside the site; this repository does not deploy central Firestore rules.
+
 - **Your goals** — one to three goals on their own account doc
   (`briefings-bob/goals-<uid>`, so the Daily Boost transaction can never drop
   them), each with a theme guessed from its words, a concrete next move, and an
