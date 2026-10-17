@@ -26,6 +26,7 @@ test('ZALORA separates voucher and member prices from unconditional markdowns an
  const voucher=parseZalora(card('','<div><div>Buy 3, Get 15% Off Curated</div><div>No min. spend.</div></div><div data-test-id="productPrice"><div data-test-id="voucherPill"><span>Php 5,000.00</span></div><div data-test-id="discountPercentage">-41%</div></div>'),at);
  assert.equal(voucher.items.length,0);assert.equal(voucher.campaigns.length,1);
  assert.deepEqual([voucher.campaigns[0].kind,voucher.campaigns[0].price,voucher.campaigns[0].originalPrice,voucher.campaigns[0].condition,voucher.campaigns[0].name],['voucher',5000,8500,'Buy 3, Get 15% Off Curated · No min. spend.','Adizero Shoes']);
+ assert.equal(parseZalora(card('<div data-test-id="voucherPill">From Php 5,000.00</div>'),at).campaigns[0].priceFrom,true);
  // The VIP badge beside the brand marks perks, not a member price.
  const vip=parseZalora(card(special,'<svg class="inline-block vip-icon"></svg>'),at);assert.equal(vip.items.length,1);assert.equal(vip.campaigns.length,0);
  // A full-price card, VIP badge or not, is neither a deal nor an offer.

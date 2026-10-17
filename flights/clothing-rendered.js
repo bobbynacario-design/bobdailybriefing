@@ -50,7 +50,7 @@ export function parseZalora(html,checkedAt){
     // it stays out of the deals, and a full-price card is not an offer at all.
     if(pill.length){
       const voucherPrice=php(pill.text());
-      if(voucherPrice>0 && originalPrice>voucherPrice)campaigns.push({...item,kind:'voucher',price:voucherPrice,priceFrom:false,condition:voucherTerms($,a),validFrom:'',validTo:''});
+      if(voucherPrice>0 && originalPrice>voucherPrice)campaigns.push({...item,kind:'voucher',price:voucherPrice,priceFrom:/\bFrom\b/i.test(pill.text()),condition:voucherTerms($,a),validFrom:'',validTo:''});
     }else if(price>0 && originalPrice>price)items.push(item);
   });return {items,campaigns};
 }
