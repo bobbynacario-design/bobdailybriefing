@@ -19,8 +19,9 @@ export function parseUniqlo(html,checkedAt){
   const $=load(html),items=[],campaigns=[],seen=new Set(),today=new Date(Date.parse(checkedAt)+8*3600000).toISOString().slice(0,10);
   $('a.product-tile__link[href*="/ph/en/products/"]').each((_,node)=>{
     const a=$(node),name=clean(a.find('h2').first().text()),url=urlOn(a.attr('href'),'https://www.uniqlo.com','/ph/en/products/'),label=clean(a.attr('aria-label')),dates=offerDates(label+' '+a.text());
-    if(!name || !url || seen.has(url) || !dates || dates.validFrom>today || dates.validTo<today)return;seen.add(url);
-    const price=php(label),originalPrice=php(a.find('.strikethrough,del,s').first().text()),item={...base('UNIQLO','UNIQLO',name,url,checkedAt),...dates,category:category(name),price,originalPrice,image:a.find('img[src*="imagesgoods"]').first().attr('src') || '',terms:label};
+    const kind=category(name);
+    if(!name || !url || !kind || seen.has(url) || !dates || dates.validFrom>today || dates.validTo<today)return;seen.add(url);
+    const price=php(label),originalPrice=php(a.find('.strikethrough,del,s').first().text()),item={...base('UNIQLO','UNIQLO',name,url,checkedAt),...dates,category:kind,price,originalPrice,image:a.find('img[src*="imagesgoods"]').first().attr('src') || '',terms:label};
     // A size range printed on a tile is a range offered, not size stock.
     if(price>0 && originalPrice>price)items.push(item);else campaigns.push({...item,kind:'announcement',name:name+' · limited offer',terms:label+' · regular price and size stock are unverified.'});
   });return {items,campaigns};
@@ -28,18 +29,20 @@ export function parseUniqlo(html,checkedAt){
 export function parseAdidas(html,checkedAt){
   const $=load(html),items=[],seen=new Set();
   $('[data-testid="plp-product-card"]').each((_,node)=>{
-    const a=$(node),name=clean(a.find('[data-testid="product-card-title"]').text()),subtitle=clean(a.find('[data-testid="product-card-subtitle"]').text()),url=urlOn(a.find('[data-testid="product-card-description-link"]').attr('href'),'https://www.adidas.com.ph','/'),price=php(a.find('[data-testid="main-price"]').text()),originalPrice=php(a.find('[data-testid="original-price"]').text());
-    if(!name || !url || !/\/[A-Z0-9]{6}\.html(?:\?|$)/.test(url) || !/\bMen\b|Unisex/i.test(subtitle) || /women|kids/i.test(subtitle) || /sock|backpack|wristband|waist bag|\bcap\b/i.test(name) || !(price>0) || !(originalPrice>price) || seen.has(url))return;seen.add(url);
-    items.push({...base('Adidas','Adidas',name,url,checkedAt),styleCode:new URL(url).pathname.split('/').at(-1).replace('.html',''),color:'',category:category(name),price,originalPrice,image:a.find('[data-testid="product-card-primary-image"]').attr('src') || ''});
+    const a=$(node),name=clean(a.find('[data-testid="product-card-title"]').text()),subtitle=clean(a.find('[data-testid="product-card-subtitle"]').text()),url=urlOn(a.find('[data-testid="product-card-description-link"]').attr('href'),'https://www.adidas.com.ph','/'),price=php(a.find('[data-testid="main-price"]').text()),originalPrice=php(a.find('[data-testid="original-price"]').text()),kind=category(name);
+    if(!name || !url || !/\/[A-Z0-9]{6}\.html(?:\?|$)/.test(url) || !/\bMen\b|Unisex/i.test(subtitle) || /women|kids/i.test(subtitle) || /sock|backpack|wristband|waist bag|\bcap\b/i.test(name) || !kind || !(price>0) || !(originalPrice>price) || seen.has(url))return;seen.add(url);
+    items.push({...base('Adidas','Adidas',name,url,checkedAt),styleCode:new URL(url).pathname.split('/').at(-1).replace('.html',''),color:'',category:kind,price,originalPrice,image:a.find('[data-testid="product-card-primary-image"]').attr('src') || ''});
   });return {items,campaigns:[]};
 }
 export function parseZalora(html,checkedAt){
   const $=load(html),items=[],campaigns=[],seen=new Set(),brands={'ADIDAS':'Adidas','CROCS':'Crocs','NIKE':'Nike','H&M':'H&M','ZALORA':'ZALORA'};
   $('a[data-test-id="productLink"]').each((_,node)=>{
     const a=$(node),brand=brands[clean(a.find('[data-test-id="productBrandName"]').text()).toUpperCase()],name=clean(a.find('[data-test-id="productTitle"]').text()),url=urlOn(a.attr('href'),'https://www.zalora.com.ph','/p/');
-    if(!brand || !name || !url || seen.has(url) || /women|womens|kids|toddler|baby|girl|boy|sock|backpack|wristband|waist bag/i.test(name))return;seen.add(url);
+    // Crocs makes footwear: "Crocband In White" names no garment, so it is not a top.
+    const kind=category(name,'',brand==='Crocs'?'Footwear':'Other');
+    if(!brand || !name || !url || !kind || seen.has(url) || /women|womens|kids|toddler|baby|girl|boy|sock|backpack|wristband|waist bag/i.test(name))return;seen.add(url);
     const originalPrice=php(a.find('[data-test-id="originalPrice"]').text()),current=a.find('[data-test-id="specialPrice"]'),price=php(current.text()),conditional=a.find('[data-test-id="voucherPill"]').length>0 || a.find('.vip-icon').length>0;
-    const image=a.find('[data-test-id="productImages"] img').first().attr('src') || '',item={...base(brand,'ZALORA',name,url,checkedAt),category:category(name),image,price,originalPrice,priceFrom:/\bFrom\b/i.test(current.text())};
+    const image=a.find('[data-test-id="productImages"] img').first().attr('src') || '',item={...base(brand,'ZALORA',name,url,checkedAt),category:kind,image,price,originalPrice,priceFrom:/\bFrom\b/i.test(current.text())};
     if(!conditional && price>0 && originalPrice>price)items.push(item);
     else if(conditional && originalPrice>0){
       const advertised=php(a.find('[data-test-id="voucherPill"]').text()),terms=clean(a.text()).slice(0,650);

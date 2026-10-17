@@ -13,7 +13,22 @@ export const SOURCES=[
   {id:'sm',brand:'Mall promotions',url:'https://www.smsupermalls.com/smdeals'}
 ];
 const id=s=>createHash('sha256').update(s).digest('hex').slice(0,24);
-export function category(name){return /shoe|sneaker|clog|sandal|slide|flip.flop/i.test(name)?'Footwear':/trouser|jeans|pants|chino/i.test(name)?'Trousers':/shorts/i.test(name)?'Shorts':/jacket|coat|hoodie/i.test(name)?'Outerwear':'Tops';}
+// Whole words only, and the product name decides before a retailer's category
+// code: H&M files polos and T-shirts under "..._shortsleeve", which a bare
+// /shorts/ read as Shorts. '' means an accessory or care item, not clothing.
+const ACCESSORY=/\b(?:laces|socks?|bags?|backpacks?|wallets?|belts?|caps?|hats?|beanies?|scarf|scarves|sunglasses|jibbitz|charms?|wristbands?|repair patch(?:es)?|hemming|bottles?|umbrellas?)\b/i;
+const KINDS=[
+  ['Footwear',/\b(?:shoes?|sneakers?|trainers?|clogs?|sandals?|slides?|flip[- ]?flops?|flips?|boots?|loafers?|mules?|slip-ons?|espadrilles?)\b/i],
+  ['Shorts',/\bshorts\b/i],
+  ['Trousers',/\b(?:trousers?|jeans|pants|chinos?|joggers?|sweatpants|trackpants|cargos?)\b/i],
+  ['Outerwear',/\b(?:jackets?|coats?|hoodies?|blazers?|parkas?|windbreakers?|overshirts?|gilets?)\b/i],
+  ['Tops',/\b(?:shirts?|t-shirts?|tees?|polos?|tops?|tanks?|sweaters?|sweatshirts?|jumpers?|cardigans?|henleys?|jerseys?)\b/i]
+];
+export function category(name,hint='',fallback='Other'){
+  if(ACCESSORY.test(name))return '';
+  for(const text of [name,String(hint || '').replace(/_/g,' ')])for(const [kind,re] of KINDS)if(re.test(text))return kind;
+  return fallback;
+}
 export function parseHM(html,checkedAt){
   const $=load(html);let data;try{data=JSON.parse($('#__NEXT_DATA__').text());}catch{return [];}
   const rows=data?.props?.pageProps?.plpProps?.productListingSectionProps?.productListingData?.rawProductList || [];
@@ -26,7 +41,10 @@ export function parseHM(html,checkedAt){
     // codes are not guessed to mean stock. Listing availability isn't a hold.
     const sizes=Array.isArray(p.sizes)?p.sizes.filter(s=>s.stock===2).map(s=>String(s.label)):null;
     if(sizes && !sizes.length)return [];
-    return [{id:id('hm:'+p.id),brand:'H&M',name:String(p.productName || '').slice(0,140),color:String(p.colorName || '').slice(0,60),category:category(p.productName+' '+p.mainCatCode),image:p.productImage || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:sizes,sizeSystem:'Labelled clothing',shipping:null}];
+    // The men's sale page also lists kids' care items and men's accessories.
+    const code=String(p.mainCatCode || ''),kind=category(String(p.productName || ''),code);
+    if(code && (!code.startsWith('men_') || code.startsWith('men_accessories')) || !kind)return [];
+    return [{id:id('hm:'+p.id),brand:'H&M',name:String(p.productName || '').slice(0,140),color:String(p.colorName || '').slice(0,60),category:kind,image:p.productImage || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:sizes,sizeSystem:'Labelled clothing',shipping:null}];
   });
 }
 export function parseCrocs(body,checkedAt){
@@ -52,7 +70,9 @@ export function parseNike(html,checkedAt){
     if(!name || /women|kids|baby|toddler|girl|boy/i.test(subtitle) || p.prices?.currency!=='PHP' || !(price>0) || !(originalPrice>price) || seen.has(p.productCode))return [];
     let url;try{url=new URL(p.pdpUrl?.url);}catch{return [];}
     if(url.origin!=='https://www.nike.com' || !url.pathname.startsWith('/ph/t/'))return [];seen.add(p.productCode);
-    return [{id:id('nike:'+p.productCode),brand:'Nike',name:String(name+' · '+subtitle).slice(0,140),color:String(p.displayColors?.colorDescription || '').slice(0,90),category:p.productType==='FOOTWEAR'?'Footwear':category(name),image:p.colorwayImages?.portraitURL || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:null,sizeSystem:'Unverified',shipping:null}];
+    // Nike's subtitle names the garment ("Men's Golf Polo"); the title often doesn't.
+    const kind=p.productType==='FOOTWEAR'?'Footwear':category(name+' '+subtitle);if(!kind)return [];
+    return [{id:id('nike:'+p.productCode),brand:'Nike',name:String(name+' · '+subtitle).slice(0,140),color:String(p.displayColors?.colorDescription || '').slice(0,90),category:kind,image:p.colorwayImages?.portraitURL || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:null,sizeSystem:'Unverified',shipping:null}];
   });
 }
 export function mallCandidates(html){const $=load(html);return [...new Set($('a[href]').map((_,e)=>{const a=$(e),text=a.text()+' '+(a.find('img').attr('alt') || '');if(!/uniqlo|h\s*&\s*m|nike|adidas|crocs|zalora/i.test(text))return null;try{const u=new URL(a.attr('href'),'https://www.smsupermalls.com');return u.origin==='https://www.smsupermalls.com' && u.pathname.startsWith('/smdeals/')?(u.search='',u.href):null;}catch{return null;}}).get().filter(Boolean))].slice(0,8);}

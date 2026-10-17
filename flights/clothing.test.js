@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {parseHM,parseCrocs,parseNike,parseMall,mallCandidates,readSource,priceHistory} from './clothing.js';
+import {category,parseHM,parseCrocs,parseNike,parseMall,mallCandidates,readSource,priceHistory} from './clothing.js';
 const at='2026-10-17T03:00:00Z';
 const product={id:'12345',productName:'Cotton polo',url:'/en_ph/productpage.12345.html',colorName:'Blue',availability:{stockState:'Available'},prices:[{priceType:'redPrice',price:500},{priceType:'whitePrice',price:1000}],sizes:[{label:'M',stock:2},{label:'S',stock:0}]};
 const hm=rows=>'<script id="__NEXT_DATA__" type="application/json">'+JSON.stringify({props:{pageProps:{plpProps:{productListingSectionProps:{productListingData:{rawProductList:rows}}}}}})+'</script>';
@@ -35,4 +35,21 @@ test('Nike uses public PH prices for the exact color SKU but never guesses size 
  const p={productCode:'SKU-001',productType:'FOOTWEAR',copy:{title:'Nike example',subTitle:"Men's Shoes"},prices:{currency:'PHP',currentPrice:3000,initialPrice:5000},pdpUrl:{url:'https://www.nike.com/ph/t/example/SKU-001'}};
  const html='<script id="__NEXT_DATA__">'+JSON.stringify({props:{pageProps:{initialState:{Wall:{productGroupings:[{products:[p,p,{...p,productCode:'2',prices:{...p.prices,currency:'USD'}},{...p,productCode:'3',copy:{title:'Example',subTitle:"Women's Shoes"}}]}]}}}}})+'</script>';
  const rows=parseNike(html,at);assert.equal(rows.length,1);assert.equal(rows[0].price,3000);assert.equal(rows[0].availableSizes,null);assert.equal(rows[0].shipping,null);
+});
+
+// Names and codes as the H&M PH sale page listed them on 17 Oct 2026.
+test('categories read the product name before the retailer code, and accessories are not clothing',()=>{
+ assert.equal(category('Regular-Fit Fine-Knit Polo Shirt','men_tshirtstanks_poloshirts_shortsleeve'),'Tops');
+ assert.equal(category('Oversized Cotton T-Shirt','men_tshirtstanks_shortsleeve'),'Tops');
+ assert.equal(category('Nylon Swim Shorts','men_swimwear_swimshorts'),'Shorts');
+ assert.equal(category('Relaxed-Fit Cotton Joggers','men_trousers_casual'),'Trousers');
+ assert.equal(category('Relaxed-Fit Double-Breasted Jacket','men_blazerssuits_blazers'),'Outerwear');
+ assert.equal(category('Regular Fit Item','men_trousers_casual'),'Trousers');
+ assert.equal(category('Crocband Flip in White'),'Footwear');assert.equal(category('Lace-Up Boots'),'Footwear');
+ for(const name of ['Shoe Laces','Jibbitz™ Charm Sweet Treats 5 Pack','Polarized Sunglasses','Crossbody Bag','9-pack Repair Patches'])assert.equal(category(name),'',name);
+ assert.equal(category('Crocband In White'),'Other');assert.equal(category('Crocband In White','','Footwear'),'Footwear');
+});
+test('H&M keeps menswear and drops the kids care items and accessories on the same sale page',()=>{
+ const rows=parseHM(hm([{...product,mainCatCode:'men_tshirtstanks_poloshirts_shortsleeve',productName:'Regular-Fit Polo Shirt'},{...product,id:'k',mainCatCode:'kids_boys_clothing_takecare',productName:'2-Pack Mesh Laundry Bags'},{...product,id:'s',mainCatCode:'men_accessories_sunglasses',productName:'Polarized Sunglasses'}]),at);
+ assert.deepEqual(rows.map(r=>[r.name,r.category]),[['Regular-Fit Polo Shirt','Tops']]);
 });
