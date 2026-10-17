@@ -330,8 +330,14 @@ test('search results for the personal sources open where they live',async()=>{
   assert.equal(element('grounding-panel').open,true,'Your numbers opens');
   context.openIndexedIntelligenceItem({source:'Weekly read',ref:'2026-09-27'});
   await context.openDossierResult('dk1');
+  // The weekly read lives in Daily Boost on About you (17 Oct): openWeeklyRead
+  // brings that page up itself, so the opener no longer switches to Today first.
   assert.deepEqual(calls,['page:evidence','set:set%201','page:evidence','brief:m1','scroll:meeting-panel','page:evidence','scroll:grounding-panel',
-    'page:today','weekly','load:Saturday--September-26--2026','highlight:briefing-insurance-1','dossier:insurance/1']);
+    'weekly','load:Saturday--September-26--2026','highlight:briefing-insurance-1','dossier:insurance/1']);
+  // A reflection day: Daily Boost opens it (and its page); without it, About you.
+  calls.length=0; context.openDailyBoostDay=day=>{calls.push('day:'+day);return true;}; context.openReflectionDay('2026-09-20');
+  context.openDailyBoostDay=()=>false; context.openReflectionDay('2026-09-21');
+  assert.deepEqual(calls,['day:2026-09-20','page:about']);
   assert.equal(context._briefingHistory[0].key,archived.key,'the archived briefing is put where Today can open it');
   calls.length=0; await context.openDossierResult('missing'); assert.deepEqual(calls,[],'an unknown dossier does nothing');
   context.intelligenceSearchState.briefings=[]; context._briefingHistory=[]; await context.openDossierResult('dk1');
