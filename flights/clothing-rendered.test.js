@@ -7,7 +7,7 @@ test('UNIQLO requires current published dates and an actual crossed-out price; p
  const current='Limited Offer from 16 Oct - 22 Oct 2026';
  const r=parseUniqlo(tile(current),at);assert.equal(r.items.length,1);assert.equal(r.items[0].price,2490);assert.equal(r.items[0].availableSizes,null);
  for(const dates of ['','Limited Offer from 1 Oct - 15 Oct 2026','Limited Offer from 18 Oct - 22 Oct 2026'])assert.equal(parseUniqlo(tile(dates),at).items.length,0);
- assert.equal(parseUniqlo(tile(current,''),at).campaigns.length,1);
+ assert.equal(parseUniqlo(tile(current,''),at).campaigns[0].condition,'Limited offer 16 Oct – 22 Oct; regular price not shown');
  assert.equal(parseUniqlo(tile(current),'2026-10-22T16:00:00Z').items.length,0);
  assert.equal(offerDates('Limited Offer from 31 Feb - 5 Mar 2026'),null);
  assert.deepEqual(offerDates('Limited Offer from 28 Dec - 5 Jan 2027'),{validFrom:'2026-12-28',validTo:'2027-01-05'});
@@ -21,10 +21,17 @@ test('ZALORA separates voucher and member prices from unconditional markdowns an
  const card=(price,extra='')=>`<a data-test-id="productLink" href="https://www.zalora.com.ph/p/adidas-shoes-1"><h3 data-test-id="productBrandName">ADIDAS</h3><h3 data-test-id="productTitle">Adizero Shoes</h3>${extra}${price}<div data-test-id="originalPrice">Php 8,500.00</div></a>`;
  const special='<div data-test-id="specialPrice">From Php 6,630.00</div>';
  const r=parseZalora('<header>Coupon Php 100</header>'+card(special),at);assert.equal(r.items[0].price,6630);assert.equal(r.items[0].brand,'Adidas');assert.equal(r.items[0].retailer,'ZALORA');assert.equal(r.items[0].priceFrom,true);assert.equal(r.items[0].availableSizes,null);
- for(const extra of ['<div data-test-id="voucherPill">Php 5,000</div>','<i class="vip-icon"></i>']){const conditional=parseZalora(card(special,extra),at);assert.equal(conditional.items.length,0);assert.equal(conditional.campaigns.length,1);}
- assert.equal(parseZalora(card(''),at).items.length,0);
+ // Card shape as rendered on zalora.com.ph on 17 Oct 2026: the condition lines
+ // sit above the brand, the pill holds the price after the voucher.
+ const voucher=parseZalora(card('','<div><div>Buy 3, Get 15% Off Curated</div><div>No min. spend.</div></div><div data-test-id="productPrice"><div data-test-id="voucherPill"><span>Php 5,000.00</span></div><div data-test-id="discountPercentage">-41%</div></div>'),at);
+ assert.equal(voucher.items.length,0);assert.equal(voucher.campaigns.length,1);
+ assert.deepEqual([voucher.campaigns[0].kind,voucher.campaigns[0].price,voucher.campaigns[0].originalPrice,voucher.campaigns[0].condition,voucher.campaigns[0].name],['voucher',5000,8500,'Buy 3, Get 15% Off Curated · No min. spend.','Adizero Shoes']);
+ // The VIP badge beside the brand marks perks, not a member price.
+ const vip=parseZalora(card(special,'<svg class="inline-block vip-icon"></svg>'),at);assert.equal(vip.items.length,1);assert.equal(vip.campaigns.length,0);
+ // A full-price card, VIP badge or not, is neither a deal nor an offer.
+ for(const extra of ['','<svg class="vip-icon"></svg>']){const full=parseZalora(card('',extra),at);assert.equal(full.items.length+full.campaigns.length,0);}
  assert.equal(parseZalora(card(special).replace('https://www.zalora.com.ph/p/','https://evil.test/p/'),at).items.length,0);
 });
 test('Crocs collection titles never manufacture dated offers or item reductions',()=>{
- const r=parseCrocsCollection('<h1>10.10 sale</h1>','https://crocs.com.ph/collections/sale',at);assert.equal(r.items.length,0);assert.equal(r.campaigns[0].validTo,'');assert.match(r.campaigns[0].terms,/not been verified/);
+ const r=parseCrocsCollection('<h1>10.10 sale</h1>','https://crocs.com.ph/collections/sale',at);assert.equal(r.items.length,0);assert.equal(r.campaigns[0].validTo,'');assert.match(r.campaigns[0].condition,/not checked/);
 });

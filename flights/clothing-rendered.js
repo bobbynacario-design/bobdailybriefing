@@ -15,6 +15,7 @@ export function offerDates(text){
   const from=format(endYear-(sm>em?1:0),sm,Number(m[1])),to=format(endYear,em,Number(m[3]));
   return from && to && from<=to?{validFrom:from,validTo:to}:null;
 }
+const dayMonth=iso=>Number(iso.slice(8,10))+' '+'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[Number(iso.slice(5,7))-1];
 export function parseUniqlo(html,checkedAt){
   const $=load(html),items=[],campaigns=[],seen=new Set(),today=new Date(Date.parse(checkedAt)+8*3600000).toISOString().slice(0,10);
   $('a.product-tile__link[href*="/ph/en/products/"]').each((_,node)=>{
@@ -23,7 +24,7 @@ export function parseUniqlo(html,checkedAt){
     if(!name || !url || !kind || seen.has(url) || !dates || dates.validFrom>today || dates.validTo<today)return;seen.add(url);
     const price=php(label),originalPrice=php(a.find('.strikethrough,del,s').first().text()),item={...base('UNIQLO','UNIQLO',name,url,checkedAt),...dates,category:kind,price,originalPrice,image:a.find('img[src*="imagesgoods"]').first().attr('src') || '',terms:label};
     // A size range printed on a tile is a range offered, not size stock.
-    if(price>0 && originalPrice>price)items.push(item);else campaigns.push({...item,kind:'announcement',name:name+' · limited offer',terms:label+' · regular price and size stock are unverified.'});
+    if(price>0 && originalPrice>price)items.push(item);else campaigns.push({...item,kind:'announcement',condition:'Limited offer '+dayMonth(dates.validFrom)+' – '+dayMonth(dates.validTo)+'; regular price not shown'});
   });return {items,campaigns};
 }
 export function parseAdidas(html,checkedAt){
@@ -41,20 +42,29 @@ export function parseZalora(html,checkedAt){
     // Crocs makes footwear: "Crocband In White" names no garment, so it is not a top.
     const kind=category(name,'',brand==='Crocs'?'Footwear':'Other');
     if(!brand || !name || !url || !kind || seen.has(url) || /women|womens|kids|toddler|baby|girl|boy|sock|backpack|wristband|waist bag/i.test(name))return;seen.add(url);
-    const originalPrice=php(a.find('[data-test-id="originalPrice"]').text()),current=a.find('[data-test-id="specialPrice"]'),price=php(current.text()),conditional=a.find('[data-test-id="voucherPill"]').length>0 || a.find('.vip-icon').length>0;
+    const originalPrice=php(a.find('[data-test-id="originalPrice"]').text()),current=a.find('[data-test-id="specialPrice"]'),price=php(current.text()),pill=a.find('[data-test-id="voucherPill"]');
     const image=a.find('[data-test-id="productImages"] img').first().attr('src') || '',item={...base(brand,'ZALORA',name,url,checkedAt),category:kind,image,price,originalPrice,priceFrom:/\bFrom\b/i.test(current.text())};
-    if(!conditional && price>0 && originalPrice>price)items.push(item);
-    else if(conditional && originalPrice>0){
-      const advertised=php(a.find('[data-test-id="voucherPill"]').text()),terms=clean(a.text()).slice(0,650);
-      campaigns.push({...item,kind:'conditional',price:advertised || null,name:name+' · conditional offer',terms:'Voucher, member or payment conditions apply; the displayed price is not an unconditional item price. '+terms,validFrom:'',validTo:''});
-    }
+    // The purple VIP badge sits beside the brand name (live page, 17 Oct): it
+    // marks VIP perks, not a member-only price, so it no longer makes a
+    // markdown conditional. The voucher pill IS the price after a voucher;
+    // it stays out of the deals, and a full-price card is not an offer at all.
+    if(pill.length){
+      const voucherPrice=php(pill.text());
+      if(voucherPrice>0 && originalPrice>voucherPrice)campaigns.push({...item,kind:'voucher',price:voucherPrice,priceFrom:false,condition:voucherTerms($,a),validFrom:'',validTo:''});
+    }else if(price>0 && originalPrice>price)items.push(item);
   });return {items,campaigns};
+}
+// The condition sits in small lines above the brand ("Buy 3, Get 15% Off
+// Curated", "No min. spend."), apart from the prices.
+function voucherTerms($,a){
+  const lines=a.find('div,span,p').filter((_,e)=>!$(e).children().length && !$(e).closest('[data-test-id="productPrice"]').length).map((_,e)=>clean($(e).text())).get().filter(t=>/\d+%\s*off|php\s?[\d,.]+\s*off|\bbuy \d|min\.? spend/i.test(t));
+  return [...new Set(lines)].join(' · ').slice(0,120) || 'Voucher price; conditions on the product page';
 }
 export function parseCrocsCollection(html,url,checkedAt){
   const $=load(html);$('script,style,header,footer,nav').remove();const title=clean($('h1').first().text());
   // A retailer's active Sale link is a lead, not proof that a campaign's
   // dates are current or every item in the collection is discounted.
-  return {items:[],campaigns:title?[{id:id('crocs-collection:'+url),brand:'Crocs',retailer:'Crocs',name:title,url,checkedAt,kind:'collection',validFrom:'',validTo:'',terms:'Retailer-linked sale collection. Dates, item markdowns, eligible sizes and voucher conditions have not been verified. Do not treat its campaign name as a current date.'}]:[]};
+  return {items:[],campaigns:title?[{id:id('crocs-collection:'+url),brand:'Crocs',retailer:'Crocs',name:title,url,checkedAt,kind:'collection',validFrom:'',validTo:'',condition:'Sale collection; dates and markdowns not checked'}]:[]};
 }
 export function parseRendered(source,html,checkedAt,url=source.url){
   return source.id==='uniqlo'?parseUniqlo(html,checkedAt):source.id==='adidas'?parseAdidas(html,checkedAt):source.id.startsWith('zalora')?parseZalora(html,checkedAt):source.id==='crocs'?parseCrocsCollection(html,url,checkedAt):{items:[],campaigns:[]};

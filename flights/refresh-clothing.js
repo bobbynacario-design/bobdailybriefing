@@ -22,7 +22,7 @@ async function main(){
       else if(!old.items.length)results[index]={...r,candidates:old.candidates || []};
     }
   }
-  const campaigns=results.flatMap(r=>r.campaigns || []).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).slice(0,40);
+  const campaigns=results.flatMap(r=>r.campaigns || []).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).slice(0,60);
   const promos=[];
   for(const url of results.flatMap(r=>r.candidates).slice(0,8)){
     try{const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(15000)});if(r.ok){const html=await r.text();if(html.length<4000000)promos.push(...parseMall(html,url,checkedAt));}}catch{/* Do not invent a branch offer when a detail page is unavailable. */}
