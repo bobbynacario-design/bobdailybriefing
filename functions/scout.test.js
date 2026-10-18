@@ -105,3 +105,12 @@ test('Scout refreshes the work calendar from its sources and keeps it with the o
   assert.deepEqual(Object.values(doc.items).map(v=>[v.title,v.firstSeen]),[['W1','2026-10-18']]);
   assert.match(prompt(null,null,{},'2026-10-18',[]),/ANZIIF, AICLA and IIA listings are already read directly into his work calendar, so spend work searches on CA ANZ, CPA Australia, IPA, the Insurance Council of Australia and other organisers/);
 });
+test('Scout reads each page\'s headline, so a date far below the title of a page about the event confirms',async()=>{
+  const {checkDates,readPage}=require('./scout');
+  const html='<html><head><title>Australian Liability Conference 2026 - ANZIIF</title></head><body>'+' nav link'.repeat(400)+'<p>Tuesday, 17 November 2026</p></body></html>';
+  const fetchImpl=async()=>({ok:true,headers:{get:()=>'text/html'},text:async()=>html});
+  const read=await readPage('https://anziif.example/liability',fetchImpl,1000);
+  assert.match(read.head,/australian liability conference/);assert.match(read.text,/17 november 2026/);
+  const [v]=await checkDates([{title:'Australian Liability Conference 2026',url:'https://anziif.example/liability',start:'2026-11-17'}],fetchImpl,1000);
+  assert.equal(v.dateCheck,'confirmed');
+});

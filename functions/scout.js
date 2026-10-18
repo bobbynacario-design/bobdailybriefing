@@ -38,7 +38,8 @@ async function readPage(link,fetchImpl,ms){
     const u=new URL(link);if(u.protocol!=='https:'||!publicHost(u.hostname))return null;
     const res=await fetchImpl(u.href,{redirect:'follow',signal:AbortSignal.timeout(ms),headers:{'User-Agent':'Mozilla/5.0 (compatible; DaybookScout/1.0; date check)',Accept:'text/html,application/xhtml+xml'}});
     if(!res||!res.ok||!/html|xml|text/i.test((res.headers&&res.headers.get('content-type'))||''))return null;
-    return Core.pageText((await res.text()).slice(0,2000000));
+    const html=(await res.text()).slice(0,2000000);
+    return {text:Core.pageText(html),head:Core.headline(html)};
   }catch(e){return null;}
 }
 // Each pick's start date and registration deadline looked for on its own
@@ -50,9 +51,9 @@ async function checkDates(items,fetchImpl,ms,stats){
   await Promise.all((items||[]).map(async v=>{
     const meets=[v.lastActive,v.nextActive].filter(Boolean);
     if(!v.start&&!v.deadline&&!meets.length)return;
-    const page=await readPage(v.url,fetchImpl,ms||8000);
-    if(v.start)v.dateCheck=Core.dateCheck(page,v.start,v.title);
-    if(v.deadline)v.deadlineCheck=Core.dateCheck(page,v.deadline,v.title);
+    const read=await readPage(v.url,fetchImpl,ms||8000),page=read&&read.text,head=read&&read.head;
+    if(v.start)v.dateCheck=Core.dateCheck(page,v.start,v.title,head);
+    if(v.deadline)v.deadlineCheck=Core.dateCheck(page,v.deadline,v.title,head);
     if(meets.length){const found=meets.map(d=>Core.dateCheck(page,d));v.activityCheck=found.includes('confirmed')?'confirmed':found[0];}
     if(v.access!=='invite'&&Core.membersOnly(page))v.access='members';
   }));

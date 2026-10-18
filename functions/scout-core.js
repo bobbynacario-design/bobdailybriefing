@@ -62,8 +62,9 @@
   // Does the page carry this date? Day and month in either order (ranges such
   // as "16-30 October" or "Nov. 07 -30" count), ISO, or d/m/y numbers. A match
   // followed closely by another year belongs to another year's event.
-  function dateOnPage(page,iso){
-    if(!page||!date(iso))return false;
+  // Where this date sits on the page, each with its year bound to it.
+  function dateHits(page,iso){
+    var out=[];if(!page||!date(iso))return out;
     var y=iso.slice(0,4),m=+iso.slice(5,7),d=+iso.slice(8,10),full=MONTHS[m-1];
     var mon='(?:'+full+'|'+full.slice(0,3)+(m===9?'|sept':'')+')\\.?',day='0?'+d+'(?:st|nd|rd|th)?',other='\\d{1,2}(?:st|nd|rd|th)?',join='(?:-|to|and|&)';
     var re=new RegExp(['\\b'+iso+'(?!\\d)',
@@ -74,26 +75,41 @@
       // A year must be bound to this date, not merely somewhere on the page.
       // Prefer a trailing year, otherwise the closest preceding year in this
       // short clause ("2025 Annual conference: 10 November" is not 2026).
-      if(hit[0].includes(y))return true;
       var after=page.slice(re.lastIndex,re.lastIndex+16).match(/^\s*[,\s-]*\b(20\d\d)(?!\d)/);
       var before=page.slice(Math.max(0,hit.index-65),hit.index).match(/\b(20\d\d)\b[^.!?;]*$/);
-      if((after&&after[1]===y)||(!after&&before&&before[1]===y))return true;
+      if(hit[0].includes(y)||(after&&after[1]===y)||(!after&&before&&before[1]===y))out.push(hit.index);
     }
-    return false;
+    return out;
+  }
+  function dateOnPage(page,iso){return dateHits(page,iso).length>0;}
+  // A pick's title as the words that identify it: short, generic and date words
+  // are left out, so "–" against "-", "&" or a year in the title do not matter.
+  var TITLE_STOP={the:1,and:1,for:1,with:1,from:1,your:1,our:1,this:1,that:1,into:1,about:1,are:1,how:1,what:1,why:1,who:1,its:1,all:1,new:1,part:1,webinar:1,event:1,events:1,session:1};
+  function words(s){return String(s||'').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);}
+  function titleWords(title){var seen={};return words(title).filter(function(w){if(w.length<3||TITLE_STOP[w]||/^\d+$/.test(w)||seen[w]||MONTHS.indexOf(w)>=0||MONTHS.some(function(m){return m.slice(0,3)===w;}))return false;seen[w]=true;return true;});}
+  function coverage(text,list){if(!list.length)return 0;var have={};words(text).forEach(function(w){have[w]=true;});return list.filter(function(w){return have[w];}).length/list.length;}
+  // What the page says it is about: its <title>, og:title and first <h1>.
+  function headline(html){
+    var s=String(html||''),pick=function(re){var m=re.exec(s);return m?m[1]:'';};
+    return pageText([pick(/<title[^>]*>([\s\S]*?)<\/title>/i),pick(/<meta[^>]+property=["']og:title["'][^>]*content=["']([^"']*)["']/i)||pick(/<meta[^>]+content=["']([^"']*)["'][^>]*property=["']og:title["']/i),pick(/<h1[^>]*>([\s\S]*?)<\/h1>/i)].join(' | '));
   }
   // confirmed, not-found, or unchecked when the page could not be read (no
   // page, or too few words: an app shell that draws itself in the browser).
-  function dateCheck(page,iso,title){
+  // Given the pick's title, the date must also be this event's. On a page
+  // about the event (its headline carries most of the title's words) any
+  // year-bound date counts: on 18 Oct the exact-title rule (67c1f24) missed 5
+  // of 6 genuine dates, which sat over 1,000 characters below the title. On a
+  // listing, the date must follow the title's words closely, so a neighbouring
+  // course's date never confirms this one.
+  function dateCheck(page,iso,title,head){
     if(!date(iso))return '';
     if(typeof page!=='string'||page.length<200)return 'unchecked';
-    if(!dateOnPage(page,iso))return 'not-found';
+    var hits=dateHits(page,iso);if(!hits.length)return 'not-found';
     if(!title)return 'confirmed';
-    var norm=function(s){return String(s).toLowerCase().replace(/[^\p{L}\p{N}\s/.,:-]/gu,' ').replace(/\s+/g,' ').trim();};
-    var normalized=norm(page),name=norm(title),at=normalized.indexOf(name);
-    // A matching date elsewhere in a long page is not confirmation for this
-    // event. An unmatched/changed title remains visibly unchecked.
-    if(!name||at<0)return 'unchecked';
-    return dateOnPage(normalized.slice(Math.max(0,at-100),at+name.length+1000),iso)?'confirmed':'unchecked';
+    var list=titleWords(title);if(!list.length)return 'unchecked';
+    if(head&&coverage(head,list)>=0.7)return 'confirmed';
+    var back=Math.max(200,String(title).length+120);
+    return hits.some(function(p){return coverage(page.slice(Math.max(0,p-back),p+40),list)>=0.7;})?'confirmed':'unchecked';
   }
   // A community is a pick only while it meets: a meeting in the last 60 days
   // or one in the next 90 (18 Oct: one group had not met since August's end
@@ -307,7 +323,7 @@
   function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16);}
   function expired(v,day){var end=timing(v).localEnd;return !!((end&&end<day)||(v.deadline&&v.deadline<day));}
   function due(items,choices,day){var until=new Date(Date.parse(day+'T00:00:00Z')+7*86400000).toISOString().slice(0,10);return items.filter(function(v){var c=choices[v.id]||{};return (c.saved||c.interested)&&!c.hidden&&!expired(v,day)&&v.deadline&&v.deadlineCheck!=='not-found'&&v.deadline>=day&&v.deadline<=until;}).sort(function(a,b){return a.deadline.localeCompare(b.deadline);}).slice(0,3);}
-  var api={cpeEntry:cpeEntry,timing:timing,sortKey:sortKey,restore:restore,calendarItem:calendarItem,choiceItem:choiceItem,choiceDetails:choiceDetails,reminders:reminders,weeklyPicks:weeklyPicks,ics:ics,cpeCsv:cpeCsv,lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,access:access,membersOnly:membersOnly,previewHost:previewHost,reasons:reasons,drop:drop,kept:kept,laneNote:laneNote,calendarId:calendarId,mergeCalendar:mergeCalendar,isNew:isNew,rollPicks:rollPicks,workMatch:workMatch,cpeDefault:cpeDefault,applyCpe:applyCpe,cpeSummary:cpeSummary,theme:theme,clean:clean,expired:expired,due:due};
+  var api={dateHits:dateHits,titleWords:titleWords,coverage:coverage,headline:headline,cpeEntry:cpeEntry,timing:timing,sortKey:sortKey,restore:restore,calendarItem:calendarItem,choiceItem:choiceItem,choiceDetails:choiceDetails,reminders:reminders,weeklyPicks:weeklyPicks,ics:ics,cpeCsv:cpeCsv,lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,access:access,membersOnly:membersOnly,previewHost:previewHost,reasons:reasons,drop:drop,kept:kept,laneNote:laneNote,calendarId:calendarId,mergeCalendar:mergeCalendar,isNew:isNew,rollPicks:rollPicks,workMatch:workMatch,cpeDefault:cpeDefault,applyCpe:applyCpe,cpeSummary:cpeSummary,theme:theme,clean:clean,expired:expired,due:due};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.ScoutCore=api;
 })(typeof window!=='undefined'?window:globalThis);
