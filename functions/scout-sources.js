@@ -8,12 +8,15 @@
 // lists only policyholder consultation days and an in-person conference; SMD
 // Lawyers' site shows a hosting "suspended" page. The weekly search covers those
 // (SEARCHED), so its work searches go where this cannot.
+// The IIA's webinars (added 18 Oct, after Bob said he is a CIA) carry their
+// CIA CPE hours; IIA Philippines answers scripts with 403.
 const Core = require("./scout-core");
 
 const SOURCES = [
   {id: "anziif-webinars", organizer: "ANZIIF", label: "ANZIIF webinars", kind: "sxa", page: "https://anziif.com/professional-development/webinars", origin: "https://anziif.com"},
   {id: "anziif-events", organizer: "ANZIIF", label: "ANZIIF events", kind: "sxa", page: "https://anziif.com/professional-development/events", origin: "https://anziif.com"},
   {id: "aicla", organizer: "AICLA", label: "AICLA events", kind: "tribe", api: "https://aicla.org/wp-json/tribe/events/v1/events", origin: "https://aicla.org"},
+  {id: "iia-webinars", organizer: "IIA", label: "IIA webinars", kind: "iia", page: "https://www.theiia.org/en/learning/online/webinars/", origin: "https://www.theiia.org"},
 ];
 const SEARCHED_BODIES = ["CA ANZ", "CPA Australia", "IPA", "the Insurance Council of Australia"];
 const SEARCHED = SEARCHED_BODIES.concat("the law firms in your accounts");
@@ -34,7 +37,8 @@ function iso(y, m, d) { return Core.date(y + "-" + pad(m) + "-" + pad(d)); }
 function month(word) { return MONTHS[String(word || "").slice(0, 3).toLowerCase()] || 0; }
 
 // "Thursday, 15 October 2026, 12:00 PM - 1:00 PM AEDT", "Tue 17 Nov 2026, 8:00 am - ...",
-// "11-12 February 2027", "13 - 14 October 2026, 8:30 ...", "30 Nov - 1 Dec 2026".
+// "11-12 February 2027", "13 - 14 October 2026, 8:30 ...", "30 Nov - 1 Dec 2026",
+// and the IIA's "Nov 04, 2026".
 function parseWhen(text) {
   const s = plain(text);
   let start = "", end = "", at = -1, len = 0, m;
@@ -42,6 +46,8 @@ function parseWhen(text) {
     start = iso(m[5], month(m[2]), m[1]); end = iso(m[5], month(m[4]), m[3]); at = m.index; len = m[0].length;
   } else if ((m = /(\d{1,2})(?:\s*-\s*(\d{1,2}))?\s+([A-Za-z]{3,9})\.?\s+(\d{4})/.exec(s)) && month(m[3])) {
     start = iso(m[4], month(m[3]), m[1]); end = m[2] ? iso(m[4], month(m[3]), m[2]) : start; at = m.index; len = m[0].length;
+  } else if ((m = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})/.exec(s)) && month(m[1])) {
+    start = end = iso(m[3], month(m[1]), m[2]); at = m.index; len = m[0].length;
   }
   if (!start || !end || end < start) return null;
   const rest = s.slice(at + len);
@@ -75,6 +81,13 @@ function cityZone(place, day) {
   if (/perth/.test(p)) return "AWST";
   if (/auckland|wellington|christchurch/.test(p)) return nzDst ? "NZDT" : "NZST";
   return "";
+}
+
+// US time for the IIA's "ET" (and "CT", "PT"): daylight saving from the second
+// Sunday in March to the first Sunday in November.
+function usZone(label, day) {
+  const y = +String(day).slice(0, 4), dst = Core.date(day) && day >= sunday(y, 3, 2) && day < sunday(y, 11, 1);
+  return ({ET: dst ? "EDT" : "EST", CT: dst ? "UTC-05:00" : "UTC-06:00", PT: dst ? "PDT" : "UTC-08:00"})[label] || label;
 }
 
 function event(src, fields) {
@@ -134,6 +147,32 @@ function parseTribe(json, src) {
   }).filter(Boolean);
 }
 
+// The IIA's webinar listing: one card per webinar with its date and CPE
+// credits (archived recordings have no date and are left out); the full title
+// is the card image's alt text. A webinar's own page gives its time in US time.
+function parseIia(html, src) {
+  const seen = {};
+  return String(html || "").split('<div class="article-wrap">').slice(1).map((card) => {
+    const pick = (re) => { const m = re.exec(card); return m ? plain(m[1]) : ""; };
+    let link = ""; try { link = new URL((/href="([^"]+)"/.exec(card) || [])[1], src.origin).href; } catch (e) { link = ""; }
+    const when = parseWhen(pick(/class="res-article-date"[^>]*>(?:\s*<img[^>]*>)?\s*([^<]+)</));
+    const title = pick(/<img[^>]*alt="([^"]*)"/) || pick(/class="res-article-sub-title"[^>]*>([\s\S]*?)<\/div>/);
+    const credits = parseFloat((/CPE Credits:\s*([\d.]+)/i.exec(card) || [])[1]) || 0;
+    const modality = pick(/class="res-article-detail"[^>]*>(?:\s*<img[^>]*>)?\s*([^<]+)</);
+    if (!when || !title || !/^https:\/\//.test(link) || seen[link]) return null;
+    seen[link] = true;
+    return {title, url: link, start: when.start, end: when.end, time: "", zone: "", format: /person/i.test(modality) ? "in-person" : /hybrid/i.test(modality) ? "hybrid" : "online",
+      location: /person/i.test(modality) ? "" : "Online", cpeHours: credits, cpd: credits ? "IIA CPE " + credits + " hour" + (credits === 1 ? "" : "s") : ""};
+  }).filter(Boolean);
+}
+// "DATE: Nov 4, 2026 TIME: 1:00 PM-2:00 PM ET" on a webinar's page. The page
+// also carries the text escaped twice ("PM&amp;ndash;2:00"), so it is decoded twice.
+function iiaTime(html) {
+  const m = /TIME:\s*(\d{1,2})(?::(\d{2}))?\s*([AP])\.?M\.?.{0,30}?\b(ET|EST|EDT|CT|PT)\b/i.exec(plain(plain(html)));
+  if (!m) return null;
+  return {time: pad(+m[1] % 12 + (/p/i.test(m[3]) ? 12 : 0)) + ":" + (m[2] || "00"), zone: m[4].toUpperCase().replace(/^E[SD]T$/, "ET")};
+}
+
 async function fetchText(url, fetchImpl, ms) {
   let last;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -156,6 +195,13 @@ const READERS = {
   async tribe(src, fetchImpl, day, ms) {
     return parseTribe(JSON.parse(await fetchText(src.api + "?per_page=50&start_date=" + day, fetchImpl, ms)), src);
   },
+  async iia(src, fetchImpl, day, ms) {
+    const rows = parseIia(await fetchText(src.page, fetchImpl, ms), src).filter((r) => r.end >= day).slice(0, 15);
+    return Promise.all(rows.map(async (r) => {
+      let t = null; try { t = iiaTime(await fetchText(r.url, fetchImpl, ms)); } catch (e) { t = null; }
+      return event(src, Object.assign(r, t ? {time: t.time, zone: usZone(t.zone, r.start)} : {}));
+    }));
+  },
 };
 
 // Every source's dated events from today to 120 days out, and how each source
@@ -174,4 +220,4 @@ async function collect(fetchImpl, day, opts) {
   return {events: runs.flatMap((r) => r.rows), sources: runs.map((r) => r.status), searched: SEARCHED};
 }
 
-module.exports = {SOURCES, SEARCHED, SEARCHED_BODIES, plain, parseWhen, cityZone, sxaQuery, parseSxa, parseTribe, collect};
+module.exports = {SOURCES, SEARCHED, SEARCHED_BODIES, plain, parseWhen, cityZone, usZone, sxaQuery, parseSxa, parseTribe, parseIia, iiaTime, collect};

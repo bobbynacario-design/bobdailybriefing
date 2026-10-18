@@ -103,5 +103,5 @@ test('Scout refreshes the work calendar from its sources and keeps it with the o
   assert.equal(writes[0].id,'scout-calendar-owner');assert.equal(writes[0].c,'briefings-bob');
   assert.equal(doc.uid,'owner');assert.equal(doc.kind,'scout-calendar');assert.equal(doc.startedOn,'2026-10-18');assert.ok(doc.refreshedAt);
   assert.deepEqual(Object.values(doc.items).map(v=>[v.title,v.firstSeen]),[['W1','2026-10-18']]);
-  assert.match(prompt(null,null,{},'2026-10-18',[]),/ANZIIF and AICLA listings are already read directly into his work calendar, so spend work searches on CA ANZ, CPA Australia, IPA, the Insurance Council of Australia and other organisers/);
+  assert.match(prompt(null,null,{},'2026-10-18',[]),/ANZIIF, AICLA and IIA listings are already read directly into his work calendar, so spend work searches on CA ANZ, CPA Australia, IPA, the Insurance Council of Australia and other organisers/);
 });

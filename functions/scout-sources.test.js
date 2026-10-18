@@ -51,12 +51,32 @@ test("Scout collects every source, keeps a failed one's status, and stays inside
     if (url.includes("/sxa/search/results/")) return {ok: true, text: async () => JSON.stringify({Results: url.includes("0161FFB3") ? [data.webinar] : [data.hybrid, data.summit]})};
     return {ok: true, text: async () => data.page.replace(/0161FFB3/g, url.includes("events") ? "EVENTS00" : "0161FFB3")};
   };
-  const out = await S.collect(fetchImpl, "2026-10-18", {ms: 1000});
+  const out = await S.collect(fetchImpl, "2026-10-18", {ms: 1000, sources: S.SOURCES.slice(0, 3)});
   assert.deepEqual(out.sources.map((s) => [s.id, s.ok, s.count]), [["anziif-webinars", true, 1], ["anziif-events", true, 2], ["aicla", false, 0]]);
   assert.match(out.sources[2].error, /HTTP 503/);
   assert.deepEqual(out.events.map((e) => e.title.slice(0, 22)), ["Thursday Thought-Leade", "Australian Liability C", "ANZIIF International S"], "the summit (11 Feb) is 116 days out");
   assert.equal(calls.filter((u) => u.includes("aicla")).length, 2, "a failed source is tried twice");
-  assert.deepEqual((await S.collect(fetchImpl, "2026-10-01", {ms: 1000})).events.map((e) => e.start), ["2026-10-29", "2026-11-17"], "133 days out is beyond the window");
-  assert.deepEqual((await S.collect(fetchImpl, "2026-11-18", {ms: 1000})).events.map((e) => e.start), ["2027-02-11"], "events that have ended are left out");
+  assert.deepEqual((await S.collect(fetchImpl, "2026-10-01", {ms: 1000, sources: S.SOURCES.slice(0, 3)})).events.map((e) => e.start), ["2026-10-29", "2026-11-17"], "133 days out is beyond the window");
+  assert.deepEqual((await S.collect(fetchImpl, "2026-11-18", {ms: 1000, sources: S.SOURCES.slice(0, 3)})).events.map((e) => e.start), ["2027-02-11"], "events that have ended are left out");
   assert.ok(S.SEARCHED.includes("CA ANZ"));
+});
+test("Scout reads the IIA's webinars: date, CPE hours and title, then each webinar's US time in PHT", async () => {
+  const iia = S.SOURCES.find((s) => s.id === "iia-webinars");
+  assert.deepEqual(S.parseWhen("Nov 04, 2026"), {start: "2026-11-04", end: "2026-11-04", time: "", zone: ""});
+  const rows = S.parseIia(data.iiaList, iia);
+  assert.deepEqual(rows.map((r) => [r.title.slice(0, 30), r.start, r.cpeHours, r.cpd, r.format]), [
+    ["Coordinated Assurance: Turning", "2026-11-04", 1, "IIA CPE 1 hour", "online"],
+    ["Elevate Your Semester With Kno", "2026-10-21", 0, "", "online"],
+    ["Ethical Culture Starts With Us", "2026-12-10", 1, "IIA CPE 1 hour", "online"],
+    ["Enterprise Risk Without Silos", "2026-12-17", 3, "IIA CPE 3 hours", "online"]], "archived recordings (no date) and repeats are left out");
+  assert.equal(rows[0].url, "https://www.theiia.org/en/products/learning-solutions/webinar/coordinated-assurance-turning-more-activity-into-confidence/");
+  assert.deepEqual(S.iiaTime(data.iiaDetail), {time: "13:00", zone: "ET"}, "read through the doubly escaped dash");
+  assert.equal(S.iiaTime("<p>TIME: 9:30 a.m. - 10:30 a.m. PT</p>").time, "09:30");assert.equal(S.iiaTime("<p>No time given</p>"), null);
+  assert.equal(S.usZone("ET", "2026-10-20"), "EDT");assert.equal(S.usZone("ET", "2026-11-04"), "EST", "US daylight saving ends on the first Sunday in November");
+  assert.equal(S.usZone("PT", "2026-12-01"), "UTC-08:00");
+  const fetchImpl = async (url) => ({ok: true, text: async () => url.endsWith("/webinars/") ? data.iiaList : url.includes("coordinated") ? data.iiaDetail : "<p>TIME: 8:00 AM - 9:00 AM ET</p>"});
+  const out = await S.collect(fetchImpl, "2026-10-18", {ms: 1000, sources: [iia]});
+  const first = out.events.find((e) => e.title.startsWith("Coordinated"));
+  assert.deepEqual([first.time, first.zone, first.pht, first.cpeHours], ["13:00", "EST", "02:00 PHT (next day) (13:00 EST)", 1], "a Manila 2 am start says so");
+  assert.equal(out.events.find((e) => e.title.startsWith("Ethical")).pht, "21:00 PHT (08:00 EST)");
 });
