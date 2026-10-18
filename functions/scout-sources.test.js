@@ -26,6 +26,7 @@ test("Scout reads ANZIIF's listing: its search settings, then each webinar and e
   const [w] = S.parseSxa({Results: [data.webinar]}, webinars);
   assert.equal(w.title, "Thursday Thought-Leaders: The Affordability Pincer | How Inflation and Cost-of-Living Pressures are Reshaping Australia’s General Insurance Market");
   assert.equal(w.url, "https://anziif.com/professional-development/webinars/how-inflation-and-cost-of-living-pressures-are-reshaping-australias-general-insurance-market");
+  assert.equal(w.endTime, "13:00", "the published 1:00 PM end reaches the event");
   assert.deepEqual([w.start, w.time, w.zone, w.pht, w.format, w.location, w.cpd, w.organizer, w.source], ["2026-10-29", "12:00", "AEDT", "09:00 PHT (12:00 AEDT)", "online", "Online", "1 CIP point", "ANZIIF", "anziif-webinars"]);
   assert.match(w.summary, /claims inflation pressures/);
   const rows = S.parseSxa({Results: [data.hybrid, data.virtual, data.summit]}, events);

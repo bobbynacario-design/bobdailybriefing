@@ -130,7 +130,7 @@ function parseSxa(json, src) {
     const format = /webinar|virtual/i.test(badge) ? "online" : /hybrid/i.test(badge) ? "hybrid" : "in-person";
     let link = ""; try { link = new URL(r.Url, src.origin).href; } catch (e) { link = ""; }
     if (!title || !link || !when) return null;
-    return event(src, {title, url: link, start: when.start, end: when.end, time: when.time, zone: when.zone, format,
+    return event(src, {title, url: link, start: when.start, end: when.end, time: when.time, endTime: when.endTime, zone: when.zone, format,
       location: location || (format === "online" ? "Online" : ""), cpd: cipText(points),
       summary: pick(/class="field-introduction"[^>]*>([\s\S]*?)<\/div>/)});
   }).filter(Boolean);
