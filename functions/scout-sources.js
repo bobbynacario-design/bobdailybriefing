@@ -53,11 +53,16 @@ function parseWhen(text) {
   const rest = s.slice(at + len);
   // "8:00 am" or "12:00 PM"; a listing cut short ("8:30 ...") keeps a bare 24-hour time.
   const t = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s?m\b/i.exec(rest), bare = /(?:^|[\s,])([01]?\d|2[0-3]):([0-5]\d)(?!\s*[ap]\.?\s?m)/i.exec(rest);
-  let time = "";
-  if (t && +t[1] >= 1 && +t[1] <= 12) time = pad(+t[1] % 12 + (/p/i.test(t[3]) ? 12 : 0)) + ":" + (t[2] || "00");
-  else if (bare) time = pad(+bare[1]) + ":" + bare[2];
+  const ampm = (h, mm, ap) => pad(+h % 12 + (/p/i.test(ap) ? 12 : 0)) + ":" + (mm || "00");
+  let time = "", endTime = "";
+  if (t && +t[1] >= 1 && +t[1] <= 12) {
+    time = ampm(t[1], t[2], t[3]);
+    // "12:00 PM - 1:00 PM AEDT": the published end, for calendar files.
+    const e = /^\s*(?:-|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s?m\b/i.exec(rest.slice(t.index + t[0].length));
+    if (e && +e[1] >= 1 && +e[1] <= 12) endTime = ampm(e[1], e[2], e[3]);
+  } else if (bare) time = pad(+bare[1]) + ":" + bare[2];
   const z = /\b(AEDT|AEST|ACDT|ACST|AWST|NZDT|NZST)\b/.exec(rest);
-  return {start, end, time, zone: z ? z[1] : ""};
+  return {start, end, time, endTime, zone: z ? z[1] : ""};
 }
 
 // The zone of an Australian or New Zealand city on a date, for listings that
@@ -139,7 +144,7 @@ function parseTribe(json, src) {
     const start = Core.date(String(e.start_date || "").slice(0, 10)), end = Core.date(String(e.end_date || "").slice(0, 10)) || start;
     if (!title || !start || !/^https:\/\//.test(e.url || "")) return null;
     const cpd = /CPD:?\s*([\d.]+)\s*points?/i.exec(desc);
-    return event(src, {title, url: e.url, start, end, time: e.all_day ? "" : String(e.start_date).slice(11, 16),
+    return event(src, {title, url: e.url, start, end, time: e.all_day ? "" : String(e.start_date).slice(11, 16), endTime: e.all_day ? "" : String(e.end_date || "").slice(11, 16),
       zone: /^[A-Z]{3,5}$/.test(e.timezone_abbr || "") ? e.timezone_abbr : "", format: online ? "online" : "in-person",
       location: online ? "Online" : [venue, city].filter(Boolean).join(", "), cost: plain(e.cost).replace(/\$/g, "A$"),
       cpd: cpd ? src.organizer + " CPD " + cpd[1] + " point" + (+cpd[1] === 1 ? "" : "s") : "",
@@ -168,9 +173,10 @@ function parseIia(html, src) {
 // "DATE: Nov 4, 2026 TIME: 1:00 PM-2:00 PM ET" on a webinar's page. The page
 // also carries the text escaped twice ("PM&amp;ndash;2:00"), so it is decoded twice.
 function iiaTime(html) {
-  const m = /TIME:\s*(\d{1,2})(?::(\d{2}))?\s*([AP])\.?M\.?.{0,30}?\b(ET|EST|EDT|CT|PT)\b/i.exec(plain(plain(html)));
+  const m = /TIME:\s*(\d{1,2})(?::(\d{2}))?\s*([AP])\.?M\.?\s*(?:-|to)?\s*(?:(\d{1,2})(?::(\d{2}))?\s*([AP])\.?M\.?)?.{0,30}?\b(ET|EST|EDT|CT|PT)\b/i.exec(plain(plain(html)));
   if (!m) return null;
-  return {time: pad(+m[1] % 12 + (/p/i.test(m[3]) ? 12 : 0)) + ":" + (m[2] || "00"), zone: m[4].toUpperCase().replace(/^E[SD]T$/, "ET")};
+  const at = (h, mm, ap) => pad(+h % 12 + (/p/i.test(ap) ? 12 : 0)) + ":" + (mm || "00");
+  return {time: at(m[1], m[2], m[3]), endTime: m[4] && +m[4] <= 12 ? at(m[4], m[5], m[6]) : "", zone: m[7].toUpperCase().replace(/^E[SD]T$/, "ET")};
 }
 
 async function fetchText(url, fetchImpl, ms) {
@@ -199,7 +205,7 @@ const READERS = {
     const rows = parseIia(await fetchText(src.page, fetchImpl, ms), src).filter((r) => r.end >= new Date(Date.parse(day+'T00:00:00Z')-86400000).toISOString().slice(0,10)).slice(0, 15);
     return Promise.all(rows.map(async (r) => {
       let t = null; try { t = iiaTime(await fetchText(r.url, fetchImpl, ms)); } catch (e) { t = null; }
-      return event(src, Object.assign(r, t ? {time: t.time, zone: usZone(t.zone, r.start)} : {}));
+      return event(src, Object.assign(r, t ? {time: t.time, endTime: t.endTime, zone: usZone(t.zone, r.start)} : {}));
     }));
   },
 };

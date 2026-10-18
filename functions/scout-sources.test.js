@@ -7,11 +7,11 @@ const data = require("./scout-sources.test-data.json");
 const [webinars, events, aicla] = S.SOURCES;
 
 test("Scout reads the dates, times and zones organisers publish", () => {
-  assert.deepEqual(S.parseWhen("Thursday, 29 October 2026, 12:00 PM - 1:00 PM AEDT"), {start: "2026-10-29", end: "2026-10-29", time: "12:00", zone: "AEDT"});
-  assert.deepEqual(S.parseWhen("Tue 17 Nov 2026, 8:00 am - ..."), {start: "2026-11-17", end: "2026-11-17", time: "08:00", zone: ""});
-  assert.deepEqual(S.parseWhen("11-12 February 2027"), {start: "2027-02-11", end: "2027-02-12", time: "", zone: ""});
-  assert.deepEqual(S.parseWhen("13 - 14 October 2026, 8:30 ..."), {start: "2026-10-13", end: "2026-10-14", time: "08:30", zone: ""});
-  assert.deepEqual(S.parseWhen("30 Nov - 1 Dec 2026, 9 am AEDT"), {start: "2026-11-30", end: "2026-12-01", time: "09:00", zone: "AEDT"});
+  assert.deepEqual(S.parseWhen("Thursday, 29 October 2026, 12:00 PM - 1:00 PM AEDT"), {start: "2026-10-29", end: "2026-10-29", time: "12:00", endTime: "13:00", zone: "AEDT"});
+  assert.deepEqual(S.parseWhen("Tue 17 Nov 2026, 8:00 am - ..."), {start: "2026-11-17", end: "2026-11-17", time: "08:00", endTime: "", zone: ""}, "a listing cut short has no end");
+  assert.deepEqual(S.parseWhen("11-12 February 2027"), {start: "2027-02-11", end: "2027-02-12", time: "", endTime: "", zone: ""});
+  assert.deepEqual(S.parseWhen("13 - 14 October 2026, 8:30 ..."), {start: "2026-10-13", end: "2026-10-14", time: "08:30", endTime: "", zone: ""});
+  assert.deepEqual(S.parseWhen("30 Nov - 1 Dec 2026, 9 am AEDT"), {start: "2026-11-30", end: "2026-12-01", time: "09:00", endTime: "", zone: "AEDT"});
   assert.equal(S.parseWhen("12:30 PM, 3 Mo 2026"), null);assert.equal(S.parseWhen("Virtual (Zoom)"), null);assert.equal(S.parseWhen("31 February 2027"), null);
   assert.equal(S.cityZone("Doltone House Hyde Park Syd...", "2026-11-17"), "AEDT");assert.equal(S.cityZone("Pullman Sydney", "2026-06-15"), "AEST");
   assert.equal(S.cityZone("The Star Brisbane", "2026-11-13"), "AEST");assert.equal(S.cityZone("Royal Perth Golf Club", "2026-11-05"), "AWST");
@@ -62,7 +62,7 @@ test("Scout collects every source, keeps a failed one's status, and stays inside
 });
 test("Scout reads the IIA's webinars: date, CPE hours and title, then each webinar's US time in PHT", async () => {
   const iia = S.SOURCES.find((s) => s.id === "iia-webinars");
-  assert.deepEqual(S.parseWhen("Nov 04, 2026"), {start: "2026-11-04", end: "2026-11-04", time: "", zone: ""});
+  assert.deepEqual(S.parseWhen("Nov 04, 2026"), {start: "2026-11-04", end: "2026-11-04", time: "", endTime: "", zone: ""});
   const rows = S.parseIia(data.iiaList, iia);
   assert.deepEqual(rows.map((r) => [r.title.slice(0, 30), r.start, r.cpeHours, r.cpd, r.format]), [
     ["Coordinated Assurance: Turning", "2026-11-04", 1, "IIA CPE 1 hour", "online"],
@@ -70,7 +70,7 @@ test("Scout reads the IIA's webinars: date, CPE hours and title, then each webin
     ["Ethical Culture Starts With Us", "2026-12-10", 1, "IIA CPE 1 hour", "online"],
     ["Enterprise Risk Without Silos", "2026-12-17", 3, "IIA CPE 3 hours", "online"]], "archived recordings (no date) and repeats are left out");
   assert.equal(rows[0].url, "https://www.theiia.org/en/products/learning-solutions/webinar/coordinated-assurance-turning-more-activity-into-confidence/");
-  assert.deepEqual(S.iiaTime(data.iiaDetail), {time: "13:00", zone: "ET"}, "read through the doubly escaped dash");
+  assert.deepEqual(S.iiaTime(data.iiaDetail), {time: "13:00", endTime: "14:00", zone: "ET"}, "read through the doubly escaped dash");
   assert.equal(S.iiaTime("<p>TIME: 9:30 a.m. - 10:30 a.m. PT</p>").time, "09:30");assert.equal(S.iiaTime("<p>No time given</p>"), null);
   assert.equal(S.usZone("ET", "2026-10-20"), "EDT");assert.equal(S.usZone("ET", "2026-11-04"), "EST", "US daylight saving ends on the first Sunday in November");
   assert.equal(S.usZone("PT", "2026-12-01"), "UTC-08:00");

@@ -43,10 +43,14 @@
   // US sessions belong to the following day in Manila, including for CPE.
   function timing(v){
     v=v||{};var day=date(v.start),t=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(text(v.time,5)),z=zoneInfo(v.timezone||v.zone,v.location);
-    if(!day||!t||!z)return {startAt:'',localDate:day,localEnd:date(v.end)||day};
+    if(!day||!t||!z)return {startAt:'',endAt:'',localDate:day,localEnd:date(v.end)||day};
     var at=new Date(Date.parse(day+'T00:00:00Z')+(+t[1]*60+(+t[2])-z[0])*60000);
     var local=new Date(+at+480*60000).toISOString().slice(0,10),days=Math.round((Date.parse(date(v.end)||day)-Date.parse(day))/86400000);
-    return {startAt:at.toISOString(),localDate:local,localEnd:shift(local,days)};
+    // The published end time, on the event's last day (the next day if it
+    // would otherwise come before the start).
+    var e=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(text(v.endTime,5)),endAt='';
+    if(e){var fin=new Date(Date.parse((date(v.end)||day)+'T00:00:00Z')+(+e[1]*60+(+e[2])-z[0])*60000);if(+fin<=+at)fin=new Date(+fin+86400000);endAt=fin.toISOString();}
+    return {startAt:at.toISOString(),endAt:endAt,localDate:local,localEnd:shift(local,days)};
   }
   function sortKey(v){var t=timing(v);return t.startAt||t.localDate+'T23:59:59Z';}
   var MONTHS=['january','february','march','april','may','june','july','august','september','october','november','december'],CHECKS=['confirmed','not-found','unchecked'];
@@ -161,7 +165,7 @@
       if(day&&((end&&end<day)||(deadline&&deadline<day)))return no('past');
       var time=text(v.time,5),zone=text(v.timezone||v.zone,40),location=text(v.location,180)||'Location not listed';
       var item={id:'s'+hash(source),title:title,lane:v.lane,kind:v.kind==='community'?'community':'event',url:source,
-        start:start,end:end,deadline:deadline,when:text(v.when,160),format:formats[v.format]?v.format:'',time:time,zone:zone,pht:phtTime(start,time,zone,location),location:location,
+        start:start,end:end,deadline:deadline,when:text(v.when,160),format:formats[v.format]?v.format:'',time:time,endTime:/^([01]?\d|2[0-3]):([0-5]\d)$/.test(text(v.endTime,5))?text(v.endTime,5):'',zone:zone,pht:phtTime(start,time,zone,location),location:location,
         cost:text(v.cost,140)||'Cost not listed',access:access[v.access]?v.access:'',organizer:text(v.organizer,140),why:why(v.why),topic:text(v.topic,100)};
       item.cpd=text(v.cpd,120);
       if(typeof v.cpeHours==='number'&&Number.isFinite(v.cpeHours)&&v.cpeHours>=0)item.cpeHours=Math.min(v.cpeHours,40);
@@ -316,8 +320,10 @@
     var escape=function(s){return String(s||'').replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/;/g,'\\;').replace(/,/g,'\\,');};
     var stamp=function(s){return s.replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');};
     var rows=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Daybook//Scout//EN','BEGIN:VEVENT','UID:'+escape(v.id)+'@daybook-scout','DTSTAMP:'+stamp(new Date().toISOString())];
-    if(t.startAt)rows.push('DTSTART:'+stamp(t.startAt));else rows.push('DTSTART;VALUE=DATE:'+t.localDate.replace(/-/g,''),'DTEND;VALUE=DATE:'+shift(t.localEnd,1).replace(/-/g,''));
-    rows.push('SUMMARY:'+escape(v.title),'LOCATION:'+escape(v.location),'DESCRIPTION:'+escape([v.url,v.when,!t.startAt?'Time not confirmed; check the source.':'End time not supplied; check the source.'].filter(Boolean).join('\n')),'URL:'+url(v.url),'END:VEVENT','END:VCALENDAR');
+    // A timed event ends at its published end, else one hour after it starts
+    // (said in the description), so it never imports with no length.
+    if(t.startAt)rows.push('DTSTART:'+stamp(t.startAt),'DTEND:'+stamp(t.endAt||new Date(Date.parse(t.startAt)+3600000).toISOString()));else rows.push('DTSTART;VALUE=DATE:'+t.localDate.replace(/-/g,''),'DTEND;VALUE=DATE:'+shift(t.localEnd,1).replace(/-/g,''));
+    rows.push('SUMMARY:'+escape(v.title),'LOCATION:'+escape(v.location),'DESCRIPTION:'+escape([v.url,v.when,!t.startAt?'Time not confirmed; check the source.':t.endAt?'':'End time assumed one hour after the start; check the source.'].filter(Boolean).join('\n')),'URL:'+url(v.url),'END:VEVENT','END:VCALENDAR');
     // RFC 5545 lines fold at 75 UTF-8 octets, without splitting a character.
     return rows.map(function(line){var out='',n=0;for(var c of line){var bytes=unescape(encodeURIComponent(c)).length;if(n+bytes>75){out+='\r\n ';n=1;}out+=c;n+=bytes;}return out;}).join('\r\n')+'\r\n';}
   function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16);}
