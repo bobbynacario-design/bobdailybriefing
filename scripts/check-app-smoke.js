@@ -41,6 +41,7 @@ assert.ok(html.includes('./lib/intelligence-search-core.js'), 'Unified search co
 assert.ok(html.includes('./lib/evidence-sets-core.js'), 'Evidence sets core must load before the app script');
 assert.ok(html.includes('./lib/entity-timeline-core.js'), 'Entity timeline core must load before the app script');
 assert.ok(html.includes("if (id==='today') pending = renderTodayFive()"), 'Today must render the Morning 5');
+assert.ok(html.includes('<symbol id="i-scout"'), 'Scout needs its section icon (menu row and page header)');
 // Eleven tabs since the 11 Oct prune; the folded pages open from their family's strip and from Search.
 const navTabs = (html.slice(html.indexOf('<div class="nav-center">'), html.indexOf('<div class="nav-right">')).match(/data-page="([a-z]+)"/g) || []).map((m) => m.slice(11, -1)).sort();
 assert.deepEqual(navTabs, ['about', 'calendar', 'decisions', 'evidence', 'flights', 'help', 'miro', 'radar', 'research', 'scout', 'shopping', 'sports', 'today'], 'the bar holds thirteen tabs');
