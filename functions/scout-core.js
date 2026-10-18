@@ -225,7 +225,14 @@
   function cpeDefault(v){
     v=v||{};return {hours:hrs(v.cpeHours,40),ethics:/\bethic/i.test(v.title||'')};
   }
-  function cpeEntry(v){return Object.assign({},v,{status:['planned','attended','confirmed'].includes(v.status)?v.status:'needs-review',eligible:v.eligible===true});}
+  // An entry logged before the attendance states (the first tracker, 18 Oct)
+  // has no status: one dated after today was a "Going" tap and is a plan; one
+  // already past needs review. Its hours from another body's points (that
+  // tracker prefilled them) are not CIA hours.
+  function cpeEntry(v,day){
+    var legacy=!v.status,status=['planned','attended','confirmed'].includes(v.status)?v.status:legacy&&day&&String(v.date)>day?'planned':'needs-review';
+    return Object.assign({},v,{status:status,eligible:v.eligible===true},legacy&&!v.iia?{hours:0}:{});
+  }
   // One change to the CPE log: start (hours already earned in a year, from his
   // IIA record), toggle (an event attended, or not), edit, remove.
   function applyCpe(doc,change,now){
@@ -242,7 +249,7 @@
         status:(t.startAt?Date.parse(t.startAt)>at:(t.localDate||day)>day)?'planned':'attended',hours:d.hours,ethics:d.ethics,eligible:false,evidence:'',organizer:text(v.organizer,60),iia:+v.cpeHours>0};}
     }
     else if(change.op==='edit'&&next.entries[id]){
-      var entry=cpeEntry(next.entries[id]);
+      var entry=cpeEntry(next.entries[id],day);
       ['hours','ethics','eligible','evidence','status','date'].forEach(function(k){if(!Object.prototype.hasOwnProperty.call(change,k))return;
         if(k==='hours')entry.hours=hrs(change.hours,40);else if(k==='evidence')entry.evidence=text(change.evidence,600);
         else if(k==='date'){if(!date(change.date))throw new Error('Enter a valid session date.');if(entry.date!==change.date)entry.startAt='';entry.date=change.date;}
@@ -262,7 +269,7 @@
   // on or before today), booked (sessions still to come) and days to 31 Dec.
   function cpeSummary(doc,day,selectedYear){
     var year=/^\d{4}$/.test(selectedYear||'')?selectedYear:String(day).slice(0,4),base=((doc&&doc.years)||{})[year],entries=(doc&&doc.entries)||{};
-    var list=Object.keys(entries).map(function(id){return Object.assign({id:id},cpeEntry(entries[id]));}).filter(function(e){return String(e.date).slice(0,4)===year;}).sort(function(a,b){return String(a.date).localeCompare(String(b.date));});
+    var list=Object.keys(entries).map(function(id){return Object.assign({id:id},cpeEntry(entries[id],day));}).filter(function(e){return String(e.date).slice(0,4)===year;}).sort(function(a,b){return String(a.date).localeCompare(String(b.date));});
     var add=function(f){return Math.round(list.filter(f).reduce(function(t,e){return t+(+e.hours||0);},0)*10)/10;};
     var start=hrs(base&&base.start,200),startEthics=Math.min(start,hrs(base&&base.ethics,200));
     var earned=function(e){return e.status==='confirmed'&&e.eligible&&e.date<=day;};
@@ -300,7 +307,7 @@
   function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16);}
   function expired(v,day){var end=timing(v).localEnd;return !!((end&&end<day)||(v.deadline&&v.deadline<day));}
   function due(items,choices,day){var until=new Date(Date.parse(day+'T00:00:00Z')+7*86400000).toISOString().slice(0,10);return items.filter(function(v){var c=choices[v.id]||{};return (c.saved||c.interested)&&!c.hidden&&!expired(v,day)&&v.deadline&&v.deadlineCheck!=='not-found'&&v.deadline>=day&&v.deadline<=until;}).sort(function(a,b){return a.deadline.localeCompare(b.deadline);}).slice(0,3);}
-  var api={timing:timing,sortKey:sortKey,restore:restore,calendarItem:calendarItem,choiceItem:choiceItem,choiceDetails:choiceDetails,reminders:reminders,weeklyPicks:weeklyPicks,ics:ics,cpeCsv:cpeCsv,lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,access:access,membersOnly:membersOnly,previewHost:previewHost,reasons:reasons,drop:drop,kept:kept,laneNote:laneNote,calendarId:calendarId,mergeCalendar:mergeCalendar,isNew:isNew,rollPicks:rollPicks,workMatch:workMatch,cpeDefault:cpeDefault,applyCpe:applyCpe,cpeSummary:cpeSummary,theme:theme,clean:clean,expired:expired,due:due};
+  var api={cpeEntry:cpeEntry,timing:timing,sortKey:sortKey,restore:restore,calendarItem:calendarItem,choiceItem:choiceItem,choiceDetails:choiceDetails,reminders:reminders,weeklyPicks:weeklyPicks,ics:ics,cpeCsv:cpeCsv,lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,access:access,membersOnly:membersOnly,previewHost:previewHost,reasons:reasons,drop:drop,kept:kept,laneNote:laneNote,calendarId:calendarId,mergeCalendar:mergeCalendar,isNew:isNew,rollPicks:rollPicks,workMatch:workMatch,cpeDefault:cpeDefault,applyCpe:applyCpe,cpeSummary:cpeSummary,theme:theme,clean:clean,expired:expired,due:due};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.ScoutCore=api;
 })(typeof window!=='undefined'?window:globalThis);
