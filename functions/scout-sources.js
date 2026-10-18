@@ -196,7 +196,7 @@ const READERS = {
     return parseTribe(JSON.parse(await fetchText(src.api + "?per_page=50&start_date=" + day, fetchImpl, ms)), src);
   },
   async iia(src, fetchImpl, day, ms) {
-    const rows = parseIia(await fetchText(src.page, fetchImpl, ms), src).filter((r) => r.end >= day).slice(0, 15);
+    const rows = parseIia(await fetchText(src.page, fetchImpl, ms), src).filter((r) => r.end >= new Date(Date.parse(day+'T00:00:00Z')-86400000).toISOString().slice(0,10)).slice(0, 15);
     return Promise.all(rows.map(async (r) => {
       let t = null; try { t = iiaTime(await fetchText(r.url, fetchImpl, ms)); } catch (e) { t = null; }
       return event(src, Object.assign(r, t ? {time: t.time, zone: usZone(t.zone, r.start)} : {}));
@@ -211,7 +211,7 @@ async function collect(fetchImpl, day, opts) {
   const until = new Date(Date.parse(day + "T00:00:00Z") + 120 * 86400000).toISOString().slice(0, 10);
   const runs = await Promise.all((opts.sources || SOURCES).map(async (src) => {
     try {
-      const rows = (await READERS[src.kind](src, fetchImpl, day, opts.ms || 20000)).filter((e) => e.end >= day && e.start <= until);
+      const rows = (await READERS[src.kind](src, fetchImpl, day, opts.ms || 20000)).filter((e) => Core.timing(e).localEnd >= day && Core.timing(e).localDate <= until);
       return {rows, status: {id: src.id, label: src.label, organizer: src.organizer, ok: true, count: rows.length}};
     } catch (e) {
       return {rows: [], status: {id: src.id, label: src.label, organizer: src.organizer, ok: false, count: 0, error: String(e && e.message || e).slice(0, 140)}};

@@ -54,7 +54,7 @@ test('Scout reads each pick page from public https hosts only and records what i
 test('Scout drops a community whose readable page does not show its meeting date, and asks for meeting dates',async()=>{
   const {checkDates}=require('./scout');
   const words=' members'.repeat(40);
-  const pages={'https://meetup.example/dep':'<h2>Past events</h2><p>Mon, Aug 31 · 7:00 PM PHT · Online</p>'+words,'https://group.example/quiet':'<p>About us</p>'+words};
+  const pages={'https://meetup.example/dep':'<h2>Past events</h2><p>Mon, Aug 31, 2026 · 7:00 PM PHT · Online</p>'+words,'https://group.example/quiet':'<p>About us</p>'+words};
   const fetchImpl=async url=>{if(url.includes('fb'))return {ok:false,headers:{get:()=>'text/html'},text:async()=>''};return {ok:true,headers:{get:()=>'text/html'},text:async()=>pages[url]||''};};
   const kept=await checkDates([{url:'https://meetup.example/dep',kind:'community',lastActive:'2026-08-31'},{url:'https://group.example/quiet',kind:'community',lastActive:'2026-10-01'},
     {url:'https://fb.example/group',kind:'community',nextActive:'2026-11-12'}],fetchImpl,1000);

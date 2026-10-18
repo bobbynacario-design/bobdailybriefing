@@ -79,4 +79,6 @@ test("Scout reads the IIA's webinars: date, CPE hours and title, then each webin
   const first = out.events.find((e) => e.title.startsWith("Coordinated"));
   assert.deepEqual([first.time, first.zone, first.pht, first.cpeHours], ["13:00", "EST", "02:00 PHT (next day) (13:00 EST)", 1], "a Manila 2 am start says so");
   assert.equal(out.events.find((e) => e.title.startsWith("Ethical")).pht, "21:00 PHT (08:00 EST)");
+  const nextDay=await S.collect(fetchImpl,"2026-11-05",{ms:1000,sources:[iia]});
+  assert.ok(nextDay.events.some(e=>e.title.startsWith('Coordinated')),'the Nov 4 US session is retained on its Nov 5 Manila date');
 });

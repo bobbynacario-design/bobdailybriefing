@@ -51,8 +51,8 @@ async function checkDates(items,fetchImpl,ms,stats){
     const meets=[v.lastActive,v.nextActive].filter(Boolean);
     if(!v.start&&!v.deadline&&!meets.length)return;
     const page=await readPage(v.url,fetchImpl,ms||8000);
-    if(v.start)v.dateCheck=Core.dateCheck(page,v.start);
-    if(v.deadline)v.deadlineCheck=Core.dateCheck(page,v.deadline);
+    if(v.start)v.dateCheck=Core.dateCheck(page,v.start,v.title);
+    if(v.deadline)v.deadlineCheck=Core.dateCheck(page,v.deadline,v.title);
     if(meets.length){const found=meets.map(d=>Core.dateCheck(page,d));v.activityCheck=found.includes('confirmed')?'confirmed':found[0];}
     if(v.access!=='invite'&&Core.membersOnly(page))v.access='members';
   }));
