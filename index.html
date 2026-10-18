@@ -1371,13 +1371,18 @@ window.fbScoutChoice = async function(item,action,value) {
   var uid=getUid();if(!uid)throw new Error('Sign in first');
   if(!['saved','interested','more','hidden'].includes(action))throw new Error('Invalid choice');
   var cleaned=ScoutCore.clean([item])[0];if(!cleaned)throw new Error('Invalid opportunity');
-  return runTransaction(db,async function(tx){
-    var ref=doc(db,COLL,'scout-saved-'+uid),snap=await tx.get(ref),items=snap.exists()?snap.data().items||{}:{};
+  var ref=doc(db,COLL,'scout-saved-'+uid);
+  var run=function(){return runTransaction(db,async function(tx){
+    var snap=await tx.get(ref),items=snap.exists()?snap.data().items||{}:{};
     var choice=Object.assign({},items[cleaned.id]||{},{item:cleaned,updatedAt:Date.now()});choice[action]=!!value;items[cleaned.id]=choice;
     if(!choice.saved&&!choice.interested&&!choice.more&&!choice.hidden)delete items[cleaned.id];
     if(Object.keys(items).length>100)throw new Error('Your Scout list is full (100). Clear a saved choice first.');
     tx.set(ref,{uid:uid,kind:'scout-saved',items:items});return items;
-  });
+  });};
+  // The first choice ever: a missing doc reads as denied under the shared
+  // rules, so the transaction failed. Create our own doc, then retry.
+  try{return await run();}
+  catch(e){if(!e||e.code!=='permission-denied')throw e;await setDoc(ref,{uid:uid,kind:'scout-saved'},{merge:true});return run();}
 };
 
 window.fbLoadHotelTrips = function() { return fbReadOwn('hotel-trips-'); };
