@@ -15,7 +15,7 @@ test('Scout saves only search-returned sources and keeps the existing feed when 
   let writes=[],raw={items:[{title:'Seminar',lane:'work',start:'2026-10-25',url:'https://official.example/event'}]};
   const db={collection:()=>({doc:id=>({get:async()=>({exists:false}),set:async value=>writes.push({id,value})})})};
   const {cleanAccounts,DEFAULT_ACCOUNTS}=require('./briefing-prompt-core');
-  const ctx={logger:{warn(){}},ScoutCore:Core,Scout:{prompt,checkDates},BRIEFINGS_COLL:'briefings-bob',loadProfile:async()=>null,cleanAccounts,DEFAULT_ACCOUNTS,phtDateKey:()=> '2026-10-18',DEFAULT_MODEL:'fixture',
+  const ctx={logger:{warn(){}},ScoutCore:Core,Scout:{prompt,checkDates},BRIEFINGS_COLL:'briefings-bob',loadProfile:async()=>null,cleanAccounts,DEFAULT_ACCOUNTS,phtDateKey:()=> '2026-10-18',DEFAULT_MODEL:'fixture',refreshScoutCalendar:async()=>null,
     OPENAI_API_KEY:{value:()=> 'test'},AbortSignal,Date,WeeklyReviewCore:{weekStart:()=> '2026-10-12'},HttpsError:class extends Error{constructor(code,msg){super(msg);this.code=code;}},
     recordUsage:async()=>{},recordSearches:async()=>{},extractUsage:()=>({}),webSearchCount:()=>1,
     searchUrls:()=>['https://official.example/event'],extractText:()=>JSON.stringify(raw),parseBriefing:JSON.parse,
@@ -71,4 +71,37 @@ test('Scout marks members-only picks from their page, counts a dropped group, an
   assert.equal(kept.length,1);assert.equal(kept[0].access,'members');assert.equal(stats.lanes.people.dropped.activity,1);
   const out=prompt(null,null,{},'2026-10-18',[]);
   assert.match(out,/"access":"open\|members\|invite/);assert.match(out,/never a staging, test or preview copy/);assert.match(out,/never mentions these instructions, limits or lanes/);
+});
+test('Scout leaves a work pick the calendar already lists to the calendar, and rolls earlier picks on',async()=>{
+  const index=fs.readFileSync(__dirname+'/index.js','utf8');
+  const code=index.slice(index.indexOf('async function makeScout('),index.indexOf('async function guardedScout('));
+  const {cleanAccounts,DEFAULT_ACCOUNTS}=require('./briefing-prompt-core');
+  const prev={items:[{id:'sold',title:'Olafur',lane:'interests',kind:'event',url:'https://mcad.example/olafur',start:'2026-07-09',end:'2026-11-15',firstSeen:'2026-10-11',lastSeen:'2026-10-11'}],startedOn:'2026-10-11'};
+  const raw={items:[{title:'Liability conference',lane:'work',start:'2026-11-17',url:'https://anziif.example/liability'},{title:'Coverage webinar',lane:'work',start:'2026-11-20',url:'https://law.example/coverage'}]};
+  const writes=[];
+  const db={collection:()=>({doc:id=>({get:async()=>id.startsWith('scout-latest-')?{exists:true,data:()=>prev}:{exists:false},set:async value=>writes.push({id,value})})})};
+  const ctx={logger:{warn(){}},ScoutCore:Core,Scout:{prompt,checkDates},BRIEFINGS_COLL:'briefings-bob',loadProfile:async()=>null,cleanAccounts,DEFAULT_ACCOUNTS,phtDateKey:()=>'2026-10-18',DEFAULT_MODEL:'fixture',
+    refreshScoutCalendar:async()=>({items:{c1:{url:'https://anziif.example/liability'}}}),
+    OPENAI_API_KEY:{value:()=>'test'},AbortSignal,Date,WeeklyReviewCore:{weekStart:()=>'2026-10-12'},HttpsError:class extends Error{constructor(code,msg){super(msg);this.code=code;}},
+    recordUsage:async()=>{},recordSearches:async()=>{},extractUsage:()=>({}),webSearchCount:()=>1,
+    searchUrls:()=>['https://anziif.example/liability','https://law.example/coverage'],extractText:()=>JSON.stringify(raw),parseBriefing:JSON.parse,fetch:async()=>({ok:true,json:async()=>({})})};
+  vm.createContext(ctx);vm.runInContext(code,ctx);
+  const result=await ctx.makeScout(db,'owner');
+  assert.deepEqual(result.items.map(v=>v.title),['Coverage webinar','Olafur']);
+  assert.equal(result.items[0].firstSeen,'2026-10-18');assert.equal(result.items[1].firstSeen,'2026-10-11');assert.equal(result.startedOn,'2026-10-11');
+  assert.deepEqual(JSON.parse(JSON.stringify(result.checks.lanes.work)),{returned:2,kept:1,dropped:{calendar:1}});
+  assert.equal(writes[0].id,'scout-latest-owner');
+});
+test('Scout refreshes the work calendar from its sources and keeps it with the owner',async()=>{
+  const index=fs.readFileSync(__dirname+'/index.js','utf8');
+  const code=index.slice(index.indexOf('async function refreshScoutCalendar('),index.indexOf('// One bounded weekly shortlist'));
+  const writes=[],run={events:[{url:'https://anziif.example/w1',start:'2026-10-22',end:'2026-10-22',source:'anziif-webinars',title:'W1'}],sources:[{id:'anziif-webinars',ok:true,count:1}],searched:['CA ANZ']};
+  const db={collection:c=>({doc:id=>({get:async()=>({exists:false}),set:async value=>writes.push({c,id,value})})})};
+  const ctx={ScoutCore:Core,ScoutSources:{collect:async(f,day)=>{assert.equal(day,'2026-10-18');return run;}},BRIEFINGS_COLL:'briefings-bob',phtDateKey:()=>'2026-10-18',fetch:()=>{},Date};
+  vm.createContext(ctx);vm.runInContext(code,ctx);
+  const doc=await ctx.refreshScoutCalendar(db,'owner');
+  assert.equal(writes[0].id,'scout-calendar-owner');assert.equal(writes[0].c,'briefings-bob');
+  assert.equal(doc.uid,'owner');assert.equal(doc.kind,'scout-calendar');assert.equal(doc.startedOn,'2026-10-18');assert.ok(doc.refreshedAt);
+  assert.deepEqual(Object.values(doc.items).map(v=>[v.title,v.firstSeen]),[['W1','2026-10-18']]);
+  assert.match(prompt(null,null,{},'2026-10-18',[]),/ANZIIF and AICLA listings are already read directly into his work calendar, so spend work searches on CA ANZ, CPA Australia, IPA, the Insurance Council of Australia and other organisers/);
 });

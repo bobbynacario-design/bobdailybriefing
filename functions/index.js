@@ -3,11 +3,24 @@
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const ScoutCore = require('./scout-core');
 const Scout = require('./scout');
+const ScoutSources = require('./scout-sources');
+
+// The work calendar: organisers' own listings (scout-sources.js), refreshed
+// daily and on every build. No AI and no search, so it costs nothing.
+async function refreshScoutCalendar(db, uid) {
+  const ref=db.collection(BRIEFINGS_COLL).doc('scout-calendar-'+uid),day=phtDateKey();
+  const [snap,run]=await Promise.all([ref.get(),ScoutSources.collect(fetch,day)]);
+  const doc=Object.assign({uid,kind:'scout-calendar'},ScoutCore.mergeCalendar(snap.exists?snap.data():null,run,day),{refreshedAt:new Date().toISOString()});
+  await ref.set(doc);
+  return doc;
+}
 
 // One bounded weekly shortlist per owner, stored privately like other research.
 async function makeScout(db, uid) {
   const read = async prefix => { const s=await db.collection(BRIEFINGS_COLL).doc(prefix+uid).get(); return s.exists?s.data():{}; };
-  const [profile,prefs,saved,accountsDoc]=await Promise.all([loadProfile(db,uid),read('scout-prefs-'),read('scout-saved-'),read('accounts-').catch(()=>({}))]);
+  // The calendar refreshes alongside the search, so a build is never older than its listings.
+  const calendarRun=refreshScoutCalendar(db,uid).catch(e=>{logger.warn('Scout calendar not refreshed',{message:e.message});return null;});
+  const [profile,prefs,saved,accountsDoc,previous]=await Promise.all([loadProfile(db,uid),read('scout-prefs-'),read('scout-saved-'),read('accounts-').catch(()=>({})),read('scout-latest-')]);
   // His insurers and solicitors name the work-lane organisers to look for.
   const kept=cleanAccounts(accountsDoc.accounts),accounts=kept.length?kept:DEFAULT_ACCOUNTS;
   const response=await fetch('https://api.openai.com/v1/responses',{
@@ -26,10 +39,15 @@ async function makeScout(db, uid) {
   // What each lane returned and why picks were left out, kept with the
   // shortlist so an empty lane can explain itself.
   const stats={};
-  const items=await Scout.checkDates(ScoutCore.clean(raw.items,allowed,phtDateKey(),stats),fetch,undefined,stats);
-  const checks=ScoutCore.kept(stats,items);
-  if(raw.items.length&&!items.length){logger.warn('Scout: nothing passed the checks',checks);throw new HttpsError('internal','No opportunities passed source and date checks. Your previous shortlist is kept.');}
-  const result={uid,kind:'scout-latest',items,checks,generatedAt:new Date().toISOString(),week:WeeklyReviewCore.weekStart(phtDateKey())};
+  const checked=await Scout.checkDates(ScoutCore.clean(raw.items,allowed,phtDateKey(),stats),fetch,undefined,stats);
+  // A work pick the calendar already lists is left to the calendar.
+  const calendar=await calendarRun,listed=new Set(Object.values((calendar&&calendar.items)||{}).map(v=>v.url));
+  const fresh=checked.filter(v=>{if(v.lane!=='work'||!listed.has(v.url))return true;ScoutCore.drop(stats,v.lane,'calendar');return false;});
+  const checks=ScoutCore.kept(stats,fresh),day=phtDateKey();
+  if(raw.items.length&&!fresh.length){logger.warn('Scout: nothing passed the checks',checks);throw new HttpsError('internal','No opportunities passed source and date checks. Your previous shortlist is kept.');}
+  // Earlier picks roll on until they end, keeping when each was first seen.
+  const items=ScoutCore.rollPicks(previous.items,fresh,day);
+  const result={uid,kind:'scout-latest',items,checks,startedOn:previous.startedOn||day,generatedAt:new Date().toISOString(),week:WeeklyReviewCore.weekStart(day)};
   await db.collection(BRIEFINGS_COLL).doc('scout-latest-'+uid).set(result);
   return result;
 }
@@ -2109,6 +2127,16 @@ exports.deliverMorningFive = onSchedule(
 exports.generateScout=onCall({region:'asia-southeast1',timeoutSeconds:240,memory:'512MiB',secrets:[OPENAI_API_KEY]},async request=>{
   try{authorize(request.auth,GENERATION_OWNERS);return await guardedScout(getFirestore(),request.auth.uid,(request.data||{}).requestId);}
   catch(e){if(e instanceof HttpsError)throw e;throw new HttpsError(['unauthenticated','permission-denied','invalid-argument','resource-exhausted','failed-precondition'].includes(e.code)?e.code:'internal',e.code?e.message:'Scout could not finish. Your previous shortlist is kept.');}
+});
+// The work calendar every morning before the briefing, free: no AI, no search.
+exports.refreshScoutCalendar=onSchedule({schedule:'40 5 * * *',timeZone:'Asia/Manila',region:'asia-southeast1',timeoutSeconds:120,memory:'256MiB'},async()=>{
+  const db=getFirestore();
+  for(const email of GENERATION_OWNERS){
+    try{const user=await getAuth().getUserByEmail(email);if(!user.emailVerified||user.disabled)continue;
+      const doc=await refreshScoutCalendar(db,user.uid);
+      logger.info('Scout calendar refreshed',{events:Object.keys(doc.items).length,sources:doc.sources.map(s=>s.id+':'+(s.ok?s.count:'failed'))});
+    }catch(e){logger.warn('Scout calendar not refreshed',{code:e.code||'',message:e.message});}
+  }
 });
 exports.buildWeeklyScout=onSchedule({schedule:'15 6 * * 0',timeZone:'Asia/Manila',region:'asia-southeast1',timeoutSeconds:540,memory:'512MiB',secrets:[OPENAI_API_KEY]},async()=>{
   const db=getFirestore(),week=WeeklyReviewCore.weekStart(phtDateKey());

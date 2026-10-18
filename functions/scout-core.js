@@ -92,7 +92,7 @@
   // Why picks were left out, by lane, so an empty lane can say why.
   var reasons={invalid:'missing a title or link',source:'link not among the search results',duplicate:'listed twice',date:'no valid date',past:'already past or registration closed',
     host:'a staging or test copy of a site',signup:'a sign-up or membership page',inactive:'no meeting in the last 60 days or the next 90',activity:'meeting date not on its page',
-    ai:'over the one AI pick',poker:'poker',limit:'over the 12-pick limit'};
+    ai:'over the one AI pick',poker:'poker',limit:'over the 12-pick limit',calendar:'already in your work calendar'};
   function tally(stats,lane){stats.lanes=stats.lanes||{};return stats.lanes[lane]||(stats.lanes[lane]={returned:0,kept:0,dropped:{}});}
   function drop(stats,lane,reason){if(stats&&lanes[lane]){var l=tally(stats,lane);l.dropped[reason]=(l.dropped[reason]||0)+1;}}
   function kept(stats,items){Object.keys(lanes).forEach(function(k){if(stats.lanes&&stats.lanes[k])stats.lanes[k].kept=0;});(items||[]).forEach(function(v){tally(stats,v.lane).kept++;});return stats;}
@@ -121,6 +121,8 @@
       var item={id:'s'+hash(source),title:title,lane:v.lane,kind:v.kind==='community'?'community':'event',url:source,
         start:start,end:end,deadline:deadline,when:text(v.when,160),format:formats[v.format]?v.format:'',time:time,zone:zone,pht:phtTime(start,time,zone,location),location:location,
         cost:text(v.cost,140)||'Cost not listed',access:access[v.access]?v.access:'',organizer:text(v.organizer,140),why:why(v.why),topic:text(v.topic,100)};
+      if(date(v.firstSeen))item.firstSeen=v.firstSeen;
+      if(date(v.lastSeen))item.lastSeen=v.lastSeen;
       if(start&&CHECKS.indexOf(v.dateCheck)>=0)item.dateCheck=v.dateCheck;
       if(deadline&&CHECKS.indexOf(v.deadlineCheck)>=0)item.deadlineCheck=v.deadlineCheck;
       if(item.kind==='community'){
@@ -138,10 +140,40 @@
     out.slice(12).forEach(function(v){drop(stats,v.lane,'limit');});
     return out.slice(0,12);
   }
+  // The work calendar (functions/scout-sources.js) keeps each event from its
+  // first sighting until it ends. A source that read fine but no longer lists
+  // an event twice running means it was withdrawn; a source that failed keeps
+  // its events as they were.
+  function calendarId(e){return 'c'+hash(String(e.url)+'|'+e.start);}
+  function mergeCalendar(prev,run,day){
+    var old=(prev&&prev.items)||{},items={},ok={};
+    ((run&&run.sources)||[]).forEach(function(s){if(s.ok)ok[s.id]=true;});
+    ((run&&run.events)||[]).forEach(function(e){var id=calendarId(e),was=old[id];
+      items[id]=Object.assign({},e,{id:id,firstSeen:(was&&was.firstSeen)||day,lastSeen:day,missed:0});});
+    Object.keys(old).forEach(function(id){var v=old[id];if(items[id]||(v.end||v.start)<day)return;
+      var missed=(v.missed||0)+(ok[v.source]?1:0);if(missed<2)items[id]=Object.assign({},v,{missed:missed});});
+    return {startedOn:(prev&&prev.startedOn)||day,items:items,sources:(run&&run.sources)||[],searched:(run&&run.searched)||[]};
+  }
+  // New: first seen in the last seven days, and not part of the first
+  // collection (everything is "new" on the day a list starts).
+  function isNew(v,startedOn,day){return !!(v&&date(v.firstSeen)&&startedOn&&v.firstSeen>startedOn&&v.firstSeen>=shift(day,-7));}
+  // The weekly picks roll the same way: a pick seen again keeps its first
+  // sighting; an earlier pick stays until it ends (a community, four weeks
+  // after it was last returned), so a good find is not lost to next week's
+  // search and the same exhibit is not "new" three times.
+  function rollPicks(prev,fresh,day){
+    var byId={},out=[];
+    (prev||[]).forEach(function(v){if(v&&v.id)byId[v.id]=v;});
+    (fresh||[]).forEach(function(v){var was=byId[v.id];out.push(Object.assign({},v,{firstSeen:(was&&was.firstSeen)||day,lastSeen:day}));delete byId[v.id];});
+    Object.keys(byId).forEach(function(id){var v=byId[id];
+      if(expired(v,day)||(v.kind==='community'&&(v.lastSeen||'')<shift(day,-28)))return;
+      out.push(v);});
+    return out.slice(0,24);
+  }
   function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16);}
   function expired(v,day){return !!((v.end&&v.end<day)||(v.deadline&&v.deadline<day));}
   function due(items,choices,day){var until=new Date(Date.parse(day+'T00:00:00Z')+7*86400000).toISOString().slice(0,10);return items.filter(function(v){var c=choices[v.id]||{};return (c.saved||c.interested)&&!c.hidden&&!expired(v,day)&&v.deadline&&v.deadlineCheck!=='not-found'&&v.deadline>=day&&v.deadline<=until;}).sort(function(a,b){return a.deadline.localeCompare(b.deadline);}).slice(0,3);}
-  var api={lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,access:access,membersOnly:membersOnly,previewHost:previewHost,reasons:reasons,drop:drop,kept:kept,laneNote:laneNote,theme:theme,clean:clean,expired:expired,due:due};
+  var api={lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,access:access,membersOnly:membersOnly,previewHost:previewHost,reasons:reasons,drop:drop,kept:kept,laneNote:laneNote,calendarId:calendarId,mergeCalendar:mergeCalendar,isNew:isNew,rollPicks:rollPicks,theme:theme,clean:clean,expired:expired,due:due};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.ScoutCore=api;
 })(typeof window!=='undefined'?window:globalThis);

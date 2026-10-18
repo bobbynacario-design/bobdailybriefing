@@ -15,7 +15,8 @@ const SOURCES = [
   {id: "anziif-events", organizer: "ANZIIF", label: "ANZIIF events", kind: "sxa", page: "https://anziif.com/professional-development/events", origin: "https://anziif.com"},
   {id: "aicla", organizer: "AICLA", label: "AICLA events", kind: "tribe", api: "https://aicla.org/wp-json/tribe/events/v1/events", origin: "https://aicla.org"},
 ];
-const SEARCHED = ["CA ANZ", "CPA Australia", "IPA", "the Insurance Council of Australia", "the law firms in your accounts"];
+const SEARCHED_BODIES = ["CA ANZ", "CPA Australia", "IPA", "the Insurance Council of Australia"];
+const SEARCHED = SEARCHED_BODIES.concat("the law firms in your accounts");
 const UA = "Mozilla/5.0 (compatible; DaybookScout/1.0; event calendar)";
 const MONTHS = {jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12};
 const ENTITIES = {amp: "&", quot: "\"", apos: "'", nbsp: " ", ndash: "-", mdash: "-", rsquo: "'", lsquo: "'", hellip: "..."};
@@ -173,4 +174,4 @@ async function collect(fetchImpl, day, opts) {
   return {events: runs.flatMap((r) => r.rows), sources: runs.map((r) => r.status), searched: SEARCHED};
 }
 
-module.exports = {SOURCES, SEARCHED, plain, parseWhen, cityZone, sxaQuery, parseSxa, parseTribe, collect};
+module.exports = {SOURCES, SEARCHED, SEARCHED_BODIES, plain, parseWhen, cityZone, sxaQuery, parseSxa, parseTribe, collect};
