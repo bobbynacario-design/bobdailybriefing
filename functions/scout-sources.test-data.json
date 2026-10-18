@@ -1,0 +1,48 @@
+{
+ "webinar": {
+  "Url": "/professional-development/webinars/how-inflation-and-cost-of-living-pressures-are-reshaping-australias-general-insurance-market",
+  "Html": " <a href=\"/professional-development/webinars/how-inflation-and-cost-of-living-pressures-are-reshaping-australias-general-insurance-market\" class=\"field-card-wrapper__event-listing\"> <div class=\"field-tile-info\"> <p>Webinars</p> <span class=\"field-content-type\"> Event </span> </div> <div class=\"field-cip-points\"> <svg></svg> <h5>1 CIP Points </h5> </div> <div class=\"field-body-content\"> <span class=\"field-text-wrapper\"> <h4 class=\"field-title\">Thursday Thought-Leaders: The Affordability Pincer | How Inflation and Cost-of-Living Pressures are Reshaping Australia’s General Insurance Market</h4> </span> <div class=\"field-introduction\"> Explore the affordability and claims inflation pressures squeezing Australia's general insurance ... </div> </div> <div class=\"field-meta-info\"> <span class=\"field-date\"> <svg></svg> <h5>Thursday, 29 October 2026, 12:00 PM - 1:00 PM AEDT <br /> 2:00 PM - 3:00 PM NZDT</h5> </span> </div> <button type=\"button\" class=\"btn btn-skin-1 field-cta has-icon dark-theme\"> <span class=\"btn-text\">Read More</span> <svg></svg></button> </a>"
+ },
+ "hybrid": {
+  "Url": "/professional-development/events/liability-conference",
+  "Html": " <a href=\"/professional-development/events/liability-conference\" class=\"field-card-wrapper__event-listing\"> <div class=\"event-header\"> <span class=\"event-badge\">Hybrid Events</span> </div> <div class=\"event-image\"></div> <div class=\"event-body\"> <h1 class=\"event-title\">Australian Liability Conference 2026</h1> <hr> <div class=\"event-details\"> <div class=\"event-detail-item\"> <svg></svg> <span class=\"event-date\">Tue 17 Nov 2026, 8:00 am - ...</span> </div> <div class=\"event-detail-item\"> <svg></svg> <span class=\"event-location\">Doltone House Hyde Park Syd...</span> </div> </div> <hr> <div class=\"event-footer\"> <svg></svg> <span class=\"event-points\">6 CIP Points</span> </div> </div> </a>"
+ },
+ "virtual": {
+  "Url": "/professional-development/events/underwriting-dna-insurance-simulation",
+  "Html": " <a href=\"/professional-development/events/underwriting-dna-insurance-simulation\" class=\"field-card-wrapper__event-listing\"> <div class=\"event-header\"> <span class=\"event-badge\">Virtual Events</span> </div> <div class=\"event-image\"></div> <div class=\"event-body\"> <h1 class=\"event-title\">Underwriting DNA Insurance Simulation</h1> <hr> <div class=\"event-details\"> <div class=\"event-detail-item\"> <svg></svg> <span class=\"event-location\">Virtual (Zoom)</span> </div> </div> <hr> <div class=\"event-footer\"> <svg></svg> <span class=\"event-points\">6 CIP Points</span> </div> </div> </a>"
+ },
+ "summit": {
+  "Url": "/professional-development/events/international-summit",
+  "Html": " <a href=\"/professional-development/events/international-summit\" class=\"field-card-wrapper__event-listing\"> <div class=\"event-header\"> <span class=\"event-badge\">In-person Only</span> </div> <div class=\"event-image\"></div> <div class=\"event-body\"> <h1 class=\"event-title\">ANZIIF International Summit</h1> <hr> <div class=\"event-details\"> <div class=\"event-detail-item\"> <svg></svg> <span class=\"event-date\">11-12 February 2027</span> </div> <div class=\"event-detail-item\"> <svg></svg> <span class=\"event-location\">ICC Sydney</span> </div> </div> <hr> <div class=\"event-footer\"> <svg></svg> <span class=\"event-points\">Up to 8.0 CIP Points</span> </div> </div> </a>"
+ },
+ "aicla": [
+  {
+   "title": "AICLA NSW/ACT Webinar &#8211; Utmost Good Faith, Misrepresentation &#038; Non-Disclosure",
+   "url": "https://aicla.org/event/aicla-nsw-act-webinar-utmost-good-faith-misrepresentation-non-disclosure/",
+   "description": "<p style=\"text-align: center;\">The AICLA NSW/ACT Division is pleased to invite you to our upcoming webinar, presented by Jonathan Liberis and Justin Khouri of Wotton + Kearney.</p> <p style=\"text-align: center;\">“Utmost Good Faith, Misrepresentation &amp; Non-Disclosure”</p> <p style=\"text-align: center;\">A common issue arising across all claim lines is the interplay between an insured&#8217;s, and insurer&#8217;s, duty of utmost good faith and misrepresentations or non-disclosures made prior to policy inception.</p> <p style=\"text-align: center;\">This presentation will examine the courts&#8217; current approach to these issues and explore the circumstances in which misrepresentations and non-disclosures can impact an insured&#8217;s entitlement under a policy. Attendees will gain valuable insight into the practical application of these principles and their relevance to claims handling.</p> <p style=\"text-align: center;\">Perfect for claims professionals, loss adjusters, brokers, underwriters, and anyone looking to strengthen their technical insurance knowledge.</p> <p style=\"text-align: center;\">&#x1f4c5; Wednesday, 21 October 2026<br /> &#x1f550; 1:00pm – 2:00pm AEDT<br /> &#x2705; Open to all AICLA members<br /> &#x2705; No cost to attend</p> <p style=\"text-align: center;\">AICLA CPD: 1 Point</p> <h2 style=\"text-align: center;\">To register and add this event to your calendar</h2> <h2 style=\"text-align: center;\"><a href=\"https://events.teams.microsoft.com/event/52ec7050-b5d5-",
+   "excerpt": "",
+   "start_date": "2026-10-21 13:00:00",
+   "end_date": "2026-10-21 14:00:00",
+   "all_day": false,
+   "timezone_abbr": "AEDT",
+   "cost": "",
+   "venue": []
+  },
+  {
+   "title": "SA/NT Seminar: Recovery 101",
+   "url": "https://aicla.org/event/sa-nt-seminar-recovery-101/",
+   "description": "<p>Recovery can be one of the trickiest parts of a claim, sometimes straightforward, sometimes anything but!</p> <p>Join us for a practical session exploring recovery opportunities, common pitfalls and the issues that can make getting money back a little more complicated than simply sending an invoice.</p> <p>Our final educational event for the year promises useful insights, real-world discussion and hopefully a few lessons worth recovering too.</p>",
+   "excerpt": "",
+   "start_date": "2026-10-29 16:00:00",
+   "end_date": "2026-10-29 18:00:00",
+   "all_day": false,
+   "timezone_abbr": "ACDT",
+   "cost": "&#036;10.00 – &#036;20.00",
+   "venue": {
+    "venue": "Alma Tavern",
+    "city": "Norwood"
+   }
+  }
+ ],
+ "page": "<div class=\"search-box\" data-properties='{\"endpoint\":\"//sxa/search/results/\",\"suggestionEndpoint\":\"//sxa/search/suggestions/\",\"v\":\"{F32DCA6E-1BB9-4D08-9B8F-C06726AF3D74}\",\"s\":\"{E73C5886-B948-4A25-9253-3504F82FF2A0}\",\"p\":10,\"itemid\":\"{A5FAD651-727F-4E92-B4A8-444E7DD186F2}\"}'></div><div class=\"facet\" data-properties='{&quot;endpoint&quot;:&quot;//sxa/search/facets/&quot;,&quot;f&quot;:&quot;Region&quot;}'></div><div class=\"search-results\" data-properties='{&quot;endpoint&quot;:&quot;//sxa/search/results/&quot;,&quot;v&quot;:&quot;{0766CA96-4C8B-4C42-971F-0600D0981058}&quot;,&quot;s&quot;:&quot;{0161FFB3-B58F-488B-9CA4-1A108BC4A2D8}&quot;,&quot;l&quot;:&quot;&quot;,&quot;p&quot;:18,&quot;defaultSortOrder&quot;:&quot;Anziif Date,Ascending&quot;,&quot;sig&quot;:&quot;&quot;,&quot;itemid&quot;:&quot;{A5FAD651-727F-4E92-B4A8-444E7DD186F2}&quot;}'></div>"
+}
