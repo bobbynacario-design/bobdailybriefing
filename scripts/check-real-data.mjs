@@ -285,6 +285,89 @@ if (fl && flights && Array.isArray(flights.offers)) {
   }
 }
 
+// Scout (Ask and Search): worked out here by hand from the raw documents,
+// never with ScoutCore. CPE: an entry's state (its status, else an older
+// entry after today is planned and one on or before today needs review; an
+// older entry from another body counts 0 hours), the hours earned (starting
+// hours plus confirmed, eligible sessions to date), the hours planned, the
+// sessions waiting on attendance or credit, and days to 31 December. Saved:
+// his Save taps that are not hidden. Work calendar: each event's Manila day
+// and time from its published time and zone (a table kept here), the events
+// still to come, online and in person, by month, and every PHT start time in
+// the month records.
+{
+  const ov = byId['scout:overview'];
+  if (!scoutSaved && !scoutCalendar && !scoutCpe) warn('Scout: no Scout documents yet', 'nothing to check');
+  else if (!ov) check('Scout overview present', false, 'missing');
+  else {
+    const year = today.slice(0, 4), round1 = (n) => Math.round(n * 10) / 10;
+    const entries = Object.entries((scoutCpe && scoutCpe.entries) || {}).map(([id, e]) => {
+      const status = ['planned', 'attended', 'confirmed'].includes(e.status) ? e.status : String(e.date) > today ? 'planned' : 'needs-review';
+      const hours = !e.status && !e.iia ? 0 : Math.max(0, round1(Number(e.hours) || 0));
+      return {id, date: String(e.date), status, hours, ethics: !!e.ethics, eligible: e.eligible === true};
+    });
+    const mine = entries.filter((e) => e.date.slice(0, 4) === year);
+    const planned = mine.filter((e) => e.status === 'planned' && e.date > today);
+    const waiting = mine.filter((e) => e.status !== 'confirmed' && (e.status !== 'planned' || e.date <= today));
+    const base = ((scoutCpe && scoutCpe.years) || {})[year] || {};
+    const earned = round1((Number(base.start) || 0) + mine.filter((e) => e.status === 'confirmed' && e.eligible && e.date <= today).reduce((t, e) => t + e.hours, 0));
+    const booked = round1(planned.reduce((t, e) => t + e.hours, 0));
+    const daysLeft = Math.round((Date.parse(year + '-12-31') - Date.parse(today)) / 86400000);
+    const y = /: ([\d.]+) of 40 hours earned, [\d.]+ of 2 on ethics; (\d+) days? to 31 December/.exec(ov.body);
+    check('Scout CPE: hours earned and days to 31 December match a count by hand', y && Number(y[1]) === earned && Number(y[2]) === daysLeft,
+      'by hand ' + earned + ' hours, ' + daysLeft + ' days · overview ' + (y ? y[1] + ' hours, ' + y[2] + ' days' : 'not found'));
+    const p = /Planned, you tapped Going \((\d+) sessions?, ([\d.]+) hours? of published CPE/.exec(ov.body);
+    check('Scout CPE: sessions planned and their hours match a count by hand', planned.length ? p && Number(p[1]) === planned.length && Number(p[2]) === booked : ov.body.includes('Planned: none.'),
+      'by hand ' + planned.length + ' planned, ' + booked + ' hours · overview ' + (p ? p[1] + ', ' + p[2] : planned.length ? 'not found' : 'none'));
+    const w = /Waiting on attendance or credit confirmation(?: \((\d+)\)|: none)/.exec(ov.body);
+    check('Scout CPE: sessions still needing attendance or credit confirmation match a count by hand', w && Number(w[1] || 0) === waiting.length,
+      'by hand ' + waiting.length + (waiting.length ? ' (' + waiting.map((e) => e.date).join(', ') + ')' : '') + ' · overview ' + (w ? w[1] || 0 : 'not found'));
+    const words = {planned: 'planned', attended: 'attended, credit not yet confirmed', confirmed: 'credit confirmed', 'needs-review': 'an older record to review'};
+    const wrong = entries.filter((e) => { const r = byId['scout:cpe:' + e.id]; return !r || !r.detail.includes(words[e.status]) || (e.status === 'planned' && (e.date <= today) !== r.detail.includes('session date has passed')); });
+    check('Scout CPE: every log entry is a record with its state worked out by hand', !wrong.length, entries.length + ' entries' + (wrong.length ? '; wrong: ' + wrong.map((e) => e.id + ' ' + e.status).join(', ') : ''));
+
+    const choices = (scoutSaved && scoutSaved.items) || {};
+    const saved = Object.values(choices).filter((c) => c && c.saved && !c.hidden);
+    const s = /On Scout you saved (nothing|(\d+):)/.exec(ov.body);
+    check('Scout: saved events match his Save taps counted by hand', s && (saved.length ? Number(s[2]) === saved.length : s[1] === 'nothing'), 'by hand ' + saved.length + ' · overview ' + (s ? s[2] || 0 : 'not found'));
+
+    // A published time moved to Manila by hand: [the Manila day, HH:MM] or null.
+    const ZONES = {PHT: 480, PHST: 480, AEDT: 660, AEST: 600, ACDT: 630, ACST: 570, AWST: 480, NZDT: 780, NZST: 720, EDT: -240, EST: -300, CDT: -300, PDT: -420, UTC: 0, GMT: 0, BST: 60};
+    const manila = (day, time, zone) => {
+      const t = /^(\d{1,2}):(\d{2})$/.exec(String(time || '')), off = ZONES[String(zone || '').toUpperCase()];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || !t || off == null) return null;
+      const at = new Date(Date.parse(day + 'T00:00:00Z') + (Number(t[1]) * 60 + Number(t[2]) - off + 480) * 60000).toISOString();
+      return [at.slice(0, 10), at.slice(11, 16)];
+    };
+    const plusDays = (day, n) => new Date(Date.parse(day + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+    const events = Object.values((scoutCalendar && scoutCalendar.items) || {}).filter((v) => v && v.url && v.title && /^\d{4}-\d{2}-\d{2}$/.test(v.start || '')).map((v) => {
+      const m = manila(v.start, v.time, v.zone), day = m ? m[0] : v.start;
+      const span = /^\d{4}-\d{2}-\d{2}$/.test(v.end || '') ? Math.round((Date.parse(v.end) - Date.parse(v.start)) / 86400000) : 0;
+      return {v, day, end: plusDays(day, Math.max(0, span)), clock: m && m[1], hidden: !!(choices[v.id] && choices[v.id].hidden)};
+    });
+    const ahead = events.filter((e) => !e.hidden && e.end >= today), online = ahead.filter((e) => e.v.format !== 'in-person');
+    const c = /: (\d+) upcoming events? you can join online from Manila and (\d+) in person/.exec(ov.body);
+    check('Scout work calendar: events to come, online and in person, match a count by hand', c && Number(c[1]) === online.length && Number(c[2]) === ahead.length - online.length,
+      'by hand ' + online.length + ' online, ' + (ahead.length - online.length) + ' in person · overview ' + (c ? c[1] + ', ' + c[2] : 'not found'));
+    const MONTHS = 'January February March April May June July August September October November December'.split(' '), monthWord = (m) => MONTHS[Number(m.slice(5, 7)) - 1] + ' ' + m.slice(0, 4);
+    const byMonth = {};
+    ahead.forEach((e) => { const m = e.day.slice(0, 7); byMonth[m] = byMonth[m] || {online: 0, away: 0}; byMonth[m][e.v.format !== 'in-person' ? 'online' : 'away']++; });
+    const monthsWrong = Object.keys(byMonth).filter((m) => !ov.body.includes(monthWord(m) + ': ' + byMonth[m].online + ' to join online, ' + byMonth[m].away + ' in person') || !byId['scout:month:' + m]);
+    check('Scout work calendar: each month\'s counts match a count by hand, and each month has its record', !monthsWrong.length,
+      Object.keys(byMonth).sort().map((m) => monthWord(m) + ' ' + byMonth[m].online + '/' + byMonth[m].away).join('; ') + (monthsWrong.length ? '; wrong: ' + monthsWrong.join(', ') : ''));
+    // Every online event's Manila day and start time, as worked out here, is in its month's record.
+    const MON = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
+    const timed = online.filter((e) => e.clock), untimed = online.length - timed.length;
+    const missing = timed.filter((e) => {
+      const r = byId['scout:month:' + e.day.slice(0, 7)], d = new Date(e.day + 'T00:00:00Z');
+      const re = new RegExp('\\b' + d.getUTCDate() + ' ' + MON[d.getUTCMonth()] + '\\w*(?: \\d{4})?, ' + e.clock + '(?:–\\d{2}:\\d{2})? PHT');
+      return !r || !re.test(r.body);
+    });
+    check('Scout work calendar: every online event\'s Manila day and PHT start time match a conversion by hand', !missing.length,
+      timed.length + ' timed' + (untimed ? ', ' + untimed + ' without a published time or a zone known here' : '') + (missing.length ? '; not found: ' + missing.map((e) => e.day + ' ' + e.clock + ' ' + e.v.title.slice(0, 40)).join('; ') : ''));
+  }
+}
+
 // Hotels: the shared document holds only scouted fare dates; your trips and
 // their prices live in your own documents; the cheapest room the app shows
 // is recomputed from the raw site rates (whole-stay totals left out).
