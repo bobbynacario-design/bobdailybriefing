@@ -2090,6 +2090,29 @@ test('NBA cards show the bookmaker line, the move since open and a 5+ point mode
   assert.ok(j.includes('model Brier 0.24, last observed pre-tip quote 0.2 (lower is better). Too few matched games to assess reliability.'));
 });
 
+test('NBA league leaders: season named, last season says when the new one starts, followed teams in gold, moves noted',()=>{
+  const {context}=environment(['nbaLeadersHtml','nbaLeadersCount','nbaLeaderValue','sportsFollowed','sportsFollowKey','sportsTeamKey','sportsDate','sportsDateOnly'],{esc:escHtml});
+  const lal={abbr:'LAL',name:'Los Angeles Lakers'},mil={abbr:'MIL',name:'Milwaukee Bucks'},mia={abbr:'MIA',name:'Miami Heat'};
+  const leaders={season:'2025-26',final:true,checkedAt:'2026-10-18T05:48:00Z',categories:[
+    {key:'pointsPerGame',label:'Points',unit:'PPG',pct:false,leaders:[{rank:1,player:'Luka Doncic',teams:[lal],now:null,value:33.5},{rank:2,player:'Giannis Antetokounmpo',teams:[mil],now:mia,value:30}]},
+    {key:'fieldGoalPercentage',label:'Field goal %',unit:'FG%',pct:true,leaders:[{rank:1,player:'Rudy Gobert',teams:[{abbr:'MIN',name:'Minnesota Timberwolves'}],now:null,value:68.2}]}]};
+  const mod={watchlist:[{team:'Los Angeles Lakers'}],leaders,matches:[{stage:'regular-season',utcDate:'2026-10-20T23:30:00Z',status:'SCHEDULED'},{stage:'preseason',utcDate:'2026-10-02T00:00:00Z',status:'FINISHED'}]};
+  const before=Date.parse('2026-10-18T06:00:00Z');
+  const h=context.nbaLeadersHtml(mod,before);
+  assert.equal(context.nbaLeadersCount(leaders),'2025-26 final');
+  assert.match(h,/Regular-season final leaders \(2025-26\)\. The new season's leaders replace them once games are played; opening night is Oct 21\./);
+  assert.match(h,/<li class="top mine">.*Luka Doncic.*LAL.*33\.5<\/span>/);
+  assert.match(h,/Giannis Antetokounmpo<span class="nba-leader-team">MIL · now MIA<\/span><\/span><span class="nba-leader-val">30\.0</);
+  assert.match(h,/68\.2%/);
+  assert.match(h,/Gold names play for a team you follow\./);
+  assert.match(context.nbaLeadersHtml(mod,Date.parse('2026-10-22T00:00:00Z')),/The new season has started; ESPN has not published its leaders yet\./);
+  const early=context.nbaLeadersHtml({...mod,leaders:{...leaders,season:'2026-27',final:false,teamGames:2}},before);
+  assert.match(early,/Early: about 2 games per team/);
+  assert.equal(context.nbaLeadersCount({...leaders,final:false}),'2025-26 so far');
+  assert.doesNotMatch(context.nbaLeadersHtml({...mod,watchlist:[]},before),/Gold names/);
+  assert.match(context.nbaLeadersHtml({}),/not available on this refresh/);
+});
+
 test('Boxing & UFC: cards with prelims folded, Filipino fighters first, upsets named with their pre-fight chance',()=>{
   const {context}=environment(['sportsCombatHtml','combatFightHtml','combatResultHtml','sportsFreshnessHtml','sportsDate','sportsDateOnly'],{esc:escHtml});
   const f=(id,a,b,pa,seg,extra)=>Object.assign({id,sport:'ufc',bout:a+' vs. '+b,card:'UFC 333',weightClass:'Bantamweight',segment:seg,date:'2026-10-24T14:00:00Z',fighters:[{name:a,pct:pa},{name:b,pct:pa==null?null:100-pa}],status:'upcoming',url:'https://polymarket.com/event/x'},extra||{});
