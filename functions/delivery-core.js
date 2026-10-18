@@ -249,7 +249,7 @@ function notificationCopy(items, test, extra) {
   const experiment = extra.experiment && extra.experiment.plan ? extra.experiment : null;
   const sparkLine = extra.spark ? "\nToday’s spark: " + extra.spark : "";
   const experimentLine = experiment ? "\nExperiment to review: " + experiment.plan : "";
-  const weeklyLine = extra.weekly ? "\nIt’s Sunday: review your week and set next week’s three." : "";
+  const weeklyLine = extra.weekly ? "\nIt’s Sunday: review your week and set next week’s commitments." : "";
   const commitment = extra.commitment && extra.commitment.text ? extra.commitment : null;
   const commitmentLine = commitment ? "\nThis week: " + (commitment.text.length > 90 ? commitment.text.slice(0, 89).trimEnd() + "…" : commitment.text) +
     (commitment.ticked ? " · ticked " + commitment.ticked + (commitment.ticked === 1 ? " day" : " days") + " so far" : commitment.elapsed <= 1 ? " · new this week" : " · not ticked yet") : "";
@@ -258,7 +258,7 @@ function notificationCopy(items, test, extra) {
     return {title: test ? "Test · To check today" : "⏰ To check today", body: toCheck + experimentLine + weeklyLine + commitmentLine + sparkLine};
   }
   if (extra.weeklyOnly) {
-    return {title: test ? "Test · Your week" : "Your weekly review is ready", body: "A few minutes on Today: score this week’s commitments and set next week’s three. Your week read back is there too." + experimentLine + sparkLine};
+    return {title: test ? "Test · Your week" : "Your weekly review is ready", body: "A few minutes on Today: score this week’s commitments and set next week’s commitments. Your week read back is there too." + experimentLine + sparkLine};
   }
   const lead = items[0];
   if (extra.urgent && lead) return {title: test ? "Test · Starting soon" : "Starting soon", body: lead.source + ": " + lead.title};

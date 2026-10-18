@@ -172,6 +172,16 @@ if (commits) {
   const weeks = Object.values((review && review.weeks) || {}).filter((w) => w && Array.isArray(w.commitments) && w.commitments.length).length;
   check('Commitments overview: weeks set match the review document', weeks ? commits.body.includes('Weeks with commitments: ') : commits.body.includes('You have not set any weekly commitments yet'),
     weeks + ' weeks with commitments');
+  // Up to ten a week (19 Oct): each commitment of this week, as saved, reaches Ask whole.
+  const thisWeek = review && review.weeks && review.weeks[Review.weekStart(today)];
+  const raw = thisWeek && Array.isArray(thisWeek.commitments) ? thisWeek.commitments.filter((c) => c && String(c.text || '').trim()) : [];
+  const record = byId['commitments:' + Review.weekStart(today)];
+  if (raw.length) {
+    const squash = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+    const missing = raw.filter((c) => !(record && squash(record.body).includes(squash(c.text))));
+    check('Commitments: all ' + raw.length + ' of this week reach Ask', !missing.length,
+      missing.length ? 'missing: ' + missing.map((c) => squash(c.text).slice(0, 40)).join(' | ') : raw.length + ' in the review document, ' + raw.length + ' in the record');
+  }
 }
 
 // Flights: every fare the overview quotes is one the scout saw.

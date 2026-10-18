@@ -165,15 +165,15 @@ test("Sunday's weekly read is worth one nudge that day, until it has been read",
 test("the weekly read rides along with a push, or is the push on a quiet Sunday", () => {
   const items = [{source: "Radar", title: "NVDA confirmed"}];
   assert.equal(notificationCopy(items, false, {spark: "Look back on your week", weekly: true}).body,
-    "Radar: NVDA confirmed\nIt’s Sunday: review your week and set next week’s three.\nToday’s spark: Look back on your week");
+    "Radar: NVDA confirmed\nIt’s Sunday: review your week and set next week’s commitments.\nToday’s spark: Look back on your week");
   assert.deepEqual(notificationCopy([], false, {spark: "Look back on your week", weekly: true, weeklyOnly: true}), {
     title: "Your weekly review is ready",
-    body: "A few minutes on Today: score this week’s commitments and set next week’s three. Your week read back is there too.\nToday’s spark: Look back on your week",
+    body: "A few minutes on Today: score this week’s commitments and set next week’s commitments. Your week read back is there too.\nToday’s spark: Look back on your week",
   });
   assert.equal(notificationCopy([], true, {weekly: true, weeklyOnly: true}).title, "Test · Your week");
   const due = [{metric: "Check whether: margins recover", due: "2026-09-27"}];
   assert.equal(notificationCopy([], false, {reminders: due, remindersOnly: true, weekly: true}).body,
-    "Check whether: margins recover\nIt’s Sunday: review your week and set next week’s three.", "a reminders-only push mentions it too");
+    "Check whether: margins recover\nIt’s Sunday: review your week and set next week’s commitments.", "a reminders-only push mentions it too");
   assert.equal(notificationCopy(items, false, {spark: ""}).body, "Radar: NVDA confirmed", "no line on other days");
 });
 
