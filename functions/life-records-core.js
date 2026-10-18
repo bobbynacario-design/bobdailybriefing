@@ -301,8 +301,14 @@
       .filter(function(e){return e && e.result && e.result.price>0 && K.date(e.depart) && K.date(e.ret);});
     var exactFor=function(airports,depart,ret){return exact.filter(function(e){return airports.indexOf(e.destination)>=0 && e.depart===depart && e.ret===ret;})
       .sort(function(a,b){return a.result.price-b.result.price;})[0] || null;};
-    var flightText=function(e){var r=e.result;return peso(r.price)+' per traveller on Google Flights ('+[r.airline,r.stops===0?'nonstop':r.stops>0?r.stops+(r.stops===1?' stop':' stops'):''].filter(Boolean).join(', ')+
-      ' from '+(ORIGIN_CITY[e.origin] || e.origin)+(r.level?'; Google rates this price '+text(r.level,20)+(r.typical && r.typical.low>0 && r.typical.high>0?', the usual range being '+range(r.typical.low,r.typical.high):''):'')+(checkedDay(e.checkedAt)?'; checked '+checkedDay(e.checkedAt):'')+')';};
+    // A record's detail carries the Google Flights price; what Google says
+    // about it goes in the body, since the search index cuts a detail at 420
+    // characters (18 Oct: a fare watch's "PHP 2,020 over your target" reached
+    // Ask as "PHP 2,0"). The overview keeps the whole line.
+    var flightPrice=function(e){return peso(e.result.price)+' per traveller on Google Flights';};
+    var flightAbout=function(e){var r=e.result;return [r.airline,r.stops===0?'nonstop':r.stops>0?r.stops+(r.stops===1?' stop':' stops'):''].filter(Boolean).join(', ')+
+      ' from '+(ORIGIN_CITY[e.origin] || e.origin)+(r.level?'; Google rates this price '+text(r.level,20)+(r.typical && r.typical.low>0 && r.typical.high>0?', the usual range being '+range(r.typical.low,r.typical.high):''):'')+(checkedDay(e.checkedAt)?'; checked '+checkedDay(e.checkedAt):'');};
+    var flightText=function(e){return flightPrice(e)+' ('+flightAbout(e)+')';};
     // The cheapest current hotel room for one of his priced trips.
     var stays=trips.hotelStays && Array.isArray(trips.hotelStays.trips)?trips.hotelStays.trips:[];
     var hotelFor=function(id){
@@ -332,13 +338,13 @@
     planned.forEach(function(t) {
       var e=exactFor(t.airports,t.checkIn,t.checkOut),h=hotelFor(t.id),nights=nightsOf(t.checkIn,t.checkOut),kind=TRIP_KIND[t.kind] || 'Trip';
       var total=e && h?F.tripTotal(e.result.price,h.php,nights):null;
-      var parts=[nights+(nights===1?' night':' nights'),e?'flight '+flightText(e):'no exact flight price checked yet',
+      var parts=function(flight){return [nights+(nights===1?' night':' nights'),e?'flight '+flight(e):'no exact flight price checked yet',
         h?'cheapest room '+peso(h.php)+' a night at '+h.name+' (one room, '+h.adults+' adults'+(h.site?', '+h.site:'')+')':'no current hotel price',
-        total?'together about '+peso(total.one)+' for one traveller, '+peso(total.two)+' for two sharing the room':''];
+        total?'together about '+peso(total.one)+' for one traveller, '+peso(total.two)+' for two sharing the room':''].filter(Boolean);};
       out.push({id:'trips:plan:'+slug(t.id),source:'Trips',title:kind+': '+text(t.city,60)+', '+L.span(t.checkIn,t.checkOut)+(t.label?' ('+text(t.label,80)+')':''),
-        detail:parts.filter(Boolean).join(' · '),body:t.venue?'Venue: '+text(t.venue,80)+'.':'',meta:'Trips · '+kind.toLowerCase()+' · '+months(t.checkIn,t.checkOut),
-        page:'flights',ref:t.id,saved:t.checkIn,rank:0,entities:[]});
-      lines.push(kind+' '+text(t.city,60)+' '+L.span(t.checkIn,t.checkOut)+(t.label?' ('+text(t.label,80)+')':'')+': '+parts.filter(Boolean).join('; ')+'.');
+        detail:parts(flightPrice).join(' · '),body:[e?'Google Flights: '+flightAbout(e)+'.':'',t.venue?'Venue: '+text(t.venue,80)+'.':''].filter(Boolean).join(' '),
+        meta:'Trips · '+kind.toLowerCase()+' · '+months(t.checkIn,t.checkOut),page:'flights',ref:t.id,saved:t.checkIn,rank:0,entities:[]});
+      lines.push(kind+' '+text(t.city,60)+' '+L.span(t.checkIn,t.checkOut)+(t.label?' ('+text(t.label,80)+')':'')+': '+parts(flightText).join('; ')+'.');
     });
     // His fare watches: the best scouted fare that fits, and Google's price on the dates the app chose.
     var watches=Object.keys(trips.watches || {}).map(function(id) {
@@ -347,12 +353,12 @@
     }).filter(Boolean).sort(function(a,b){return a.w.city.localeCompare(b.w.city);});
     watches.forEach(function(x) {
       var w=x.w,best=x.r && x.r.best,vs=function(php){return php<=w.target?'at or under your target':peso(php-w.target)+' over your target';};
-      var parts=['target '+peso(w.target)+' per traveller','leaving '+L.span(w.from,w.to)+', '+w.minNights+'–'+w.maxNights+' nights'+(w.origin!=='All'?', from '+(ORIGIN_CITY[w.origin] || w.origin):''),
+      var parts=function(flight){return ['target '+peso(w.target)+' per traveller','leaving '+L.span(w.from,w.to)+', '+w.minNights+'–'+w.maxNights+' nights'+(w.origin!=='All'?', from '+(ORIGIN_CITY[w.origin] || w.origin):''),
         best?'best scouted fare ≈ '+peso(best.php)+' ('+[F.tripLabel(best.fare,now),text(best.fare.airline,60)].filter(Boolean).join(', ')+'), '+vs(best.php):'no scouted fare fits yet',
-        x.e?'for '+L.span(x.e.depart,x.e.ret)+': '+flightText(x.e)+', '+vs(x.e.result.price):''];
-      out.push({id:'trips:watch:'+slug(x.id),source:'Trips',title:'Fare watch: '+text(w.city,60)+' at '+peso(w.target)+' or less',detail:parts.filter(Boolean).join(' · '),body:'',
-        meta:'Trips · fare watch · '+months(w.from,w.to),page:'flights',ref:x.id,saved:w.from,rank:0,entities:[]});
-      lines.push('Fare watch '+text(w.city,60)+': '+parts.filter(Boolean).join('; ')+'.');
+        x.e?'for '+L.span(x.e.depart,x.e.ret)+': '+flight(x.e)+', '+vs(x.e.result.price):''].filter(Boolean);};
+      out.push({id:'trips:watch:'+slug(x.id),source:'Trips',title:'Fare watch: '+text(w.city,60)+' at '+peso(w.target)+' or less',detail:parts(flightPrice).join(' · '),
+        body:x.e?'Google Flights for '+L.span(x.e.depart,x.e.ret)+': '+flightAbout(x.e)+'.':'',meta:'Trips · fare watch · '+months(w.from,w.to),page:'flights',ref:x.id,saved:w.from,rank:0,entities:[]});
+      lines.push('Fare watch '+text(w.city,60)+': '+parts(flightText).join('; ')+'.');
     });
     if(!watches.length)lines.push('No fare watches are set.');
     out.push({id:'trips:overview',source:'Trips',title:'Trips overview: booked trips, flight and hotel prices for your trips, and fare watches',
