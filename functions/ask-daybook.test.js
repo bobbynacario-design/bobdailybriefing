@@ -262,6 +262,30 @@ test("life data: the server reads his calendar, commitments, PokerHQ picks and F
   const withHealth = Ask.askIndexInput(Object.assign({}, lifeDocs, {healthDays: {days: {"2026-09-30": {steps: 7000, sleepMin: 420, sleepKind: "asleep"}}}}), boostCore, healthLife).records;
   assert.ok(withHealth.some((r) => r.id === "health:day:2026-09-30" && r.detail === "7,000 steps · slept 7h00"));
   assert.ok(Ask.originOf("Health", "health:research:x").startsWith("A health-research summary written for him by AI"), "research is marked AI-written");
+  // His Scout tab: the work calendar, his choices and his CPE log, each month computed, times in PHT.
+  const Scout = require("./scout-core");
+  const webinar = {source: "iia-webinars", organizer: "IIA", title: "Ethics for auditors", url: "https://www.theiia.org/en/e", start: "2026-11-10", end: "2026-11-10",
+    time: "12:00", endTime: "13:00", zone: "EST", format: "online", location: "Online", cpeHours: 1};
+  const wid = Scout.calendarId(webinar), scoutLife = Object.assign({}, life, {scout: Scout});
+  const scoutDocs = Object.assign({}, lifeDocs, {scoutSaved: {items: {}},
+    scoutCalendar: {startedOn: "2026-09-20", items: {[wid]: Object.assign({id: wid}, webinar)}, sources: [{id: "iia-webinars", label: "IIA webinars", ok: true}]},
+    scoutCpe: {entries: {[wid]: {title: webinar.title, url: webinar.url, date: "2026-11-11", status: "planned", hours: 1, ethics: true, eligible: false, iia: true, organizer: "IIA"}}}});
+  const scoutInput = Ask.askIndexInput(scoutDocs, boostCore, scoutLife);
+  const scout = Object.fromEntries(scoutInput.records.filter((r) => r.source === "Scout").map((r) => [r.id, r]));
+  assert.deepEqual(Object.keys(scout).sort(), ["scout:cal:" + wid, "scout:cpe:" + wid, "scout:month:2026-11", "scout:overview"]);
+  assert.ok(scout["scout:cal:" + wid].detail.startsWith("Wed 11 Nov, 01:00–02:00 PHT (12:00 EST on Tue 10 Nov) · IIA · Online · CIA CPE: 1 hour"), scout["scout:cal:" + wid].detail);
+  assert.ok(scout["scout:overview"].body.includes("Planned, you tapped Going (1 session, 1 hour of published CPE, 1 on ethics)"), scout["scout:overview"].body);
+  assert.ok(!Ask.askIndexInput(lifeDocs, boostCore, scoutLife).records.some((r) => r.source === "Scout"), "no Scout documents, no Scout records");
+  assert.ok(Ask.originOf("Scout", "scout:cal:x").startsWith("An event on his Scout work calendar, read straight from the organiser's own listing"));
+  assert.ok(Ask.originOf("Scout", "scout:pick:x").includes("its reason is AI-written"), "a shortlist pick's reason is the AI's");
+  assert.ok(Ask.originOf("Scout", "scout:cpe:x").startsWith("An entry in his CIA CPE log on Scout"));
+  assert.ok(Ask.originOf("Scout", "scout:overview").startsWith("An overview of his Scout tab computed by the app"));
+  // "Webinars in November" finds the computed month first, whole, even bounded to the month.
+  const scoutOut = JSON.parse(Ask.lookupOutput(Core.searchPlan(Core.buildIndex(scoutInput), {terms: ["webinar", "November"], sources: ["Scout"], since: "2026-11-01", until: "2026-11-30"}, {now}), Ask.newRegistry())).results;
+  assert.equal(scoutOut[0].title, "Work calendar, November 2026: webinars and events to join online from Manila, and in person");
+  assert.equal(scoutOut[0].kind, "A month of his Scout work calendar computed by the app from the organisers' listings (not AI-written)");
+  assert.ok(scoutOut[0].text.startsWith("1 event to join online and 0 in person in Australia and New Zealand. — To join online (times PHT): Wed 11 Nov, 01:00–02:00 PHT (12:00 EST on Tue 10 Nov), IIA, \"Ethics for auditors\", CIA CPE: 1 hour, you tapped Going."), scoutOut[0].text);
+  assert.ok(scoutOut.some((r) => r.title === "CPE log: Ethics for auditors"), "the CPE entry in November");
 
   const index = Core.buildIndex(input);
   const registry = Ask.newRegistry();
@@ -295,6 +319,8 @@ test("the prompt says how to ask about his time and plans, and keeps PokerHQ and
   assert.ok(prompt.includes("A close is a completed PSE session on the date given, never a live price") && prompt.includes("never tell him to buy, sell or hold"), "PSE answers report, never advise");
   assert.ok(prompt.includes("an association is never a cause") && prompt.includes("Never diagnose or advise treatment"), "health answers stay within the records");
   assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("Health"));
+  assert.ok(prompt.includes("look up source Scout with the term \"overview\"") && prompt.includes("More like this is not a save") && prompt.includes("so give the Manila date"), "Scout answers start from the overview and keep his taps apart");
+  assert.ok(Ask.SEARCH_TOOL.parameters.properties.sources.items.enum.includes("Scout") && Ask.SEARCH_TOOL.description.includes("his CIA CPE log"));
 });
 
 test("refs written together are split, so each is kept, listed and checked", () => {

@@ -4,7 +4,9 @@
   // wants them): his calendar (own events, account meetings, all-day entries
   // such as leave and holidays), his weekly commitments, the tournaments he
   // starred in PokerHQ, the Flights scout and his own Trips (booked trips,
-  // flight and hotel prices for his trips, fare watches). Each part also gets an overview
+  // flight and hotel prices for his trips, fare watches), his PSE watchlist,
+  // his health, and his Scout tab (the work calendar, what he chose there and
+  // his CIA CPE log). Each part also gets an overview
   // computed here across all its records, so a planning question is answered
   // from figures the app worked out rather than ones a model pieced together.
   // Pure: the caller reads the documents and passes the cores in.
@@ -13,8 +15,8 @@
   // is ever written into a record.
   var arr=function(v){return Array.isArray(v)?v:[];};
   var text=function(v,n){return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,n || 400);};
-  var OVERVIEW_IDS=['calendar:overview','commitments:overview','poker:overview','flights:overview','trips:overview','pse:overview','health:overview'];
-  var SOURCES=['Calendar','Commitments','Poker','Flights','Trips','PSE','Health'];
+  var OVERVIEW_IDS=['calendar:overview','commitments:overview','poker:overview','flights:overview','trips:overview','pse:overview','health:overview','scout:overview'];
+  var SOURCES=['Calendar','Commitments','Poker','Flights','Trips','PSE','Health','Scout'];
   var POKERHQ_URL='https://bobbynacario-design.github.io/pokerhq/';
   var ORIGIN_CITY={MNL:'Manila',CEB:'Cebu',CRK:'Clark'};
   var MONTH_NAMES='Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
@@ -493,6 +495,154 @@
     return out;
   }
 
+  // ---- Scout --------------------------------------------------------------
+  // The Scout tab (lib/scout-core.js): his work calendar, read straight from
+  // the organisers' own listings (ANZIIF, AICLA, the IIA) every morning; what
+  // he saved, marked Interested or More like this, or noted there; and his CIA
+  // CPE log. Items are cleaned the way the page cleans them, a CPE entry's
+  // state is ScoutCore.cpeEntry's and the year's totals cpeSummary's, so Ask
+  // says what the Scout page shows. Times are Manila's, with the organiser's
+  // own beside them. The weekly shortlist itself is left out: only what he
+  // chose from it.
+  function scoutRecords(input,K,F,today,now,S) {
+    var scout=input.scout;
+    if(!scout || !S || !K)return [];
+    var L=labeller(F,now),out=[],lines=[];
+    var choices=(scout.choices && typeof scout.choices==='object')?scout.choices:{};
+    var cal=scout.calendar || {},entries=(scout.cpe && scout.cpe.entries && typeof scout.cpe.entries==='object')?scout.cpe.entries:{};
+    var n1=function(n){return String(Math.round(n*10)/10);};
+    var hrs=function(n){return n1(n)+' hour'+(Math.round(n*10)===10?'':'s');};
+    var count=function(n,one){return n+' '+one+(n===1?'':'s');};
+    var clock=function(iso){return new Date(Date.parse(iso)+480*60000).toISOString().slice(11,16);};
+    var quote=function(v,n){v=text(v,400);return '"'+(v.length>n?v.slice(0,n-1).trim()+'…':v)+'"';};
+    var labels={};arr(cal.sources).forEach(function(s){if(s && s.id)labels[s.id]=text(s.label,60);});
+    // "Wed 11 Nov, 01:00–02:00 PHT (12:00 EST on Tue 10 Nov)": the Manila day
+    // and time, with the organiser's own time beside it unless short. The end
+    // shows only when it falls within a day of the start (a listing gave one
+    // breakfast seminar an end 24 hours on).
+    var when=function(v,short) {
+      var t=S.timing(v),day=L.span(t.localDate,t.localEnd);
+      if(!t.startAt)return day+(v.time?', '+text(v.time,5)+(v.zone?' '+text(v.zone,40):'')+' as published, not converted to PHT':', time not published');
+      var org=short?null:/\((\d{2}:\d{2} [^()]+)\)\s*$/.exec(v.pht || ''),len=t.endAt?Date.parse(t.endAt)-Date.parse(t.startAt):0;
+      return day+', '+clock(t.startAt)+(len>0 && len<86400000?'–'+clock(t.endAt):'')+' PHT'+(org?' ('+org[1]+(v.start && v.start!==t.localDate?' on '+L.day(v.start):'')+')':'');
+    };
+    var meets=function(v){return 'a community'+(v.nextActive?', next meets '+L.day(v.nextActive):'')+(v.lastActive?', last met '+L.day(v.lastActive):'');};
+    var format=function(v){return (S.formats[v.format] || '').replace(' · ',', ');};
+    // His choices on the page, in its own words.
+    var mine=function(c) {
+      var p=[];if(!c)return p;
+      if(c.saved)p.push('you saved it');
+      if(c.interested)p.push('you marked it Interested');
+      if(c.more)p.push('you asked for more like this');
+      if(text(c.note))p.push('your note: '+sentence(text(c.note,300)));
+      if(K.date(c.followUp))p.push('follow up on '+L.day(c.followUp));
+      return p;
+    };
+    var stateText=function(e) {
+      if(e.status==='confirmed'){var at=e.confirmedAt && K.pht(Date.parse(e.confirmedAt));return 'credit confirmed'+(at?' on '+L.day(at.day):'');}
+      if(e.status==='planned')return S.cpePending(e,today)?'planned, and the session date has passed: confirm attendance, then credit':'planned (you tapped Going): after the session, confirm attendance, then credit';
+      if(e.status==='attended')return 'attended, credit not yet confirmed: enter actual hours, confirm CIA eligibility, then confirm credit';
+      return 'an older record to review: mark it attended or planned';
+    };
+    var items={},latest={};
+    Object.keys(cal.items || {}).forEach(function(k){var v=S.calendarItem(cal.items[k]);if(v)items[v.id]=v;});
+    S.restore(scout.latest && scout.latest.items).forEach(function(v){latest[v.id]=v;});
+    var calendarList=Object.keys(items).map(function(k){return items[k];});
+    var hidden=function(id){return !!(choices[id] && choices[id].hidden);};
+    var calFor=function(id){return calendarList.filter(function(v){return S.cpeIdFor(entries,v)===id;})[0];};
+    var logged=function(v){var id=S.cpeIdFor(entries,v);return id?'in your CPE log: '+stateText(S.cpeEntry(entries[id],today)):'';};
+
+    // The work calendar's events still to come, as the page lists them.
+    var upcoming=calendarList.filter(function(v){return !hidden(v.id) && S.timing(v).localEnd>=today;}).sort(function(a,b){return S.sortKey(a).localeCompare(S.sortKey(b));});
+    upcoming.forEach(function(v) {
+      var t=S.timing(v),topic=S.workMatch(v);
+      out.push({id:'scout:cal:'+v.id,source:'Scout',title:v.title,
+        detail:[when(v),v.organizer,format(v),S.creditLabel(v),S.access[v.access] || '',v.cost,topic?'on your work: '+topic:'',S.isNew(v,cal.startedOn,today)?'new on the calendar this week':'']
+          .concat(mine(choices[v.id]),[logged(v)]).filter(Boolean).join(' · '),
+        body:'',meta:'Scout · work calendar · '+(labels[v.source] || v.organizer || 'organiser listing')+' · '+months(t.localDate,t.localEnd),
+        page:'scout',ref:v.id,saved:t.localDate,rank:0,entities:[]});
+    });
+    // Everything else he chose: a pick from the weekly shortlist, or a
+    // calendar event that has ended. The page's freshest copy is used.
+    var chosen=Object.keys(choices).map(function(id) {
+      var c=choices[id];if(!c || c.hidden || !mine(c).length)return null;
+      var v=items[id] || latest[id] || S.choiceItem(c.item);return v?{v:v,c:c}:null;
+    }).filter(Boolean);
+    chosen.forEach(function(r) {
+      var v=r.v,t=S.timing(v);
+      if(upcoming.indexOf(items[v.id])>=0)return;
+      var cal1=!!v.source,check={'not-found':'its date was not found on its page: check before you plan',unchecked:'its date could not be checked on its page',confirmed:'date matched its page'}[v.dateCheck] || '';
+      out.push({id:(cal1?'scout:cal:':'scout:pick:')+v.id,source:'Scout',title:v.title,
+        detail:mine(r.c).concat([v.start?when(v):meets(v),v.organizer || S.lanes[v.lane],format(v),v.location,v.cost,S.access[v.access] || '',
+          K.date(v.deadline)?'register by '+L.day(v.deadline):'',check,S.expired(v,today)?'past or registration closed':'',logged(v)]).filter(Boolean).join(' · '),
+        body:v.why?'Scout\'s reason (AI-written): '+sentence(text(v.why,400)):'',
+        meta:'Scout · '+(cal1?'work calendar':'weekly shortlist')+' · '+S.lanes[v.lane]+(t.localDate?' · '+months(t.localDate,t.localEnd):''),
+        page:'scout',ref:v.id,saved:t.localDate || '',rank:0,entities:[]});
+    });
+    // His CIA CPE log, every entry.
+    Object.keys(entries).forEach(function(id) {
+      var e=S.cpeEntry(entries[id],today),v=calFor(id),h=+e.hours || 0,day=K.date(e.date);
+      var credit=h>0?hrs(h)+(e.status==='confirmed'?' of CIA CPE credited':e.iia?' of published IIA CPE, not counted until credit is confirmed':' entered, not counted until credit is confirmed')
+        :e.iia?'no hours entered':'no CIA hours: '+(text(e.organizer,60) || 'another body')+' points are not CIA CPE';
+      out.push({id:'scout:cpe:'+id,source:'Scout',title:'CPE log: '+text(e.title,180),
+        detail:[(day?L.day(day):'no date')+(e.startAt && Number.isFinite(Date.parse(e.startAt))?', '+clock(e.startAt)+' PHT':''),stateText(e),credit,e.ethics?'ethics session':'',text(e.organizer,60),
+          v?'live session: '+when(v):'',text(e.evidence)?'reference: '+text(e.evidence,160):''].filter(Boolean).join(' · '),
+        body:'',meta:'Scout · CIA CPE log'+(day?' · '+months(day):''),page:'scout',ref:'cpe:'+id,saved:day,rank:0,entities:[]});
+    });
+
+    // Each month's events, computed here, so "what's on in November?" is
+    // answered from one record and never pieced together from a lookup's
+    // first twelve matches. Undated, so a lookup bounded to the month keeps it.
+    var join=upcoming.filter(function(v){return v.format!=='in-person';}),byMonth={},order=[];
+    upcoming.forEach(function(v){var m=S.timing(v).localDate.slice(0,7);if(!byMonth[m]){byMonth[m]={join:[],away:[]};order.push(m);}byMonth[m][v.format==='in-person'?'away':'join'].push(v);});
+    var flags=function(v){var c=choices[v.id] || {},id=S.cpeIdFor(entries,v),e=id && S.cpeEntry(entries[id],today);
+      return [e?(e.status==='planned' && !S.cpePending(e,today)?'you tapped Going':'in your CPE log: '+e.status):'',c.saved?'saved':'',c.interested?'Interested':''].filter(Boolean);};
+    order.forEach(function(m) {
+      var g=byMonth[m],word=months(m+'-01');
+      out.push({id:'scout:month:'+m,source:'Scout',title:'Work calendar, '+word+': webinars and events to join online from Manila, and in person',
+        detail:count(g.join.length,'event')+' to join online and '+g.away.length+' in person in Australia and New Zealand'+(m===today.slice(0,7)?', from '+L.day(today):'')+'.',
+        body:(g.join.length?'To join online (times PHT): '+g.join.map(function(v){return [when(v),text(v.organizer,40),quote(v.title,120),v.format==='hybrid'?format(v):'',S.creditLabel(v),v.access==='members'?'members only':'',
+          v.cost && v.cost!=='Cost not listed'?v.cost:''].concat(flags(v)).filter(Boolean).join(', ');}).join('; ')+'.':'Nothing to join online.')+
+          (g.away.length?' In person: '+g.away.map(function(v){return [L.span(S.timing(v).localDate,S.timing(v).localEnd),text(v.organizer,40),quote(v.title,80)].concat(flags(v)).join(', ');}).join('; ')+'.':''),
+        meta:'Computed from your Scout work calendar · '+word,page:'scout',ref:'',saved:'',rank:900,entities:[]});
+    });
+
+    // The overview: the CIA year as the CPE card works it out, what he chose,
+    // and the work calendar's months.
+    var s=S.cpeSummary(scout.cpe || null,today);
+    var planned=s.entries.filter(function(e){return e.status==='planned' && !S.cpePending(e,today);}),waiting=s.entries.filter(function(e){return S.cpePending(e,today);});
+    var confirmed=s.entries.filter(function(e){return e.status==='confirmed';});
+    var entryText=function(e,state) {
+      var v=calFor(e.id),h=+e.hours || 0;
+      return quote(e.title,90)+' ('+(v?when(v,true):L.day(e.date))+'; '+(state?stateText(e):h>0?hrs(h)+(e.iia?' of published CPE':''):e.iia?'no hours entered':'no CIA hours: '+(text(e.organizer,40) || 'other-body')+' points are not CIA CPE')+(e.ethics?'; ethics':'')+')';
+    };
+    lines.push('CIA CPE '+s.year+' (your CPE log on Scout; the CIA needs '+s.target+' hours a calendar year, '+s.ethicsTarget+' on ethics, by 31 December): '+n1(s.earned)+' of '+s.target+' hours earned, '+
+      n1(s.ethics)+' of '+s.ethicsTarget+' on ethics; '+count(s.daysLeft,'day')+' to 31 December. '+
+      (s.hasStart?'Earned includes the '+hrs(s.start)+(s.startEthics?' ('+n1(s.startEthics)+' on ethics)':'')+' you had before logging here.':'No starting hours are entered yet, so earned counts only sessions logged here with credit confirmed.'));
+    lines.push(planned.length?'Planned, you tapped Going ('+count(planned.length,'session')+', '+hrs(s.booked)+' of published CPE'+(s.bookedEthics?', '+n1(s.bookedEthics)+' on ethics':'')+'): '+planned.map(function(e){return entryText(e);}).join('; ')+'.':'Planned: none.');
+    lines.push(waiting.length?'Waiting on attendance or credit confirmation ('+waiting.length+'): '+waiting.map(function(e){return entryText(e,true);}).join('; ')+'.':'Waiting on attendance or credit confirmation: none.');
+    if(confirmed.length)lines.push('Credit confirmed ('+confirmed.length+'): '+confirmed.map(function(e){return entryText(e);}).join('; ')+'.');
+    var name=function(r){var v=r.v;return quote(v.title,90)+' ('+(v.start?L.day(S.timing(v).localDate):'a community')+(v.organizer?', '+text(v.organizer,80):'')+(S.expired(v,today)?', past':'')+')';};
+    var group=function(f){return chosen.filter(function(r){return f(r.c);}).map(name);};
+    var saved=group(function(c){return c.saved;}),interested=group(function(c){return c.interested;}),more=group(function(c){return c.more;}),noted=group(function(c){return text(c.note) || K.date(c.followUp);});
+    lines.push('On Scout you saved '+(saved.length?saved.length+': '+saved.join('; '):'nothing')+'; marked Interested: '+(interested.length?interested.join('; '):'none')+
+      '; asked for more like this (it steers future shortlists; not a save): '+(more.length?more.join('; '):'none')+'; notes or follow-ups: '+(noted.length?noted.join('; '):'none')+'.');
+    var away=upcoming.length-join.length;
+    var srcs=arr(cal.sources).filter(function(x){return x && x.label;}),failed=srcs.filter(function(x){return !x.ok;});
+    var checked=cal.refreshedAt?K.pht(Date.parse(cal.refreshedAt)):null,last=upcoming.reduce(function(m,v){var e=S.timing(v).localEnd;return e>m?e:m;},'');
+    var names=srcs.map(function(x){return text(x.label,60);});
+    lines.push('Work calendar, read straight from '+(names.length?names.slice(0,-1).join(', ')+(names.length>1?' and ':'')+names[names.length-1]:'the organisers\' listings')+
+      (checked?' (last checked '+L.day(checked.day)+', '+checked.time+' PHT)':'')+(failed.length?'; '+failed.map(function(x){return text(x.label,60);}).join(' and ')+' could not be read then, so their events are from the last good read':'')+
+      ': '+count(join.length,'upcoming event')+' you can join online from Manila and '+away+' in person in Australia and New Zealand'+(last?', to '+L.day(last):'')+'.');
+    if(order.length)lines.push('By month (each month has its own "Work calendar" record listing its events): '+order.map(function(m){return months(m+'-01')+': '+byMonth[m].join.length+' to join online, '+byMonth[m].away.length+' in person';}).join('; ')+'.');
+    var next=join.slice(0,3);
+    if(next.length)lines.push('Next to join online: '+next.map(function(v){return [when(v,true),text(v.organizer,40),quote(v.title,80),S.creditLabel(v)].concat(flags(v)).filter(Boolean).join(', ');}).join('; ')+'.');
+    out.push({id:'scout:overview',source:'Scout',title:'Scout overview: your CIA CPE year, what you saved and the work calendar by month',
+      detail:count(join.length,'upcoming event')+' to join online; '+count(planned.length,'CPE session')+' planned; '+waiting.length+' waiting on attendance or credit confirmation; '+saved.length+' saved.',
+      body:lines.join(' '),meta:'Computed from your Scout tab · as of '+today,page:'scout',ref:'',saved:'',rank:1000,entities:[]});
+    return out;
+  }
+
   // Every record, each part on its own so one unreadable document never
   // costs the others. input.today is the Manila date and input.now the time
   // (ms) fares are judged fresh at. cores: {calendar, flights, review}; in the
@@ -510,7 +660,8 @@
       guarded(function(){return flightsRecords(input,K,F,today,now);}),
       guarded(function(){return tripsRecords(input,K,F,today,now);}),
       guarded(function(){return pseRecords(input,K,F,today,now);}),
-      guarded(function(){return healthRecords(input,K,F,today,now,cores.health || root.HealthCore,cores.checkup || root.CheckupCore,cores.lifestyle || root.LifestyleCore,W);}));
+      guarded(function(){return healthRecords(input,K,F,today,now,cores.health || root.HealthCore,cores.checkup || root.CheckupCore,cores.lifestyle || root.LifestyleCore,W);}),
+      guarded(function(){return scoutRecords(input,K,F,today,now,cores.scout || root.ScoutCore);}));
   }
 
   var api={records:records,OVERVIEW_IDS:OVERVIEW_IDS,SOURCES:SOURCES,POKERHQ_URL:POKERHQ_URL};

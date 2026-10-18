@@ -31,6 +31,7 @@ const Review = require('./weekly-review-core.js');
 const HealthCore = require('./health-core.js');
 const CheckupCore = require('./checkup-core.js');
 const LifestyleCore = require('./lifestyle-core.js');
+const ScoutCore = require('./scout-core.js');
 const {initializeApp, cert} = require('firebase-admin/app');
 const {getFirestore} = require('firebase-admin/firestore');
 
@@ -74,7 +75,8 @@ const own = (name, n) => db.collection(name).where('uid', '==', uid).orderBy('sa
 const latest = async (prefix) => { const p = await get(COLL, prefix + '-latest'); return p && p.value ? get(COLL, prefix + '-' + p.value) : null; };
 const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports, profile, accounts, usage, goals, radarJournal,
   calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx, askDoc,
-  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch] = await Promise.all([
+  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch,
+  scoutSaved, scoutCalendar, scoutCpe, scoutLatest] = await Promise.all([
   own(COLL, 100), own('reports-bob', 50), own('journal-bob', 100), get(COLL, 'command-prefs-' + uid), get(COLL, 'dossiers-' + uid), get(COLL, 'meeting-briefs-' + uid),
   get(COLL, 'weekly-mirror-' + uid), get(COLL, 'daily-boost-' + uid), get(COLL, 'grounding-latest'), latest('news'), latest('radar'), latest('miro'), latest('sports'),
   get(COLL, 'profile-' + uid), get(COLL, 'accounts-' + uid), get(COLL, 'usage-' + uid), get(COLL, 'goals-' + uid), get(COLL, 'radar-journal'),
@@ -82,13 +84,15 @@ const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyB
   get('pokerhq-bob', 'sessions'), get(COLL, 'flights-latest'), get(COLL, 'flights-saved-' + uid), get(COLL, 'flights-history'), get(COLL, 'radar-ph'), get(COLL, 'ask-' + uid),
   get(COLL, 'trips-booked-' + uid), get(COLL, 'flights-watch-' + uid), get(COLL, 'exact-prices-' + uid), get(COLL, 'hotel-trips-' + uid), get(COLL, 'hotel-stays-' + uid),
   get(COLL, 'pse-watch-' + uid), require('./pse-paper.js').listPicks(db, uid).catch(() => null),
-  get(COLL, 'health-' + uid), get(COLL, 'health-basics-' + uid), get(COLL, 'lifestyle-' + uid), get(COLL, 'health-research-' + uid)]);
+  get(COLL, 'health-' + uid), get(COLL, 'health-basics-' + uid), get(COLL, 'lifestyle-' + uid), get(COLL, 'health-research-' + uid),
+  get(COLL, 'scout-saved-' + uid), get(COLL, 'scout-calendar-' + uid), get(COLL, 'cpe-' + uid), get(COLL, 'scout-latest-' + uid)]);
 
 // Ask's index, built exactly as the askDaybook function builds it.
 const docs = {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports, profile, accounts, usage, goals, radarJournal,
   todayKey: today, now, calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch};
-const index = Search.buildIndex(Ask.askIndexInput(docs, DailyBoostCore, {core: Life, calendar: Calendar, flights: Flights, review: Review, health: HealthCore, checkup: CheckupCore, lifestyle: LifestyleCore}));
+  tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch,
+  scoutSaved, scoutCalendar, scoutCpe, scoutLatest};
+const index = Search.buildIndex(Ask.askIndexInput(docs, DailyBoostCore, {core: Life, calendar: Calendar, flights: Flights, review: Review, health: HealthCore, checkup: CheckupCore, lifestyle: LifestyleCore, scout: ScoutCore}));
 const byId = Object.fromEntries(index.map((i) => [i.id, i]));
 check('Ask index builds under its cap', index.length > 0 && index.length < 5000, index.length + ' records');
 Life.OVERVIEW_IDS.forEach((id) => check('Overview present: ' + id, byId[id], byId[id] ? '' : 'missing'));

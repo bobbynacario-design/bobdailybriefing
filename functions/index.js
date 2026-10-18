@@ -1000,7 +1000,8 @@ async function loadAskIndex(db, uid) {
   const [briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
     profile, accounts, usage, goals, radarJournal,
     calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-    tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch] = await Promise.all([
+    tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch,
+    scoutSaved, scoutCalendar, scoutCpe, scoutLatest] = await Promise.all([
     own(BRIEFINGS_COLL, 100), own(REPORTS_COLL, 50), own(JOURNAL_COLL, 100),
     get(COMMAND_PREF_PREFIX + uid), get("dossiers-" + uid), get("meeting-briefs-" + uid), get("weekly-mirror-" + uid), get("daily-boost-" + uid),
     get("grounding-latest"), latest("news"), latest("radar"), latest("miro"), latest("sports"),
@@ -1020,13 +1021,17 @@ async function loadAskIndex(db, uid) {
     get("pse-watch-" + uid), PsePaper.listPicks(db, uid).catch(() => null),
     // His health: Apple Health days, Health basics, check-in answers, this week's research.
     get("health-" + uid), get("health-basics-" + uid), get("lifestyle-" + uid), get("health-research-" + uid),
+    // His Scout tab: what he chose, the work calendar, his CIA CPE log, and the
+    // latest shortlist (only for the freshest copy of a pick he chose).
+    get("scout-saved-" + uid), get("scout-calendar-" + uid), get("cpe-" + uid), get("scout-latest-" + uid),
   ]);
   const index = IntelligenceSearchCore.buildIndex(Ask.askIndexInput(
     {briefings, reports, decisions, prefs, dossiers, meetings, mirrors, dailyBoost, grounding, news, radar, markets, sports,
       profile, accounts, usage, goals, radarJournal, todayKey: phtDateKey(), now: Date.now(),
       calendarEvents, calendarMeetings, review, pokerTourneys, pokerBankroll, pokerSessions, flights, flightsSaved, flightsHistory, fx,
-      tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch}, DailyBoostCore,
-    {core: LifeRecordsCore, calendar: DaybookCalendarCore, flights: FlightsCore, review: WeeklyReviewCore, health: HealthCore, checkup: CheckupCore, lifestyle: LifestyleCore}));
+      tripsBooked, flightsWatch, exactPrices, hotelTrips, hotelStays, pseWatch, psePaper, healthDays, healthBasics, lifestyle, healthResearch,
+      scoutSaved, scoutCalendar, scoutCpe, scoutLatest}, DailyBoostCore,
+    {core: LifeRecordsCore, calendar: DaybookCalendarCore, flights: FlightsCore, review: WeeklyReviewCore, health: HealthCore, checkup: CheckupCore, lifestyle: LifestyleCore, scout: ScoutCore}));
   askIndexCache = {uid, at: Date.now(), index};
   return index;
 }
