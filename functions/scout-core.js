@@ -141,7 +141,7 @@
     return out.slice(0,12);
   }
   // The work calendar (functions/scout-sources.js) keeps each event from its
-  // first sighting until it ends. A source that read fine but no longer lists
+  // first sighting until two weeks after it ends. A source that read fine but no longer lists
   // an event twice running means it was withdrawn; a source that failed keeps
   // its events as they were.
   function calendarId(e){return 'c'+hash(String(e.url)+'|'+e.start);}
@@ -150,7 +150,10 @@
     ((run&&run.sources)||[]).forEach(function(s){if(s.ok)ok[s.id]=true;});
     ((run&&run.events)||[]).forEach(function(e){var id=calendarId(e),was=old[id];
       items[id]=Object.assign({},e,{id:id,firstSeen:(was&&was.firstSeen)||day,lastSeen:day,missed:0});});
-    Object.keys(old).forEach(function(id){var v=old[id];if(items[id]||(v.end||v.start)<day)return;
+    // An event that has ended stays two weeks, so a session attended can still be
+    // logged for CPE after its organiser takes it down.
+    Object.keys(old).forEach(function(id){var v=old[id],end=v.end||v.start;if(items[id]||end<shift(day,-14))return;
+      if(end<day){items[id]=v;return;}
       var missed=(v.missed||0)+(ok[v.source]?1:0);if(missed<2)items[id]=Object.assign({},v,{missed:missed});});
     return {startedOn:(prev&&prev.startedOn)||day,items:items,sources:(run&&run.sources)||[],searched:(run&&run.searched)||[]};
   }
@@ -177,10 +180,52 @@
     ['quantum',/quantum/i],['recoveries',/recover(?:y|ies)|subrogation/i],['liability',/liabilit/i],['motor',/motor|car insurance|vehicle/i],['property claims',/property|cash settlement|home insurance/i],
     ['expert evidence',/expert (?:evidence|report|witness)/i],['forensic accounting',/forensic/i],['policy wording',/utmost good faith|non-disclosure|misrepresentation|policy wording/i],['claims',/\bclaims?\b/i]];
   function workMatch(v){var hay=(v&&v.title)||'';for(var i=0;i<WORK_TOPICS.length;i++)if(WORK_TOPICS[i][1].test(hay))return WORK_TOPICS[i][0];return '';}
+  // CIA CPE (the IIA): a practising CIA needs 40 hours a calendar year, at
+  // least 2 on ethics, reported by 31 December. Bob is a Philippine CPA and a
+  // CIA (18 Oct 2026); his PRC CPD is noted on the card, not tracked, because
+  // its unit count for CPAs is not confirmed.
+  var CIA={hours:40,ethics:2};
+  function hrs(v,max){var n=Math.round((+v||0)*10)/10;return n>0?Math.min(n,max):0;}
+  // What an attended event counts for by default: the IIA's own CPE credits
+  // (none for an IIA session without them); otherwise its listed points or
+  // hours (an ANZIIF CIP point is about an hour), else 1. Bob can change it.
+  function cpeDefault(v){
+    v=v||{};var n;
+    if(+v.cpeHours>0)n=+v.cpeHours;else if(v.organizer==='IIA'&&v.cpeHours===0)n=0;
+    else{var m=/(\d+(?:\.\d+)?)\s*(?:[A-Z]+\s+)?(?:points?|hours?)/i.exec(v.cpd||'');n=m?+m[1]:1;}
+    return {hours:hrs(n,40),ethics:/\bethic/i.test(v.title||'')};
+  }
+  // One change to the CPE log: start (hours already earned in a year, from his
+  // IIA record), toggle (an event attended, or not), edit, remove.
+  function applyCpe(doc,change,now){
+    change=change||{};
+    var next={uid:(doc&&doc.uid)||'',kind:'cpe',years:Object.assign({},doc&&doc.years),entries:Object.assign({},doc&&doc.entries)},id=text(change.id,40);
+    if(change.op==='start'&&/^\d{4}$/.test(String(change.year)))next.years[change.year]={start:hrs(change.start,200),ethics:hrs(change.ethics,200)};
+    else if(change.op==='toggle'&&id){
+      if(next.entries[id])delete next.entries[id];
+      else{var v=change.item||{},d=cpeDefault(v);next.entries[id]={title:text(v.title,180)||'Untitled session',url:url(v.url),date:date(v.start)||today(now),hours:d.hours,ethics:d.ethics,organizer:text(v.organizer,60),iia:+v.cpeHours>0};}
+    }
+    else if(change.op==='edit'&&next.entries[id])next.entries[id]=Object.assign({},next.entries[id],{hours:hrs(change.hours,40),ethics:!!change.ethics});
+    else if(change.op==='remove')delete next.entries[id];
+    if(Object.keys(next.entries).length>300)throw new Error('Your CPE log is full (300). Remove an older entry first.');
+    return next;
+  }
+  // The year so far: hours and ethics earned (his starting hours plus sessions
+  // on or before today), booked (sessions still to come) and days to 31 Dec.
+  function cpeSummary(doc,day){
+    var year=String(day).slice(0,4),base=((doc&&doc.years)||{})[year],entries=(doc&&doc.entries)||{};
+    var list=Object.keys(entries).map(function(id){return Object.assign({id:id},entries[id]);}).filter(function(e){return String(e.date).slice(0,4)===year;}).sort(function(a,b){return String(a.date).localeCompare(String(b.date));});
+    var add=function(f){return Math.round(list.filter(f).reduce(function(t,e){return t+(+e.hours||0);},0)*10)/10;};
+    var start=hrs(base&&base.start,200),startEthics=hrs(base&&base.ethics,200);
+    return {year:year,hasStart:!!base,start:start,startEthics:startEthics,target:CIA.hours,ethicsTarget:CIA.ethics,
+      earned:Math.round((start+add(function(e){return e.date<=day;}))*10)/10,ethics:Math.round((startEthics+add(function(e){return e.date<=day&&e.ethics;}))*10)/10,
+      booked:add(function(e){return e.date>day;}),bookedEthics:add(function(e){return e.date>day&&e.ethics;}),
+      daysLeft:Math.round((Date.parse(year+'-12-31T00:00:00Z')-Date.parse(day+'T00:00:00Z'))/86400000),entries:list};
+  }
   function hash(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16);}
   function expired(v,day){return !!((v.end&&v.end<day)||(v.deadline&&v.deadline<day));}
   function due(items,choices,day){var until=new Date(Date.parse(day+'T00:00:00Z')+7*86400000).toISOString().slice(0,10);return items.filter(function(v){var c=choices[v.id]||{};return (c.saved||c.interested)&&!c.hidden&&!expired(v,day)&&v.deadline&&v.deadlineCheck!=='not-found'&&v.deadline>=day&&v.deadline<=until;}).sort(function(a,b){return a.deadline.localeCompare(b.deadline);}).slice(0,3);}
-  var api={lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,access:access,membersOnly:membersOnly,previewHost:previewHost,reasons:reasons,drop:drop,kept:kept,laneNote:laneNote,calendarId:calendarId,mergeCalendar:mergeCalendar,isNew:isNew,rollPicks:rollPicks,workMatch:workMatch,theme:theme,clean:clean,expired:expired,due:due};
+  var api={lanes:lanes,formats:formats,url:url,date:date,today:today,prefs:prefs,phtTime:phtTime,pageText:pageText,dateOnPage:dateOnPage,dateCheck:dateCheck,active:active,access:access,membersOnly:membersOnly,previewHost:previewHost,reasons:reasons,drop:drop,kept:kept,laneNote:laneNote,calendarId:calendarId,mergeCalendar:mergeCalendar,isNew:isNew,rollPicks:rollPicks,workMatch:workMatch,cpeDefault:cpeDefault,applyCpe:applyCpe,cpeSummary:cpeSummary,theme:theme,clean:clean,expired:expired,due:due};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.ScoutCore=api;
 })(typeof window!=='undefined'?window:globalThis);
