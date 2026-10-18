@@ -11,6 +11,8 @@ import {
   addNbaRestSignals,
   normNbaInjuries,
   normNbaPlayerWatch,
+  normNbaLeaders,
+  nbaTeamGames,
   nbaPlayoffRound,
   buildNbaBracket,
   nbaSeasonYear,
@@ -215,6 +217,56 @@ test('normalizes ESPN NBA availability and recent game leaders', function () {
   var watch = normNbaPlayerWatch([game]);
   assert.equal(watch[0].player, 'Victor Wembanyama');
   assert.equal(watch[0].line, '19 PTS, 14 REB, 5 BLK');
+});
+
+test('league leaders: season label comes from what ESPN sent, season teams kept, a later move noted, junk categories dropped', function () {
+  function team(id, abbr, name) { return { id: id, abbreviation: abbr, displayName: name }; }
+  function leader(name, short, value, teams, now) {
+    return { value: value, displayValue: String(Math.round(value * 10) / 10), athlete: { displayName: name, shortName: short, position: { abbreviation: 'G' } }, team: now, teams: teams };
+  }
+  var lal = team('13', 'LAL', 'Los Angeles Lakers'), lac = team('12', 'LAC', 'LA Clippers'), cle = team('5', 'CLE', 'Cleveland Cavaliers');
+  var mil = team('15', 'MIL', 'Milwaukee Bucks'), mia = team('14', 'MIA', 'Miami Heat');
+  // Asked for 2026-27 before opening night; ESPN answers with 2025-26.
+  var json = {
+    requestedSeason: { year: 2026, displayName: '2025-26', type: { name: 'Regular Season', endDate: '2026-04-13T06:59:00.000+00:00' } },
+    leaders: { categories: [
+      { name: 'pointsPerGame', leaders: [leader('Luka Doncic', 'L. Doncic', 33.484375, [lal], lal), leader('Giannis Antetokounmpo', 'G. Antetokounmpo', 30.1, [mil], mia)] },
+      { name: 'assistsPerGame', leaders: [leader('James Harden', 'J. Harden', 8.04, [lac, cle], cle)] },
+      { name: 'fieldGoalPercentage', leaders: [leader('Rudy Gobert', 'R. Gobert', 68.22799682617188, [], team('16', 'MIN', 'Minnesota Timberwolves'))] },
+      { name: 'PER', leaders: [leader('Two Way', 'T. Way', 32.8, [lal], lal)] },
+      { name: '3PointPct', leaders: [leader('Luke Kennard', 'L. Kennard', 0.5, [lal], lal)] },
+      { name: 'reboundsPerGame', leaders: [] }
+    ] }
+  };
+  var out = normNbaLeaders(json, '2026-10-18T05:00:00Z');
+  assert.equal(out.season, '2025-26');
+  assert.equal(out.seasonYear, 2026);
+  assert.equal(out.final, true);
+  assert.deepEqual(out.categories.map(function (c) { return c.key; }), ['pointsPerGame', 'assistsPerGame', 'fieldGoalPercentage']);
+  var pts = out.categories[0];
+  assert.equal(pts.label, 'Points');
+  assert.equal(pts.leaders[0].value, 33.5);
+  assert.equal(pts.leaders[0].now, null);
+  assert.equal(pts.leaders[1].teams[0].abbr, 'MIL');
+  assert.equal(pts.leaders[1].now.abbr, 'MIA');
+  assert.deepEqual(out.categories[1].leaders[0].teams.map(function (t) { return t.abbr; }), ['LAC', 'CLE']);
+  assert.equal(out.categories[1].leaders[0].now, null);
+  // No season teams listed: the current team stands in, and is not a "move".
+  assert.equal(out.categories[2].leaders[0].teams[0].abbr, 'MIN');
+  assert.equal(out.categories[2].leaders[0].now, null);
+  assert.equal(out.categories[2].pct, true);
+  // Mid-season the same season is not final.
+  assert.equal(normNbaLeaders(json, '2026-01-10T00:00:00Z').final, false);
+  assert.deepEqual(normNbaLeaders(null, '2026-10-18T05:00:00Z').categories, []);
+});
+
+test('team games: average finished regular-season games per team, preseason ignored', function () {
+  var g = function (home, away, stage, status) { return { home: home, away: away, stage: stage, status: status || 'FINISHED' }; };
+  assert.equal(nbaTeamGames([
+    g('A', 'B', 'regular-season'), g('C', 'D', 'regular-season'), g('A', 'C', 'regular-season'), g('B', 'D', 'regular-season'),
+    g('A', 'D', 'preseason'), g('B', 'C', 'regular-season', 'SCHEDULED')
+  ]), 2);
+  assert.equal(nbaTeamGames([]), 0);
 });
 
 test('normalizes ESPN playoff rounds and builds current series bracket rows', function () {

@@ -504,6 +504,66 @@ function normNbaPlayerWatch(events, followedPlayers) {
   }).slice(0, 16);
 }
 
+// League leaders from ESPN's site v3 leaders feed (top five per category).
+// PER and 3P% are left out: ESPN's PER list is not minimum-qualified (a two-way
+// player led 2025-26) and its 3P% values arrive rounded to 0.4/0.5.
+var NBA_LEADER_CATEGORIES = [
+  { key: 'pointsPerGame', label: 'Points', unit: 'PPG' },
+  { key: 'reboundsPerGame', label: 'Rebounds', unit: 'RPG' },
+  { key: 'assistsPerGame', label: 'Assists', unit: 'APG' },
+  { key: '3PointsMadePerGame', label: '3-pointers made', unit: '3PM' },
+  { key: 'stealsPerGame', label: 'Steals', unit: 'SPG' },
+  { key: 'blocksPerGame', label: 'Blocks', unit: 'BPG' },
+  { key: 'fieldGoalPercentage', label: 'Field goal %', unit: 'FG%', pct: true },
+  { key: 'FreeThrowPct', label: 'Free throw %', unit: 'FT%', pct: true }
+];
+
+function nbaLeaderTeam(team) {
+  return team && team.abbreviation ? { abbr: team.abbreviation, name: team.displayName || team.abbreviation } : null;
+}
+
+// ESPN ignores the season asked for until that season has stats: before opening
+// night season=2027 answers with 2025-26. The label comes from requestedSeason
+// (what ESPN says it sent), and `final` is true once that season's regular
+// season has ended. `teams` are the player's teams that season; `now` is his
+// current team when it differs (offseason trades).
+function normNbaLeaders(json, nowIso) {
+  var season = (json && json.requestedSeason) || {};
+  var type = season.type || {};
+  var byKey = {};
+  (((json && json.leaders) || {}).categories || []).forEach(function (c) { if (c && c.name) byKey[c.name] = c; });
+  var categories = NBA_LEADER_CATEGORIES.map(function (def) {
+    var rows = ((byKey[def.key] || {}).leaders || []).slice(0, 5).map(function (row, i) {
+      var athlete = row.athlete || {};
+      var value = Number(row.value);
+      var teams = (row.teams || []).map(nbaLeaderTeam).filter(Boolean);
+      var now = nbaLeaderTeam(row.team);
+      if (!teams.length && now) teams = [now];
+      var moved = now && !teams.some(function (t) { return t.abbr === now.abbr; });
+      return {
+        rank: i + 1,
+        player: athlete.displayName || athlete.fullName || '',
+        short: athlete.shortName || '',
+        position: (athlete.position && athlete.position.abbreviation) || '',
+        teams: teams,
+        now: moved ? now : null,
+        value: isFinite(value) ? Math.round(value * 10) / 10 : null
+      };
+    }).filter(function (row) { return row.player && row.value != null; });
+    return rows.length ? { key: def.key, label: def.label, unit: def.unit, pct: Boolean(def.pct), leaders: rows } : null;
+  }).filter(Boolean);
+  var end = Date.parse(type.endDate || '');
+  var now = Date.parse(nowIso || new Date().toISOString());
+  return {
+    season: season.displayName || '',
+    seasonYear: season.year || null,
+    seasonType: type.name || '',
+    final: isFinite(end) && isFinite(now) ? now > end : false,
+    categories: categories,
+    checkedAt: nowIso || new Date().toISOString()
+  };
+}
+
 function buildNbaBracket(matches) {
   var bySeries = {};
   (matches || []).filter(function (match) { return match.round; }).forEach(function (match) {
@@ -1571,7 +1631,19 @@ function nbaWatchlist(standings, momentum) {
   });
 }
 
-async function fetchNbaModule() {
+// The league's average regular-season games per team in this window; early in
+// a season it says how few games the leaders stand on.
+function nbaTeamGames(matches) {
+  var teams = {};
+  (matches || []).forEach(function (m) {
+    if (m.status !== 'FINISHED' || m.stage !== 'regular-season') return;
+    [m.home, m.away].forEach(function (t) { teams[t] = (teams[t] || 0) + 1; });
+  });
+  var counts = Object.keys(teams).map(function (t) { return teams[t]; });
+  return counts.length ? Math.round(counts.reduce(function (a, b) { return a + b; }, 0) / counts.length) : 0;
+}
+
+async function fetchNbaModule(prior) {
   var now = new Date();
   var offseason = now.getUTCMonth() >= 5 && now.getUTCMonth() <= 8;
   var start = shiftedDate(now, offseason ? -150 : -45);
@@ -1582,6 +1654,10 @@ async function fetchNbaModule() {
     espnNba('/v2/sports/basketball/nba/standings?season=' + seasonYear),
     espnNba('/site/v2/sports/basketball/nba/injuries').catch(function (e) {
       console.warn('NBA injuries unavailable:', e.message || e);
+      return null;
+    }),
+    espnNba('/site/v3/sports/basketball/nba/leaders?season=' + seasonYear + '&seasontype=2&limit=5').catch(function (e) {
+      console.warn('NBA leaders unavailable:', e.message || e);
       return null;
     })
   ]);
@@ -1601,6 +1677,10 @@ async function fetchNbaModule() {
   attachNbaEdges(matches);
   var injuries = normNbaInjuries(payloads[2]).slice(0, 60);
   var playerWatch = normNbaPlayerWatch(events, NBA_FOLLOW_PLAYERS);
+  // A failed leaders read keeps the last good table (it carries its own checkedAt).
+  var leaders = payloads[3] ? normNbaLeaders(payloads[3], now.toISOString()) : null;
+  if (!leaders || !leaders.categories.length) leaders = (prior && prior.leaders) || leaders;
+  if (leaders && leaders.seasonYear === seasonYear) leaders.teamGames = nbaTeamGames(matches);
   var bracket = buildNbaBracket(matches);
   var teamProfiles = buildTeamProfiles('nba', standings, momentum, matches, injuries);
   var keyDates = [];
@@ -1632,7 +1712,7 @@ async function fetchNbaModule() {
     title: 'NBA Momentum Radar',
     phase: nbaModulePhase(now, upcoming),
     provider: 'ESPN basketball feed',
-    providerNote: 'NBA schedule, results, standings, game leaders and availability are refreshed from ESPN\'s public basketball feed. Momentum uses each team\'s latest five completed games in the rolling window.',
+    providerNote: 'NBA schedule, results, standings, game leaders, league leaders and availability are refreshed from ESPN\'s public basketball feed. Momentum uses each team\'s latest five completed games in the rolling window.',
     season: String(seasonYear - 1) + '-' + String(seasonYear).slice(-2),
     asOf: phtDateKey(),
     generatedAt: generatedAt,
@@ -1649,6 +1729,7 @@ async function fetchNbaModule() {
     injuries: injuries,
     availabilityStatus: payloads[2] ? 'ok' : 'unavailable',
     playerWatch: playerWatch,
+    leaders: leaders,
     followedPlayers: NBA_FOLLOW_PLAYERS,
     projectionModel: projectionModel,
     bracket: bracket,
@@ -2616,7 +2697,7 @@ async function main() {
   }
   if (wantsModule('nba')) {
     try {
-      doc.modules.nba = await fetchNbaModule();
+      doc.modules.nba = await fetchNbaModule(prevDocData && prevDocData.modules && prevDocData.modules.nba);
       await updateNbaJournal(db, doc.modules.nba, DRY_RUN);
       console.log('NBA: loaded ' + doc.modules.nba.matches.length + ' games, ' +
         doc.modules.nba.standings.length + ' standings rows and ' + doc.modules.nba.momentum.length + ' momentum rows.');
@@ -2837,6 +2918,8 @@ export {
   addNbaRestSignals,
   normNbaInjuries,
   normNbaPlayerWatch,
+  normNbaLeaders,
+  nbaTeamGames,
   nbaPlayoffRound,
   buildNbaBracket,
   nbaSeasonYear,
