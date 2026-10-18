@@ -53,6 +53,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/weekly-review-core.js"></script>
 <script src="./lib/health-core.js"></script>
 <script src="./lib/checkup-core.js"></script>
+<script src="./lib/grooming-core.js"></script>
 <script src="./lib/lifestyle-core.js"></script>
 <script src="./lib/life-records-core.js"></script>
 <script src="./lib/weekly-review-ui.js"></script>
@@ -453,6 +454,37 @@ window.fbSaveHealthBasics = async function(basics) {
   var uid = getUid();
   if (!uid) throw new Error('Sign in first');
   await setDoc(doc(db, COLL, 'health-basics-' + uid), Object.assign({}, basics, {uid: uid, kind: 'health-basics', updatedAt: new Date().toISOString()}));
+};
+// Grooming (lib/grooming-core.js): haircut, sauna, massage and the rest, how
+// often and when he last went. A first read primes {uid} so the transaction
+// that changes it can read the doc; every change works on the latest copy.
+window.fbLoadGrooming = async function(uid) {
+  if (!uid || uid !== getUid()) throw new Error('Account changed');
+  var ref = doc(db, COLL, 'grooming-' + uid), snap;
+  try { snap = await getDoc(ref); }
+  catch (e) {
+    if (!e || e.code !== 'permission-denied') throw e;
+    if (uid !== getUid()) throw new Error('Account changed');
+    await setDoc(ref, {uid: uid}, {merge: true}); snap = await getDoc(ref);
+  }
+  if (uid !== getUid()) throw new Error('Account changed');
+  return snap.exists() ? snap.data() : null;
+};
+window.fbUpdateGrooming = async function(mutate) {
+  var uid = getUid();
+  if (!uid) throw new Error('Sign in first');
+  var ref = doc(db, COLL, 'grooming-' + uid);
+  var next = await runTransaction(db, async function(tx) {
+    if (uid !== getUid()) throw new Error('Account changed');
+    var snap = await tx.get(ref), stored = mutate(snap.exists() ? snap.data() : null);
+    if (!stored || !Array.isArray(stored.items)) throw new Error('Grooming could not be saved.');
+    if (uid !== getUid()) throw new Error('Account changed');
+    var data = {uid: uid, kind: 'grooming', items: stored.items, updatedAt: new Date().toISOString()};
+    tx.set(ref, data);
+    return data;
+  });
+  if (uid !== getUid()) throw new Error('Account changed');
+  return next;
 };
 
 // Go deeper (functions/story-dossier.js): a working dossier on one story, and
@@ -3181,7 +3213,7 @@ body.light .filter-chip.active,body.light .tool-chip.active,body.light .secgroup
 /* About you: a status strip, the profile as cards that read as text until
    Edit, calendars as status rows, and what it picked up as a card grid. */
 .about-glance{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;margin:0 0 1rem}
-@media(min-width:1100px){.about-glance{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(min-width:1100px){.about-glance{grid-template-columns:repeat(5,minmax(0,1fr))}}
 .about-glance-tile{display:flex;align-items:center;gap:.7rem;min-width:0;padding:.75rem .9rem;border:1px solid var(--rim);border-radius:12px;background:var(--bg2);color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
 .about-glance-tile:hover{border-color:var(--line-hover);background:var(--bg3)}
 .about-glance-tile>.ico{width:32px;height:32px;padding:7px;border-radius:9px;background:var(--gold-dim);color:var(--gold)}
@@ -3282,6 +3314,21 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 .checkup-off{display:flex;gap:.3rem;align-items:center;font-size:12px;color:var(--txt3);grid-column:1/-1}
 .today-checkups button{margin-left:.35rem}
 @media(max-width:760px){.checkup-row{grid-template-columns:minmax(0,1fr) auto}.checkup-row .checkup-month{grid-column:1/-1}}
+.groom-list{display:grid;gap:.45rem}
+.groom-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.5rem .8rem;padding:.6rem .8rem;border:1px solid var(--rim);border-radius:10px;background:var(--bg3)}
+.groom-name{font-size:13.5px;font-weight:600;color:var(--txt)}
+.groom-state{margin-left:.55rem;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3)}
+.groom-state.is-due{color:var(--amber)}.groom-state.is-plan{color:var(--green)}.groom-state.is-soon{color:var(--gold)}
+.groom-sub{display:block;margin-top:.1rem;font-size:12px;line-height:1.45;color:var(--txt3)}
+.groom-btns{display:flex;flex-wrap:wrap;gap:.35rem;justify-content:flex-end}
+.groom-fields,.groom-form{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.5rem .9rem;align-items:end}
+.groom-form{padding:.6rem .7rem;border:1px dashed var(--rim2);border-radius:9px}
+.groom-fields label,.groom-form label{display:grid;gap:.25rem}
+.groom-fields input,.groom-fields select,.groom-form input,.groom-add input{background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:.4rem .55rem;font:inherit;font-size:13px;min-width:0}
+.groom-form input[type=text]{width:13rem;max-width:100%}
+.groom-add{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:.75rem}
+.groom-add .tool-chip{text-transform:none;letter-spacing:0}
+@media(max-width:560px){.groom-row{grid-template-columns:minmax(0,1fr)}.groom-btns{justify-content:flex-start}.groom-state{display:block;margin:.15rem 0 0}}
 .research-card{margin:0 0 1rem;padding:.9rem 1rem;border:1px solid var(--rim);border-left:3px solid var(--green);border-radius:12px;background:var(--bg2)}
 .research-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.4rem .8rem;margin-bottom:.5rem}
 .research-head h2{margin:0;font-size:16px;color:var(--txt)}
@@ -4342,6 +4389,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <button type="button" class="about-glance-tile" onclick="aboutJump('about-profile')"><svg class="ico" aria-hidden="true"><use href="#i-note"/></svg><span class="about-glance-text"><span class="about-glance-k">Your profile</span><span class="about-glance-v" id="about-glance-profile">Loading…</span></span></button>
     <button type="button" class="about-glance-tile" onclick="aboutJump('about-calendar')"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg><span class="about-glance-text"><span class="about-glance-k">Your calendars</span><span class="about-glance-v" id="about-glance-calendar">Loading…</span></span></button>
     <button type="button" class="about-glance-tile" onclick="aboutJump('about-health')"><svg class="ico" aria-hidden="true"><use href="#i-heart"/></svg><span class="about-glance-text"><span class="about-glance-k">Apple Health</span><span class="about-glance-v" id="about-glance-health">Loading…</span></span></button>
+    <button type="button" class="about-glance-tile" onclick="aboutJump('about-grooming')"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg><span class="about-glance-text"><span class="about-glance-k">Grooming</span><span class="about-glance-v" id="about-glance-grooming">Loading…</span></span></button>
     <button type="button" class="about-glance-tile" onclick="aboutJump('about-learned-panel')"><svg class="ico" aria-hidden="true"><use href="#i-sparkle"/></svg><span class="about-glance-text"><span class="about-glance-k">Picked up from you</span><span class="about-glance-v" id="about-glance-learned">Loading…</span></span></button>
   </nav>
   <section class="command-panel about-panel owner-only" id="about-profile" aria-labelledby="about-profile-title">
@@ -4403,6 +4451,13 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="checkup-list" id="checkup-list"><p class="rel-none-txt">Loading…</p></div>
     <div class="about-actions" style="margin-top:.8rem"><button type="button" class="tool-chip about-primary" id="checkup-save" onclick="saveHealthBasics()">Save</button><span class="about-status" id="checkup-status" role="status"></span></div>
   </section>
+  <section class="command-panel about-panel owner-only" id="about-grooming" aria-labelledby="about-grooming-title">
+    <div class="command-panel-head"><div class="command-panel-title" id="about-grooming-title">Grooming</div></div>
+    <p class="about-intro">Haircut, sauna, massage and anything else you keep on a rhythm. Set how often and the day you last went; <b>Done</b> records a visit and works out the next one. <b>Plan</b> puts a session on your Calendar, and on the morning push that day. What is due shows on Calendar.</p>
+    <div class="groom-list" id="groom-list"><p class="rel-none-txt">Loading…</p></div>
+    <div class="groom-add" id="groom-add"></div>
+    <p class="about-status" id="groom-status" role="status"></p>
+  </section>
   <section class="command-panel about-panel owner-only" id="about-learned-panel" aria-labelledby="about-learned-title">
     <div class="command-panel-head"><div class="command-panel-title" id="about-learned-title">What it has picked up from you</div></div>
     <p class="about-intro">Each one says what it steers. Nothing here is guessed: it is what you recorded or tapped.</p>
@@ -4461,6 +4516,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p><b>Apple Health</b> — tap <b>Connect</b> on your iPhone and follow <b>Set up the Shortcut on your iPhone</b>: a Shortcut called Daybook Health sends the last 3 days of steps, walking distance, time in bed (from your sleep schedule) and, if you log it, weight, each time you open Outlook. Daybook adds them up per day on the day where you were (a night counts on the day you woke up), keeps the larger reading when a day is sent twice, and turns away numbers no body produces. The reply shows as a notification, and <b>About you</b> lists the last 14 days. Only your account can read them and no AI sees them yet. The code is shown once and works only for sending; <b>New code</b> or <b>Disconnect</b> stops the old one at once.</p>
       <p>Once it sends, <b>Today</b> shows a <b>Body</b> line under This week: yesterday's steps and last night's time in bed. It turns amber when steps were well under or over your usual (the middle of your last 14 days) or when short nights (under 6 hours in bed) repeat, and only then does it ride on the morning push. A weekly commitment that names a number Apple Health can check (<i>8,000 steps</i>, <i>3 km</i>, <i>in bed by 11:30 pm</i>, <i>7 hours in bed</i>, in its words or in How you'll know) <b>ticks itself</b>: a step goal once the day is over and a send has come in, a sleep goal for the evening you went to bed. Those ticks show as ringed dots, and the morning check-in stops asking about them. Untick one and it stays off. "Walk 30 minutes" cannot tick itself: an iPhone without a Watch does not record exercise minutes.</p>
       <p><b>Health basics</b> — your birth year, which screenings to include, and the month you last had each check-up. Daybook works out what is next due from Australian guidelines for adults at average risk (blood pressure, heart and diabetes risk checks, bowel screening, dental, eyes, the flu vaccine, the screenings for women, and the pneumococcal and two-dose shingles vaccines from 65), each linking its source. If your doctor gave you a different date, put it in <b>Next due</b>; it replaces the schedule for that check until you mark it done. What is due shows on <b>Today</b> with a <b>Done</b> button (it records this month), on <b>Calendar</b>, and as the health idea in your weekly review. It never reads results, and your doctor may set a different schedule: untick a check with <b>Not for me</b>.</p>
+      <p><b>Grooming</b> — on <b>About you</b>, your haircut, sauna, massage and anything else you keep on a rhythm (add a barber shave, nails, a facial or one you name). Pick how often and the day you last went, and Daybook works out when each is next due: due soon a few days before, overdue once it is a quarter of the gap late (two days for a weekly sauna, a week for a monthly haircut). <b>Plan</b> puts a session on your Calendar as one of your own events, with where you go; move or delete it on Calendar and Grooming follows, and the morning push lists it on the day. <b>Done</b> records today, or the planned day once it has passed, takes the plan off your Calendar, and the next due day follows from how often. What is due and not planned shows on <b>Calendar</b>.</p>
       <p><b>Lifestyle questions</b> — once the morning check-in's commitment question is done (or when there is none), it asks one question about yesterday, a different one each day: drinks, a late meal, protein at breakfast, 20 minutes of daylight, and your energy. One tap, or <b>Not now</b>. Nothing is counted or scored; the answers add up as a line each in your Sunday review (“Drinks: None on 3 days, 3 or more on 1”) and, once Apple Health has a few weeks of your sleep and steps, will be set against them.</p>
       <p><b>This week's health research</b> — every Sunday at 5:15 a web search finds up to three findings from the last two weeks on sleep, activity, nutrition, alcohol, ageing or stress. Only meta-analyses, systematic reviews, randomised trials, large cohort studies and health-body guidelines count; animal studies, supplements and medicines are left out, and a link is kept only if the search really returned it. That is all that is checked: the date, design, numbers and summary are the AI's reading of the page, not checked against the paper, so open the source before acting on one. Each finding says what it can show: a cohort study only a link, not cause; trials can show cause. The AI is told only your age band (from Health basics) and a fixed line about how you live (desk work, travel, late poker), never your steps, sleep, answers or check-ups. It shows on <b>Today</b> for two days with the week it covers (<b>Got it</b> hides it); the Sunday review lists the headlines for that week only, and one “Try” from the latest Sunday is offered as a commitment idea. An older week is never shown as this week's. The Sunday job and your own builds share one budget of 8 a month. It reports what studies found; it is not medical advice. On the cost card as health-research.</p>
       <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
@@ -6415,6 +6471,7 @@ var USAGE_LABELS = {
   fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence', ask_send_decision:'Ask: decision draft', ask_send_check:'Ask: to check', ask_send_take:'Ask: my take', ask_send_copy:'Ask: copy as text', 'ask_send_confirm-check':'Ask: check added',
   page_today:'Today', page_command:'Morning 5', page_evidence:'Evidence', page_decisions:'Decisions', page_research:'Research', page_timeline:'Timeline',
   page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_flights:'Trips', page_shopping:'Clothing', page_calendar:'Calendar', page_pse:'PSE', page_trends:'Trends',
+  grooming_done:'Grooming: done', grooming_plan:'Grooming: plan a session', grooming_add:'Grooming: add an item',
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
   card_more:'More like this', card_less:'Less like this', card_remind:'Remind me',
   aha_save:'Aha: save insight', aha_decision:'Aha: open as decision', aha_note:'Aha: write my take', aha_check:'Aha: check later', aha_link:'Aha: jump to a story',
@@ -6930,6 +6987,8 @@ async function renderAbout() {
   paintHealth();
   await loadHealthBasics();
   paintHealthBasics();
+  await loadGrooming();
+  paintGrooming();
   await renderAboutLearned();
 }
 // ── Apple Health (lib/health-core.js, functions/health-link.js) ──
@@ -7242,6 +7301,200 @@ document.addEventListener('click', async function(event) {
     try { await window.fbGenerateHealthResearch(false); } catch (e) { showToast('Could not build it: ' + ((e && e.message) || 'try again'), 'warn'); }
     _researchBusy = false; renderTodayResearch(true);
   }
+});
+
+// ── Grooming (lib/grooming-core.js) ──
+// The list on grooming-<uid>, and his Calendar events, where a planned
+// session lives (calendar-events-<uid>). _groomEvents is null when the
+// Calendar could not be read: plans are then unknown, so Plan is off.
+var _groom = null, _groomEvents = null, _groomFor = null, _groomReadAt = 0, _groomBusy = false, _groomOpen = {}, _groomOther = false;
+async function loadGrooming(force) {
+  var uid = window._firebaseUid || null;
+  if (!uid || window.daybookMember || typeof window.fbLoadGrooming !== 'function') return;
+  if (!force && _groomFor === uid && Date.now() - _groomReadAt < 5 * 60000) return;
+  try {
+    var r = await Promise.all([window.fbLoadGrooming(uid), window.fbLoadDaybookEvents().catch(function() { return null; })]);
+    _groom = r[0]; _groomEvents = r[1]; _groomFor = uid; _groomReadAt = Date.now();
+  } catch (e) { _groom = null; _groomEvents = null; _groomFor = null; }
+}
+function groomItems() { return window.GroomingCore.plan(_groom, _groomEvents, checkupToday()); }
+function groomItem(id) { return groomItems().filter(function(i) { return i.id === id; })[0] || null; }
+function groomButtonsHtml(i) {
+  var noCal = _groomEvents === null;
+  return '<button type="button" class="tool-chip" data-groom-act="plan" aria-expanded="false"' + (noCal ? ' disabled title="Your Calendar could not be read"' : '') + '>' + (i.session ? 'Move' : 'Plan') + '</button>' +
+    '<button type="button" class="tool-chip" data-groom-act="done" data-track="grooming_done" title="' + (i.status === 'past' ? 'You went on the planned day' : 'You went today') + '">Done</button>';
+}
+// The Plan picker: the due day (or the plan already made) at his usual time.
+function groomPlanHtml(i, today) {
+  var d = window.GroomingCore.planDefault(i, today);
+  return '<div class="groom-form" role="group" aria-label="' + esc('Plan ' + i.title) + '">' +
+    '<label><span class="about-sublabel">Day</span><input type="date" data-groom-plan="date" min="' + today + '" value="' + esc(d.date) + '"></label>' +
+    '<label><span class="about-sublabel">Time (optional)</span><input type="time" data-groom-plan="time" value="' + esc(d.time) + '"></label>' +
+    '<button type="button" class="tool-chip about-primary" data-groom-act="plan-save" data-track="grooming_plan">' + (i.session ? 'Move it' : 'Put it on Calendar') + '</button>' +
+    '<button type="button" class="tool-chip" data-groom-act="close">Cancel</button>' +
+    (i.session ? '<button type="button" class="tool-chip" data-groom-act="unplan">Call it off</button>' : '') +
+    (i.where ? '<span class="flights-note">At ' + esc(i.where) + '</span>' : '') + '</div>';
+}
+function groomMoreHtml(i) {
+  return '<div class="groom-form" role="group" aria-label="' + esc(i.title + ' details') + '">' +
+    '<label><span class="about-sublabel">Name</span><input type="text" data-groom-more="title" maxlength="60" value="' + esc(i.title) + '"></label>' +
+    '<label><span class="about-sublabel">Where (optional)</span><input type="text" data-groom-more="where" maxlength="80" value="' + esc(i.where) + '" placeholder="Barber, spa or gym"></label>' +
+    '<label><span class="about-sublabel">With whom (optional)</span><input type="text" data-groom-more="with" maxlength="80" value="' + esc(i.with) + '" placeholder="Your barber or therapist"></label>' +
+    '<button type="button" class="tool-chip about-primary" data-groom-act="more-save">Save</button><button type="button" class="tool-chip" data-groom-act="close">Cancel</button>' +
+    '<button type="button" class="about-link-btn" data-groom-act="remove">Remove from the list</button></div>';
+}
+function groomStateClass(i) {
+  return window.GroomingCore.isDue(i) ? ' is-due' : i.status === 'planned' ? ' is-plan' : i.status === 'soon' ? ' is-soon' : '';
+}
+function groomRowHtml(i, today) {
+  // A plan's state already names the place, so the line under it does not.
+  var G = window.GroomingCore, open = _groomOpen['about:' + i.id] || '', sub = [i.session && i.session.location ? '' : i.where, i.with ? 'with ' + i.with : ''].filter(Boolean).join(' · ');
+  var every = G.EVERY.indexOf(i.every) < 0 ? G.EVERY.concat([i.every]).sort(function(a, b) { return a - b; }) : G.EVERY;
+  return '<div class="groom-row" data-groom="' + esc(i.id) + '" data-groom-place="about">' +
+    '<div><span class="groom-name">' + esc(i.title) + '</span><span class="groom-state' + groomStateClass(i) + '">' + esc(G.stateText(i, today)) + '</span>' + (sub ? '<span class="groom-sub">' + esc(sub) + '</span>' : '') + '</div>' +
+    '<div class="groom-btns">' + groomButtonsHtml(i) + '<button type="button" class="tool-chip" data-groom-act="more" aria-expanded="' + (open === 'more') + '">Details</button></div>' +
+    '<div class="groom-fields"><label><span class="about-sublabel">How often</span><select data-groom-field="every" aria-label="' + esc(i.title + ': how often') + '">' +
+      every.map(function(n) { return '<option value="' + n + '"' + (n === i.every ? ' selected' : '') + '>' + esc(G.everyLabel(n)) + '</option>'; }).join('') + '</select></label>' +
+    '<label><span class="about-sublabel">Last went</span><input type="date" data-groom-field="last" max="' + today + '" value="' + esc(i.last) + '" aria-label="' + esc(i.title + ': the day you last went') + '"></label></div>' +
+    (open === 'plan' ? groomPlanHtml(i, today) : open === 'more' ? groomMoreHtml(i) : '') + '</div>';
+}
+function groomAddHtml() {
+  var G = window.GroomingCore, presets = G.presetsToAdd(_groom, checkupToday());
+  return presets.map(function(p) { return '<button type="button" class="tool-chip" data-groom-add="' + esc(p.id) + '" data-track="grooming_add">+ ' + esc(p.title) + '</button>'; }).join('') +
+    (_groomOther ? '<input type="text" id="groom-own" maxlength="60" placeholder="e.g. Eyebrow threading" aria-label="Name of the item to add"><button type="button" class="tool-chip about-primary" data-groom-act="add-own" data-track="grooming_add">Add</button>' :
+      '<button type="button" class="tool-chip" data-groom-act="other">+ Other</button>');
+}
+function paintGrooming() {
+  var G = window.GroomingCore, list = document.getElementById('groom-list'), add = document.getElementById('groom-add');
+  if (!G || !list) return;
+  if (!_groomFor) { list.innerHTML = '<p class="rel-none-txt">Your grooming list could not be loaded. Reload to try again.</p>'; setText('about-glance-grooming', 'Not loaded'); return; }
+  var today = checkupToday(), items = groomItems();
+  list.innerHTML = items.length ? items.map(function(i) { return groomRowHtml(i, today); }).join('') : '<p class="rel-none-txt">Nothing on your list. Add one below.</p>';
+  if (add) add.innerHTML = groomAddHtml();
+  var due = items.filter(G.isDue).length, planned = items.filter(function(i) { return i.status === 'planned'; }).length;
+  setText('about-glance-grooming', items.length && items.every(function(i) { return i.status === 'unknown'; }) ? 'Set when you last went' :
+    (due ? due + ' due' : 'Nothing due') + (planned ? ' · ' + planned + ' planned' : ''));
+  if (_groomEvents === null) setText('groom-status', 'Your Calendar could not be read, so plans are not shown and Plan is off. Reload to try again.');
+}
+function groomRepaint() { paintGrooming(); }
+async function groomFreshEvents() {
+  try { _groomEvents = await window.fbLoadDaybookEvents(); } catch (e) { _groomEvents = null; }
+  return _groomEvents;
+}
+// One change to the list, on the latest copy; a core error stops the write.
+async function groomSave(mutate) {
+  _groom = await window.fbUpdateGrooming(function(latest) {
+    var r = mutate(latest);
+    if (r.error) throw new Error(r.error);
+    return r.doc;
+  });
+  _groomReadAt = Date.now();
+}
+async function groomRemoveEvent(id, events) {
+  var e = id && (events || []).filter(function(x) { return x && x.id === id; })[0];
+  if (e) _groomEvents = await window.fbWriteDaybookEvent({id: id}, true, e.updatedAt || '');
+}
+async function groomAction(act, id, row) {
+  var G = window.GroomingCore, today = checkupToday(), place = row ? row.getAttribute('data-groom-place') : 'about', key = place + ':' + id;
+  if (act === 'plan' || act === 'more') {
+    _groomOpen[key] = _groomOpen[key] === act ? '' : act; groomRepaint();
+    // The day for a plan; where he goes for details (the name is rarely changed).
+    var again = document.querySelector('[data-groom-place="' + place + '"][data-groom="' + id + '"] ' + (act === 'plan' ? '[data-groom-plan="date"]' : '[data-groom-more="where"]'));
+    if (again) again.focus();
+    return;
+  }
+  if (act === 'close') { delete _groomOpen[key]; groomRepaint(); return; }
+  if (act === 'other') { _groomOther = true; groomRepaint(); var own = document.getElementById('groom-own'); if (own) own.focus(); return; }
+  if (_groomBusy) return;
+  var item = row ? groomItem(id) : null;
+  if (row && !item) { groomRepaint(); return; }
+  _groomBusy = true;
+  try {
+    if (act === 'done') {
+      // A plan on Calendar leaves it, so read the latest copy first.
+      var events = item.eventId ? await groomFreshEvents() : _groomEvents;
+      if (item.eventId && events === null) throw new Error('Your Calendar could not be read. Try again.');
+      var done = G.markDone(_groom, events, id, today);
+      await groomRemoveEvent(done.removeEvent, events);
+      await groomSave(function(latest) { return G.markDone(latest, events, id, today); });
+      delete _groomOpen[key];
+      showToast(item.title + ' done' + (done.went !== today ? ' on ' + G.dayLabel(done.went) : '') + '. Next due ' + G.dayLabel(done.next) + '.', 'ok');
+    } else if (act === 'plan-save') {
+      var when = {date: row.querySelector('[data-groom-plan="date"]').value, time: row.querySelector('[data-groom-plan="time"]').value};
+      var fresh = await groomFreshEvents();
+      if (fresh === null) throw new Error('Your Calendar could not be read, so nothing was planned. Try again.');
+      var newId = 'groom-' + id + '-' + crypto.randomUUID().replace(/-/g, '').slice(0, 10), planned = G.planSession(_groom, fresh, id, when, today, newId);
+      if (planned.error) throw new Error(planned.error);
+      // The list first: an event that then fails to save leaves no stray plan.
+      await groomSave(function(latest) { return G.planSession(latest, fresh, id, when, today, newId); });
+      _groomEvents = await window.fbWriteDaybookEvent(planned.event, false, planned.expected);
+      delete _groomOpen[key];
+      showToast(item.title + ' planned for ' + G.dayLabel(planned.event.start) + (planned.event.time ? ' ' + planned.event.time : '') + '. It is on your Calendar.', 'ok');
+    } else if (act === 'unplan') {
+      var before = await groomFreshEvents();
+      if (before === null) throw new Error('Your Calendar could not be read. Try again.');
+      await groomRemoveEvent(G.cancelPlan(_groom, before, id, today).removeEvent, before);
+      await groomSave(function(latest) { return G.cancelPlan(latest, before, id, today); });
+      delete _groomOpen[key];
+      showToast('Plan called off. It is off your Calendar.', 'ok');
+    } else if (act === 'more-save') {
+      var patch = {};
+      row.querySelectorAll('[data-groom-more]').forEach(function(input) { patch[input.getAttribute('data-groom-more')] = input.value; });
+      await groomSave(function(latest) { return G.updateItem(latest, id, patch, today); });
+      delete _groomOpen[key];
+      setText('groom-status', 'Saved.');
+    } else if (act === 'remove') {
+      if (!confirm('Remove ' + item.title + ' from your grooming list?' + (item.session ? ' Its plan comes off your Calendar too.' : ''))) return;
+      var list = item.eventId ? await groomFreshEvents() : _groomEvents;
+      if (item.eventId && list === null) throw new Error('Your Calendar could not be read. Try again.');
+      await groomRemoveEvent(G.removeItem(_groom, list, id, today).removeEvent, list);
+      await groomSave(function(latest) { return G.removeItem(latest, list, id, today); });
+      delete _groomOpen[key];
+      setText('groom-status', item.title + ' removed.');
+    } else if (act === 'add-own' || act === 'add') {
+      var what = act === 'add' ? id : (document.getElementById('groom-own') || {}).value || '', added = G.addItem(_groom, what, today);
+      if (added.error) throw new Error(added.error);
+      await groomSave(function(latest) { return G.addItem(latest, what, today); });
+      _groomOther = false;
+      setText('groom-status', G.cleanGrooming(_groom, today).items.filter(function(i) { return i.id === added.id; }).map(function(i) { return i.title; })[0] + ' added. Set how often and the day you last went.');
+    }
+  } catch (e) {
+    console.error('Grooming change failed:', e);
+    var message = e && e.message && !/permission|network|offline/i.test(e.message) ? e.message : 'Could not save. Check the connection and try again.';
+    if (place === 'about') setText('groom-status', message);
+    showToast(message, 'warn');
+  } finally {
+    _groomBusy = false;
+    groomRepaint();
+  }
+}
+document.addEventListener('click', function(event) {
+  var t = event.target && event.target.closest ? event.target : null;
+  var add = t && t.closest('[data-groom-add]');
+  if (add) { groomAction('add', add.getAttribute('data-groom-add'), null); return; }
+  var b = t && t.closest('[data-groom-act]');
+  if (!b || b.disabled || !window.GroomingCore) return;
+  var row = b.closest('[data-groom]');
+  groomAction(b.getAttribute('data-groom-act'), row ? row.getAttribute('data-groom') : '', row);
+});
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Enter' && event.target && event.target.id === 'groom-own') { event.preventDefault(); groomAction('add-own', '', null); }
+});
+// How often and the day he last went save as soon as they change.
+document.addEventListener('change', async function(event) {
+  var t = event.target, field = t && t.getAttribute && t.getAttribute('data-groom-field'), row = field && t.closest('[data-groom]');
+  if (!row || !window.GroomingCore) return;
+  var G = window.GroomingCore, id = row.getAttribute('data-groom'), patch = {}, today = checkupToday();
+  if (field === 'last' && t.value && t.value > today) { setText('groom-status', 'Choose today or an earlier day.'); return; }
+  patch[field] = t.value;
+  try {
+    await groomSave(function(latest) { return G.updateItem(latest, id, patch, today); });
+    setText('groom-status', 'Saved.');
+  } catch (e) {
+    console.error('Grooming change failed:', e);
+    setText('groom-status', 'Could not save. Check the connection and try again.');
+  }
+  groomRepaint();
 });
 
 // ── Your calendars (functions/calendar.js) ──
