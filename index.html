@@ -3313,6 +3313,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 .checkup-state.is-due{color:var(--amber)}.checkup-state.is-ok{color:var(--green)}
 .checkup-off{display:flex;gap:.3rem;align-items:center;font-size:12px;color:var(--txt3);grid-column:1/-1}
 .today-checkups button{margin-left:.35rem}
+.today-grooming [data-groom] .tool-chip,.today-grooming>.tool-chip{margin-left:.35rem}.today-grooming .groom-form{margin-top:.55rem}
 @media(max-width:760px){.checkup-row{grid-template-columns:minmax(0,1fr) auto}.checkup-row .checkup-month{grid-column:1/-1}}
 .groom-list{display:grid;gap:.45rem}
 .groom-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.5rem .8rem;padding:.6rem .8rem;border:1px solid var(--rim);border-radius:10px;background:var(--bg3)}
@@ -3699,6 +3700,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <section class="weekly-card" id="weekly-card" hidden aria-labelledby="weekly-title"></section>
   <p class="today-body owner-only" id="today-body" hidden role="status"></p>
   <p class="today-body today-checkups owner-only is-notable" id="today-checkups" hidden></p>
+  <div class="today-body today-grooming owner-only" id="today-grooming" hidden></div>
   <section class="weekly-review" id="weekly-review" hidden aria-label="Weekly review"></section>
 
   <div class="hero" id="daily-intelligence" tabindex="-1">
@@ -4453,7 +4455,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   </section>
   <section class="command-panel about-panel owner-only" id="about-grooming" aria-labelledby="about-grooming-title">
     <div class="command-panel-head"><div class="command-panel-title" id="about-grooming-title">Grooming</div></div>
-    <p class="about-intro">Haircut, sauna, massage and anything else you keep on a rhythm. Set how often and the day you last went; <b>Done</b> records a visit and works out the next one. <b>Plan</b> puts a session on your Calendar, and on the morning push that day. What is due shows on Calendar.</p>
+    <p class="about-intro">Haircut, sauna, massage and anything else you keep on a rhythm. Set how often and the day you last went; <b>Done</b> records a visit and works out the next one. <b>Plan</b> puts a session on your Calendar, and on the morning push that day. What is due shows on Today and Calendar.</p>
     <div class="groom-list" id="groom-list"><p class="rel-none-txt">Loading…</p></div>
     <div class="groom-add" id="groom-add"></div>
     <p class="about-status" id="groom-status" role="status"></p>
@@ -4516,7 +4518,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p><b>Apple Health</b> — tap <b>Connect</b> on your iPhone and follow <b>Set up the Shortcut on your iPhone</b>: a Shortcut called Daybook Health sends the last 3 days of steps, walking distance, time in bed (from your sleep schedule) and, if you log it, weight, each time you open Outlook. Daybook adds them up per day on the day where you were (a night counts on the day you woke up), keeps the larger reading when a day is sent twice, and turns away numbers no body produces. The reply shows as a notification, and <b>About you</b> lists the last 14 days. Only your account can read them and no AI sees them yet. The code is shown once and works only for sending; <b>New code</b> or <b>Disconnect</b> stops the old one at once.</p>
       <p>Once it sends, <b>Today</b> shows a <b>Body</b> line under This week: yesterday's steps and last night's time in bed. It turns amber when steps were well under or over your usual (the middle of your last 14 days) or when short nights (under 6 hours in bed) repeat, and only then does it ride on the morning push. A weekly commitment that names a number Apple Health can check (<i>8,000 steps</i>, <i>3 km</i>, <i>in bed by 11:30 pm</i>, <i>7 hours in bed</i>, in its words or in How you'll know) <b>ticks itself</b>: a step goal once the day is over and a send has come in, a sleep goal for the evening you went to bed. Those ticks show as ringed dots, and the morning check-in stops asking about them. Untick one and it stays off. "Walk 30 minutes" cannot tick itself: an iPhone without a Watch does not record exercise minutes.</p>
       <p><b>Health basics</b> — your birth year, which screenings to include, and the month you last had each check-up. Daybook works out what is next due from Australian guidelines for adults at average risk (blood pressure, heart and diabetes risk checks, bowel screening, dental, eyes, the flu vaccine, the screenings for women, and the pneumococcal and two-dose shingles vaccines from 65), each linking its source. If your doctor gave you a different date, put it in <b>Next due</b>; it replaces the schedule for that check until you mark it done. What is due shows on <b>Today</b> with a <b>Done</b> button (it records this month), on <b>Calendar</b>, and as the health idea in your weekly review. It never reads results, and your doctor may set a different schedule: untick a check with <b>Not for me</b>.</p>
-      <p><b>Grooming</b> — on <b>About you</b>, your haircut, sauna, massage and anything else you keep on a rhythm (add a barber shave, nails, a facial or one you name). Pick how often and the day you last went, and Daybook works out when each is next due: due soon a few days before, overdue once it is a quarter of the gap late (two days for a weekly sauna, a week for a monthly haircut). <b>Plan</b> puts a session on your Calendar as one of your own events, with where you go; move or delete it on Calendar and Grooming follows, and the morning push lists it on the day. <b>Done</b> records today, or the planned day once it has passed, takes the plan off your Calendar, and the next due day follows from how often. What is due and not planned shows on <b>Calendar</b>.</p>
+      <p><b>Grooming</b> — on <b>About you</b>, your haircut, sauna, massage and anything else you keep on a rhythm (add a barber shave, nails, a facial or one you name). Pick how often and the day you last went, and Daybook works out when each is next due: due soon a few days before, overdue once it is a quarter of the gap late (two days for a weekly sauna, a week for a monthly haircut). <b>Plan</b> puts a session on your Calendar as one of your own events, with where you go; move or delete it on Calendar and Grooming follows, and the morning push lists it on the day. <b>Done</b> records today, or the planned day once it has passed, takes the plan off your Calendar, and the next due day follows from how often. What is due and not planned shows on <b>Calendar</b>. <b>Today</b> lists a plan whose day went by (did you go?), what is overdue or due, a session today or tomorrow and what is due soon, up to three, each with Plan and Done; before anything has a day it asks once to set it up (<b>Not now</b> hides that for two weeks).</p>
       <p><b>Lifestyle questions</b> — once the morning check-in's commitment question is done (or when there is none), it asks one question about yesterday, a different one each day: drinks, a late meal, protein at breakfast, 20 minutes of daylight, and your energy. One tap, or <b>Not now</b>. Nothing is counted or scored; the answers add up as a line each in your Sunday review (“Drinks: None on 3 days, 3 or more on 1”) and, once Apple Health has a few weeks of your sleep and steps, will be set against them.</p>
       <p><b>This week's health research</b> — every Sunday at 5:15 a web search finds up to three findings from the last two weeks on sleep, activity, nutrition, alcohol, ageing or stress. Only meta-analyses, systematic reviews, randomised trials, large cohort studies and health-body guidelines count; animal studies, supplements and medicines are left out, and a link is kept only if the search really returned it. That is all that is checked: the date, design, numbers and summary are the AI's reading of the page, not checked against the paper, so open the source before acting on one. Each finding says what it can show: a cohort study only a link, not cause; trials can show cause. The AI is told only your age band (from Health basics) and a fixed line about how you live (desk work, travel, late poker), never your steps, sleep, answers or check-ups. It shows on <b>Today</b> for two days with the week it covers (<b>Got it</b> hides it); the Sunday review lists the headlines for that week only, and one “Try” from the latest Sunday is offered as a commitment idea. An older week is never shown as this week's. The Sunday job and your own builds share one budget of 8 a month. It reports what studies found; it is not medical advice. On the cost card as health-research.</p>
       <p>Each matched meeting gets a <b>meeting brief</b> on its own: at 18:00 for tomorrow's meetings and at 6:00 for today's, up to three a day (about $0.31 each, on the cost card as meeting-brief-auto). It is the same brief as <b>Build brief</b>, gathered from your last six weeks on the account plus a web search; only the meeting's title, time and account go to the AI. The meeting shows in the <b>Morning 5</b> (“Tomorrow 08:00 · Suncorp weekly catch-up · Meeting brief ready”) and in the morning push; tapping it opens the brief.</p>
@@ -5087,6 +5089,7 @@ function onSignedIn() {
   renderTodayAsk();
   renderTodayBody();
   renderTodayCheckups();
+  renderTodayGrooming();
   renderTodayResearch();
   setApplicationLocked(false);
   document.querySelectorAll('.page').forEach(function(el) { el.inert = false; });
@@ -5450,7 +5453,7 @@ function switchPage(id, el) {
   if (boostHere && window.renderDailyBoost) window.renderDailyBoost();
   if (boostHere && window.renderWeeklyMirror) window.renderWeeklyMirror();
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayResearch(); }
+  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayGrooming(); renderTodayResearch(); }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -5465,7 +5468,7 @@ function switchPage(id, el) {
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayResearch(); }
+  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayGrooming(); renderTodayResearch(); }
   if (id==='research') pending = renderResearchList();
   if (id==='radar') pending = renderRadar();
   if (id==='journal') pending = renderJournal();
@@ -7376,7 +7379,37 @@ function paintGrooming() {
     (due ? due + ' due' : 'Nothing due') + (planned ? ' · ' + planned + ' planned' : ''));
   if (_groomEvents === null) setText('groom-status', 'Your Calendar could not be read, so plans are not shown and Plan is off. Reload to try again.');
 }
-function groomRepaint() { paintGrooming(); }
+function groomRepaint() { paintGrooming(); return renderTodayGrooming(); }
+// Today: a plan to confirm, what is overdue or due, a session today or
+// tomorrow, then what is due soon, each with Plan and Done. Before anything
+// is dated, one line that leads to the box (Not now hides it for 14 days).
+var GROOM_SETUP_LATER = 'daybook-grooming-later';
+async function renderTodayGrooming() {
+  var el = document.getElementById('today-grooming'), G = window.GroomingCore, uid = window._firebaseUid || null;
+  if (!el) return;
+  if (!uid || window.daybookMember || !G) { el.hidden = true; return; }
+  await loadGrooming();
+  if (!_groomFor || window._firebaseUid !== uid) { el.hidden = true; return; }
+  var today = checkupToday(), items = groomItems(), line = G.todayLine(items, today);
+  if (!line) { el.hidden = true; return; }
+  if (line.setup) {
+    var until = '';
+    try { until = localStorage.getItem(GROOM_SETUP_LATER) || ''; } catch (e) {}
+    if (until > today) { el.hidden = true; return; }
+    var names = items.slice(0, 3).map(function(i) { return i.title.toLowerCase(); });
+    el.classList.remove('is-notable');
+    el.innerHTML = 'Grooming: set the day you last had a ' + esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' or ' + names[names.length - 1] : names[0]) + ', and Daybook will tell you here when each is due.' +
+      '<button type="button" class="tool-chip" data-groom-act="setup">Set it up</button><button type="button" class="tool-chip" data-groom-act="later">Not now</button>';
+    el.hidden = false; return;
+  }
+  var open = line.items.filter(function(i) { return _groomOpen['today:' + i.id] === 'plan'; })[0];
+  el.classList.toggle('is-notable', line.notable);
+  el.innerHTML = 'Grooming: ' + line.items.map(function(i) {
+    return '<span data-groom="' + esc(i.id) + '" data-groom-place="today"><b>' + esc(i.title) + '</b> ' + esc(G.stateText(i, today)) + groomButtonsHtml(i) + '</span>';
+  }).join(' · ') + (line.more ? ' · <a href="#about" data-groom-act="setup">+' + line.more + ' more</a>' : '') +
+    (open ? '<div data-groom="' + esc(open.id) + '" data-groom-place="today">' + groomPlanHtml(open, today) + '</div>' : '');
+  el.hidden = false;
+}
 async function groomFreshEvents() {
   try { _groomEvents = await window.fbLoadDaybookEvents(); } catch (e) { _groomEvents = null; }
   return _groomEvents;
@@ -7397,7 +7430,7 @@ async function groomRemoveEvent(id, events) {
 async function groomAction(act, id, row) {
   var G = window.GroomingCore, today = checkupToday(), place = row ? row.getAttribute('data-groom-place') : 'about', key = place + ':' + id;
   if (act === 'plan' || act === 'more') {
-    _groomOpen[key] = _groomOpen[key] === act ? '' : act; groomRepaint();
+    _groomOpen[key] = _groomOpen[key] === act ? '' : act; await groomRepaint();
     // The day for a plan; where he goes for details (the name is rarely changed).
     var again = document.querySelector('[data-groom-place="' + place + '"][data-groom="' + id + '"] ' + (act === 'plan' ? '[data-groom-plan="date"]' : '[data-groom-more="where"]'));
     if (again) again.focus();
@@ -7405,6 +7438,8 @@ async function groomAction(act, id, row) {
   }
   if (act === 'close') { delete _groomOpen[key]; groomRepaint(); return; }
   if (act === 'other') { _groomOther = true; groomRepaint(); var own = document.getElementById('groom-own'); if (own) own.focus(); return; }
+  if (act === 'setup') { Promise.resolve(switchPage('about', document.querySelector('.ntab[data-page="about"]'))).then(function() { aboutJump('about-grooming'); }); return; }
+  if (act === 'later') { try { localStorage.setItem(GROOM_SETUP_LATER, WeeklyReviewCore.offset(today, 14)); } catch (e) {} renderTodayGrooming(); return; }
   if (_groomBusy) return;
   var item = row ? groomItem(id) : null;
   if (row && !item) { groomRepaint(); return; }
@@ -7474,6 +7509,7 @@ document.addEventListener('click', function(event) {
   if (add) { groomAction('add', add.getAttribute('data-groom-add'), null); return; }
   var b = t && t.closest('[data-groom-act]');
   if (!b || b.disabled || !window.GroomingCore) return;
+  if (b.tagName === 'A') event.preventDefault();
   var row = b.closest('[data-groom]');
   groomAction(b.getAttribute('data-groom-act'), row ? row.getAttribute('data-groom') : '', row);
 });
