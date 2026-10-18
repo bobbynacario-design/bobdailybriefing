@@ -23,9 +23,13 @@ async function makeScout(db, uid) {
   let raw;try{raw=parseBriefing(extractText(json));}catch(e){throw new HttpsError('internal','Scout returned an unreadable shortlist. Your previous shortlist is kept.');}
   if(!raw||!Array.isArray(raw.items))throw new HttpsError('internal','Scout returned no valid shortlist.');
   const allowed=searchUrls(json).map(ScoutCore.url).filter(Boolean);
-  const items=await Scout.checkDates(ScoutCore.clean(raw.items,allowed,phtDateKey()),fetch);
-  if(raw.items.length&&!items.length)throw new HttpsError('internal','No opportunities passed source and date checks. Your previous shortlist is kept.');
-  const result={uid,kind:'scout-latest',items,generatedAt:new Date().toISOString(),week:WeeklyReviewCore.weekStart(phtDateKey())};
+  // What each lane returned and why picks were left out, kept with the
+  // shortlist so an empty lane can explain itself.
+  const stats={};
+  const items=await Scout.checkDates(ScoutCore.clean(raw.items,allowed,phtDateKey(),stats),fetch,undefined,stats);
+  const checks=ScoutCore.kept(stats,items);
+  if(raw.items.length&&!items.length){logger.warn('Scout: nothing passed the checks',checks);throw new HttpsError('internal','No opportunities passed source and date checks. Your previous shortlist is kept.');}
+  const result={uid,kind:'scout-latest',items,checks,generatedAt:new Date().toISOString(),week:WeeklyReviewCore.weekStart(phtDateKey())};
   await db.collection(BRIEFINGS_COLL).doc('scout-latest-'+uid).set(result);
   return result;
 }

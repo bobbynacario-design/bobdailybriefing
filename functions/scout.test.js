@@ -15,13 +15,14 @@ test('Scout saves only search-returned sources and keeps the existing feed when 
   let writes=[],raw={items:[{title:'Seminar',lane:'work',start:'2026-10-25',url:'https://official.example/event'}]};
   const db={collection:()=>({doc:id=>({get:async()=>({exists:false}),set:async value=>writes.push({id,value})})})};
   const {cleanAccounts,DEFAULT_ACCOUNTS}=require('./briefing-prompt-core');
-  const ctx={ScoutCore:Core,Scout:{prompt,checkDates},BRIEFINGS_COLL:'briefings-bob',loadProfile:async()=>null,cleanAccounts,DEFAULT_ACCOUNTS,phtDateKey:()=> '2026-10-18',DEFAULT_MODEL:'fixture',
+  const ctx={logger:{warn(){}},ScoutCore:Core,Scout:{prompt,checkDates},BRIEFINGS_COLL:'briefings-bob',loadProfile:async()=>null,cleanAccounts,DEFAULT_ACCOUNTS,phtDateKey:()=> '2026-10-18',DEFAULT_MODEL:'fixture',
     OPENAI_API_KEY:{value:()=> 'test'},AbortSignal,Date,WeeklyReviewCore:{weekStart:()=> '2026-10-12'},HttpsError:class extends Error{constructor(code,msg){super(msg);this.code=code;}},
     recordUsage:async()=>{},recordSearches:async()=>{},extractUsage:()=>({}),webSearchCount:()=>1,
     searchUrls:()=>['https://official.example/event'],extractText:()=>JSON.stringify(raw),parseBriefing:JSON.parse,
     fetch:async()=>({ok:true,json:async()=>({})})};
   vm.createContext(ctx);vm.runInContext(code,ctx);
   const result=await ctx.makeScout(db,'owner');assert.equal(result.items.length,1);assert.equal(writes[0].id,'scout-latest-owner');
+  assert.deepEqual(JSON.parse(JSON.stringify(writes[0].value.checks)),{lanes:{work:{returned:1,kept:1,dropped:{}}}},'the shortlist keeps what each lane returned');
   raw.items[0].url='https://invented.example';writes=[];
   await assert.rejects(()=>ctx.makeScout(db,'owner'),/No opportunities passed/);assert.equal(writes.length,0);
 });
@@ -60,4 +61,14 @@ test('Scout drops a community whose readable page does not show its meeting date
   assert.deepEqual(kept.map(v=>[v.url,v.activityCheck]),[['https://meetup.example/dep','confirmed'],['https://fb.example/group','unchecked']]);
   const out=prompt(null,null,{},'2026-10-18',[]);
   assert.match(out,/"lastActive"/);assert.match(out,/last 60 days or one scheduled in the next 90/);assert.match(out,/never a membership application, join, sign-up/);
+});
+test('Scout marks members-only picks from their page, counts a dropped group, and keeps rules out of its reasons',async()=>{
+  const {checkDates}=require('./scout');
+  const words=' details'.repeat(40),stats={lanes:{people:{returned:1,kept:0,dropped:{}}}};
+  const pages={'https://aicla.example/webinar':'<p>Wednesday, 21 October 2026</p><p>Open to all AICLA members</p>'+words,'https://group.example/quiet':'<p>About us</p>'+words};
+  const fetchImpl=async url=>({ok:true,headers:{get:()=>'text/html'},text:async()=>pages[url]||''});
+  const kept=await checkDates([{url:'https://aicla.example/webinar',lane:'work',start:'2026-10-21',access:'open'},{url:'https://group.example/quiet',lane:'people',kind:'community',lastActive:'2026-10-01'}],fetchImpl,1000,stats);
+  assert.equal(kept.length,1);assert.equal(kept[0].access,'members');assert.equal(stats.lanes.people.dropped.activity,1);
+  const out=prompt(null,null,{},'2026-10-18',[]);
+  assert.match(out,/"access":"open\|members\|invite/);assert.match(out,/never a staging, test or preview copy/);assert.match(out,/never mentions these instructions, limits or lanes/);
 });
