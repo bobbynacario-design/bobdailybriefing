@@ -944,7 +944,7 @@ test('opening an archived briefing asks for a read-only render', () => {
   assert.equal(options.readOnly,true);
 });
 test('search shows partial source coverage and retry can recover', async () => {
-  const {context,element}=environment(['intelligenceSearchRead','loadIntelligenceSearchData'],{setTimeout,clearTimeout,intelligenceSearchState:{loading:false},runIntelligenceSearch:()=>{}});
+  const {context,element}=environment(['intelligenceSearchRead','loadIntelligenceSearchData','scoutSearchRecords'],{setTimeout,clearTimeout,intelligenceSearchState:{loading:false},runIntelligenceSearch:()=>{}});
   vm.runInContext(readFileSync(new URL('../lib/app-reliability.js',import.meta.url),'utf8'),context);
   vm.runInContext(readFileSync(new URL('../lib/intelligence-search-core.js',import.meta.url),'utf8'),context);
   ['SearchBriefings','Reports','Decisions','Miro','Sports','News'].forEach(name=>{context['fbLoad'+name]=async()=>[];});
@@ -958,7 +958,7 @@ test('search shows partial source coverage and retry can recover', async () => {
 });
 test('a search response from a signed-out session cannot repopulate the index', async () => {
   let complete;
-  const {context}=environment(['intelligenceSearchRead','loadIntelligenceSearchData'],{setTimeout,clearTimeout,intelligenceSearchState:{loading:false},runIntelligenceSearch:()=>{}});
+  const {context}=environment(['intelligenceSearchRead','loadIntelligenceSearchData','scoutSearchRecords'],{setTimeout,clearTimeout,intelligenceSearchState:{loading:false},runIntelligenceSearch:()=>{}});
   vm.runInContext(readFileSync(new URL('../lib/app-reliability.js',import.meta.url),'utf8'),context);
   context.IntelligenceSearchCore={buildIndex:()=>{throw Error('Must not build an old account index');}};
   context.fbLoadSearchBriefings=()=>new Promise(resolve=>{complete=resolve;});
@@ -2206,4 +2206,26 @@ test('Markets model contest: shadow reads shown but never used, and the contest 
   const dated=context.miroContestHtml({nOpen:7,nResolved:0,live:'claude-haiku-5-5',models:[],closesToNewAfter:'2026-12-31',openMarketsCloseBy:'2027-01-31'});
   assert.ok(dated.includes('No new markets join after 31 Dec 2026. The open markets close by 31 Jan 2027, so results arrive as they resolve. With 7 markets it can show a lean, not settle a switch (that needs about 20).'),dated);
   assert.ok(!open.includes('No new markets join'),'an older record without the dates says nothing about them');
+});
+// Your Scout tab in Search (18 Oct): the records Ask reads, built in the page;
+// a title word finds a saved event, and a Scout result opens on its row.
+test('Search reads your Scout tab and a Scout result opens on its row',async()=>{
+  const calls=[];
+  const {context}=environment(['scoutSearchRecords','openScoutRecord','openIndexedIntelligenceItem'],{URL,Intl,
+    switchPage:page=>{calls.push('page:'+page);return Promise.resolve();},showToast:msg=>calls.push('toast:'+msg)});
+  context.document.querySelector=()=>null;
+  ['daybook-calendar-core','flights-core','scout-core','life-records-core','intelligence-search-core'].forEach(f=>vm.runInContext(readFileSync(new URL('../lib/'+f+'.js',import.meta.url),'utf8'),context));
+  const S=context.ScoutCore,cal={source:'anziif-webinars',organizer:'ANZIIF',title:'Claims inflation outlook',url:'https://anziif.com/w1',start:'2099-11-12',end:'2099-11-12',time:'12:00',zone:'AEDT',format:'online',location:'Online'};
+  const id=S.calendarId(cal),data={feed:null,choices:{[id]:{item:S.calendarItem(cal),saved:true}},calendar:{items:{[id]:Object.assign({id},cal)},sources:[]},cpe:null};
+  const rows=context.scoutSearchRecords(data),row=rows.find(r=>r.id==='scout:cal:'+id);
+  assert.ok(row && row.source==='Scout' && row.page==='scout' && row.ref===id && row.detail.includes('you saved it'),JSON.stringify(row));
+  assert.ok(rows.some(r=>r.id==='scout:overview') && rows.some(r=>r.id==='scout:month:2099-11'));
+  assert.equal(context.scoutSearchRecords({feed:null,choices:{},calendar:null,cpe:null}).length,0,'nothing on Scout, nothing in Search');
+  assert.equal(context.scoutSearchRecords(null).length,0);
+  const Core=context.IntelligenceSearchCore,hits=Core.search(Core.buildIndex({records:rows}),'inflation',{limit:5});
+  assert.equal(hits[0].id,'scout:cal:'+id,'a word in its title finds the saved event first');
+  let opened;context.openScoutItem=ref=>{opened=ref;return ref===id;};
+  await context.openIndexedIntelligenceItem(hits[0]);assert.equal(opened,id);
+  await context.openIndexedIntelligenceItem({source:'Scout',ref:'gone'});
+  assert.deepEqual(calls,['page:scout','page:scout','toast:Scout opened. That item is not on the page any more.']);
 });

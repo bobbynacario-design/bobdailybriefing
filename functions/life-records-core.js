@@ -6,7 +6,7 @@
   // starred in PokerHQ, the Flights scout and his own Trips (booked trips,
   // flight and hotel prices for his trips, fare watches), his PSE watchlist,
   // his health, and his Scout tab (the work calendar, what he chose there and
-  // his CIA CPE log). Each part also gets an overview
+  // his CIA CPE log; the app's Search reads this part too). Each part also gets an overview
   // computed here across all its records, so a planning question is answered
   // from figures the app worked out rather than ones a model pieced together.
   // Pure: the caller reads the documents and passes the cores in.

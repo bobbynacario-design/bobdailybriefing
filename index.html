@@ -54,6 +54,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/health-core.js"></script>
 <script src="./lib/checkup-core.js"></script>
 <script src="./lib/lifestyle-core.js"></script>
+<script src="./lib/life-records-core.js"></script>
 <script src="./lib/weekly-review-ui.js"></script>
 <script src="./lib/client-note.js"></script>
 
@@ -4542,7 +4543,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <ul>
         <li><b>Synced and private</b> — notes, reminders, read marks and experiments follow your sign-in to every device and are visible only to you.</li>
         <li><b>Two devices at once</b> — edits to different parts of a day both keep. If the same note changed in both places, the other wording is kept under <b>Recovered reflection versions</b> to use or dismiss.</li>
-        <li><b>Find anything</b> — <b>Ctrl+K</b> searches your notes alongside briefings, research, decisions, evidence sets, Go deeper dossiers, meeting briefs, weekly reads and Your numbers; a result opens where it lives. Words match from their start, so <b>eth</b> finds ETH and Ethereum but not “together”.</li>
+        <li><b>Find anything</b> — <b>Ctrl+K</b> searches your notes alongside briefings, research, decisions, evidence sets, Go deeper dossiers, meeting briefs, weekly reads, Your numbers and your Scout tab (work-calendar events, what you saved there and your CPE log); a result opens where it lives, a Scout one on its own row. Words match from their start, so <b>eth</b> finds ETH and Ethereum but not “together”.</li>
         <li><b>Nothing is thrown away</b> — the latest 90 days stay on the page; older ones move to a yearly archive that search and <b>Copy all reflections</b> still reach.</li>
       </ul>
     </div>
@@ -5506,7 +5507,7 @@ function loadIntelligenceSearchData() {
   var state = intelligenceSearchState;
   state.loading = true;
   setText('intel-search-status','Loading account archive and feed snapshots…');
-  var names = ['Briefings','Research','Decisions','Radar','Markets','Sports','News','Evidence','Dossiers','Meeting briefs','Weekly reads','Your numbers','Radar journal'];
+  var names = ['Briefings','Research','Decisions','Radar','Markets','Sports','News','Evidence','Dossiers','Meeting briefs','Weekly reads','Your numbers','Radar journal','Scout'];
   var uid = window._firebaseUid || null;
   // Your own saved work, besides the archive: evidence sets, Go deeper dossiers,
   // meeting briefs, weekly reads (the owner's only) and Your numbers.
@@ -5518,7 +5519,9 @@ function loadIntelligenceSearchData() {
     window.fbLoadGrounding,
     // How each Radar score band has done before. Optional: it only adds a line
     // to each Radar record, so without it Search is not partial.
-    function() { return window.fbLoadJournal ? window.fbLoadJournal() : null; }];
+    function() { return window.fbLoadJournal ? window.fbLoadJournal() : null; },
+    // Your Scout tab (owner only): the work calendar, what you chose there and your CPE log.
+    function() { return uid && !window.daybookMember && window.fbLoadScout ? window.fbLoadScout() : null; }];
   state.promise = Promise.all(loaders.map(function(loader,i) { return intelligenceSearchRead(loader,i < 3 ? [] : null); })).then(function(results) {
     if (state !== intelligenceSearchState) return [];
     var data = results.map(function(result) { return result.value; });
@@ -5528,7 +5531,7 @@ function loadIntelligenceSearchData() {
     window._reportFeed = state.reports;
     var builtins = typeof BUILTIN_REPORTS !== 'undefined' ? BUILTIN_REPORTS : [];
     state.index = window.IntelligenceSearchCore.buildIndex({briefings:state.briefings,reports:builtins.concat(state.reports),decisions:data[2],radar:data[3],markets:data[4],sports:data[5],news:data[6],
-      evidence:data[7],dossiers:data[8],meetingBriefs:data[9],mirrors:data[10],grounding:data[11],radarJournal:data[12]});
+      evidence:data[7],dossiers:data[8],meetingBriefs:data[9],mirrors:data[10],grounding:data[11],radarJournal:data[12],records:scoutSearchRecords(data[13])});
     state.loaded = true; state.loading = false; state.loadedAt = Date.now(); state.promise = null;
     setText('intel-search-coverage',(state.failures.length ? 'Unavailable: ' + state.failures.join(', ') + '. Results are partial. ' : 'All sources loaded. ') + 'Archive: ' + state.briefings.length + ' briefings (up to 100).');
     runIntelligenceSearch((document.getElementById('intel-search-input') || {}).value || '');
@@ -5687,6 +5690,20 @@ function openReflectionDay(day) {
   if (window.openDailyBoostDay && window.openDailyBoostDay(day)) return;
   switchPage('about', document.querySelector('.ntab[data-page="about"]'));
 }
+// Your Scout tab in Search: the same records Ask reads (LifeRecordsCore's
+// Scout part), from what fbLoadScout returns. Nothing when Scout holds nothing.
+function scoutSearchRecords(data) {
+  if (!data || !window.LifeRecordsCore) return [];
+  var choices = data.choices || {};
+  if (!data.calendar && !data.cpe && !Object.keys(choices).length) return [];
+  return window.LifeRecordsCore.records({scout: {choices: choices, calendar: data.calendar || null, cpe: data.cpe || null, latest: data.feed || null}});
+}
+// A Scout record opens the Scout tab on its event, pick or CPE log entry.
+function openScoutRecord(ref) {
+  return Promise.resolve(switchPage('scout', document.querySelector('.ntab[data-page="scout"]'))).then(function() {
+    if (window.openScoutItem && !window.openScoutItem(ref)) showToast('Scout opened. That item is not on the page any more.', 'info');
+  });
+}
 function openIndexedIntelligenceItem(item) {
   if (!item) return;
   if (item.source === 'News' && openNewsRecord(item.ref)) return;
@@ -5696,6 +5713,7 @@ function openIndexedIntelligenceItem(item) {
   // His life data (Ask Daybook): PokerHQ is its own app; commitments are on
   // Today's This week card; a calendar entry opens on its day.
   if (item.source === 'Poker') { window.open('https://bobbynacario-design.github.io/pokerhq/', '_blank', 'noopener'); return; }
+  if (item.source === 'Scout') return openScoutRecord(item.ref);
   if (item.source === 'Commitments') {
     switchPage('today', document.querySelector('.ntab[data-page="today"]'));
     var week = document.getElementById('weekly-card');
