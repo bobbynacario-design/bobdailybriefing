@@ -580,7 +580,7 @@ window.fbCheckCalendarNow = async function() {
   var check = httpsCallable(functions, 'checkCalendarNow', {timeout: 70000});
   return (await check({})).data;
 };
-// Apple Health (functions/health-link.js): the days the Shortcut has sent, and
+// Apple Health (functions/health-link.js): the days the phone has sent, and
 // the private code it sends with. The code is shown once; the server keeps
 // only its hash.
 window.fbLoadHealth = async function(uid) {
@@ -3341,7 +3341,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 .research-you{margin:.3rem 0 0;font-size:12.5px;line-height:1.5;color:var(--txt2)}.research-you b{color:var(--txt)}
 .research-actions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.7rem}
 .weekly-research{margin-top:.8rem}.weekly-research ul{margin:.3rem 0 0;padding-left:1.1rem;font-size:13px;line-height:1.55}
-.health-how ol{margin:.5rem 0;padding-left:1.3rem;line-height:1.6;max-width:80ch}.health-how li{margin:.3rem 0}.health-how code{font-family:var(--mono);font-size:12px;color:var(--gold)}
+.health-how .health-shortcut{margin-top:.6rem}.health-how ol{margin:.5rem 0;padding-left:1.3rem;line-height:1.6;max-width:80ch}.health-how li{margin:.3rem 0}.health-how code{font-family:var(--mono);font-size:12px;color:var(--gold)}
 @media(max-width:560px){.health-code-row{grid-template-columns:minmax(0,1fr) auto}.health-code-row .about-sublabel{grid-column:1/-1}.health-days{font-size:12.5px}.health-days th,.health-days td{padding:.4rem .3rem}.health-days th{letter-spacing:.03em}}
 .calendar-none{margin:0;padding:.7rem .85rem;font-size:13px;color:var(--txt3);border:1px dashed var(--rim2);border-radius:10px}
 .calendar-how{margin-top:.9rem;padding-top:.8rem;border-top:1px solid var(--rim);font-size:13px;color:var(--txt2)}.calendar-how summary{cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--txt)}.calendar-how p,.calendar-how ul{margin:.5rem 0;line-height:1.6;max-width:80ch}
@@ -4421,13 +4421,27 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   </section>
   <section class="command-panel about-panel owner-only" id="about-health" aria-labelledby="about-health-title">
     <div class="command-panel-head"><div class="command-panel-title" id="about-health-title">Apple Health</div></div>
-    <p class="about-intro">A Shortcut on your iPhone sends your steps, walking distance and time in bed (from your sleep schedule) to Daybook, plus weight if you log it in Health. Only your account can read them, and nothing here goes to an AI. Each send replaces that day's numbers, so it can run as often as you like.</p>
+    <p class="about-intro">An app on your iPhone sends your steps, walking distance and time in bed (from your sleep schedule) to Daybook, plus weight if you log it in Health. Only your account can read them; Ask Daybook reads them when you ask about your health. Each send replaces that day's numbers, so it can run as often as you like.</p>
     <div id="health-link"></div>
     <div id="health-code" hidden></div>
     <span class="about-status" id="health-status" role="status"></span>
     <div id="health-days"></div>
-    <details class="calendar-how health-how" id="health-how"><summary>Set up the Shortcut on your iPhone</summary>
-      <p>Once, on the iPhone, about 10 minutes. For time in bed, open <b>Health → Browse → Sleep</b>, set up a <b>Sleep Schedule</b>, and turn on <b>Track Time in Bed with iPhone</b> if you see it. Without an Apple Watch the iPhone records time in bed, not time asleep.</p>
+    <details class="calendar-how health-how" id="health-how"><summary>Set up on your iPhone</summary>
+      <p>Once, on the iPhone, about 5 minutes, with the <b>Health Auto Export</b> app: it does the sending, so there is nothing to build. For time in bed, first open <b>Health → Browse → Sleep</b>, set up a <b>Sleep Schedule</b>, and turn on <b>Track Time in Bed with iPhone</b> if you see it. Without an Apple Watch the iPhone records time in bed, not time asleep.</p>
+      <ol>
+        <li>Open Daybook on the iPhone, come to this box and tap <b>Connect</b> above (<b>New code</b> if you connected before). You will copy the <b>Address</b> and the <b>Authorization</b> code from here. If they are gone when you come back from the app, tap <b>New code</b> again.</li>
+        <li>Install <b>Health Auto Export – JSON+CSV</b> from the App Store and open it. Allow Health access for <b>Steps</b>, <b>Walking + Running Distance</b> and <b>Sleep</b> (and <b>Weight</b> if you log it). Sending to Daybook needs its <b>Premium</b>; it starts with a 7-day free trial.</li>
+        <li>In the app's menu, tap <b>Automations</b> → <b>New Automation</b>. Automation Type: <b>REST API</b>. Name: <b>Daybook</b>.</li>
+        <li><b>URL</b>: paste the Address.</li>
+        <li><b>HTTP Headers</b> → <b>Add Headers</b>. Left box: <code>Authorization</code>. Right box: paste the code (it starts <code>Bearer dbh_</code>).</li>
+        <li><b>Data Type</b>: <b>Health Metrics</b>. In <b>Select Health Metrics</b>, pick <b>Step Count</b>, <b>Walking + Running Distance</b> and <b>Sleep Analysis</b>, plus <b>Weight &amp; Body Mass</b> only if you log it. Nothing else.</li>
+        <li><b>Export Format</b>: JSON. <b>Export Version</b>: 2. <b>Date Range</b>: Default. <b>Summarize Data</b>: on. <b>Time Grouping</b>: Day. <b>Batch Requests</b>: off.</li>
+        <li><b>Sync Cadence</b>: every 1 hour. Save.</li>
+        <li>Test it once: in the automation, tap <b>Manual Export</b> → <b>Export</b>. Reopen this page and the table fills in. If it doesn't, the app's <b>View Activity Logs</b> shows what went wrong.</li>
+      </ol>
+      <p>Your iPhone keeps Health locked while the phone is locked, so the app sends while you use the phone, not at a set time. Its widget on your Home Screen helps it run more often.</p>
+      <p>The code works like a password: whoever has it can send readings into your Daybook (not read them). If it is ever exposed, tap <b>New code</b> and paste the new one into the header (step 5).</p>
+      <details class="health-shortcut"><summary>Or build it yourself with Shortcuts (free, slower to set up)</summary>
       <ol>
         <li>Tap <b>Connect</b> above (on this iPhone, so you can copy and paste). Then open <b>Shortcuts</b>, tap <b>+</b> and name the shortcut <b>Daybook Health</b>.</li>
         <li>Add <b>Find Health Samples</b>: Type <b>Steps</b>, add the filter <b>Start Date is in the last 3 days</b>, and set <b>Group By</b> to <b>Day</b>.</li>
@@ -4440,7 +4454,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
         <li>Tap <b>▶</b> once. Allow Health access for each kind, and <b>Always Allow</b> the send to Daybook. The table here fills in when you reopen this page.</li>
         <li>Make it automatic: <b>Shortcuts → Automation → +</b> → <b>App</b> → pick <b>Outlook</b> (or any app you open every morning) → <b>Is Opened</b> → <b>Run Immediately</b> → <b>Daybook Health</b>. Your iPhone keeps Health locked while the phone is locked, so a time-of-day automation can fail; an app you open means the phone is unlocked.</li>
       </ol>
-      <p>The code works like a password: whoever has it can send readings into your Daybook (not read them). If it is ever exposed, tap <b>New code</b> and paste the new one into step 7.</p>
+      </details>
     </details>
   </section>
   <section class="command-panel about-panel owner-only" id="about-checkups" aria-labelledby="about-checkups-title">
@@ -4515,7 +4529,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p><b>More → About you</b> holds one profile in five parts: your work, your clients and files, what moves your numbers, what to look out for, and anything else. Each reads as text and is marked <b>Starting text</b> or <b>Your words</b>; tap <b>Edit</b> on one to change it, then <b>Save profile</b>. The briefing, Ask Daybook, Go deeper, meeting briefs, the weekly read and deep research all read it from their next run, so a change in your work mix reaches all of them at once. It starts as the profile those features already used; <b>Put back the starting profile</b> returns to it. Your words change only the facts about you: the rules (sources, no invented links, no trading advice) stay fixed.</p>
       <p>Below it, <b>What it has picked up from you</b> lists what already steers Daybook, each with what it steers: your story votes (with <b>Take back</b>), open calls, Radar setups, accounts, goals and Morning 5 priorities, plus what you open most. Nothing there is guessed. Later, Daybook will suggest profile lines from what you use, for you to approve.</p>
       <p><b>Your calendars</b> — paste your Google Calendar secret iCal address and your Outlook published ICS link (<b>Where to find each link</b> shows how). Daybook reads them read-only at 6:00 and 18:00 and keeps the title and times of every meeting, and the title and dates of every all-day entry, for the next 90 days, so your meetings, leave and holidays show on <b>Calendar</b>. Meetings in the next 36 hours whose title names one of your accounts (other names count: AAMI for Suncorp) get a brief built the evening before. To bring in Zoho People leave and company holidays, open Zoho People → Leave → Leave Summary → Calendar view → ⋯ and sync to the Google or Microsoft 365 calendar linked here. Descriptions, locations, dial-in links and guests are never read, and nothing from your calendars is sent anywhere. Treat each link like a password; it is never shown back in full.</p>
-      <p><b>Apple Health</b> — tap <b>Connect</b> on your iPhone and follow <b>Set up the Shortcut on your iPhone</b>: a Shortcut called Daybook Health sends the last 3 days of steps, walking distance, time in bed (from your sleep schedule) and, if you log it, weight, each time you open Outlook. Daybook adds them up per day on the day where you were (a night counts on the day you woke up), keeps the larger reading when a day is sent twice, and turns away numbers no body produces. The reply shows as a notification, and <b>About you</b> lists the last 14 days. Only your account can read them and no AI sees them yet. The code is shown once and works only for sending; <b>New code</b> or <b>Disconnect</b> stops the old one at once.</p>
+      <p><b>Apple Health</b> — tap <b>Connect</b> on your iPhone and follow <b>Set up on your iPhone</b>: the <b>Health Auto Export</b> app (its Premium) sends yesterday's and today's steps, walking distance, time in bed (from your sleep schedule) and, if you log it, weight, about every hour while you use the phone. A free Shortcut can do the same (its steps are there too), but it takes longer to build. Daybook adds them up per day on the day where you were (a night counts on the day you woke up), keeps the larger reading when a day is sent twice, and turns away numbers no body produces. <b>About you</b> shows the last send's reply and lists the last 14 days. Only your account can read them; Ask Daybook reads them when you ask about your health. The code is shown once and works only for sending; <b>New code</b> or <b>Disconnect</b> stops the old one at once.</p>
       <p>Once it sends, <b>Today</b> shows a <b>Body</b> line under This week: yesterday's steps and last night's time in bed. It turns amber when steps were well under or over your usual (the middle of your last 14 days) or when short nights (under 6 hours in bed) repeat, and only then does it ride on the morning push. A weekly commitment that names a number Apple Health can check (<i>8,000 steps</i>, <i>3 km</i>, <i>in bed by 11:30 pm</i>, <i>7 hours in bed</i>, in its words or in How you'll know) <b>ticks itself</b>: a step goal once the day is over and a send has come in, a sleep goal for the evening you went to bed. Those ticks show as ringed dots, and the morning check-in stops asking about them. Untick one and it stays off. "Walk 30 minutes" cannot tick itself: an iPhone without a Watch does not record exercise minutes.</p>
       <p><b>Health basics</b> — your birth year, which screenings to include, and the month you last had each check-up. Daybook works out what is next due from Australian guidelines for adults at average risk (blood pressure, heart and diabetes risk checks, bowel screening, dental, eyes, the flu vaccine, the screenings for women, and the pneumococcal and two-dose shingles vaccines from 65), each linking its source. If your doctor gave you a different date, put it in <b>Next due</b>; it replaces the schedule for that check until you mark it done. What is due shows on <b>Today</b> with a <b>Done</b> button (it records this month), on <b>Calendar</b>, and as the health idea in your weekly review. It never reads results, and your doctor may set a different schedule: untick a check with <b>Not for me</b>.</p>
       <p><b>Grooming</b> — on <b>About you</b>, your haircut, sauna, massage and anything else you keep on a rhythm (add a barber shave, nails, a facial or one you name). Pick how often and the day you last went, and Daybook works out when each is next due: due soon a few days before, overdue once it is a quarter of the gap late (two days for a weekly sauna, a week for a monthly haircut). <b>Plan</b> puts a session on your Calendar as one of your own events, with where you go; move or delete it on Calendar and Grooming follows, and the morning push lists it on the day. <b>Done</b> records today, or the planned day once it has passed, takes the plan off your Calendar, and the next due day follows from how often. What is due and not planned shows on <b>Calendar</b>. <b>Today</b> lists a plan whose day went by (did you go?), what is overdue or due, a session today or tomorrow and what is due soon, up to three, each with Plan and Done; before anything has a day it asks once to set it up (<b>Not now</b> hides that for two weeks).</p>
@@ -7010,7 +7024,7 @@ async function renderTodayBody() {
   if (!line || (!line.text && !line.stale)) { el.hidden = true; return; }
   el.className = 'today-body owner-only' + (line.notable ? ' is-notable' : '') + (line.stale ? ' is-stale' : '');
   el.innerHTML = line.text ? esc(line.text)
-    : 'Apple Health has not sent since ' + esc(H.dayLabel(line.since)) + '. Check the Daybook Health automation on your iPhone (<a href="#about" onclick="switchPage(\'about\'); return false;">About you</a>).';
+    : 'Apple Health has not sent since ' + esc(H.dayLabel(line.since)) + '. Check the Daybook automation on your iPhone (<a href="#about" onclick="switchPage(\'about\'); return false;">About you</a>).';
   el.hidden = false;
 }
 async function loadHealth(force) {
@@ -7023,9 +7037,9 @@ async function loadHealth(force) {
 function healthLinkHtml(h) {
   var link = h && h.link, last = h && h.lastReceived;
   var state = !link ? 'is-off' : !last ? 'is-saved' : last.used ? 'is-ok' : 'is-error';
-  var sub = !link ? '<span>Not connected. Tap Connect, then set up the Shortcut below.</span>'
+  var sub = !link ? '<span>Not connected. Tap Connect, then set up the app below.</span>'
     : '<span>Connected ' + esc(meetingTime(link.connectedAt)) + ' · code ending …' + esc(link.hint || '') + '</span>' + (!last
-      ? '<span class="calendar-read">Nothing received yet. Run the Shortcut once by hand to check it.</span>'
+      ? '<span class="calendar-read">Nothing received yet. Send once by hand to check it (in the app: Manual Export).</span>'
       : '<span class="calendar-read' + (last.used ? '' : ' is-error') + '">Last send ' + esc(meetingTime(last.at)) + ': ' + esc(last.message || '') + '</span>');
   var actions = !link ? '<button type="button" class="tool-chip about-primary" data-health-act="connect">Connect</button>'
     : '<button type="button" class="tool-chip" data-health-act="connect">New code</button><button type="button" class="tool-chip" data-health-act="disconnect">Disconnect</button>';
@@ -7038,7 +7052,7 @@ function healthCodeHtml(code) {
     return '<div class="health-code-row"><span class="about-sublabel">' + label + '</span><input type="text" readonly value="' + esc(value) + '" aria-label="' + label + '" onfocus="this.select()">' +
       '<button type="button" class="tool-chip" data-health-copy="' + key + '">Copy</button></div>';
   };
-  return '<div class="health-code"><p class="about-hint">Shown only now. Paste both into the Shortcut (step 7 below). If you lose them, tap New code: the old code stops working.</p>' +
+  return '<div class="health-code"><p class="about-hint">Shown only now. Paste both into the app (steps 4 and 5 below). If you lose them, tap New code: the old code stops working.</p>' +
     row('Address', code.endpoint, 'endpoint') + row('Authorization', 'Bearer ' + code.token, 'token') + '</div>';
 }
 // The last 14 days, newest first. Weight shows only once there is one.
@@ -7066,13 +7080,13 @@ function paintHealth() {
   setText('about-glance-health', !link ? 'Not connected' : !last ? 'Connected · nothing received yet' : 'Last send ' + meetingTime(last.at));
 }
 async function connectHealth() {
-  if (_health && _health.link && !confirm('Make a new code? The Shortcut stops working until you paste the new one into it.')) return;
+  if (_health && _health.link && !confirm('Make a new code? Sending stops until you paste the new one into the app.')) return;
   setText('health-status', 'Making your code…');
   try {
     var made = await window.fbCreateHealthLink();
     _healthCode = {token: made.token, endpoint: made.endpoint};
     _health = Object.assign({}, _health || {}, {link: made.link});
-    setText('health-status', 'Connected. Copy the address and code into the Shortcut now; they are not shown again.');
+    setText('health-status', 'Connected. Copy the address and code into the app now; they are not shown again.');
   } catch (e) {
     console.error('Health connect failed:', e);
     setText('health-status', 'Could not connect (' + ((e && e.message) || 'try again') + ').');
@@ -7080,7 +7094,7 @@ async function connectHealth() {
   paintHealth();
 }
 async function disconnectHealth() {
-  if (!confirm('Disconnect Apple Health? The Shortcut stops working. The days already here stay.')) return;
+  if (!confirm('Disconnect Apple Health? Sending stops. The days already here stay.')) return;
   setText('health-status', 'Disconnecting…');
   try {
     await window.fbRevokeHealthLink();
