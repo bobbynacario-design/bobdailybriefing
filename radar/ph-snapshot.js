@@ -108,12 +108,13 @@ async function buildPhSnapshot(config, prev, barSink) {
   // last doc, so a normal run is two requests per stock.
   var known = {};
   (prev.board || []).forEach(function (s) { if (s && s.symbol) known[s.symbol] = s; });
-  var board = [], failed = [];
+  var board = [], failed = [], fromPage = 0;
   for (var i = 0; i < ph.board.stocks.length; i++) {
     var item = ph.board.stocks[i];
     try {
       var got = await fetchEdgeStock(item.symbol, known[item.symbol], today, 400);
       got.bars = finishedBars(got.bars, today, mins);
+      if (got.fromPage && got.bars.length && got.bars[got.bars.length - 1].date === got.page.asOf) fromPage++;
       if (barSink) barSink[item.symbol] = got.bars;
       var metrics = stockMetrics(got.bars);
       if (!metrics) throw new Error('no daily bars');
@@ -128,6 +129,7 @@ async function buildPhSnapshot(config, prev, barSink) {
       console.log('  PSE Edge ' + item.symbol + ' skipped: ' + (e.message || e));
     }
   }
+  if (fromPage) console.log("  " + fromPage + " stock(s) took the latest session from their PSE Edge page (the chart did not have it yet).");
   board.sort(function (a, b) { return (b.marketCap || 0) - (a.marketCap || 0); });
   var breadth = buildBreadth(board);
   if (!index && !board.length) throw new Error('no PSEi data and no PSE Edge prices');

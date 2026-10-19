@@ -17,7 +17,7 @@ test('current breadth cannot be improved by older bullish rows, even when most r
   const b=buildBreadth(rows);
   assert.equal(b.asOf,'2026-10-12');assert.equal(b.currentCount,2);assert.equal(b.with200,2);assert.equal(b.above200,1);assert.equal(b.mood,'mixed');assert.equal(b.medianRet1m,null);
 });
-import { parseEdgeChart, parseEdgeStockPage, edgeDate, edgeQueryDate } from './pse-edge.js';
+import { parseEdgeChart, parseEdgeStockPage, sessionBar, edgeDate, edgeQueryDate } from './pse-edge.js';
 
 // n weekday bars ending on `end`, closes from fn(i).
 function weekdays(end, n, fn) {
@@ -118,4 +118,47 @@ test('PSE Edge stock page: the security id for the symbol asked, and the page fi
   assert.equal(p.securityId, '468'); assert.equal(p.marketCap, 602968557090);
   assert.equal(p.lastPrice, 112); assert.equal(p.high52, 144.6); assert.equal(p.low52, 109.2);
   assert.equal(parseEdgeStockPage(html, 'XYZ').securityId, null);
+});
+
+// The page as PSE Edge served it for BDO on 19 Oct 2026, 21:00 PHT, when the
+// chart still ended on Friday 16 Oct.
+const BDO_PAGE = '<select name="security_id" onchange="document.form1.submit();"> <option value="468" selected>BDO</option> </select> <span style="margin-left:1em;">As of Oct 19, 2026 02:50 PM</span>' +
+  '<tr><th>Status</th><td>Open</td><th>Market Capitalization</th><td>617,388,739,676.80</td></tr>' +
+  '<tr><th>Last Traded Price</th><td>117.00</td><th>Open</th><td>115.70</td></tr>' +
+  '<tr><th>Previous Close and Date</th><td>115.70 (Oct 16, 2026)</td><th>Change(% Change)</th><td>up&nbsp; 1.30 (1.12%)</td></tr>' +
+  '<tr><th>High</th><td>117.90</td><th>P/E Ratio</th><td></td></tr><tr><th>Value</th><td>294,267,393.00</td><th>Low</th><td>115.70</td></tr>' +
+  '<tr><th>Volume</th><td>2,511,580</td><th>52-Week High</th><td>144.60</td></tr><tr><th>52-Week Low</th><td>109.20</td></tr>';
+const BDO_CHART = [{ date: '2026-10-15', open: 112.3, high: 113.9, low: 112.2, close: 113.5, value: 178287172 },
+  { date: '2026-10-16', open: 114.2, high: 116.4, low: 113.1, close: 115.7, value: 474429503 }];
+
+test('PSE Edge stock page: the session it shows and the close before it', () => {
+  const p = parseEdgeStockPage(BDO_PAGE, 'BDO');
+  assert.equal(p.asOf, '2026-10-19'); assert.equal(p.lastPrice, 117);
+  assert.equal(p.open, 115.7); assert.equal(p.high, 117.9); assert.equal(p.low, 115.7);
+  assert.equal(p.value, 294267393); assert.equal(p.volume, 2511580);
+  assert.equal(p.prevClose, 115.7); assert.equal(p.prevDate, '2026-10-16');
+  assert.equal(p.high52, 144.6); assert.equal(p.low52, 109.2);
+});
+
+test('the session the chart lacks comes from the page, only where the page follows on from the chart', () => {
+  const p = parseEdgeStockPage(BDO_PAGE, 'BDO');
+  assert.deepEqual(sessionBar(BDO_CHART, p), { date: '2026-10-19', open: 115.7, high: 117.9, low: 115.7, close: 117, value: 294267393 });
+  // The chart has caught up: nothing to add.
+  assert.equal(sessionBar(BDO_CHART.concat([{ date: '2026-10-19', close: 117 }]), p), null);
+  // The page skips a session the chart does not have, or its previous close differs.
+  assert.equal(sessionBar(BDO_CHART.slice(0, 1), p), null);
+  assert.equal(sessionBar([BDO_CHART[0], Object.assign({}, BDO_CHART[1], { close: 115.2 })], p), null);
+  // No trades, a missing figure, or a close outside the day's range.
+  assert.equal(sessionBar(BDO_CHART, Object.assign({}, p, { volume: 0 })), null);
+  assert.equal(sessionBar(BDO_CHART, Object.assign({}, p, { high: null })), null);
+  assert.equal(sessionBar(BDO_CHART, Object.assign({}, p, { lastPrice: 118.5 })), null);
+  assert.equal(sessionBar([], p), null); assert.equal(sessionBar(BDO_CHART, null), null);
+  // An older page (no "As of") adds nothing.
+  assert.equal(sessionBar(BDO_CHART, Object.assign({}, p, { asOf: null })), null);
+});
+
+test('a page bar shown before the close is dropped, so a daytime run stays on the last close', () => {
+  const bars = BDO_CHART.concat([sessionBar(BDO_CHART, parseEdgeStockPage(BDO_PAGE, 'BDO'))]);
+  assert.equal(finishedBars(bars, '2026-10-19', 14 * 60 + 50).pop().date, '2026-10-16');
+  assert.equal(finishedBars(bars, '2026-10-19', 21 * 60).pop().date, '2026-10-19');
 });

@@ -66,13 +66,41 @@ function parseEdgeStockPage(html, symbol) {
     var f = new RegExp('<th>\\s*' + label + '\\s*</th>\\s*<td[^>]*>([\\s\\S]*?)</td>', 'i').exec(html || '');
     return f ? num(f[1]) : null;
   }
+  var asOf = /As of ([A-Z][a-z]{2} \d{1,2}, \d{4})/.exec(html || '');
+  var prev = /<th>\s*Previous Close and Date\s*<\/th>\s*<td[^>]*>\s*([\d,.]+)\s*\(([A-Z][a-z]{2} \d{1,2}, \d{4})\)/i.exec(html || '');
   return {
     securityId: securityId,
     marketCap: field('Market Capitalization'),
     lastPrice: field('Last Traded Price'),
     high52: field('52-Week High'),
-    low52: field('52-Week Low')
+    low52: field('52-Week Low'),
+    // The session the page shows ("As of Oct 19, 2026 02:50 PM"), for sessionBar().
+    asOf: asOf ? edgeDate(asOf[1]) : null,
+    open: field('Open'),
+    high: field('High'),
+    low: field('Low'),
+    value: field('Value'),
+    volume: field('Volume'),
+    prevClose: prev ? num(prev[1]) : null,
+    prevDate: prev ? edgeDate(prev[2]) : null
   };
+}
+
+// The chart has no bar for a session until after midnight PHT, so every
+// after-close run showed the stocks one session behind the PSEi (13-16 Oct
+// 2026: PSEi on Friday's close, BDO still on Thursday's 113.50, not 115.70).
+// The stock page already has that session, so it becomes the last bar. Only
+// when the page picks up exactly where the chart ends: its previous close and
+// date are the chart's last bar, so a suspension or a changed page adds
+// nothing. A page shown before the close is dropped later by finishedBars().
+function sessionBar(bars, page) {
+  var last = bars && bars[bars.length - 1];
+  if (!last || !page || !page.asOf || page.asOf <= last.date) return null;
+  if (page.prevDate !== last.date || page.prevClose == null || Math.abs(page.prevClose - last.close) > 0.005) return null;
+  var close = page.lastPrice, open = page.open, high = page.high, low = page.low;
+  if ([close, open, high, low].some(function (v) { return v == null || !(v > 0); })) return null;
+  if (!(page.volume > 0) || low > high || close < low || close > high) return null;
+  return { date: page.asOf, open: open, high: high, low: low, close: close, value: page.value };
 }
 
 async function lookupCompanyId(symbol) {
@@ -117,7 +145,9 @@ async function fetchEdgeStock(symbol, known, todayIso, days) {
   var from = new Date(Date.parse(todayIso + 'T00:00:00Z') - (days || 400) * 86400000).toISOString().slice(0, 10);
   var bars = await fetchBars(cmpyId, securityId, from, todayIso, symbol);
   await pause(300);
-  return { cmpyId: cmpyId, securityId: securityId, name: name, page: page, bars: bars };
+  var extra = sessionBar(bars, page);
+  if (extra) bars = bars.concat([extra]);
+  return { cmpyId: cmpyId, securityId: securityId, name: name, page: page, bars: bars, fromPage: !!extra };
 }
 
-export { fetchEdgeStock, parseEdgeChart, parseEdgeStockPage, edgeDate, edgeQueryDate };
+export { fetchEdgeStock, parseEdgeChart, parseEdgeStockPage, sessionBar, edgeDate, edgeQueryDate };
