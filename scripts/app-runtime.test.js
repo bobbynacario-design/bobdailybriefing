@@ -717,6 +717,23 @@ test('feed health: each sports lane has its own pill, and a lane that kept old d
   assert.doesNotMatch(out,/>Sports </,'the umbrella record has no pill');
   assert.match(out,/NBA last run failed at fetch \(kept last good data\) \(ESPN NBA 400: Failed to get events endpoint\.\); last good data 21d old\./);
 });
+// 18-19 Oct 2026: the PSE pill went red every Sunday because the board runs Monday to Friday.
+test('feed health: Radar and PSE pills leave out the weekend, other feeds do not',()=>{
+  const NOW=Date.parse('2026-10-19T16:30:00Z'); // Tue 00:30 PHT
+  class FixedDate extends Date { constructor(...a){ super(...(a.length?a:[NOW])); } static now(){ return NOW; } }
+  const specStart=html.indexOf('var FEED_SPEC = [');
+  const {context,element}=environment(['feedAge','feedAgeText','briefingHealthRec','feedStatus','renderFeedHealth'],{esc:v=>String(v ?? ''),_briefingHistory:[],Date:FixedDate,Intl});
+  vm.runInContext(readFileSync(new URL('../lib/command-center-core.js',import.meta.url),'utf8'),context);
+  vm.runInContext(html.slice(specStart,html.indexOf('\n];',specStart)+3),context);
+  context.renderFeedHealth({feeds:{ph:{status:'ok',lastOkAt:'2026-10-16T13:30:00Z'},miro:{status:'ok',lastOkAt:'2026-10-16T13:30:00Z'},
+    radar:{status:'ok',lastOkAt:'2026-10-16T00:30:00Z'}}});
+  const out=element('feed-health').innerHTML;
+  assert.match(out,/feed-pill "[^>]*><span class="feed-dot"><\/span>PSE <span class="feed-age">3d/,'Friday night to Monday night is not stale');
+  assert.match(out,/feed-pill bad[^>]*><span class="feed-dot"><\/span>Markets </,'a daily feed still counts the weekend');
+  assert.match(out,/feed-pill warn[^>]*><span class="feed-dot"><\/span>Radar </,'a missing Monday radar is still flagged');
+  assert.match(out,/Radar has not refreshed in 4d; expects 06:00 \+ 08:30 catch-up, Mon–Fri\./);
+  assert.doesNotMatch(out,/PSE has not refreshed/);
+});
 
 const NUMBERS=['groundingShortName','groundingDay','groundingPeriod','groundingStatus','groundingNumbersHtml'];
 const escHtml=v=>String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');

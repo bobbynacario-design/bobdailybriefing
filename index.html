@@ -9365,12 +9365,14 @@ window.loadTodayDrift = async function () {
 
 var FEED_SPEC = [
   { key: 'briefing', label: 'Briefing', maxAgeH: 30,   cadence: 'daily, generated server-side' },
-  { key: 'radar',    label: 'Radar',    maxAgeH: 30,   cadence: '06:00 + 08:30 catch-up' },
+  // weekdays: Radar and PSE run Monday to Friday, so their weekends are not
+  // counted (the PSE pill went red every Sunday with nothing wrong, 18-19 Oct 2026).
+  { key: 'radar',    label: 'Radar',    maxAgeH: 30,   weekdays: true, cadence: '06:00 + 08:30 catch-up, Mon–Fri' },
   { key: 'miro',     label: 'Markets',  maxAgeH: 30,   cadence: '06:15' },
   { key: 'shopping', label: 'Clothing', maxAgeH: 102, cadence: 'Mon + Thu 08:00 PHT' },
   { key: 'flights',  label: 'Flights',  maxAgeH: 26,   cadence: '08:00 + 20:00 PHT' },
   { key: 'hotels',   label: 'Hotels',   maxAgeH: 26,   cadence: 'after each flight scout' },
-  { key: 'ph',       label: 'PSE',      maxAgeH: 30,   cadence: '06:00 + 16:30 after close' },
+  { key: 'ph',       label: 'PSE',      maxAgeH: 30,   weekdays: true, cadence: '16:30 after the close, Mon–Fri (GitHub often starts it hours late)' },
   // One pill per sports lane (sports/refresh-sports.js laneHealth): a single
   // Sports pill stayed green for three weeks while every NBA refresh failed.
   { key: 'sports-nba',    label: 'NBA',    maxAgeH: 18, cadence: '09:00 + 15:00' },
@@ -9412,6 +9414,8 @@ function feedStatus(spec, rec) {
     cls = 'mut';
   } else {
     var hours = age == null ? Infinity : age / 3600000;
+    var core = window.CommandCenterCore;
+    if (spec.weekdays && age != null && core && core.weekdayHours) hours = core.weekdayHours(Date.now() - age, Date.now());
     if (hours > spec.maxAgeH * 2) cls = 'bad';
     else if (hours > spec.maxAgeH) cls = 'warn';
   }

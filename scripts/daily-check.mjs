@@ -16,7 +16,7 @@
 import {existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -77,12 +77,18 @@ section('Feeds');
 // 9 Oct. Take it off this list if PBA comes back.
 const RETIRED = ['sports-pba'];
 const health = (await get('feed-health')) || {feeds: {}};
+// Radar and PSE run Monday to Friday, so their weekends are not counted (the
+// PSE alert fired every Sunday with nothing wrong, 18 Oct 2026).
+// The root package is ESM, so the shared core is imported for the global it sets.
+await import(pathToFileURL(path.join(root, 'lib', 'command-center-core.js')).href);
+const {weekdayHours} = globalThis.CommandCenterCore;
 Object.entries(health.feeds || {}).sort().forEach(([name, f]) => {
   const since = f.lastOkAt ? phtTime(f.lastOkAt) : 'never';
   if (RETIRED.includes(name)) return info(name + ': retired (' + (f.status || '?') + ', last ok ' + since + ')');
   if (f.status === 'failed') return alert('feed:' + name, name + ' failing, last good ' + since + ': ' + (f.message || f.stage || 'no message'));
-  const maxHours = name === 'radar' ? (marketDay ? 30 : 80) : name === 'grounding' ? 30 : 36;
-  if (f.lastOkAt && hoursAgo(f.lastOkAt) > maxHours) return alert('feed:' + name + ':stale', name + ' has not run cleanly since ' + since);
+  const maxHours = name === 'radar' || name === 'grounding' ? 30 : 36;
+  const age = f.lastOkAt && (name === 'radar' || name === 'ph' ? weekdayHours(f.lastOkAt, Date.now()) : hoursAgo(f.lastOkAt));
+  if (f.lastOkAt && age > maxHours) return alert('feed:' + name + ':stale', name + ' has not run cleanly since ' + since);
   info(name + ': ' + (f.status || '?') + ', as of ' + (f.asOf || '?') + (f.message ? ' (' + String(f.message).slice(0, 70) + ')' : ''));
 });
 
