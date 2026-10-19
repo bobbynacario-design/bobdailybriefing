@@ -2041,7 +2041,7 @@ exports.healthIngest = onRequest(
   async (request, response) => {
     const say = (status, text) => response.status(status).set("Content-Type", "text/plain; charset=utf-8").send(text);
     if (request.method !== "POST") { response.set("Allow", "POST"); say(405, "Send with the POST method."); return; }
-    if (request.rawBody && request.rawBody.length > HealthLink.MAX_BODY) { say(413, "Daybook got too much at once. Send the last 3 days only."); return; }
+    if (request.rawBody && request.rawBody.length > HealthLink.MAX_BODY) { say(413, "Daybook got too much at once. In the Shortcut, Find Health Samples needs the filter Start Date is today."); return; }
     const token = HealthLink.bearer(request.get("authorization"));
     if (!token) { say(401, "Daybook needs your link code in the Authorization header (About you → Apple Health)."); return; }
     const db = getFirestore(), linkRef = db.collection(HealthLink.LINKS_COLL).doc(HealthLink.tokenHash(token));
