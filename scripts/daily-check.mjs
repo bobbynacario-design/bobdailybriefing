@@ -218,7 +218,9 @@ section('Your loops');
   info('Ask: ' + asks.length + ' question(s) in the last 7 days');
   const boostDays = Object.entries((boost && boost.entries) || {}).filter(([d]) => d >= pht(Date.now() - 14 * 86400000));
   info('Daily Boost: done on ' + boostDays.filter(([, e]) => e.done).length + ' of the last ' + boostDays.length + ' days with an entry');
-  const brief = await db.collection(COLL).where('uid', '==', uid).orderBy('saved', 'desc').limit(1).get().then((s) => s.docs[0] && s.docs[0].data()).catch(() => null);
+  // Other uid docs carry a 'saved' field too (shopping-prefs holds a list, which
+  // Firestore sorts above every number), so take the newest doc with a briefing body.
+  const brief = await db.collection(COLL).where('uid', '==', uid).orderBy('saved', 'desc').limit(10).get().then((s) => s.docs.map((d) => d.data()).find((d) => typeof d.data === 'string') || null).catch(() => null);
   if (brief) { const at = Number(brief.saved) < 1e12 ? Number(brief.saved) * 1000 : Number(brief.saved); info('Briefing: latest ' + phtTime(at) + (pht(at) === today ? ' (today)' : ' (not yet today)')); }
 }
 
