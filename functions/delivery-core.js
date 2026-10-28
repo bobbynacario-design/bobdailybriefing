@@ -187,6 +187,21 @@ function bookedTripLine(core, doc, today) {
   return null;
 }
 
+// UNIQLO PH's weekly limited offers run Friday to Thursday, and UNIQLO turns
+// the clothing scout away, so its deals come only from his pasted import
+// (shopping-uniqlo-<uid>). On a Friday once that import has ended, while
+// UNIQLO is one of his Clothing brands, the morning push says so. prefs is
+// his shopping-prefs doc; without one he doesn't use Clothing.
+function uniqloLine(importDoc, prefs, dayKey) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || "")) || new Date(dayKey + "T00:00:00Z").getUTCDay() !== 5) return null;
+  if (!prefs || (Array.isArray(prefs.brands) && prefs.brands.indexOf("UNIQLO") < 0)) return null;
+  const offers = importDoc ? [].concat(importDoc.items || [], importDoc.campaigns || []) : [];
+  const ends = offers.map((i) => String((i && i.validTo) || "")).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  const last = ends[ends.length - 1];
+  if (last && last >= dayKey) return null;
+  return "UNIQLO: this week’s offers start today" + (last ? "; your import ended " + dayLabel(last) : "") + ". Paste them in Clothing.";
+}
+
 // The calls a push just asked about, added to those asked before; a key is
 // forgotten after 60 days, so a call still open two months on is asked again.
 function askedAfter(asked, items, dayKey) {
@@ -266,8 +281,8 @@ function notificationCopy(items, test, extra) {
   const reminderLine = toCheck ? "\n⏰ To check: " + toCheck : "";
   const todayLine = extra.today ? "\n" + extra.today : "";
   const askLines = (Array.isArray(extra.asks) ? extra.asks : []).map((item) => "\n" + askLine(item)).join("");
-  const watchLine = (extra.trip ? "\n" + extra.trip : "") + (extra.pse ? "\n" + extra.pse : "") + (extra.fares ? "\n" + extra.fares : "");
-  // The lead, then today's plan and this week, then what is due, then his PSE watchlist and fare watches.
+  const watchLine = (extra.trip ? "\n" + extra.trip : "") + (extra.pse ? "\n" + extra.pse : "") + (extra.fares ? "\n" + extra.fares : "") + (extra.uniqlo ? "\n" + extra.uniqlo : "");
+  // The lead, then today's plan and this week, then what is due, then his PSE watchlist, fare watches and Friday's UNIQLO line.
   // His body line (only when notable) sits with this week's commitment.
   const bodyLine = extra.body ? "\n" + extra.body : "";
   const lines = todayLine + commitmentLine + bodyLine + askLines + watchLine + reminderLine + experimentLine + weeklyLine + sparkLine;
@@ -377,6 +392,7 @@ module.exports = {
   pseLine,
   fareWatchLine,
   bookedTripLine,
+  uniqloLine,
   askedAfter,
   urgentItems,
   pushKind,

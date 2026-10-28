@@ -355,3 +355,20 @@ test("the next booked trip rides the morning push: countdown and open to-dos wit
   assert.equal(pushKind({}, "2026-12-17", {trip: "Trip to Tokyo in 3 days"}), "morning");
   assert.match(notificationCopy([], false, {trip: "Trip to Tokyo in 3 days"}).body, /^Trip to Tokyo in 3 days/);
 });
+
+test("on a Friday after his UNIQLO import has ended, the morning push says to paste this week's offers", () => {
+  const {uniqloLine} = require("./delivery-core");
+  // His 17 Oct import: offers 16-22 Oct. UNIQLO's week runs Friday to Thursday.
+  const imported = {items: [{validTo: "2026-10-22"}], campaigns: [{validTo: "2026-10-21"}]};
+  const prefs = {brands: ["UNIQLO", "H&M"]};
+  assert.equal(uniqloLine(imported, prefs, "2026-10-30"), "UNIQLO: this week’s offers start today; your import ended 22 Oct. Paste them in Clothing.");
+  assert.equal(uniqloLine(imported, prefs, "2026-10-29"), null, "Thursday: only Fridays");
+  assert.equal(uniqloLine({items: [{validTo: "2026-11-05"}]}, prefs, "2026-10-30"), null, "this week's offers are already in");
+  assert.equal(uniqloLine(imported, {brands: ["H&M"]}, "2026-10-30"), null, "UNIQLO unticked");
+  assert.equal(uniqloLine(imported, null, "2026-10-30"), null, "no Clothing profile");
+  assert.equal(uniqloLine(null, {}, "2026-10-30"), "UNIQLO: this week’s offers start today. Paste them in Clothing.", "never imported, all brands");
+  const line = uniqloLine(imported, prefs, "2026-10-30");
+  assert.equal(notificationCopy([{source: "News", title: "Insurer lifts BI reserves"}], false, {fares: "Fare watch: Tokyo", uniqlo: line}).body,
+    ["News: Insurer lifts BI reserves", "Fare watch: Tokyo", line].join("\n"));
+  assert.equal(pushKind({}, "2026-10-30", {items: []}), "", "it rides on a push, it is never the push");
+});

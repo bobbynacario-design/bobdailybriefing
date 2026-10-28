@@ -76,7 +76,7 @@ const {
 } = require("./market-facts");
 const {authorize, daybookRole, guardedGeneration} = require("./generation-guard");
 const {
-  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, pseLine, fareWatchLine, bookedTripLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
+  normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, pseLine, fareWatchLine, bookedTripLine, uniqloLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
   notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, newReminders, weeklyReadDue,
   commitmentLine, weeklyReviewDue,
 } = require("./delivery-core");
@@ -1688,6 +1688,18 @@ async function fareWatchFor(db, uid, alerted, now) {
   }
 }
 
+// Friday's nudge to paste UNIQLO's new weekly offers once his import has
+// ended. Best effort: a failed read leaves the line off.
+async function uniqloFor(db, uid, dayKey) {
+  try {
+    const [prefs, imported] = await Promise.all(["shopping-prefs-" + uid, "shopping-uniqlo-" + uid].map((id) => db.collection(BRIEFINGS_COLL).doc(id).get()));
+    return uniqloLine(imported.exists ? imported.data() : null, prefs.exists ? prefs.data() : null, dayKey);
+  } catch (error) {
+    logger.warn("UNIQLO line failed", {message: error.message});
+    return null;
+  }
+}
+
 // His PSE watchlist alerts from the last close (pse-watch-<uid>), once.
 // Best effort: a failed read leaves the line off.
 async function pseFor(db, uid, lastAsOf, dayKey) {
@@ -1735,6 +1747,8 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   const trip = await bookedTripFor(db, prefs.uid, dayKey);
   // Rides only on a push already going out, like this week's commitment.
   const body = role === "owner" ? await bodyFor(db, prefs.uid, now) : "";
+  // Clothing is the owner's; this line also only rides on a push already going out.
+  const uniqlo = role === "owner" ? await uniqloFor(db, prefs.uid, dayKey) : null;
   // Only reminders no push has carried yet.
   const reminders = newReminders(boost.reminders, state.lastReminderIds);
   // One morning push a day; after it, only a meeting about to start.
@@ -1749,7 +1763,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   // No spark line since 11 Oct: Daily Boost was done on 0 of 13 days, and the
   // push he chose reads lead, today, this week.
   const copy = kind === "urgent" ? notificationCopy(urgent, false, {urgent: true}) :
-    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, fares: fares && fares.line, trip, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment, body});
+    notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, fares: fares && fares.line, trip, uniqlo, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment, body});
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
