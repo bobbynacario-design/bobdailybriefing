@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {category,parseHM,parseCrocs,parseNike,parseMall,mallCandidates,readSource,priceHistory} from './clothing.js';
+import {category,parseHM,parseCrocs,parseNike,parseShopify,parseMall,mallCandidates,readSource,priceHistory} from './clothing.js';
 const at='2026-10-17T03:00:00Z';
 const product={id:'12345',productName:'Cotton polo',url:'/en_ph/productpage.12345.html',colorName:'Blue',availability:{stockState:'Available'},prices:[{priceType:'redPrice',price:500},{priceType:'whitePrice',price:1000}],sizes:[{label:'M',stock:2},{label:'S',stock:0}]};
 const hm=rows=>'<script id="__NEXT_DATA__" type="application/json">'+JSON.stringify({props:{pageProps:{plpProps:{productListingSectionProps:{productListingData:{rawProductList:rows}}}}}})+'</script>';
@@ -64,4 +64,44 @@ test('H&M keeps menswear and drops the kids care items and accessories on the sa
 test('H&M rows keep the whole size run as well as the sizes in stock',()=>{
  const rows=parseHM(hm([{...product,mainCatCode:'men_trousers_casual',productName:'Slim Fit Wool-Blend Pants',sizes:[{label:'28',stock:2},{label:'30',stock:2},{label:'34',stock:0}]}]),at);
  assert.deepEqual(rows[0].availableSizes,['28','30']);assert.deepEqual(rows[0].sizeRun,['28','30','34']);
+});
+
+// Shapes as the stores' public products.json listed them on 29 Oct 2026.
+const levis={id:'levis',brand:"Levi's",shopify:true,url:'https://www.levi.com.ph/collections/men-sale'};
+const ua={id:'underarmour',brand:'Under Armour',shopify:true,url:'https://www.underarmour.com.ph/collections/men'};
+const v=(id,o1,o2,price,cmp,available=true)=>({id,option1:o1,option2:o2,option3:null,price:String(price),compare_at_price:cmp==null?null:String(cmp),available});
+test('Shopify stores: one listing per men\'s colour, waists from the Waist option, sizes only where a marked-down size is in stock',()=>{
+ const jeans={id:1,title:"Levi's® Men's 505™ Regular Jeans",handle:'505-regular',product_type:'Men Jeans',tags:['Blue','SALE','Men'],options:[{name:'Waist'},{name:'Length'}],variants:[v(11,'31','32',2499.5,4999),v(12,'32','32',2499.5,4999,false),v(13,'30','30',4999,null)],images:[{src:'https://cdn.shopify.com/a.jpg'}]};
+ const [row]=parseShopify(levis,[jeans],at);
+ assert.deepEqual([row.name,row.category,row.color,row.price,row.originalPrice,row.sizeSystem],['505™ Regular Jeans','Trousers','Blue',2499.5,4999,'Labelled clothing']);
+ assert.deepEqual(row.availableSizes,['31']);assert.deepEqual(row.sizeRun,['31','32','30']);
+ assert.equal(row.url,'https://www.levi.com.ph/products/505-regular?variant=11');assert.equal(row.priceFrom,undefined);
+});
+test('Under Armour sizes read as US clothing (SM/MD/LG), colour codes drop off, and unisex shoes keep the men\'s size',()=>{
+ const tee={id:2,title:'UA Men Tech 2.0 Short Sleeve | 1326413',product_type:'Short Sleeve Shirts',tags:[],handle:'tech',options:[{name:'Color'},{name:'US Size'}],variants:[v(21,'Black / White - 001','SM',897,1495),v(22,'Black / White - 001','MD',897,1495),v(23,'Black / White - 001','LG',897,1495,false),v(24,'Navy - 410','MD',1495,null)]};
+ const shoe={id:3,title:'UA Unisex Velociti Pro 2 | 6005378',product_type:'Running',tags:['Running Shoes','Shoes'],handle:'velociti',options:[{name:'Color'},{name:'US Size'}],variants:[v(31,'Black - 001','7/8.5',7628.4,10595),v(32,'Black - 001','8.5/10',7628.4,10595)]};
+ const rows=parseShopify(ua,[tee,shoe],at),t=rows.find(r=>r.category==='Tops'),s=rows.find(r=>r.category==='Footwear');
+ assert.equal(rows.length,2);
+ assert.deepEqual([t.name,t.color,t.sizeSystem,t.availableSizes,t.sizeRun],['Tech 2.0 Short Sleeve','Black / White','US clothing',['S','M'],['S','M','L']]);
+ assert.deepEqual([s.name,s.sizeSystem,s.availableSizes],['Unisex Velociti Pro 2','US men',['7','8.5']]);
+});
+test('Shopify stores drop women\'s, kids\' and accessory products, full-price items, and Penshoppe "SIZE 30" reads as a waist',()=>{
+ const base={handle:'x',tags:[],options:[{name:'Color'},{name:'Size (INT)'}]};
+ const rows=parseShopify({...levis,id:'penshoppe',brand:'Penshoppe',url:'https://www.penshoppe.com/collections/sale'},[
+  {...base,id:4,title:'Relaxed Chino Pants',product_type:"Men's Trousers",variants:[v(41,'Beige','SIZE 30',899,1299),v(42,'Beige','SIZE 32',999,1399)]},
+  {...base,id:5,title:'Relaxed Chino Pants',product_type:"Women's Trousers",variants:[v(51,'Beige','S',899,1299)]},
+  {...base,id:6,title:'Ankle Socks',product_type:"Men's Socks",variants:[v(61,'Black','Free Size',99,149)]},
+  {...base,id:7,title:'Sling Bag',product_type:"Men's Bags",variants:[v(71,'Black','Free Size',299,499)]},
+  {...base,id:8,title:'Basic Tee',product_type:"Men's Basic Tees",variants:[v(81,'White','M',399,null)]},
+  {...base,id:9,title:'Boys Graphic Tee',product_type:"Kids' Tees",variants:[v(91,'White','M',199,399)]}
+ ],at);
+ assert.deepEqual(rows.map(r=>[r.name,r.availableSizes,r.priceFrom]),[['Relaxed Chino Pants',['30','32'],true]]);
+});
+test('Shopify reading pages through the collection and stops at a short page',async()=>{
+ const urls=[],page=n=>({products:Array.from({length:n},(_,i)=>({id:i,title:"Men's Tee",product_type:'Tees',handle:'t'+i,tags:[],options:[{name:'Size'}],variants:[v(i,'M',null,500,1000)]}))});
+ const fake=async url=>{urls.push(url);return new Response(JSON.stringify(page(urls.length===1?100:3)));};
+ const r=await readSource(levis,at,fake);
+ assert.deepEqual(urls,['https://www.levi.com.ph/collections/men-sale/products.json?limit=100&page=1','https://www.levi.com.ph/collections/men-sale/products.json?limit=100&page=2']);
+ assert.equal(r.status,'ok');assert.equal(r.count,45);assert.match(r.message,/103 products/);
+ assert.equal((await readSource(levis,at,async()=>new Response('blocked',{status:403}))).status,'unavailable');
 });
