@@ -14,6 +14,13 @@ export const SOURCES=[
   {id:'levis',brand:"Levi's",shopify:true,url:'https://www.levi.com.ph/collections/men-sale'},
   {id:'underarmour',brand:'Under Armour',shopify:true,url:'https://www.underarmour.com.ph/collections/men'},
   {id:'penshoppe',brand:'Penshoppe',shopify:true,url:'https://www.penshoppe.com/collections/sale'},
+  // Sperry's sale collection holds a tenth of its markdowns; the rest sit in
+  // the whole catalogue (~700 products). Its shoes run in US men's half sizes.
+  {id:'sperry',brand:'Sperry',shopify:true,pages:7,shoes:'US men',url:'https://www.sperry.com.ph/collections/all'},
+  {id:'columbia',brand:'Columbia',shopify:true,url:'https://www.columbiasportswear.com.ph/collections/men-sale'},
+  {id:'hushpuppies',brand:'Hush Puppies',shopify:true,url:'https://www.hushpuppies.com.ph/collections/mens-sale'},
+  // Toby's Sports lists other brands' stock, as ZALORA does: only these are kept.
+  {id:'tobys',brand:"Toby's",retailer:"Toby's",shopify:true,vendors:{adidas:'Adidas',nike:'Nike','nike sportswear':'Nike',jordan:'Nike'},url:'https://www.tobys.com/collections/mens-collection-sale'},
   {id:'sm',brand:'Mall promotions',url:'https://www.smsupermalls.com/smdeals'}
 ];
 const id=s=>createHash('sha256').update(s).digest('hex').slice(0,24);
@@ -89,26 +96,40 @@ const SHOPIFY_SKIP=/\b(?:wallets?|purses?|bags?|backpacks?|sackpacks?|slings?|du
 const NOT_MEN=/\b(?:women'?s?|ladies|girls?|boys?|kids?|youth|toddlers?|baby|infants?)\b/i;
 // Levi's tags each product with a colour family ("Black", "Dark Indigo", "Multicolour").
 const SHOP_COLORS=['White','Cream','Beige','Black','Grey','Gray','Navy','Blue','Brown','Burgundy','Green','Red','Khaki','Olive','Tan','Dark Indigo','Medium Indigo','Light Indigo','Neutral','Multicolour'];
-// Under Armour writes SM/MD/LG, Penshoppe "SIZE 30", trousers "30/32" or
-// "3032" (waist then leg), and unisex shoes "7/8.5" (men's first).
+// Under Armour writes SM/MD/LG, Penshoppe "SIZE 30", Columbia "S R" (regular
+// length), trousers "30/32" or "3032" (waist then leg). Shoes: unisex "7/8.5",
+// Toby's "M 8 / W 9" or "M(8.5) / W(10)", Columbia "US9"; the men's size is kept.
+const MEN_SHOE=/^(?:US\s*)?M?\s*\(?\s*(\d{1,2}(?:\.5)?)\s*\)?(?:\s*\/\s*W?\s*\(?\s*\d{1,2}(?:\.5)?\s*\)?)?$/;
 function shopSize(raw,{waist,footwear}){
-  const s=String(raw || '').trim().toUpperCase().replace(/^SIZE\s+/,'');if(s==='DEFAULT TITLE')return '';
-  if(footwear)return /^(\d{1,2}(?:\.5)?)(?:\/\d{1,2}(?:\.5)?)?$/.exec(s)?.[1] || '';
+  const s=String(raw || '').trim().toUpperCase().replace(/^SIZE\s+/,'').replace(/^(?:US|ASIAN?|EU|UK)\s*:\s*/,'');if(s==='DEFAULT TITLE')return '';
+  if(footwear)return MEN_SHOE.exec(s)?.[1] || '';
   if(waist)return /^\d{2}$/.test(s)?s:'';
-  return /^(\d{2})(?:\/\d{2}|\d{2})$/.exec(s)?.[1] || {SM:'S',MD:'M',LG:'L'}[s] || s;
+  return /^(\d{2})(?:\/\d{2}|\d{2})$/.exec(s)?.[1] || {SM:'S',MD:'M',LG:'L'}[s] || s.replace(/^(XXS|XS|S|M|L|XL|XXL|[2-5]XL) R$/,'$1');
 }
+const escapeRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 export function parseShopify(source,products,checkedAt){
   const host=new URL(source.url).origin,rows=[];
   for(const p of products || []){
     const type=String(p.product_type || ''),tags=Array.isArray(p.tags)?p.tags:[],title=String(p.title || '');
     if(!/\b(?:men'?s?|mens|unisex)\b/i.test(title+' '+type) || NOT_MEN.test(title+' '+type) || SHOPIFY_SKIP.test(type) || SHOPIFY_SKIP.test(title))continue;
-    const name=title.replace(/^(?:Levi's®?|UA)\s+/i,'').replace(/^(?:Men'?s?|Mens)\s+/i,'').replace(/\s*\|\s*[\w-]+$/,'').slice(0,140);
+    // A multi-brand store's item belongs to its maker; makers not listed are left out.
+    const brand=source.vendors?source.vendors[String(p.vendor || '').toLowerCase()]:source.brand;if(!brand)continue;
+    let name=title.replace(new RegExp('^'+escapeRe(String(p.vendor || '-'))+'\\s+','i'),'').replace(/^(?:Levi's®?|UA)\s+/i,'').replace(/^(?:Men'?s?|Mens)\s+/i,'').replace(/\s*\|\s*[\w-]+$/,'').replace(/\s*\([A-Z0-9-]{5,}\)$/,'');
     let kind=category(name,type,'');if(kind==='')kind=category(name,tags.join(' '),'');
     if(!kind)continue;
     const opts=(p.options || []).map(o=>String(o.name || '')),at=re=>opts.findIndex(n=>re.test(n));
     const colorAt=at(/colou?rs?/i),waistAt=at(/^waist$/i),sizeAt=waistAt>=0?waistAt:at(/size|^title$/i),footwear=kind==='Footwear';
     const value=(v,i)=>i<0?'':String(v['option'+(i+1)] || '');
-    const sizeSystem=footwear?(/\bUS\b/i.test(opts[sizeAt] || '')?'US men':'Unverified'):sizeAt<0?'Unverified':/\bUS\b/i.test(opts[sizeAt])?'US clothing':'Labelled clothing';
+    // Sperry and Hush Puppies end the title with the colour ("Bahama II Sneakers - Navy");
+    // Hush Puppies also says "Men's Shoes" mid-title.
+    const titleColor=/^(.{6,}?)\s+-\s*([A-Za-z][A-Za-z /&]{1,40})$/.exec(name);if(titleColor)name=titleColor[1];name=name.replace(/\s+Men'?s\s+/i,' ').slice(0,140);
+    // Shoe sizes count as US men's only when the store says so: a "US" option,
+    // every value marked US or M (men's), or a store known to use them.
+    // Columbia marks each clothing size "US:S" or "ASIAN:XL"; a mix is not guessed.
+    const values=sizeAt<0?[]:(p.variants || []).map(v=>value(v,sizeAt).trim()),every=re=>values.length>0 && values.every(x=>re.test(x));
+    const shoeUS=/\bUS\b/i.test(opts[sizeAt] || '') || source.shoes==='US men' || every(/^(?:US\s*\d|M\s*\(?\s*\d)/i);
+    const usMarked=values.filter(x=>/^US\s*:/i.test(x)).length;
+    const sizeSystem=footwear?(shoeUS?'US men':'Unverified'):sizeAt<0?'Unverified':usMarked?(usMarked===values.length?'US clothing':'Unverified'):/\bUS\b/i.test(opts[sizeAt])?'US clothing':'Labelled clothing';
     // A store without a colour option (Levi's) files one colour per product and tags it.
     const tagColors=tags.filter(t=>SHOP_COLORS.some(c=>c.toLowerCase()===t.toLowerCase()));
     const groups=new Map();
@@ -122,7 +143,7 @@ export function parseShopify(source,products,checkedAt){
       const sizeRun=[...new Set(variants.map(size).filter(Boolean))],availableSizes=[...new Set(deals.map(size).filter(Boolean))];
       if(footwear && sizeAt>=0 && !availableSizes.length)continue;
       const image=best.featured_image?.src || p.images?.[0]?.src || '';
-      made.push({id:id(source.id+':'+p.id+':'+color),brand:source.brand,name,color:(color || tagColors[0] || '').slice(0,80),category:kind,image,price,originalPrice,currency:'PHP',url:host+'/products/'+encodeURIComponent(p.handle)+'?variant='+best.id,checkedAt,channel:'online',availableSizes:sizeAt<0 || !availableSizes.length?null:availableSizes,...(sizeRun.length?{sizeRun}:{}),sizeSystem,shipping:null,...(deals.some(v=>Number(v.price)!==price)?{priceFrom:true}:{})});
+      made.push({id:id(source.id+':'+p.id+':'+color),brand,...(source.retailer?{retailer:source.retailer}:{}),name,color:(color || tagColors[0] || (titleColor?titleColor[2]:'')).slice(0,80),category:kind,image,price,originalPrice,currency:'PHP',url:host+'/products/'+encodeURIComponent(p.handle)+'?variant='+best.id,checkedAt,channel:'online',availableSizes:sizeAt<0 || !availableSizes.length?null:availableSizes,...(sizeRun.length?{sizeRun}:{}),sizeSystem,shipping:null,...(deals.some(v=>Number(v.price)!==price)?{priceFrom:true}:{})});
     }
     // Three colours of one product at most, deepest markdown first.
     rows.push(...made.sort((a,b)=>a.price/a.originalPrice-b.price/b.originalPrice).slice(0,3));
@@ -151,9 +172,9 @@ export async function readSource(source,checkedAt,fetchImpl=fetch){
       const text=await r.text();if(text.length>4000000)throw Error('Page exceeded reader limit');return text;
     };
     if(source.shopify){
-      // Up to four pages of 100 products; a short page is the last one.
+      // Up to four pages of 100 products (a store may set more); a short page is the last one.
       const products=[];
-      for(let page=1;page<=4;page++){const rows=JSON.parse(await get(source.url+'/products.json?limit=100&page='+page)).products || [];products.push(...rows);if(rows.length<100)break;}
+      for(let page=1;page<=(source.pages || 4);page++){const rows=JSON.parse(await get(source.url+'/products.json?limit=100&page='+page)).products || [];products.push(...rows);if(rows.length<100)break;}
       const items=parseShopify(source,products,checkedAt);
       return {...source,checkedAt,status:items.length?'ok':'unpriced',count:items.length,items,candidates:[],message:items.length?'PHP markdowns read from the store’s public catalogue ('+products.length+' products); sizes are those in stock online.':'No marked-down men’s items read from '+products.length+' products. Open the official page to check.'};
     }
@@ -172,6 +193,6 @@ export function priceHistory(items,prior,checkedAt){
     const out={...i,firstSeen:before[0]?.at || checkedAt,checks:before.length,...(last?{previousPrice:last.price,previousChecked:last.at,priorLow:low.price,priorLowAt:low.at,priorHigh:high}:{})};
     history[i.id]=before.concat({day,price:i.price,at:checkedAt});return out;});
   // Bound the shared history document independently of retailer growth.
-  const keep=Object.keys(history).sort((a,b)=>history[b].at(-1).at.localeCompare(history[a].at(-1).at)).slice(0,400);
+  const keep=Object.keys(history).sort((a,b)=>history[b].at(-1).at.localeCompare(history[a].at(-1).at)).slice(0,600);
   return {items:updated,history:Object.fromEntries(keep.map(k=>[k,history[k]]))};
 }

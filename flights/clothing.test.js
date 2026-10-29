@@ -105,3 +105,29 @@ test('Shopify reading pages through the collection and stops at a short page',as
  assert.equal(r.status,'ok');assert.equal(r.count,45);assert.match(r.message,/103 products/);
  assert.equal((await readSource(levis,at,async()=>new Response('blocked',{status:403}))).status,'unavailable');
 });
+test('Sperry and Hush Puppies titles carry the colour and a style code; Sperry shoes are US men\'s half sizes',()=>{
+ const sperry={id:'sperry',brand:'Sperry',shopify:true,shoes:'US men',url:'https://www.sperry.com.ph/collections/all'};
+ const p={id:10,title:"Men's Bahama II Sneakers - Navy (24F000410)",product_type:'',vendor:'Sperry Philippines',tags:['MensSneakers'],handle:'bahama',options:[{name:'SIze'}],variants:[v(101,'8.5',null,2575,4295),v(102,'9',null,2575,4295,false)]};
+ const [row]=parseShopify(sperry,[p],at);
+ assert.deepEqual([row.name,row.color,row.category,row.sizeSystem,row.availableSizes,row.sizeRun],['Bahama II Sneakers','Navy','Footwear','US men',['8.5'],['8.5','9']]);
+ const hp=parseShopify({id:'hushpuppies',brand:'Hush Puppies',shopify:true,url:'https://www.hushpuppies.com.ph/collections/mens-sale'},[{...p,id:11,title:"Excel LT Laceup Men's Shoes - Dark Brown Leather",vendor:'Hush Puppies Philippines',options:[{name:'Size'}],variants:[v(111,'8',null,3640,5200)]}],at)[0];
+ assert.deepEqual([hp.name,hp.color,hp.sizeSystem],['Excel LT Laceup Shoes','Dark Brown Leather','Unverified'],'whole sizes with no US label stay unchecked');
+});
+test('Toby\'s keeps only Adidas and Nike under their own names, listed at Toby\'s, with men\'s sizes out of "M 8 / W 9"',()=>{
+ const tobys={id:'tobys',brand:"Toby's",retailer:"Toby's",shopify:true,vendors:{adidas:'Adidas',nike:'Nike'},url:'https://www.tobys.com/collections/mens-collection-sale'};
+ const shoe={id:20,title:"adidas Men's Duramo SL 2 Running Shoes",product_type:"Men's Road Running Footwear",vendor:'adidas',tags:[],handle:'duramo',options:[{name:'Color'},{name:'US Size'}],variants:[v(201,'Black','M 8 / W 9',2240,3200),v(202,'Black','M 8.5 / W 9.5',2240,3200)]};
+ const tee={id:21,title:"Nike Men's Dri-FIT Training Tee",product_type:"Men's Training Apparel",vendor:'Nike',tags:[],handle:'tee',options:[{name:'Color'},{name:'US Size'}],variants:[v(211,'White','S',995,1495)]};
+ const rows=parseShopify(tobys,[shoe,tee,{...shoe,id:22,vendor:'Saucony',title:"Saucony Men's Ride 18"}],at);
+ assert.deepEqual(rows.map(r=>[r.brand,r.retailer,r.name,r.sizeSystem,r.availableSizes]).sort(),[['Adidas',"Toby's",'Duramo SL 2 Running Shoes','US men',['8','8.5']],['Nike',"Toby's",'Dri-FIT Training Tee','US clothing',['S']]]);
+});
+test('Columbia sizes: "S R" is a regular-length Small, and "US9" on every shoe size makes them US men\'s',()=>{
+ const col={id:'columbia',brand:'Columbia',shopify:true,url:'https://www.columbiasportswear.com.ph/collections/men-sale'};
+ const jacket={id:30,title:"Men's Spire Valley Hooded Windbreaker",product_type:'',vendor:'Columbia Sportswear',tags:['Men_Jackets'],handle:'spire',options:[{name:'Color'},{name:'Size'}],variants:[v(301,'Black','S R',3200,4490),v(302,'Black','M R',3200,4490)]};
+ const shoe={id:31,title:"Men's Konos TRS OutDry Shoe",product_type:'',vendor:'Columbia Sportswear',tags:[],handle:'konos',options:[{name:'Color'},{name:'Size'}],variants:[v(311,'Grey','US8',9490,9990),v(312,'Grey','US9',9490,9990)]};
+ const rows=parseShopify(col,[jacket,shoe],at),j=rows.find(r=>r.category==='Outerwear'),s=rows.find(r=>r.category==='Footwear');
+ assert.deepEqual([j.availableSizes,j.sizeSystem],[['S','M'],'Labelled clothing']);
+ // Columbia's own marks, as listed on 29 Oct: "US:S" is US sizing, "ASIAN:XL" is not, a mix is left unchecked.
+ const marked=sizes=>parseShopify(col,[{...jacket,variants:sizes.map((x,n)=>v(400+n,'Black',x,3200,4490))}],at)[0];
+ assert.deepEqual([marked(['US:S','US:M']).availableSizes,marked(['US:S','US:M']).sizeSystem],[['S','M'],'US clothing']);
+ assert.equal(marked(['ASIAN:XL']).sizeSystem,'Labelled clothing');assert.equal(marked(['US:S','ASIAN:XL']).sizeSystem,'Unverified');assert.deepEqual([s.availableSizes,s.sizeSystem],[['8','9'],'US men']);
+});
