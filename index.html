@@ -48,6 +48,8 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/uniqlo-import.js"></script>
 <script src="./lib/uniqlo-import-ui.js"></script>
 <script src="./lib/shopping-ui.js"></script>
+<script src="./lib/rentals-core.js"></script>
+<script src="./lib/rentals-ui.js"></script>
 <script src="./lib/daybook-calendar-core.js"></script>
 <script src="./lib/daybook-calendar-ui.js"></script>
 <script src="./lib/weekly-review-core.js"></script>
@@ -1333,6 +1335,17 @@ window.fbLoadShoppingPrefs = async function() {
 window.fbSaveShoppingPrefs = async function(prefs) {
   var uid = getUid(); if (!uid) throw new Error('Sign in to save your shopping profile.');
   await setDoc(doc(db, COLL, 'shopping-prefs-' + uid), Object.assign({}, ShoppingCore.cleanPrefs(prefs), {uid:uid,kind:'shopping-prefs',updatedAt:new Date().toISOString()}));
+};
+// Rentals scout feed (shared, no uid) and Bob's private search. The search is
+// read by a uid query: the shared rules can deny a read of a missing doc.
+window.fbLoadRentals = async function() {
+  var uid = getUid(); if (!uid) throw new Error('Sign in to load rentals.');
+  var snaps = await Promise.all([getDoc(doc(db, COLL, 'rentals-latest')),getDocs(query(collection(db, COLL),where('uid','==',uid),where('kind','==','rentals-prefs'),limit(1)))]);
+  return {feed: snaps[0].exists() ? snaps[0].data() : null, prefs: snaps[1].empty ? {} : snaps[1].docs[0].data()};
+};
+window.fbSaveRentalPrefs = async function(prefs) {
+  var uid = getUid(); if (!uid) throw new Error('Sign in to save your rental search.');
+  await setDoc(doc(db, COLL, 'rentals-prefs-' + uid), Object.assign({}, RentalsCore.cleanPrefs(prefs), {uid:uid,kind:'rentals-prefs',updatedAt:new Date().toISOString()}));
 };
 window.fbLoadFlights = async function() {
   var snap = await getDoc(doc(db,COLL,'flights-latest'));
@@ -3388,6 +3401,47 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 .boost-goal-edit{grid-template-columns:minmax(180px,1.2fr) minmax(180px,1fr) auto auto}
 @media(max-width:700px){.boost-goal-edit{grid-template-columns:1fr;padding-bottom:.7rem;margin-bottom:.7rem;border-bottom:1px solid var(--rim)}}
 #page-shopping .shopping-photo{display:block;width:100%;height:240px;object-fit:contain;background:var(--bg2);border-radius:8px;margin-bottom:.8rem}#page-shopping .hero{margin-bottom:1rem}#page-shopping fieldset{border:1px solid var(--rim);border-radius:9px;padding:1rem}#page-shopping input,#page-shopping select{max-width:100%}#page-shopping .shopping-options{display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:1rem}#page-shopping .shopping-price{font-size:20px;color:var(--gold)}#page-shopping .shopping-price del,#page-shopping .shopping-price span{font-size:12px;color:var(--txt3)}#shopping-needs,#shopping-stores,#shopping-coverage{margin:1.25rem 0}#shopping-results details{margin-top:1rem}#page-shopping .shopping-memory-low,#page-shopping .shopping-memory-matched{color:var(--gold);font-weight:600}#page-shopping .shopping-leads{margin:.5rem 0 0;padding-left:1.1rem}#page-shopping .shopping-leads li{margin:.45rem 0;line-height:1.55}#page-shopping .shopping-leads del{color:var(--txt3);font-size:12px}#shopping-campaigns a,#shopping-stores a{color:var(--gold)}
+/* Rentals reads at the Clothing scale. */
+#page-rentals{font-size:13px;line-height:1.5}
+#page-rentals .rentals-title{font-size:20px;line-height:1.3}
+#page-rentals .hero{margin-bottom:.65rem}#page-rentals .hero p{font-size:13px;margin:.35rem 0}
+#page-rentals h3{font-size:15px;line-height:1.35;margin:.6rem 0 .4rem}
+#page-rentals .flights-note{font-size:11.5px;line-height:1.5}
+#page-rentals .shopping-shortlist-head{display:flex;flex-wrap:wrap;gap:.5rem}
+#page-rentals .rentals-glance{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin:1rem 0}
+#page-rentals .rentals-glance>div{background:var(--bg2);border:1px solid var(--rim);border-radius:9px;padding:.65rem .8rem;min-width:0}
+#page-rentals .rentals-glance b,#page-rentals .rentals-glance>div>span{display:block;overflow-wrap:anywhere}
+#page-rentals .rentals-glance b{font-size:15px;color:var(--gold)}
+#page-rentals .rentals-glance>div>span{font-size:12px;color:var(--txt2);margin-top:.2rem}
+#page-rentals .rental-typical{grid-column:1/-1;width:100%;border-collapse:collapse;font-size:12px}
+#page-rentals .rental-typical caption{text-align:left;font-size:11.5px;color:var(--txt3);padding-bottom:.3rem}
+#page-rentals .rental-typical th,#page-rentals .rental-typical td{text-align:left;padding:.3rem .5rem;border-top:1px solid var(--rim);font-weight:400}
+#page-rentals .rental-typical thead th{color:var(--txt3);border-top:0}
+#page-rentals .rental-typical tbody th{color:var(--txt2)}
+#page-rentals .rental-typical td span{color:var(--txt3)}
+#page-rentals .rentals-filters{grid-template-columns:repeat(4,minmax(0,1fr))}
+#page-rentals .rentals-filters select{width:100%;box-sizing:border-box}
+#page-rentals .deal-card{padding:.7rem .8rem;gap:.2rem}
+#page-rentals .deal-card h3{font-size:14px;margin:.1rem 0 .2rem;font-weight:600}
+#page-rentals .deal-card p{font-size:12px;margin:.15rem 0}
+#page-rentals .deal-card .flights-note{font-size:11px}
+#page-rentals .rental-photo{display:block;width:100%;height:170px;object-fit:cover;background:var(--bg2);border-radius:8px;margin-bottom:.35rem}
+#page-rentals .rental-price{font-size:17px;font-weight:600}#page-rentals .rental-price span{font-size:11px;font-weight:400;color:var(--txt2)}
+#page-rentals .rental-value{border-left:3px solid var(--rim);padding:.15rem .5rem}
+#page-rentals .rental-value-low{border-left-color:var(--green)}#page-rentals .rental-value-high{border-left-color:var(--amber)}
+#page-rentals .rental-tags{display:flex;flex-wrap:wrap;gap:.3rem}
+#page-rentals .rental-tags span{font-size:10.5px;border:1px solid var(--rim);border-radius:999px;padding:0 .5rem;color:var(--txt2)}
+#page-rentals .rental-check{color:var(--txt2)}
+#page-rentals .rental-stage{display:block;font-size:11px;margin-top:.35rem}#page-rentals .rental-stage select{margin-left:.3rem}
+#page-rentals .tool-chip,#page-rentals .flight-actions a{font-size:11px;text-transform:none;letter-spacing:.02em}
+#page-rentals .tool-chip[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
+#page-rentals .rental-more>summary,#page-rentals #rentals-coverage>summary{cursor:pointer;color:var(--txt2);padding:.5rem 0}
+#page-rentals .rental-links li{font-size:12px;margin:.2rem 0}
+#page-rentals fieldset{border:1px solid var(--rim);border-radius:9px;padding:.7rem .8rem}
+#page-rentals .shopping-options{display:flex;flex-wrap:wrap;gap:.35rem 1rem;margin:.5rem 0}
+#rentals-search{border:1px solid var(--rim);border-radius:10px;padding:.8rem 1rem;margin:1.25rem 0;scroll-margin-top:5rem}
+#rentals-search>summary{cursor:pointer}
+@media(max-width:700px){#page-rentals .rentals-glance{grid-template-columns:1fr 1fr}#page-rentals .rentals-filters{grid-template-columns:1fr 1fr}}
 /* Clothing keeps its own compact reading scale. */
 #page-shopping .shopping-shortlist-head{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
 #page-shopping .shopping-shortlist-head a{text-decoration:none}
@@ -3473,6 +3527,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M7 14h2M12 14h2M7 18h2"/></symbol>
   <symbol id="i-flights" viewBox="0 0 24 24"><path d="M12 3c-.9 0-1.5 1-1.5 2.5V9L4 13v2l6.5-2v4.5L8 19v1.5l4-1 4 1V19l-2.5-1.5V13l6.5 2v-2l-6.5-4V5.5C13.5 4 12.9 3 12 3z"/></symbol>
   <symbol id="i-shopping" viewBox="0 0 24 24"><path d="M8 4 3 7l3 5 2-1v9h8v-9l2 1 3-5-5-3a4 4 0 0 1-8 0z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9.5h4.5v-5h3v5H18V10"/></symbol>
   <symbol id="i-scout" viewBox="0 0 24 24"><circle cx="6.8" cy="16" r="3.6"/><circle cx="17.2" cy="16" r="3.6"/><path d="M3.4 14.8L5.8 5.5h3.4l1.2 8.2M20.6 14.8L18.2 5.5h-3.4l-1.2 8.2"/><path d="M10.4 11h3.2M10.4 16h3.2"/></symbol>
   <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.4a2.4 2.4 0 1 1 3.3 2.2c-.6.3-1 .8-1 1.5v.5"/><path d="M12 16.6v.1"/></symbol>
   <symbol id="i-decisions" viewBox="0 0 24 24"><path d="M12 21v-7"/><path d="M12 14L6.5 8.5M12 14l5.5-5.5"/><path d="M6 4.5V9h4.5M18 4.5V9h-4.5"/></symbol>
@@ -3590,6 +3645,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <button class="ntab owner-only" data-page="scout" onclick="switchPage('scout',this)">Scout</button>
     <button class="ntab" data-page="flights" onclick="switchPage('flights',this)">Trips</button>
     <button class="ntab owner-only" data-page="shopping" onclick="switchPage('shopping',this)">Clothing</button>
+    <button class="ntab owner-only" data-page="rentals" onclick="switchPage('rentals',this)">Rentals</button>
     <button class="ntab owner-only" data-page="about" onclick="switchPage('about',this)">About you</button>
     <button class="ntab" data-page="help" onclick="switchPage('help',this)">Help</button>
     <button class="ntab" data-page="decisions" onclick="switchPage('decisions',this)">Decisions</button>
@@ -4397,6 +4453,18 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   </details>
   <section id="shopping-campaigns"></section><section id="shopping-stores"></section><details id="shopping-coverage"></details>
 </div>
+<div class="page owner-only" id="page-rentals">
+  <div class="hero"><div class="hero-date rentals-title"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg> Condo rentals</div><p>Studio and 1-bedroom condos for a long-term lease in Cubao, Ortigas, Makati CBD and BGC, read every morning from DotProperty and Hoppler.</p></div>
+  <div class="shopping-shortlist-head"><button class="tool-chip" type="button" onclick="renderRentals()">Reload latest scout</button><button class="tool-chip" type="button" onclick="openRentalSearch()">Your search</button></div>
+  <p id="rentals-status" class="flights-note" role="status"></p>
+  <div id="rentals-glance" class="rentals-glance" aria-label="Rentals overview"></div>
+  <div class="flights-controls rentals-filters"><label>Area<select id="rentals-area" onchange="renderRentalList()"><option value="">All my areas</option><option value="cubao">Cubao</option><option value="ortigas">Ortigas</option><option value="makati">Makati CBD</option><option value="bgc">BGC</option></select></label><label>Size<select id="rentals-size" onchange="renderRentalList()"><option value="">Studio and 1 bedroom</option><option value="studio">Studio</option><option value="1br">1 bedroom</option></select></label><label>Show<select id="rentals-view" onchange="renderRentalList()"><option value="all">All matches</option><option value="new">New in the last 3 days</option><option value="drops">Price dropped</option><option value="shortlist">My shortlist</option><option value="hidden">Hidden</option></select></label><label>Sort<select id="rentals-sort" onchange="renderRentalList()"><option value="value">Cheapest for the area</option><option value="new">Newest first</option><option value="price">Lowest rent</option></select></label></div>
+  <p id="rentals-summary" class="flights-note" role="status"></p>
+  <div id="rentals-results"></div>
+  <details id="rentals-search" class="flight-trip-settings"></details>
+  <section id="rentals-more"></section>
+  <details id="rentals-coverage" class="flight-trip-settings"></details>
+</div>
 <div class="page" id="page-about">
   <div class="hero" style="margin-bottom:1.25rem">
     <div class="hero-eyebrow">What Daybook knows</div>
@@ -4770,6 +4838,10 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <p>Weekly picks and calendar events both offer <b>Save, Interested, More like this and Hide</b>. <b>Notes &amp; follow-up</b> keeps your own reason to join, who you hope to meet and an optional follow-up date. Saved events coming up, registration deadlines and due follow-ups appear on Today. Clear a follow-up date after completing it. <b>Add to Calendar .ICS</b> downloads a file for you to import; unknown times stay labelled for checking; a timed event ends at its published end time, or one hour after the start when none is published (the file says so). It does not book or register you for an event.</p>
       <p><b>CIA CPE</b> separates Planned, Attended and Credit confirmed. Going never becomes earned credit automatically. After attending, record actual eligible hours, Ethics where applicable, and a certificate or reference, then select Credit confirmed. Another body's CPD/CIP points and unknown durations are not converted to CIA hours. Older entries remain available as Review older record until you confirm them. Starting hours must exclude sessions logged here. Export your current year's record as CSV, including states, source links and evidence references. Philippine CPA CPD is not tracked here.</p>
       <div class="help-h">Clothing — your shopping scout</div><p>Open Explore → Clothing for a bounded sample of official Philippine retailer markdowns. Your private profile starts with the sizes and brands you confirmed: Medium, Small when explicitly American sizing, US men’s 8.5, plus an optional waist (inches) and EU jacket size for trousers and tailoring sold in numeric sizes; UNIQLO, H&amp;M, ZALORA, Nike, Adidas, Crocs, Levi’s, Under Armour, Penshoppe, Sperry, Columbia, Hush Puppies and Toby’s Sports (brands added later start ticked; untick one under Your sizes, brands and areas). Levi’s, Under Armour, Penshoppe, Sperry, Columbia, Hush Puppies and Toby’s come from each store’s public catalogue, so their sizes are the ones in stock online. A store that marks sizes as US (Under Armour, Columbia’s “US:” sizes, Toby’s) uses your American size; Sperry and Toby’s shoes are US men’s; Hush Puppies shoes are whole sizes with no US label, so they stay unchecked. Toby’s Sports, like ZALORA, lists other makers: only its Nike and Adidas markdowns are kept, and they show when both Toby’s and that brand are ticked. Add up to ten needs with a category, optional garment type, use, named material/technology and item-price budget. These choices filter deals; the note stays your reference. Missing garment or material evidence does not match. Use is suggested from garment type, not proof of suitability. Open Personalise recommendations below the shortlist to edit needs, sizes, taste and wardrobe. Each card starts with one verdict, a short reason and a key check; open Why this recommendation for pairing, price history and full match details. Your style guide sets buy rules (would you pay full price; two outfits with what you own; your colours; a gap, not a duplicate; right for Manila or a trip or event you have), outfit formulas for home and calls, poker nights and trips, the gym and going out, and a wardrobe count of 19 core pieces. Each deal then gets a verdict: Worth it (known wardrobe gap, at least two supported outfit formulas, no known taste conflict or unverified preferred colour, fit or pattern, listed size available, and a fixed item price; these lead the list), Check first (warm fabric for Manila, black-tie only, outside your colours, patterned, already covered, or no outfit uses it yet) or Likely to sit unworn (such as track spikes, sorted last). Promising marks details still needing confirmation, including size and variant pricing. Each card also says what to Pair it with: partner colours for its main colour, kept to your palette (plain menswear rules; black tie for a tuxedo), and the pieces you own from the outfit formulas that use it, plus one tip where it matters (keep the rest plain with a pattern, balance a roomy or slim cut). Add optional colours for each category under Your wardrobe. A specific pairing such as your navy chinos uses recorded colours and a positive category count; otherwise the suggested colours need checking. Your style guide also reads the trips on your Trips tab for the next 90 days (overlapping saves for the same city count as one trip; different cities stay separate): typical climate for the city and month, what each trip needs from your wardrobe (a top a day up to a week, chinos or jeans for cool or casino evenings, a warm layer for cool air or casino air-con, a light jacket below about 15°C, closed shoes), and what is short with an order-by date a week before you leave. Select Use for clothing planning and save your trip choices to include a trip in purchase advice; unselected trips are previews. An incomplete wardrobe group cannot establish a shortage, although recorded pieces can establish that you already have enough. A deal that fills a selected trip gap says so on its card and is not treated as a duplicate. Warm fabric still needs a comfort and weight check, even when the trip needs another piece. The seven-day delivery allowance is guidance, not a promised arrival date. Only Worth it deals shows the strongest verdicts. Blank wardrobe counts are unknown; enter 0 to record none. Bought it records an existing purchase after you confirm its category and total owned, updates that wardrobe count, and moves already-bought listings down. Undo purchase restores the earlier count only if no later edit changed it. Your taste adds optional fit, colour, design, material/technology and occasion choices plus category price limits. Recommendations explain named product traits and flag missing information. My style and Not for me feedback are private, undoable, and shared traits affect other items after two examples; a saved deal is only a weak signal. Your style guide’s Worth it deals come first; within them and after them, deals rank by discount: your size listed adds 15 points, a price fall since the last check adds 5, a price that was lower on an earlier check takes 5 off, and taste moves an item by at most 20, so it reorders similar deals without burying a much deeper markdown. Ticking every option in a group counts as no preference, only an item's main colour counts, and items you mark Not for me go last. Invalid prices, stale offers and known wrong sizes remain excluded. No extra AI calls. Save deals, filter for your listed size, and check the coverage panel when a retailer blocks the reader or needs an interactive catalogue. Each run opens Nike's sale product pages to read which shoe sizes are in stock; a range made in whole sizes only shows your 8.5 as unchecked rather than sold out. ZALORA product pages put up a human check, so ZALORA sizes stay unchecked. Prices exclude unknown delivery fees and conditional vouchers. A price that needs a voucher at checkout, and a sale lead with unchecked dates, sit below the deals as one line per promotion. Update UNIQLO opens a separate browser import: copy its offers page and paste it, or choose a saved HTML page, review the parsed offers and save. The UID-scoped import survives automatic scout refreshes and lasts until each published offer end date, with a 35-day safety bound. UNIQLO’s weekly offers run Friday to Thursday, so on a Friday once your import has ended (and UNIQLO is one of your brands) the morning push adds a line: “UNIQLO: this week’s offers start today… Paste them in Clothing.” An online listing does not establish branch stock. Store announcements require published dates and explicit participation in QC, Ortigas, Makati or Pasay. The Monday/Thursday 08:00 PHT job uses no AI or paid shopping-data API; Reload only reads its saved result. Product price observations are retained for up to thirty days (from 17 Oct 2026), and each card says what they show: lowest price seen, back to its lowest, the same price at every check (that sale price is the usual price), or cheaper before (worth waiting); the quoted discount is against the retailer’s listed regular price.</p>
+      <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg> Rentals — condos to lease</div>
+      <p>Explore → Rentals lists studio and 1-bedroom condos for a long-term lease in Cubao, Ortigas, Makati CBD and BGC. A GitHub job reads DotProperty (newest first) and Hoppler (cheapest first) every day at 07:00 PHT, up to ₱30,000 a month, with no AI calls. It opens each new listing's page once to read what it states: furnishing, deposit and advance months, minimum lease, whether dues are included, post-dated cheques, short stays, and a monthly price in the text that differs from the listed one. Nothing not stated is guessed.</p>
+      <p>Each card compares the rent per m² with the median for the same size in that area today (rent alone when the size isn't given), and the table at the top shows those medians. <b>Move-in cash</b> is the stated deposit and advance months times the rent; when the listing gives no terms it shows the usual 2 months deposit + 1 month advance, marked as not stated. <b>New</b> means first seen in the last three days. Parking slots, bed spaces and anything under ₱8,000 are left out, and one unit posted by several agents shows once with the other posts as links.</p>
+      <p><b>Your search</b> (top rent up to ₱30,000, areas, sizes, furnishing, hide short stays) is saved privately to your account, as are your <b>Shortlist</b> with its stage (Shortlisted, Messaged, Viewing booked, Viewed, Applied) and anything you <b>Hide</b>. Lamudi, Rentpad, MyProperty and OnePropertee block automated reads, so <b>More places to look</b> opens Lamudi, Carousell and Facebook Marketplace searches for each of your areas to check yourself.</p>
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-flights"/></svg> Trips — fares, hotels and seat sales</div>
       <p><b>Trips worth checking first</b> ranks up to three distinct destinations using fresh economy return samples, your trip length and an optional PHP budget. Set an extra-cost allowance for planning; it is added to the fare when checking your budget, but is not a verified ticket total. The cards explain why each option was selected and which taxes, baggage or stops remain unconfirmed. Checked-baggage preference highlights gaps; confirmed-nonstop-only excludes flights with unknown stops. Below it, <b>All destinations</b> lists cities by region (tap a region header to fold it; <b>Expand all</b> and <b>Collapse all</b> act on every region, folded regions are remembered on this device, and open cities stay open when you change filters), with separate journey and cabin groups ranked cheapest first, and each group's best fare, dates (weekday and nights) and how many fares were seen; open a city for every observed date pair, each with its own airline link, Save, and expandable fare restrictions, source-check timestamp and dated exchange rate. "All N fares to …" on a shortlist card opens that city. Cabin defaults to Economy; the status line counts the business and premium fares it hides. Destination mode, departure, cabin, trip and your trip settings are remembered on this device (not the destination text or dates); Reset filters restores the defaults.</p>
       <p><b>Your next trip</b> leads the page: your next leave window with a countdown, the best option the scout supports (a fare inside those dates is called peak-priced when the same city costs 30% less, or its region 50% less, on other dates), Google Flights for your exact dates in the three cheapest cities by return fare, the whole-break hotel prices, calendar clashes and any PokerHQ trip before it. It is computed from the scout and your calendar; no AI call.</p>
@@ -5191,6 +5263,7 @@ function clearPrivateSession() {
   setText('grounding-numbers','Sign in to load published numbers.');
   if (window.resetFlights) window.resetFlights();
   if (window.resetShopping) window.resetShopping();
+  if (window.resetRentals) window.resetRentals();
   if (window.resetPseResearch) window.resetPseResearch();
   if (window.resetClientNotes) window.resetClientNotes();
   if (window.resetScout) window.resetScout();
@@ -5491,6 +5564,7 @@ function switchPage(id, el) {
   if (id==='scout') pending = renderScout();
   if (id==='flights') pending = renderFlights();
   if (id==='shopping') pending = renderShopping();
+  if (id==='rentals') pending = renderRentals();
   if (id==='calendar') pending = renderDaybookCalendar();
   if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
   if (id==='about') pending = renderAbout();
@@ -5525,6 +5599,7 @@ function switchPageMobile(id, el) {
   if (id==='scout') pending = renderScout();
   if (id==='flights') pending = renderFlights();
   if (id==='shopping') pending = renderShopping();
+  if (id==='rentals') pending = renderRentals();
   if (id==='calendar') pending = renderDaybookCalendar();
   if (id==='help') { pending = renderLlmUsage(); renderUsage(); }
   if (id==='about') pending = renderAbout();
@@ -6485,7 +6560,7 @@ document.addEventListener('visibilitychange', function() { if (document.visibili
 var USAGE_LABELS = {
   fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence', ask_send_decision:'Ask: decision draft', ask_send_check:'Ask: to check', ask_send_take:'Ask: my take', ask_send_copy:'Ask: copy as text', 'ask_send_confirm-check':'Ask: check added',
   page_today:'Today', page_command:'Morning 5', page_evidence:'Evidence', page_decisions:'Decisions', page_research:'Research', page_timeline:'Timeline',
-  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_flights:'Trips', page_shopping:'Clothing', page_calendar:'Calendar', page_pse:'PSE', page_trends:'Trends',
+  page_history:'History', page_help:'Help', page_radar:'Radar', page_journal:'Journal', page_miro:'Markets', page_sports:'Sports', page_flights:'Trips', page_shopping:'Clothing', page_rentals:'Rentals', page_calendar:'Calendar', page_pse:'PSE', page_trends:'Trends',
   grooming_done:'Grooming: done', grooming_plan:'Grooming: plan a session', grooming_add:'Grooming: add an item',
   card_deeper:'Go deeper', card_note:'Note this (story)', card_cite:'Copy citation', card_read:'Mark read', card_evidence:'Save story to Evidence',
   card_more:'More like this', card_less:'Less like this', card_remind:'Remind me',
@@ -9387,6 +9462,7 @@ var FEED_SPEC = [
   { key: 'radar',    label: 'Radar',    maxAgeH: 30,   weekdays: true, cadence: '06:00 + 08:30 catch-up, Mon–Fri' },
   { key: 'miro',     label: 'Markets',  maxAgeH: 30,   cadence: '06:15' },
   { key: 'shopping', label: 'Clothing', maxAgeH: 102, cadence: 'Mon + Thu 08:00 PHT' },
+  { key: 'rentals',  label: 'Rentals',  maxAgeH: 36,  cadence: 'daily 07:00 PHT (GitHub can start it late)' },
   { key: 'flights',  label: 'Flights',  maxAgeH: 26,   cadence: '08:00 + 20:00 PHT' },
   { key: 'hotels',   label: 'Hotels',   maxAgeH: 26,   cadence: 'after each flight scout' },
   { key: 'ph',       label: 'PSE',      maxAgeH: 30,   weekdays: true, cadence: '16:30 after the close, Mon–Fri (GitHub often starts it hours late)' },

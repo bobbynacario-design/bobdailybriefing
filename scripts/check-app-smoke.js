@@ -27,7 +27,7 @@ assert.deepEqual(duplicateIds(sports), [], 'sports.html must not contain duplica
 
 [
   'page-scout', 'page-today', 'page-history', 'page-trends', 'page-research', 'page-radar',
-  'today-five', 'page-calendar', 'page-evidence', 'page-timeline', 'page-journal', 'page-pse', 'page-miro', 'page-flights', 'page-shopping', 'page-sports', 'page-help', 'page-decisions', 'page-about'
+  'today-five', 'page-calendar', 'page-evidence', 'page-timeline', 'page-journal', 'page-pse', 'page-miro', 'page-flights', 'page-shopping', 'page-rentals', 'page-sports', 'page-help', 'page-decisions', 'page-about'
 ].forEach(function (id) {
   assert.ok(html.includes('id="' + id + '"'), 'missing application page #' + id);
 });
@@ -45,7 +45,7 @@ assert.ok(html.includes('<symbol id="i-scout"'), 'Scout needs its section icon (
 assert.ok(html.indexOf('<div id="scout-cpe"></div>') >= 0 && html.indexOf('<div id="scout-cpe"></div>') < html.indexOf('<div id="scout-results"></div>'), 'the CIA CPE card sits above the Scout results');
 // Eleven tabs since the 11 Oct prune; the folded pages open from their family's strip and from Search.
 const navTabs = (html.slice(html.indexOf('<div class="nav-center">'), html.indexOf('<div class="nav-right">')).match(/data-page="([a-z]+)"/g) || []).map((m) => m.slice(11, -1)).sort();
-assert.deepEqual(navTabs, ['about', 'calendar', 'decisions', 'evidence', 'flights', 'help', 'miro', 'radar', 'research', 'scout', 'shopping', 'sports', 'today'], 'the bar holds thirteen tabs');
+assert.deepEqual(navTabs, ['about', 'calendar', 'decisions', 'evidence', 'flights', 'help', 'miro', 'radar', 'rentals', 'research', 'scout', 'shopping', 'sports', 'today'], 'the bar holds fourteen tabs');
 const shell = readFileSync(new URL('../lib/ui-shell.js', import.meta.url), 'utf8');
 ['history', 'trends', 'timeline', 'journal', 'pse'].forEach((page) => {
   assert.ok(new RegExp("\\['" + page + "',").test(shell), page + ' must sit in a page family');
