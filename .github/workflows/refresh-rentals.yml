@@ -1,0 +1,27 @@
+name: Refresh condo rentals
+on:
+  schedule:
+    # Daily, 07:00 Philippine time. No AI or paid data API.
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: refresh-rentals
+  cancel-in-progress: false
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: flights/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix flights ci
+      - run: node flights/refresh-rentals.js
