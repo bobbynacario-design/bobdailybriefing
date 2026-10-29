@@ -2,7 +2,7 @@
    The app page opens from the cache and refreshes behind itself (openShell);
    other requests of Daybook's own are network-first, with the cache as the
    offline fallback. Firebase and Google auth traffic always bypasses the cache. */
-var CACHE_NAME = 'bob-briefing-shell-v336';
+var CACHE_NAME = 'bob-briefing-shell-v337';
 
 var briefingMessaging = null;
 try {
