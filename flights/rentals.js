@@ -151,15 +151,16 @@ export function benchmarks(items){
   }
   return out;
 }
-// Compact price memory: first seen, last seen and each price change, 60 days.
+// Compact price memory: first seen, last seen and each price change
+// ({d: day, r: rent}; Firestore refuses a list inside a list), 60 days.
 export function trackHistory(items,prior,checkedAt){
   const day=checkedAt.slice(0,10),cut=new Date(Date.parse(checkedAt)-60*86400000).toISOString().slice(0,10),entries={};
-  for(const [id,e] of Object.entries(prior?.items || {}))if(e && e.l>=cut)entries[id]=e;
+  for(const [id,e] of Object.entries(prior?.items || {}))if(e && e.l>=cut && Array.isArray(e.p))entries[id]=e;
   const out=items.map(i=>{
-    const e=entries[i.id] || {f:checkedAt,l:day,p:[]},before=e.p.filter(r=>r[0]!==day),last=before[before.length-1];
-    const p=last && last[1]===i.price?before:before.concat([[day,i.price]]);
+    const e=entries[i.id] || {f:checkedAt,l:day,p:[]},before=e.p.filter(r=>r.d!==day),last=before[before.length-1];
+    const p=last && last.r===i.price?before:before.concat({d:day,r:i.price});
     entries[i.id]={f:e.f,l:day,p:p.slice(-12)};
-    return {...i,firstSeen:e.f,...(last && last[1]!==i.price?{previousPrice:last[1],previousDay:last[0]}:{})};
+    return {...i,firstSeen:e.f,...(last && last.r!==i.price?{previousPrice:last.r,previousDay:last.d}:{})};
   });
   const keep=Object.keys(entries).sort((a,b)=>entries[b].l.localeCompare(entries[a].l)).slice(0,3000);
   const since=prior?.since || checkedAt;

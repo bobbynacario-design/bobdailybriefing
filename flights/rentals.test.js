@@ -8,6 +8,13 @@ const dotCard=({uuid='u1',title='1 Bedroom Condo for rent in The Sapphire Bloc, 
   '<div>₱ '+price+'</div><div>'+per+'</div></a><ul>'+(beds!=null?'<li><span>'+icon('bed')+'</span> '+beds+'</li>':'')+'<li><span>'+icon('bathtub')+'</span> 1</li>'+(sqm!=null?'<li><span>'+icon('resize')+'</span> '+sqm+' m<sup>2</sup></li>':'')+'<li>'+icon('home')+' Condo</li></ul>'+
   '<div class="line-clamp-4">'+snippet+'</div><a href="https://www.dotproperty.com.ph/publisher/a/properties-for-rent"><div title="Jane Agent">Jane Agent</div>'+(verified?'<span>'+icon('verified')+'</span>':'')+'</a></article>';
 const dotPage=(cards,total)=>'<html><body>'+cards.join('')+'<script>var last_search = {"totalProperty":'+total+',"x":1}</script></body></html>';
+// What Firestore refuses in a document: undefined values and a list inside a list.
+const firestoreProblem=(v,path='doc',inList=false)=>{
+  if(v===undefined)return path+' is undefined';
+  if(Array.isArray(v)){if(inList)return path+' is a list inside a list';for(let i=0;i<v.length;i++){const p=firestoreProblem(v[i],path+'['+i+']',true);if(p)return p;}return null;}
+  if(v && typeof v==='object'){for(const [k,x] of Object.entries(v)){const p=firestoreProblem(x,path+'.'+k,false);if(p)return p;}}
+  return null;
+};
 const hopplerPage=rows=>'<html><script id="hiResultsPageResult" type="application/json">'+Buffer.from(JSON.stringify(rows)).toString('base64')+'</script></html>';
 const hop=(o={})=>({propertyKey:'RR1',feStatus:'Available',category:'Rent',type:'Condominium',building:'Aurora Escalades',area:'Cubao',city:'Quezon City',permalink:'/quezon-city-cubao-aurora-escalades-rr1',minPrice:21000,maxPrice:21000,discountedPrice:21000,floorArea:24,bedrooms:0,bathrooms:1,photos:['hoppler/p.png'],dateModified:'2026-03-08T10:00:00+08:00',dateAvailability:'2026-04-01T23:59:59+08:00',...o});
 
@@ -101,7 +108,8 @@ test('price memory keeps first seen and shows a change', ()=>{
   assert.equal(again.items[0].previousPrice,undefined,'same-day rerun');
   const later=trackHistory([{id:'a',price:23000}],again.history,'2026-11-02T23:00:00.000Z');
   assert.equal(later.items[0].firstSeen,'2026-10-29T23:00:00.000Z');assert.equal(later.items[0].previousPrice,25000);assert.equal(later.items[0].previousDay,'2026-10-29');
-  assert.deepEqual(later.history.items.a.p,[['2026-10-29',25000],['2026-11-02',23000]]);
+  assert.deepEqual(later.history.items.a.p,[{d:'2026-10-29',r:25000},{d:'2026-11-02',r:23000}]);
+  assert.equal(firestoreProblem(later.history),null);
   const gone=trackHistory([],later.history,'2027-02-01T00:00:00.000Z');
   assert.deepEqual(gone.history.items,{},'unseen for 60 days drops');
 });
@@ -124,4 +132,8 @@ test('crawl pages politely, records blocked pages and carries recent details', a
   assert.equal(r.sources.find(s=>s.loc==='taguig/bgc').status,'unavailable');
   assert.match(r.sources.find(s=>s.loc==='taguig/bgc').message,/HTTP 403; no bypass attempted/);
   assert.equal(r.sources.find(s=>s.loc==='pasig/ortigas').pages,1);
+  const tracked=trackHistory(dedupe(r.items),null,'2026-10-29T23:00:00.000Z');
+  assert.equal(firestoreProblem(JSON.parse(JSON.stringify({items:tracked.items,sources:r.sources}))),null);
+  assert.equal(firestoreProblem(tracked.history),null);
+  assert.match(String(firestoreProblem({p:[['2026-10-29',1]]})),/list inside a list/,'the check itself catches the 29 Oct failure');
 });
