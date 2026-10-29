@@ -107,7 +107,7 @@ export function parseHoppler(html,area){
     const price=num(r.discountedPrice) || num(r.minPrice);
     if(r.category!=='Rent' || r.type!=='Condominium' || r.feStatus!=='Available' || !price || !/^\/[a-z0-9-]+$/.test(r.permalink || ''))return [];
     return [{id:'hop:'+r.propertyKey,source:'Hoppler',area,url:'https://www.hoppler.com.ph'+r.permalink,title:clean([r.bedrooms===0?'Studio':r.bedrooms+' BR',r.building,r.area].filter(Boolean).join(' · ')),
-      price,priceFrom:num(r.maxPrice)>num(r.minPrice) || undefined,beds:num(r.bedrooms),baths:num(r.bathrooms),sqm:num(r.floorArea),building:clean(r.building) || null,locality:[r.area,r.city].filter(Boolean).join(', ') || null,near:null,
+      price,...(num(r.maxPrice)>num(r.minPrice)?{priceFrom:true}:{}),beds:num(r.bedrooms),baths:num(r.bathrooms),sqm:num(r.floorArea),building:clean(r.building) || null,locality:[r.area,r.city].filter(Boolean).join(', ') || null,near:null,
       seller:'Hoppler',verified:true,featured:false,image:r.photos && r.photos[0]?'https://d2wy52y0hrt3v.cloudfront.net/'+r.photos[0]+'?sg=propertycard':null,
       updatedAt:r.dateModified || null,availableFrom:r.dateAvailability?String(r.dateAvailability).slice(0,10):null,snippet:''}];
   });

@@ -68,6 +68,7 @@ test('Hoppler results come from its embedded JSON', ()=>{
   assert.equal(r.items[0].url,'https://www.hoppler.com.ph/quezon-city-cubao-aurora-escalades-rr1');
   assert.equal(r.items[0].availableFrom,'2026-04-01');
   assert.equal(r.items[1].priceFrom,true);
+  assert.ok(!('priceFrom' in r.items[0]),'Firestore refuses an undefined field');
   assert.equal(parseHoppler('<html></html>','cubao').readable,false);
 });
 test('Hoppler detail stops before similar listings', ()=>{

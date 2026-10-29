@@ -20,13 +20,14 @@ async function main(){
   const feed={kind:'rentals-feed',generatedAt:checkedAt,cap:CAP,areas:AREAS.map(({id,name})=>({id,name})),items,benchmarks:benchmarks(items),
     sources:run.sources,trackingSince:tracked.history.since,details:{read:run.detailRead,carried:run.detailCarried,failed:run.detailFailed},modelCalls:0,
     coverage:'Studio and 1-bedroom condos for rent up to ₱'+CAP.toLocaleString('en-PH')+' a month on DotProperty and Hoppler, newest first. Not every listing site: Lamudi, Rentpad, MyProperty and OnePropertee refuse automated reads.'};
-  const bytes=Buffer.byteLength(JSON.stringify(feed));
+  // Firestore refuses undefined values; a JSON round trip drops them.
+  const doc=JSON.parse(JSON.stringify(feed)),bytes=Buffer.byteLength(JSON.stringify(doc));
   console.log(JSON.stringify({items:items.length,raw:run.items.length,details:feed.details,bytes,sources:run.sources.map(s=>s.site+' '+s.loc+' '+s.status+' '+s.count),benchmarks:feed.benchmarks,modelCalls:0}));
-  if(out)writeFileSync(out,JSON.stringify(feed,null,1));
+  if(out)writeFileSync(out,JSON.stringify(doc,null,1));
   if(dry)return;
   if(run.sources.every(s=>s.status==='unavailable'))throw Error('All rental sources unavailable; previous feed preserved.');
   if(bytes>850000)throw Error('Rentals feed exceeds size budget; previous feed preserved.');
-  const batch=db.batch();batch.set(db.collection('briefings-bob').doc('rentals-latest'),feed);batch.set(db.collection('briefings-bob').doc('rentals-history'),tracked.history);await batch.commit();
+  const batch=db.batch();batch.set(db.collection('briefings-bob').doc('rentals-latest'),doc);batch.set(db.collection('briefings-bob').doc('rentals-history'),tracked.history);await batch.commit();
   const down=run.sources.filter(s=>s.status==='unavailable').length;
   await recordRunHealth(db,'rentals',{status:'ok',durationMs:Date.now()-started,asOf:checkedAt.slice(0,10),message:items.length+' condos for rent read'+(down?', '+down+' of '+run.sources.length+' pages unavailable':'')+'; no AI calls.'});
 }
