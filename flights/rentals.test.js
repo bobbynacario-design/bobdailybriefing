@@ -154,3 +154,16 @@ test('airport scout reaches NAIA and Pampanga paths, tracks units and computes s
   const b=benchmarks(Array.from({length:5},(_,n)=>({area:'clark',beds:0,price:20000+n*1000,sqm:30})));
   assert.equal(b.clark.studio.medianRent,22000);assert.equal(b.naia,undefined);
 });
+
+test('Entertainment City and NAIA share Tambo units without duplicates or lost area medians',async()=>{
+  const url=dotUrl('para%C3%B1aque/tambo'),html=dotPage([dotCard({uuid:'shared',title:'Studio Condo for rent in Bay Residences, Tambo, Metro Manila',beds:'0',price:'22,000'})],1);
+  const fetchImpl=async u=>({ok:u===url,status:u===url?200:404,text:async()=>html});
+  const r=await crawl({checkedAt:'2026-10-31T00:00:00Z',fetchImpl,pause:0,detailCap:0});
+  assert.equal(r.items.length,1);assert.equal(r.items[0].area,'naia');assert.deepEqual(r.items[0].areas,['naia','entertainment']);
+  for(const a of ['naia','entertainment'])assert.equal(r.sources.find(s=>s.area===a&&s.loc==='para%C3%B1aque/tambo').count,1);
+  const primary={...r.items[0],building:'Bay Residences',sqm:30};
+  const merged=dedupe([primary,{...primary,id:'hop:other',area:'entertainment',areas:undefined,detailAt:'2026-10-31T00:00:00Z'}]);
+  assert.equal(merged.length,1);assert.ok(merged[0].areas.includes('naia'));assert.ok(merged[0].areas.includes('entertainment'));
+  const rows=Array.from({length:5},(_,n)=>({...primary,id:'dot:'+n,price:20000+n*1000})),b=benchmarks(rows);
+  assert.equal(b.naia.studio.n,5);assert.equal(b.entertainment.studio.medianRent,22000);
+});

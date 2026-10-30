@@ -14,7 +14,8 @@ export const AREAS=[
   {id:'makati',name:'Makati CBD',dot:['makati/san-lorenzo','makati/bel-air','makati/urdaneta','makati/poblacion','makati/rockwell'],hoppler:['makati/legaspi-village','makati/salcedo-village','makati/poblacion','makati/rockwell-center']},
   {id:'bgc',name:'BGC',dot:['taguig/bgc'],hoppler:['taguig/bgc-bonifacio-global-city']},
   {id:'naia',name:'NAIA area',dot:['pasay/barangay-183','para%C3%B1aque/tambo'],hoppler:['pasay/newport']},
-  {id:'clark',name:'Clark area',dot:['pampanga/mabalacat/clark-freeport-zone','pampanga/angeles/anunas'],hoppler:[]}
+  {id:'clark',name:'Clark area',dot:['pampanga/mabalacat/clark-freeport-zone','pampanga/angeles/anunas'],hoppler:[]},
+  {id:'entertainment',name:'Entertainment City area',dot:['para%C3%B1aque/tambo','para%C3%B1aque/baclaran','pasay/mall-of-asia-complex'],hoppler:['paranaque/aseana-city','pasay/mall-of-asia-complex']}
 ];
 // Below this a "condo" is a bed space or parking slot, not a home.
 export const MIN_RENT=8000;
@@ -139,7 +140,9 @@ export function dedupe(items){
     groups.get(key).push(i);
   }
   return out.map(k=>{const g=groups.get(k).sort((a,b)=>(b.detailAt?1:0)-(a.detailAt?1:0) || (b.verified?1:0)-(a.verified?1:0));
-    return g.length>1?{...g[0],also:g.slice(1,4).map(x=>({source:x.source,url:x.url,seller:x.seller}))}:g[0];});
+    const areas=[...new Set(g.flatMap(i=>[i.area,...(i.areas || [])]).filter(Boolean))];
+    const lead=g.length>1?{...g[0],also:g.slice(1,4).map(x=>({source:x.source,url:x.url,seller:x.seller}))}:g[0];
+    return areas.length>1?{...lead,areas}:lead;});
 }
 const median=v=>{const s=[...v].sort((a,b)=>a-b),m=s.length>>1;return s.length%2?s[m]:Math.round((s[m-1]+s[m])/2);};
 // Typical rent per area and size from this run's listings, so a card can say
@@ -147,7 +150,7 @@ const median=v=>{const s=[...v].sort((a,b)=>a-b),m=s.length>>1;return s.length%2
 export function benchmarks(items){
   const out={};
   for(const area of AREAS)for(const [kind,beds] of [['studio',0],['1br',1]]){
-    const rows=items.filter(i=>i.area===area.id && i.beds===beds && i.price>0);
+    const rows=items.filter(i=>(i.area===area.id || (i.areas || []).includes(area.id)) && i.beds===beds && i.price>0);
     const sized=rows.filter(i=>i.sqm>=15 && i.sqm<=120);
     if(rows.length>=5)(out[area.id] ||= {})[kind]={n:rows.length,medianRent:median(rows.map(i=>i.price)),...(sized.length>=5?{medianPerSqm:median(sized.map(i=>Math.round(i.price/i.sqm))),sized:sized.length}:{})};
   }
@@ -194,7 +197,12 @@ export async function getText(url,fetchImpl=fetch){
 // One request at a time with a pause between, as a person paging through.
 export async function crawl({checkedAt,prior,fetchImpl=fetch,pause=700,detailCap=120,log=()=>{}}){
   const sources=[],found=new Map();
-  const take=rows=>{for(const i of rows)if(i.price<=CAP && i.price>=MIN_RENT && (i.beds==null || i.beds<=1) && !found.has(i.id))found.set(i.id,i);};
+  const eligible=i=>i.price<=CAP && i.price>=MIN_RENT && (i.beds==null || i.beds<=1);
+  const take=rows=>{for(const i of rows)if(eligible(i)){
+    const prior=found.get(i.id);
+    if(!prior)found.set(i.id,i);
+    else if(prior.area!==i.area)prior.areas=[...new Set([prior.area,...(prior.areas || []),i.area])];
+  }};
   for(const area of AREAS){
     for(const loc of area.dot){
       const row={site:'DotProperty',area:area.id,loc,url:dotUrl(loc),status:'ok',count:0,pages:0,message:''},seen=new Set();
@@ -202,7 +210,7 @@ export async function crawl({checkedAt,prior,fetchImpl=fetch,pause=700,detailCap
         for(let page=1;page<=20;page++){
           const {items,total}=parseDot(await getText(dotUrl(loc,page),fetchImpl),area.id);row.pages=page;
           // Featured ads repeat on every page, so a page with nothing new is the end.
-          const before=found.size,fresh=items.filter(i=>!seen.has(i.id));items.forEach(i=>seen.add(i.id));take(items);row.count+=found.size-before;
+          const fresh=items.filter(i=>!seen.has(i.id));items.forEach(i=>seen.add(i.id));take(items);row.count+=fresh.filter(eligible).length;
           if(row.total==null)row.total=total;
           if(!fresh.length || page*20>=(total || 0))break;
           await sleep(pause);
@@ -212,13 +220,13 @@ export async function crawl({checkedAt,prior,fetchImpl=fetch,pause=700,detailCap
       sources.push(row);log(row);await sleep(pause);
     }
     for(const loc of area.hoppler){
-      const row={site:'Hoppler',area:area.id,loc,url:hopplerUrl(loc),status:'ok',count:0,pages:0,message:''};
+      const row={site:'Hoppler',area:area.id,loc,url:hopplerUrl(loc),status:'ok',count:0,pages:0,message:''},seen=new Set();
       try{
         // Cheapest first, so the pages past the cap need not be read.
         for(let page=1;page<=6;page++){
           const r=parseHoppler(await getText(hopplerUrl(loc,page),fetchImpl),area.id);row.pages=page;
           if(!r.readable){if(page===1)throw Error('Listing data not found');break;}
-          const before=found.size;take(r.items);row.count+=found.size-before;
+          row.count+=r.items.filter(i=>eligible(i) && !seen.has(i.id)).length;r.items.forEach(i=>seen.add(i.id));take(r.items);
           if(r.rows<24 || r.maxPrice>CAP)break;
           await sleep(pause);
         }
