@@ -19,7 +19,7 @@ async function main(){
   const items=tracked.items.sort((a,b)=>a.price-b.price);
   const feed={kind:'rentals-feed',generatedAt:checkedAt,cap:CAP,areas:AREAS.map(({id,name})=>({id,name})),items,benchmarks:benchmarks(items),
     sources:run.sources,trackingSince:tracked.history.since,details:{read:run.detailRead,carried:run.detailCarried,failed:run.detailFailed},modelCalls:0,
-    coverage:'Studio and 1-bedroom condos for rent up to ₱'+CAP.toLocaleString('en-PH')+' a month on DotProperty and Hoppler, newest first. Not every listing site: Lamudi, Rentpad, MyProperty and OnePropertee refuse automated reads.'};
+    coverage:'Studio and 1-bedroom condos for rent up to ₱'+CAP.toLocaleString('en-PH')+' a month in Cubao, Ortigas, Makati CBD, BGC, the NAIA area (Newport/Villamor and Tambo), and the Clark area (Clark Freeport and Anunas/Friendship). DotProperty and Hoppler where available; Clark uses DotProperty. Areas are search neighbourhoods, not verified airport distances or travel times. Not every listing site: Lamudi, Rentpad, MyProperty and OnePropertee refuse automated reads.'};
   // Firestore refuses undefined values; a JSON round trip drops them.
   const doc=JSON.parse(JSON.stringify(feed)),bytes=Buffer.byteLength(JSON.stringify(doc));
   console.log(JSON.stringify({items:items.length,raw:run.items.length,details:feed.details,bytes,sources:run.sources.map(s=>s.site+' '+s.loc+' '+s.status+' '+s.count),benchmarks:feed.benchmarks,modelCalls:0}));

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {facts,dotTitle,parseDot,parseDotDetail,parseHoppler,parseHopplerDetail,dedupe,benchmarks,trackHistory,withFacts,crawl,dotUrl,hopplerUrl} from './rentals.js';
+import {AREAS,facts,dotTitle,parseDot,parseDotDetail,parseHoppler,parseHopplerDetail,dedupe,benchmarks,trackHistory,withFacts,crawl,dotUrl,hopplerUrl} from './rentals.js';
 
 const icon=n=>'<img src="//build.dotproperty.com.ph/assets/'+n+'-abc12345.svg">';
 const dotCard=({uuid='u1',title='1 Bedroom Condo for rent in The Sapphire Bloc, San Antonio, Metro Manila near MRT-3 Ortigas',price='25,000',per='/ month',beds='1',sqm='32',snippet='Fully furnished, 2 months deposit 1 month advance',verified=true}={})=>
@@ -136,4 +136,21 @@ test('crawl pages politely, records blocked pages and carries recent details', a
   assert.equal(firestoreProblem(JSON.parse(JSON.stringify({items:tracked.items,sources:r.sources}))),null);
   assert.equal(firestoreProblem(tracked.history),null);
   assert.match(String(firestoreProblem({p:[['2026-10-29',1]]})),/list inside a list/,'the check itself catches the 29 Oct failure');
+});
+
+test('airport scout reaches NAIA and Pampanga paths, tracks units and computes separate medians',async()=>{
+  const pages=new Map();
+  for(const area of AREAS.filter(a=>['naia','clark'].includes(a.id))){
+    area.dot.forEach((loc,n)=>pages.set(dotUrl(loc),dotPage([dotCard({uuid:area.id+n,title:'Studio Condo for rent in Airport Residences, '+(area.id==='clark'?'Anunas, Pampanga':'Barangay 183, Metro Manila'),beds:'0',price:'22,000'})],1)));
+    area.hoppler.forEach(loc=>pages.set(hopplerUrl(loc),hopplerPage([hop({propertyKey:'NAIA',building:'Newport',area:'Newport',city:'Pasay'})])));
+  }
+  const asked=[],fetchImpl=async url=>{asked.push(url);return {ok:pages.has(url),status:pages.has(url)?200:404,text:async()=>pages.get(url)||''};};
+  const r=await crawl({checkedAt:'2026-10-31T00:00:00Z',fetchImpl,pause:0,detailCap:0});
+  assert.equal(r.items.filter(i=>i.area==='naia').length,3);assert.equal(r.items.filter(i=>i.area==='clark').length,2);
+  assert.ok(asked.includes('https://www.dotproperty.com.ph/condos-for-rent/pampanga/angeles/anunas?max_price=30000&sort=newest'));
+  assert.ok(!asked.some(url=>url.includes('metro-manila/pampanga')));
+  assert.match(dotUrl('pampanga/angeles/anunas',2),/pampanga\/angeles\/anunas\?max_price=30000&sort=newest&page=2$/);
+  const tracked=trackHistory(r.items,null,'2026-10-31T00:00:00Z');assert.equal(tracked.items.length,5);
+  const b=benchmarks(Array.from({length:5},(_,n)=>({area:'clark',beds:0,price:20000+n*1000,sqm:30})));
+  assert.equal(b.clark.studio.medianRent,22000);assert.equal(b.naia,undefined);
 });

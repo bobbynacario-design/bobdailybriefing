@@ -12,12 +12,14 @@ export const AREAS=[
   // Makati CBD by barangay: San Lorenzo holds Legaspi Village and Greenbelt,
   // Bel-Air holds Salcedo Village, Urdaneta sits along Ayala and Paseo.
   {id:'makati',name:'Makati CBD',dot:['makati/san-lorenzo','makati/bel-air','makati/urdaneta','makati/poblacion','makati/rockwell'],hoppler:['makati/legaspi-village','makati/salcedo-village','makati/poblacion','makati/rockwell-center']},
-  {id:'bgc',name:'BGC',dot:['taguig/bgc'],hoppler:['taguig/bgc-bonifacio-global-city']}
+  {id:'bgc',name:'BGC',dot:['taguig/bgc'],hoppler:['taguig/bgc-bonifacio-global-city']},
+  {id:'naia',name:'NAIA area',dot:['pasay/barangay-183','para%C3%B1aque/tambo'],hoppler:['pasay/newport']},
+  {id:'clark',name:'Clark area',dot:['pampanga/mabalacat/clark-freeport-zone','pampanga/angeles/anunas'],hoppler:[]}
 ];
 // Below this a "condo" is a bed space or parking slot, not a home.
 export const MIN_RENT=8000;
 export const UA='DaybookRentalScout/1.0 (public rental listings)';
-export const dotUrl=(loc,page=1)=>'https://www.dotproperty.com.ph/condos-for-rent/metro-manila/'+loc+'?max_price='+CAP+'&sort=newest'+(page>1?'&page='+page:'');
+export const dotUrl=(loc,page=1)=>'https://www.dotproperty.com.ph/condos-for-rent/'+(loc.startsWith('pampanga/')?'':'metro-manila/')+loc+'?max_price='+CAP+'&sort=newest'+(page>1?'&page='+page:'');
 export const hopplerUrl=(loc,page=1)=>'https://www.hoppler.com.ph/condominiums-for-rent/'+loc+'?sort=minPrice&sortBy=asc'+(page>1?'&page='+page:'');
 const clean=s=>String(s==null?'':s).replace(/\s+/g,' ').trim();
 const num=s=>{const n=Number(String(s==null?'':s).replace(/,/g,''));return Number.isFinite(n)?n:null;};
