@@ -21,6 +21,12 @@ export const SOURCES=[
   {id:'hushpuppies',brand:'Hush Puppies',shopify:true,url:'https://www.hushpuppies.com.ph/collections/mens-sale'},
   // Toby's Sports lists other brands' stock, as ZALORA does: only these are kept.
   {id:'tobys',brand:"Toby's",retailer:"Toby's",shopify:true,vendors:{adidas:'Adidas',nike:'Nike','nike sportswear':'Nike',jordan:'Nike'},url:'https://www.tobys.com/collections/mens-collection-sale'},
+  {id:'giordano',brand:'Giordano',shopify:true,pageSize:20,pages:5,url:'https://giordano.ph/collections/sale'},
+  {id:'memo',brand:'Memo',shopify:true,pageSize:20,pages:5,url:'https://memofashion.com/collections/sale'},
+  {id:'regatta',brand:'Regatta',shopify:true,pageSize:20,pages:5,url:'https://www.regattalifestyle.com/collections/sale'},
+  {id:'timberland',brand:'Timberland',shopify:true,url:'https://timberland.com.ph/collections/sale'},
+  {id:'sc-skechers',brand:'Sports Central · Skechers',retailer:'Sports Central',shopify:true,vendors:{skechers:'Skechers'},url:'https://sportscentral.ph/collections/skechers-men'},
+  {id:'sc-puma',brand:'Sports Central · Puma',retailer:'Sports Central',shopify:true,vendors:{puma:'Puma'},url:'https://sportscentral.ph/collections/puma'},
   {id:'sm',brand:'Mall promotions',url:'https://www.smsupermalls.com/smdeals'}
 ];
 const id=s=>createHash('sha256').update(s).digest('hex').slice(0,24);
@@ -93,7 +99,7 @@ export function parseNike(html,checkedAt){
 // compare_at_price is the struck-through price the store itself shows; a
 // variant without one is full price, whatever collection it sits in.
 const SHOPIFY_SKIP=/\b(?:wallets?|purses?|bags?|backpacks?|sackpacks?|slings?|duffle|totes?|caps?|hats?|visors?|socks?|belts?|underwear|boxers?|briefs?|fragrances?|giftsets?|hair|bath|home care|eyewear|sunglasses|gloves?|headbands?|bottles?|travel kit|school|leggings?|tights|bras?|accessor(?:y|ies))\b/i;
-const NOT_MEN=/\b(?:women'?s?|ladies|girls?|boys?|kids?|youth|toddlers?|baby|infants?)\b/i;
+const NOT_MEN=/\b(?:women'?s?|ladies|girls?|boys?|kids?|juniors?|children|youth|toddlers?|baby|infants?)\b/i;
 // Levi's tags each product with a colour family ("Black", "Dark Indigo", "Multicolour").
 const SHOP_COLORS=['White','Cream','Beige','Black','Grey','Gray','Navy','Blue','Brown','Burgundy','Green','Red','Khaki','Olive','Tan','Dark Indigo','Medium Indigo','Light Indigo','Neutral','Multicolour'];
 // Under Armour writes SM/MD/LG, Penshoppe "SIZE 30", Columbia "S R" (regular
@@ -101,8 +107,8 @@ const SHOP_COLORS=['White','Cream','Beige','Black','Grey','Gray','Navy','Blue','
 // Toby's "M 8 / W 9" or "M(8.5) / W(10)", Columbia "US9"; the men's size is kept.
 const MEN_SHOE=/^(?:US\s*)?M?\s*\(?\s*(\d{1,2}(?:\.5)?)\s*\)?(?:\s*\/\s*W?\s*\(?\s*\d{1,2}(?:\.5)?\s*\)?)?$/;
 function shopSize(raw,{waist,footwear}){
-  const s=String(raw || '').trim().toUpperCase().replace(/^SIZE\s+/,'').replace(/^(?:US|ASIAN?|EU|UK)\s*:\s*/,'');if(s==='DEFAULT TITLE')return '';
-  if(footwear)return MEN_SHOE.exec(s)?.[1] || '';
+  const s=String(raw || '').trim().toUpperCase().replace(/^SIZE\s+/,'').replace(/^(?:US|ASIAN?|EU|UK|INT)\s*:\s*/,'');if(s==='DEFAULT TITLE')return '';
+  if(footwear){const marked=/^(\d{1,2}(?:\.5)?)\s+(US|UK|EU)$/.exec(s);return marked?(marked[2]==='US'?marked[1]:marked[0]):MEN_SHOE.exec(s)?.[1] || '';}
   if(waist)return /^\d{2}$/.test(s)?s:'';
   return /^(\d{2})(?:\/\d{2}|\d{2})$/.exec(s)?.[1] || {SM:'S',MD:'M',LG:'L'}[s] || s.replace(/^(XXS|XS|S|M|L|XL|XXL|[2-5]XL) R$/,'$1');
 }
@@ -127,7 +133,8 @@ export function parseShopify(source,products,checkedAt){
     // every value marked US or M (men's), or a store known to use them.
     // Columbia marks each clothing size "US:S" or "ASIAN:XL"; a mix is not guessed.
     const values=sizeAt<0?[]:(p.variants || []).map(v=>value(v,sizeAt).trim()),every=re=>values.length>0 && values.every(x=>re.test(x));
-    const shoeUS=/\bUS\b/i.test(opts[sizeAt] || '') || source.shoes==='US men' || every(/^(?:US\s*\d|M\s*\(?\s*\d)/i);
+    const otherShoeUnits=values.some(x=>/\b(?:UK|EU)\b/i.test(x)) || /\b(?:UK|EU)\b/i.test(opts[sizeAt] || '');
+    const shoeUS=!otherShoeUnits && (/\bUS\b/i.test(opts[sizeAt] || '') || source.shoes==='US men' || every(/^(?:US\s*\d|M\s*\(?\s*\d)/i) || /\bmen'?s?\b/i.test(title+' '+type) && every(/^\d{1,2}(?:\.5)?\s+US$/i));
     const usMarked=values.filter(x=>/^US\s*:/i.test(x)).length;
     const sizeSystem=footwear?(shoeUS?'US men':'Unverified'):sizeAt<0?'Unverified':usMarked?(usMarked===values.length?'US clothing':'Unverified'):/\bUS\b/i.test(opts[sizeAt])?'US clothing':'Labelled clothing';
     // A store without a colour option (Levi's) files one colour per product and tags it.
@@ -172,9 +179,9 @@ export async function readSource(source,checkedAt,fetchImpl=fetch){
       const text=await r.text();if(text.length>4000000)throw Error('Page exceeded reader limit');return text;
     };
     if(source.shopify){
-      // Up to four pages of 100 products (a store may set more); a short page is the last one.
-      const products=[];
-      for(let page=1;page<=(source.pages || 4);page++){const rows=JSON.parse(await get(source.url+'/products.json?limit=100&page='+page)).products || [];products.push(...rows);if(rows.length<100)break;}
+      // Smaller pages keep image-heavy catalogues within the reader's limits.
+      const products=[],pageSize=source.pageSize || 100;
+      for(let page=1;page<=(source.pages || 4);page++){const rows=JSON.parse(await get(source.url+'/products.json?limit='+pageSize+'&page='+page)).products || [];products.push(...rows);if(rows.length<pageSize)break;}
       const items=parseShopify(source,products,checkedAt);
       return {...source,checkedAt,status:items.length?'ok':'unpriced',count:items.length,items,candidates:[],message:items.length?'PHP markdowns read from the store’s public catalogue ('+products.length+' products); sizes are those in stock online.':'No marked-down men’s items read from '+products.length+' products. Open the official page to check.'};
     }
@@ -182,6 +189,15 @@ export async function readSource(source,checkedAt,fetchImpl=fetch){
     const items=source.id==='hm'?parseHM(text,checkedAt):source.id==='crocs'?parseCrocs(text,checkedAt):source.id==='nike'?parseNike(text,checkedAt):[];
     return {...source,checkedAt,status:items.length?'ok':source.id==='sm'?'checked':'unpriced',count:items.length,items,candidates:source.id==='sm'?mallCandidates(text):[],message:items.length?'Published PHP markdowns read; checkout and size need rechecking.':'No usable product markdowns read. Open the official page to check; this does not mean there are no deals.'};
   }catch(e){return {...source,checkedAt,status:'unavailable',count:0,items:[],candidates:[],message:e.message.startsWith('HTTP')?e.message+'; official page remains available to check manually.':'Page timed out or could not be read; no bypass attempted.'};}
+}
+// Give each source a turn before applying the shared storage limit. Otherwise
+// a large early catalogue can silently exclude every newly added retailer.
+export function balancedItems(results,limit=480){
+  const queues=results.map(r=>r.items || []),seen=new Set(),out=[];
+  for(let n=0;out.length<limit && queues.some(q=>n<q.length);n++)for(const q of queues){
+    const i=q[n];if(i && !seen.has(i.id)){seen.add(i.id);out.push(i);if(out.length===limit)break;}
+  }
+  return out;
 }
 export function priceHistory(items,prior,checkedAt){
   const day=checkedAt.slice(0,10),cut=new Date(Date.parse(checkedAt)-30*86400000).toISOString().slice(0,10),history={};

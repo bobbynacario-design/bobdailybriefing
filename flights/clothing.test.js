@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {category,parseHM,parseCrocs,parseNike,parseShopify,parseMall,mallCandidates,readSource,priceHistory} from './clothing.js';
+import {SOURCES,category,parseHM,parseCrocs,parseNike,parseShopify,parseMall,mallCandidates,readSource,priceHistory,balancedItems} from './clothing.js';
 const at='2026-10-17T03:00:00Z';
 const product={id:'12345',productName:'Cotton polo',url:'/en_ph/productpage.12345.html',colorName:'Blue',availability:{stockState:'Available'},prices:[{priceType:'redPrice',price:500},{priceType:'whitePrice',price:1000}],sizes:[{label:'M',stock:2},{label:'S',stock:0}]};
 const hm=rows=>'<script id="__NEXT_DATA__" type="application/json">'+JSON.stringify({props:{pageProps:{plpProps:{productListingSectionProps:{productListingData:{rawProductList:rows}}}}}})+'</script>';
@@ -130,4 +130,32 @@ test('Columbia sizes: "S R" is a regular-length Small, and "US9" on every shoe s
  const marked=sizes=>parseShopify(col,[{...jacket,variants:sizes.map((x,n)=>v(400+n,'Black',x,3200,4490))}],at)[0];
  assert.deepEqual([marked(['US:S','US:M']).availableSizes,marked(['US:S','US:M']).sizeSystem],[['S','M'],'US clothing']);
  assert.equal(marked(['ASIAN:XL']).sizeSystem,'Labelled clothing');assert.equal(marked(['US:S','ASIAN:XL']).sizeSystem,'Unverified');assert.deepEqual([s.availableSizes,s.sizeSystem],[['8','9'],'US men']);
+});
+
+
+test('new catalogue formats keep adult clothing and distinguish US from UK shoes',()=>{
+ const source=id=>SOURCES.find(s=>s.id===id);
+ const p={id:100,title:"GIORDANO Men's Cotton Polo",product_type:'',vendor:'Giordano PH',tags:[],handle:'polo',options:[{name:'Color'},{name:'Size'}],variants:[v(1,'Black','M',749.50,1499)]};
+ const rows=parseShopify(source('giordano'),[p,{...p,id:101,title:'GIORDANO Junior Cargo Shorts',product_type:'Mens Shorts',variants:[v(2,'Black','155',450,900)]},{...p,id:102,title:"Women's Cotton Polo"}],at);
+ assert.equal(rows.length,1);assert.equal(rows[0].price,749.5);assert.deepEqual(rows[0].availableSizes,['M']);
+ const shirt={...p,title:"Men's Cotton Shirt",product_type:"Men's Apparel",options:[{name:'Size'}],variants:[v(3,'Int:M',null,1000,1500)]};
+ assert.deepEqual(parseShopify(source('timberland'),[shirt],at)[0].availableSizes,['M']);
+ const shoe={...p,title:'Skechers Men Summits',product_type:'Men Shoes',vendor:'Skechers',options:[{name:'Size'}],variants:[v(4,'8.5 US',null,2000,3500),v(5,'9 US',null,2000,3500,false)]};
+ const us=parseShopify(source('sc-skechers'),[shoe],at)[0];assert.equal(us.retailer,'Sports Central');assert.equal(us.brand,'Skechers');assert.equal(us.sizeSystem,'US men');assert.deepEqual(us.availableSizes,['8.5']);
+ const uk=parseShopify(source('sc-puma'),[{...shoe,title:'Puma Unisex Court Classic',product_type:'Unisex Shoes',vendor:'Puma',variants:[v(6,'8 UK',null,2100,4200)]}],at)[0];
+ assert.equal(uk.sizeSystem,'Unverified');assert.deepEqual(uk.availableSizes,['8 UK']);
+ assert.equal(parseShopify(source('sc-puma'),[{...shoe,vendor:'Other'}],at).length,0);
+});
+
+test('image-heavy stores use bounded smaller catalogue pages',async()=>{
+ const urls=[],source=SOURCES.find(s=>s.id==='memo');
+ const fake=async url=>{urls.push(url);return new Response(JSON.stringify({products:Array.from({length:urls.length===1?20:1},(_,id)=>({id,title:"Men's Cotton Polo",product_type:"Men's Polo",handle:'p'+id,options:[{name:'Size'}],variants:[v(id,'M',null,500,1000)]}))}));};
+ const r=await readSource(source,at,fake);assert.equal(r.status,'ok');assert.equal(urls.length,2);assert.match(urls[0],/limit=20&page=1$/);assert.match(urls[1],/limit=20&page=2$/);
+});
+
+test('the feed limit gives later retailers space and never repeats product ids',()=>{
+ const first=Array.from({length:480},(_,n)=>({id:'old'+n})),last=Array.from({length:45},(_,n)=>({id:'new'+n}));
+ const rows=balancedItems([{items:first},{items:[]},{items:last}]);
+ assert.equal(rows.length,480);assert.equal(rows.filter(i=>i.id.startsWith('new')).length,45);assert.equal(rows[1].id,'new0');
+ assert.deepEqual(balancedItems([{items:[{id:'a'},{id:'b'}]},{items:[{id:'a'},{id:'c'}]}],3).map(i=>i.id),['a','b','c']);
 });
