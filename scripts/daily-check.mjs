@@ -86,11 +86,22 @@ Object.entries(health.feeds || {}).sort().forEach(([name, f]) => {
   const since = f.lastOkAt ? phtTime(f.lastOkAt) : 'never';
   if (RETIRED.includes(name)) return info(name + ': retired (' + (f.status || '?') + ', last ok ' + since + ')');
   if (f.status === 'failed') return alert('feed:' + name, name + ' failing, last good ' + since + ': ' + (f.message || f.stage || 'no message'));
-  const maxHours = name === 'radar' || name === 'grounding' ? 30 : 36;
+  // Clothing (shopping) runs Monday and Thursday 08:00 PHT, so Thursday to
+  // Monday is 96 hours plus GitHub's late starts; 36 alerted every weekend.
+  const maxHours = name === 'radar' || name === 'grounding' ? 30 : name === 'shopping' ? 108 : 36;
   const age = f.lastOkAt && (name === 'radar' || name === 'ph' ? weekdayHours(f.lastOkAt, Date.now()) : hoursAgo(f.lastOkAt));
   if (f.lastOkAt && age > maxHours) return alert('feed:' + name + ':stale', name + ' has not run cleanly since ' + since);
   info(name + ': ' + (f.status || '?') + ', as of ' + (f.asOf || '?') + (f.message ? ' (' + String(f.message).slice(0, 70) + ')' : ''));
 });
+
+// A numbers run can finish ok while a series in it was not read or was refused
+// (blocked or conflict). The Morning 5 shows that as one Reliability line; this
+// names it here too (the AIP page misread on 31 Oct 2026 with the feed ok).
+{
+  const g = await get('grounding-latest');
+  const stuck = ((g && g.watch) || []).filter((w) => w.state === 'blocked' || w.state === 'conflict');
+  if (stuck.length) warn('grounding:watch', 'Numbers not published (' + stuck.length + '): ' + stuck.map((w) => w.seriesId + ' ' + w.state).join(', ') + '. ' + String(stuck[0].detail || '').slice(0, 160));
+}
 
 // 3. Radar: the 06:00 laptop task writes first and has no Claude key, and the
 // GitHub run then skips because the day is already written (found 11 Oct).
