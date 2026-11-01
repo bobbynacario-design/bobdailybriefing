@@ -69,6 +69,7 @@ const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback, recentBriefingDocs} = require("./briefing-context");
 const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS, profileBrief} = require("./briefing-prompt-core");
+const {morningBriefingPlan, morningBriefingDoc, morningBriefingKey} = require("./morning-briefing");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
 const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, materialFromIndex, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
 const {
@@ -400,6 +401,202 @@ async function loadMarketFacts(db) {
   }
 }
 
+// One briefing for one account: the Generate button (generateBobDailyBriefing)
+// and the 05:40 build (buildMorningBriefing) both run this.
+async function buildBriefingFor(db, uid, dateLabel, model) {
+  const [{evidence, reason: groundingReason}, context, facts, feedback, profile] = await Promise.all([
+    loadNewsEvidence(db),
+    loadStandingContext(db, uid),
+    loadMarketFacts(db),
+    loadReaderFeedback(db, uid),
+    loadProfile(db, uid),
+  ]);
+  const prompt = buildBriefingPrompt({
+    dateLabel,
+    evidence, context, facts, feedback, profile,
+  });
+
+  const body = {
+    model,
+    input: [
+      {
+        role: "system",
+        content: "You produce factual, concise JSON intelligence briefings. Return strict JSON only.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    tools: [
+      {
+        type: "web_search",
+        // Medium, like the dossier and the meeting brief: at "low" the search
+        // rarely surfaced utility, road-asset or trucking stories at all.
+        search_context_size: "medium",
+        user_location: {
+          type: "approximate",
+          country: "PH",
+          timezone: "Asia/Manila",
+        },
+      },
+    ],
+    tool_choice: "auto",
+    // The full list of pages the search tool returned, so each story's url can
+    // be checked against what was really fetched (verifyGrounding).
+    include: ["web_search_call.action.sources"],
+  };
+
+  let response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + OPENAI_API_KEY.value(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(480000),
+    });
+  } catch (err) {
+    logger.error("OpenAI network error", err);
+    throw new HttpsError("unavailable", "OpenAI request failed before receiving a response.");
+  }
+
+  const responseText = await response.text();
+  let json;
+  try {
+    json = JSON.parse(responseText);
+  } catch (err) {
+    json = {error: {message: responseText || "Non-JSON OpenAI response"}};
+  }
+
+  if (!response.ok) {
+    const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
+    logger.error("OpenAI API error", {status: response.status, message: msg});
+    throw new HttpsError("internal", msg);
+  }
+
+  let raw;
+  let briefing;
+  try {
+    raw = extractText(json);
+    briefing = parseBriefing(raw);
+  } catch (err) {
+    logger.error("OpenAI JSON parse error", err);
+    throw new HttpsError("internal", "OpenAI returned invalid briefing JSON.");
+  }
+
+  // Check the returned citations against what was actually supplied, and
+  // record the outcome on the briefing so the app can show provenance —
+  // including when grounding did not happen, and why.
+  const searched = searchUrls(json);
+  const verified = verifyGrounding(briefing, evidence, undefined, searched);
+  briefing = verified.briefing;
+  // Links outside the feed: how many pages the search returned, and how many
+  // story links matched one (kept) or did not (removed).
+  briefing.links = {
+    searched: verified.stats.links.searched,
+    verified: verified.stats.links.verified,
+    removed: verified.stats.links.removed,
+    bySection: verified.stats.links.bySection,
+  };
+  briefing.grounding = evidence ? {
+    mode: "grounded",
+    snapshot: "news-" + evidence.date,
+    snapshotDate: evidence.date,
+    snapshotAgeDays: evidence.ageDays,
+    offered: evidence.itemCount,
+    pool: evidence.poolCount,
+    feedsOk: evidence.feedsOk,
+    feedsTotal: evidence.feedsTotal,
+    sources: evidence.sources,
+    grounded: verified.stats.grounded,
+    ungrounded: verified.stats.ungrounded,
+    unmatchedUrls: verified.stats.unmatched,
+    bySection: verified.stats.bySection,
+  } : {mode: "ungrounded", reason: groundingReason || "unavailable"};
+
+  // What the model could actually see of Bob's own state, recorded next to
+  // the grounding provenance for the same reason: a briefing that failed to
+  // mention an open call should be readable as "it had none to see" rather
+  // than leaving him to guess whether the feature ran.
+  briefing.context = {
+    standing: context && context.standing ? context.standing.stats :
+      {decisions: 0, radar: 0, markets: 0},
+    priorWatch: context && context.watch ? {
+      dateKey: context.watch.dateKey || "",
+      dateLabel: context.watch.dateLabel || "",
+    } : null,
+    reason: (context && context.reason) || null,
+    // How much of Bob's feedback shaped this briefing (null when none).
+    feedback: feedback ? feedback.stats : null,
+    accounts: context && context.accounts ? {count: context.accounts.length, source: context.accountsSource || ""} : null,
+  };
+  // A follow-up is only meaningful about a watch item that was actually
+  // supplied. Anything returned without one is invention, not a grade.
+  if (!(context && context.watch)) briefing.watch_followup = null;
+
+  // Overwrite the model's figures with the fetched ones, and blank any field
+  // no source could confirm. Same reasoning as verifyGrounding: being told to
+  // copy a value is a request, not a guarantee, and an unverified number in
+  // the ticker looks exactly like a verified one.
+  const applied = applyFacts(briefing, facts);
+  briefing = applied.briefing;
+  briefing.facts = facts ? {
+    mode: "verified",
+    applied: applied.stats.applied,
+    corrected: applied.stats.corrected,
+    blanked: applied.stats.blanked,
+    changedFields: applied.stats.fields,
+    missing: facts.missing,
+  } : {mode: "unverified", reason: "unavailable"};
+
+  if (applied.stats.corrected) {
+    logger.warn("briefing figures disagreed with fetched values", {
+      corrected: applied.stats.corrected, fields: applied.stats.fields,
+    });
+  }
+
+  if (verified.stats.unmatched) {
+    logger.warn("briefing cited urls that were not supplied", {
+      count: verified.stats.unmatched, snapshot: evidence && evidence.date,
+    });
+  }
+  if (verified.stats.links.removed) {
+    logger.warn("briefing story links did not match any searched page", {
+      removed: verified.stats.links.removed, searched: verified.stats.links.searched,
+    });
+  }
+
+  // The aha is checked last, after grounding and link checks may have dropped
+  // stories, so its link chips only name stories the briefing still has.
+  briefing.aha = cleanAha(briefing.aha, briefing.sections);
+  // The wildcard's link is held to a story's standard, but a wildcard without
+  // one is dropped rather than shown bare: it comes from outside Bob's beats,
+  // where he has the least to judge a story by.
+  const wildcard = cleanWildcard(briefing.wildcard, dateLabel);
+  const wildcardUrl = wildcard && wildcard.url ? searched.find((url) => urlKey(url) === urlKey(wildcard.url)) || "" : "";
+  briefing.wildcard = wildcard && wildcardUrl ? Object.assign(wildcard, {url: wildcardUrl, grounded: true}) : null;
+  briefing.context.wildcard = !wildcard ? "none" : wildcardUrl ? "kept" : "dropped: link not a searched page";
+  if (wildcard && !wildcardUrl) logger.warn("wildcard dropped: its link was not a searched page", {url: wildcard.url});
+  // Whether the no-rerun rule held: declared updates, and stories that look
+  // like a recent headline without saying so. Counted after the checks above.
+  const recent = context && context.recent;
+  briefing.context.recent = recent ? Object.assign({}, recent.stats, countReruns(briefing, recent)) : null;
+
+  // Record token usage, and the web searches billed per use, to the shared
+  // LLM cost ledger (no-throw).
+  await recordUsage(db, "briefing", model, extractUsage(json), phtDateKey());
+  await recordSearches(db, "briefing", webSearchCount(json), phtDateKey());
+
+  return {
+    model,
+    raw: JSON.stringify(briefing, null, 2),
+    briefing,
+  };
+}
+
 exports.generateBobDailyBriefing = onCall(
   {
     region: "asia-southeast1",
@@ -411,201 +608,43 @@ exports.generateBobDailyBriefing = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in before generating a briefing.");
     }
-
-    const db = getFirestore();
-    const [{evidence, reason: groundingReason}, context, facts, feedback, profile] = await Promise.all([
-      loadNewsEvidence(db),
-      loadStandingContext(db, request.auth.uid),
-      loadMarketFacts(db),
-      loadReaderFeedback(db, request.auth.uid),
-      loadProfile(db, request.auth.uid),
-    ]);
-    const prompt = buildBriefingPrompt({
-      dateLabel: String((request.data && request.data.date) || "").trim(),
-      evidence, context, facts, feedback, profile,
-    });
-    const model = String((request.data && request.data.model) || DEFAULT_MODEL);
-
-    const body = {
-      model,
-      input: [
-        {
-          role: "system",
-          content: "You produce factual, concise JSON intelligence briefings. Return strict JSON only.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      tools: [
-        {
-          type: "web_search",
-          // Medium, like the dossier and the meeting brief: at "low" the search
-          // rarely surfaced utility, road-asset or trucking stories at all.
-          search_context_size: "medium",
-          user_location: {
-            type: "approximate",
-            country: "PH",
-            timezone: "Asia/Manila",
-          },
-        },
-      ],
-      tool_choice: "auto",
-      // The full list of pages the search tool returned, so each story's url can
-      // be checked against what was really fetched (verifyGrounding).
-      include: ["web_search_call.action.sources"],
-    };
-
-    let response;
-    try {
-      response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          "Authorization": "Bearer " + OPENAI_API_KEY.value(),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(480000),
-      });
-    } catch (err) {
-      logger.error("OpenAI network error", err);
-      throw new HttpsError("unavailable", "OpenAI request failed before receiving a response.");
-    }
-
-    const responseText = await response.text();
-    let json;
-    try {
-      json = JSON.parse(responseText);
-    } catch (err) {
-      json = {error: {message: responseText || "Non-JSON OpenAI response"}};
-    }
-
-    if (!response.ok) {
-      const msg = json && json.error && json.error.message ? json.error.message : "OpenAI request failed.";
-      logger.error("OpenAI API error", {status: response.status, message: msg});
-      throw new HttpsError("internal", msg);
-    }
-
-    let raw;
-    let briefing;
-    try {
-      raw = extractText(json);
-      briefing = parseBriefing(raw);
-    } catch (err) {
-      logger.error("OpenAI JSON parse error", err);
-      throw new HttpsError("internal", "OpenAI returned invalid briefing JSON.");
-    }
-
-    // Check the returned citations against what was actually supplied, and
-    // record the outcome on the briefing so the app can show provenance —
-    // including when grounding did not happen, and why.
-    const searched = searchUrls(json);
-    const verified = verifyGrounding(briefing, evidence, undefined, searched);
-    briefing = verified.briefing;
-    // Links outside the feed: how many pages the search returned, and how many
-    // story links matched one (kept) or did not (removed).
-    briefing.links = {
-      searched: verified.stats.links.searched,
-      verified: verified.stats.links.verified,
-      removed: verified.stats.links.removed,
-      bySection: verified.stats.links.bySection,
-    };
-    briefing.grounding = evidence ? {
-      mode: "grounded",
-      snapshot: "news-" + evidence.date,
-      snapshotDate: evidence.date,
-      snapshotAgeDays: evidence.ageDays,
-      offered: evidence.itemCount,
-      pool: evidence.poolCount,
-      feedsOk: evidence.feedsOk,
-      feedsTotal: evidence.feedsTotal,
-      sources: evidence.sources,
-      grounded: verified.stats.grounded,
-      ungrounded: verified.stats.ungrounded,
-      unmatchedUrls: verified.stats.unmatched,
-      bySection: verified.stats.bySection,
-    } : {mode: "ungrounded", reason: groundingReason || "unavailable"};
-
-    // What the model could actually see of Bob's own state, recorded next to
-    // the grounding provenance for the same reason: a briefing that failed to
-    // mention an open call should be readable as "it had none to see" rather
-    // than leaving him to guess whether the feature ran.
-    briefing.context = {
-      standing: context && context.standing ? context.standing.stats :
-        {decisions: 0, radar: 0, markets: 0},
-      priorWatch: context && context.watch ? {
-        dateKey: context.watch.dateKey || "",
-        dateLabel: context.watch.dateLabel || "",
-      } : null,
-      reason: (context && context.reason) || null,
-      // How much of Bob's feedback shaped this briefing (null when none).
-      feedback: feedback ? feedback.stats : null,
-      accounts: context && context.accounts ? {count: context.accounts.length, source: context.accountsSource || ""} : null,
-    };
-    // A follow-up is only meaningful about a watch item that was actually
-    // supplied. Anything returned without one is invention, not a grade.
-    if (!(context && context.watch)) briefing.watch_followup = null;
-
-    // Overwrite the model's figures with the fetched ones, and blank any field
-    // no source could confirm. Same reasoning as verifyGrounding: being told to
-    // copy a value is a request, not a guarantee, and an unverified number in
-    // the ticker looks exactly like a verified one.
-    const applied = applyFacts(briefing, facts);
-    briefing = applied.briefing;
-    briefing.facts = facts ? {
-      mode: "verified",
-      applied: applied.stats.applied,
-      corrected: applied.stats.corrected,
-      blanked: applied.stats.blanked,
-      changedFields: applied.stats.fields,
-      missing: facts.missing,
-    } : {mode: "unverified", reason: "unavailable"};
-
-    if (applied.stats.corrected) {
-      logger.warn("briefing figures disagreed with fetched values", {
-        corrected: applied.stats.corrected, fields: applied.stats.fields,
-      });
-    }
-
-    if (verified.stats.unmatched) {
-      logger.warn("briefing cited urls that were not supplied", {
-        count: verified.stats.unmatched, snapshot: evidence && evidence.date,
-      });
-    }
-    if (verified.stats.links.removed) {
-      logger.warn("briefing story links did not match any searched page", {
-        removed: verified.stats.links.removed, searched: verified.stats.links.searched,
-      });
-    }
-
-    // The aha is checked last, after grounding and link checks may have dropped
-    // stories, so its link chips only name stories the briefing still has.
-    briefing.aha = cleanAha(briefing.aha, briefing.sections);
-    // The wildcard's link is held to a story's standard, but a wildcard without
-    // one is dropped rather than shown bare: it comes from outside Bob's beats,
-    // where he has the least to judge a story by.
-    const wildcard = cleanWildcard(briefing.wildcard, String((request.data && request.data.date) || "").trim());
-    const wildcardUrl = wildcard && wildcard.url ? searched.find((url) => urlKey(url) === urlKey(wildcard.url)) || "" : "";
-    briefing.wildcard = wildcard && wildcardUrl ? Object.assign(wildcard, {url: wildcardUrl, grounded: true}) : null;
-    briefing.context.wildcard = !wildcard ? "none" : wildcardUrl ? "kept" : "dropped: link not a searched page";
-    if (wildcard && !wildcardUrl) logger.warn("wildcard dropped: its link was not a searched page", {url: wildcard.url});
-    // Whether the no-rerun rule held: declared updates, and stories that look
-    // like a recent headline without saying so. Counted after the checks above.
-    const recent = context && context.recent;
-    briefing.context.recent = recent ? Object.assign({}, recent.stats, countReruns(briefing, recent)) : null;
-
-    // Record token usage, and the web searches billed per use, to the shared
-    // LLM cost ledger (no-throw).
-    await recordUsage(db, "briefing", model, extractUsage(json), phtDateKey());
-    await recordSearches(db, "briefing", webSearchCount(json), phtDateKey());
-
-    return {
-      model,
-      raw: JSON.stringify(briefing, null, 2),
-      briefing,
-    };
+    return buildBriefingFor(getFirestore(), request.auth.uid,
+      String((request.data && request.data.date) || "").trim(),
+      String((request.data && request.data.model) || DEFAULT_MODEL));
   })
+);
+
+exports.buildMorningBriefing = onSchedule(
+  {schedule: "40 5 * * *", timeZone: "Asia/Manila", region: "asia-southeast1", timeoutSeconds: 540, memory: "512MiB", secrets: [OPENAI_API_KEY]},
+  async () => {
+    const db = getFirestore();
+    const today = phtDateKey();
+    const {dateLabel, key} = morningBriefingKey();
+    for (const email of GENERATION_OWNERS) {
+      try {
+        const user = await getAuth().getUserByEmail(email);
+        if (!user.emailVerified || user.disabled) continue;
+        const [existing, usageDays] = await Promise.all([
+          db.collection(BRIEFINGS_COLL).doc(key).get().then((snap) => snap.exists),
+          db.collection(BRIEFINGS_COLL).doc("usage-" + user.uid).get().then((snap) => (snap.exists ? snap.data().days || {} : {})),
+        ]);
+        const plan = morningBriefingPlan({today, existing, usageDays});
+        if (!plan.build) {
+          logger.info("Morning briefing skipped", {key, reason: plan.reason});
+          continue;
+        }
+        // The same daily cap and once-only guard as the button. The request id
+        // is the day's, so a repeat run never pays for the same briefing twice.
+        const result = await guardedGeneration({db, uid: user.uid, feature: "briefing", period: today,
+          cap: Number(process.env.BRIEFING_DAILY_CAP || 5), requestId: "morning-" + today,
+          input: {date: dateLabel, model: DEFAULT_MODEL}}, () => buildBriefingFor(db, user.uid, dateLabel, DEFAULT_MODEL));
+        await db.collection(BRIEFINGS_COLL).doc(key).set(morningBriefingDoc(result.briefing, dateLabel, user.uid, Date.now()));
+        logger.info("Morning briefing saved", {key});
+      } catch (error) {
+        logger.error("Morning briefing failed", {key, code: error.code || "", message: error.message});
+      }
+    }
+  }
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -1552,8 +1591,8 @@ async function userCommandInputs(db, uid, prefs, shared, now) {
     if (briefing && Number.isFinite(saved)) briefingDay = phtParts(saved < 1e12 ? saved * 1000 : saved).date;
     return !!briefing;
   });
-  // Only today's briefing: at 06:00 the latest is usually yesterday's, which he
-  // has read, and he builds today's himself when he opens the app.
+  // Only today's briefing: yesterday's he has read. buildMorningBriefing saves
+  // today's at about 05:45, so the 06:00 push usually has it.
   if (briefingDay !== phtParts(now).date) briefing = null;
   const decisions = decisionsSnap.docs.map((doc) => Object.assign({id: doc.id}, doc.data()));
   return Object.assign({}, shared, {
