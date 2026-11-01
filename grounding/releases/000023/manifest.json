@@ -1,0 +1,27 @@
+{
+  "schema": "daybook-grounding-manifest/1",
+  "sequence": 23,
+  "previousSequence": 22,
+  "generatedAt": "2026-11-01T23:36:58.875Z",
+  "producerCommit": "e65658cba0944f33be90e54c4b1d42160e17dee5",
+  "files": [
+    {
+      "name": "facts.json",
+      "sha256": "b76c9f85a84310207ccc44f219ba8c3945dd0133e91b817f4c233e7989a89269",
+      "schema": "daybook-grounding-facts/1",
+      "recordCount": 68
+    },
+    {
+      "name": "watch.json",
+      "sha256": "2e4c6ca8a03d72d2f406582ef9b2d72d682e655726d544488e900a042e323981",
+      "schema": "daybook-grounding-watch/1",
+      "recordCount": 27
+    },
+    {
+      "name": "insights.json",
+      "sha256": "7436f2d4bcd761b2f290d90064bc9fb83f7700b305e7ecacdbbdbaff3f70699a",
+      "schema": "daybook-grounding-insights/1",
+      "recordCount": 0
+    }
+  ]
+}
