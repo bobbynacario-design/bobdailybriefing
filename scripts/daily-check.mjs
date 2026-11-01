@@ -221,7 +221,7 @@ section('Your loops');
   // Other uid docs carry a 'saved' field too (shopping-prefs holds a list, which
   // Firestore sorts above every number), so take the newest doc with a briefing body.
   const brief = await db.collection(COLL).where('uid', '==', uid).orderBy('saved', 'desc').limit(10).get().then((s) => s.docs.map((d) => d.data()).find((d) => typeof d.data === 'string') || null).catch(() => null);
-  if (brief) { const at = Number(brief.saved) < 1e12 ? Number(brief.saved) * 1000 : Number(brief.saved); info('Briefing: latest ' + phtTime(at) + (pht(at) === today ? ' (today)' : ' (not yet today)')); }
+  if (brief) { const at = Number(brief.saved) < 1e12 ? Number(brief.saved) * 1000 : Number(brief.saved); info('Briefing: latest ' + phtTime(at) + (pht(at) === today ? ' (today)' : ' (not yet today)') + (brief.builtBy === 'schedule' ? ', built by the 05:40 schedule' : ', built from the app')); }
 }
 
 // 10. Optional: what got used, with build days kept apart. Days with many
