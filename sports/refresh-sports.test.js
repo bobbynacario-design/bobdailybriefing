@@ -653,7 +653,8 @@ test('bookmaker odds become margin-free chances; the model gap and the closing l
   assert.equal(nbaMarket({}), null);
   var g = { id: 'g', status: 'SCHEDULED', home: 'Orlando Magic', away: 'Atlanta Hawks', utcDate: '2026-11-01T00:00:00Z', market: mk,
     projection: { favorite: 'Orlando Magic', tag: 'Moderate edge', modelVersion: 'v', probs: { home: 0.66, away: 0.34 } } };
-  attachNbaEdges([g]);
+  // A fixed clock: the game is 1 Nov, so the real clock passed it that morning.
+  attachNbaEdges([g], '2026-10-30T00:00:00Z');
   assert.deepEqual(g.edge, { gap: 11, side: 'Orlando Magic', size: 11 });
   var j1 = buildNbaJournal(null, [g], '2026-10-30T00:00:00Z');
   g.market = Object.assign({}, mk, { pHome: 0.6 });
