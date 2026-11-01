@@ -2246,3 +2246,22 @@ test('Search reads your Scout tab and a Scout result opens on its row',async()=>
   await context.openIndexedIntelligenceItem({source:'Scout',ref:'gone'});
   assert.deepEqual(calls,['page:scout','page:scout','toast:Scout opened. That item is not on the page any more.']);
 });
+// The 05:40 build (functions/morning-briefing.js) saves builtBy:'schedule'. The
+// banner says it was built for him, and once today's briefing is showing the
+// button rebuilds it.
+test('a briefing built at 05:40 says so, and the button then reads REBUILD', () => {
+  const {context,element}=environment(['autoLoadNote','todayBriefingShown','setGenerateLabel','getTodayBriefingDateLabel']);
+  const saved=Date.parse('2026-11-01T21:43:00Z'); // 05:43 in Manila on 2 Nov
+  assert.equal(context.autoLoadNote({builtBy:'schedule',saved}),'Built for you at 05:43 PHT \u00b7 REBUILD makes a fresh one');
+  assert.equal(context.autoLoadNote({saved}),'Today\'s briefing auto-loaded from 05:43 PHT');
+  assert.equal(context.autoLoadNote({}),'Today\'s briefing auto-loaded from cache');
+  const btn=element('openai-generate-btn');
+  context._currentData=null; context.setGenerateLabel();
+  assert.equal(btn.textContent,'OPENAI GENERATE');
+  context._currentData={date:context.getTodayBriefingDateLabel()}; context.setGenerateLabel();
+  assert.equal(btn.textContent,'REBUILD');
+  context._currentData={date:'Saturday, October 31, 2026'}; context.setGenerateLabel();
+  assert.equal(btn.textContent,'OPENAI GENERATE','an older briefing from the archive');
+  btn.disabled=true; btn.textContent='working'; context._currentData={date:context.getTodayBriefingDateLabel()}; context.setGenerateLabel();
+  assert.equal(btn.textContent,'working','left alone while a build runs');
+});

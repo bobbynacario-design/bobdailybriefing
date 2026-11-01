@@ -341,7 +341,7 @@ window.fbLoadHistory = async function(loadMore) {
     snap.forEach(function(d) {
       try {
         var parsed = JSON.parse(d.data().data);
-        window._briefingHistory.push({ key: d.id, saved: d.data().saved, data: parsed });
+        window._briefingHistory.push({ key: d.id, saved: d.data().saved, builtBy: d.data().builtBy || '', data: parsed });
       } catch(e) { console.warn('Skip corrupt doc:', d.id); }
     });
     if (snap.docs.length > 0) {
@@ -4623,7 +4623,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     </div>
     <div class="help-card help-wide help-takeaway">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> Today — how the page works</div>
-      <p>Top to bottom: <b>Ask your Daybook</b>, <b>This week</b> with your Apple Health lines (the weekly review opens from it), then the <b>briefing</b>, with the <b>Morning check-in</b> just above the Generate button. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
+      <p>Top to bottom: <b>Ask your Daybook</b>, <b>This week</b> with your Apple Health lines (the weekly review opens from it), then the <b>briefing</b>, with the <b>Morning check-in</b> just above the Generate button. The briefing is built for you at about <b>05:40</b>, so it is waiting when you open the app and the 06:00 push can lead with it; the banner says <b>Built for you</b>, and the button then reads <b>REBUILD</b> (it asks first, since a second build takes 3–5 minutes and about $0.60). The 05:40 build pauses after three days without opening Daybook and starts again the morning after you next open it. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
       <p><b>Daily Boost</b> — your daily spark, goals, experiments, <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> and the weekly read — moved to the bottom of <b>About you</b> on 17 Oct, so it no longer sits above the briefing. A check or experiment that comes due still rides on the morning push.</p>
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
       <p><b>Waiting on the AI</b> — Go deeper, the briefing, the weekly read, a meeting brief and deep research all show a turning ring and a timer counting up while they work. Past the usual time for that job the line adds <b>longer than usual</b>; it does not invent progress steps, because the server does not report any.</p>
@@ -6586,6 +6586,7 @@ var USAGE_LABELS = {
   fn_commanddismiss:'Morning 5: dismiss', fn_commandopenurl:'Morning 5: open article', command_why:'Morning 5: why this rank',
   fn_completecommandreviewday:'Morning 5: close review', 'open_command-week':'Morning 5: weekly discipline', 'open_grounding-panel':'Evidence: your numbers',
   push_open:'Opened from a push',
+  briefing_auto_seen:'Opened the 05:40 briefing',
   today_ask:'Ask from Today (typed)', today_ask_chip:'Ask from Today (one-tap question)',
   pse_watch_toggle:'PSE watchlist ☆', pse_watch_add:'PSE watchlist add code', pse_watch_remove:'PSE watchlist remove',
   pse_watch_target:'PSE buy-below price (open)', pse_watch_target_save:'PSE buy-below price saved', pse_watch_target_clear:'PSE buy-below price cleared',
@@ -14166,6 +14167,17 @@ function getTodayBriefingDateLabel() {
   return new Date().toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 }
 
+// Today's briefing is built for him at 05:40 (functions/morning-briefing.js),
+// so once it is showing the button rebuilds it, and asks first: a second build
+// takes minutes and costs about as much as the first.
+function todayBriefingShown() {
+  return !!(_currentData && _currentData.date === getTodayBriefingDateLabel());
+}
+function setGenerateLabel() {
+  var btn = document.getElementById('openai-generate-btn');
+  if (btn && !btn.disabled) btn.textContent = todayBriefingShown() ? 'REBUILD' : 'OPENAI GENERATE';
+}
+
 async function generateWithOpenAI() {
   var btn = document.getElementById('openai-generate-btn');
   if (!window._firebaseUid) {
@@ -14176,6 +14188,7 @@ async function generateWithOpenAI() {
     showToast('OpenAI generator is not ready yet','warn');
     return;
   }
+  if (todayBriefingShown() && !confirm('Today’s briefing is already here. Build it again? It takes 3–5 minutes, costs about $0.60, and replaces this one.')) return;
   try {
     if (btn) { btn.disabled = true; btn.innerHTML = aiWorkingHtml('GENERATING', {slow:300}); }
     var result = await window.fbGenerateBriefing(getTodayBriefingDateLabel());
@@ -14191,7 +14204,7 @@ async function generateWithOpenAI() {
     console.error(e);
     showToast('OpenAI generation failed: ' + (e && e.message ? e.message : 'check function logs'), 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'OPENAI GENERATE'; }
+    if (btn) { btn.disabled = false; setGenerateLabel(); }
   }
 }
 
@@ -14617,6 +14630,7 @@ function renderBriefing(options) {
 
   _currentData = data;
   _renderTimestamp = new Date();
+  setGenerateLabel();
 
   // Hero date
   if (data.date) {
@@ -15046,6 +15060,7 @@ function clearBriefing() {
   ['t-psei-m','t-usdphp-m','t-asx-m','t-sp-m','t-weather-m'].forEach(function(id){ var e=document.getElementById(id); if(e){e.textContent='—';e.className='tick-move tick-flat';} });
   _currentData=null;
   _renderTimestamp=null;
+  setGenerateLabel();
   clearTabBadges();
   resetBriefConsole();
   if (window.refreshDailyBoost) window.refreshDailyBoost();
@@ -16733,6 +16748,14 @@ function registerBriefingServiceWorker() {
 refreshInstallButton();
 registerBriefingServiceWorker();
 
+// The banner over an auto-loaded briefing: one the 05:40 build saved says it
+// was built for him (builtBy, functions/morning-briefing.js).
+function autoLoadNote(match) {
+  var at = match && match.saved ? new Date(match.saved).toLocaleTimeString('en-PH', {timeZone:'Asia/Manila', hour:'2-digit', minute:'2-digit', hour12:false}) + ' PHT' : '';
+  if (match && match.builtBy === 'schedule') return 'Built for you' + (at ? ' at ' + at : '') + ' · REBUILD makes a fresh one';
+  return 'Today\'s briefing auto-loaded from ' + (at || 'cache');
+}
+
 function autoLoadToday() {
   var history = window._briefingHistory || [];
   if (!history.length) return;
@@ -16773,7 +16796,9 @@ function autoLoadToday() {
 
     // Show auto-load banner
     var banner = document.getElementById('auto-load-banner');
-    banner.innerHTML = '<div class="auto-load-banner"><span class="alb-text">Today\'s briefing auto-loaded from ' + (match.saved ? new Date(match.saved).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:false}) + ' PHT' : 'cache') + '</span><button class="alb-dismiss" onclick="this.parentElement.remove()">✕</button></div>';
+    banner.innerHTML = '<div class="auto-load-banner"><span class="alb-text">' + autoLoadNote(match) + '</span><button class="alb-dismiss" onclick="this.parentElement.remove()">✕</button></div>';
+    // Counted on each open that shows it, to see whether the 05:40 build gets read.
+    if (match.builtBy === 'schedule' && typeof trackUse === 'function') trackUse('briefing_auto_seen');
   }
 }
 
