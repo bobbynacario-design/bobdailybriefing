@@ -46,3 +46,17 @@ test("index.js schedules the news dispatch at 05:30 Manila with its own secret",
   assert.match(block, /secrets: \[GITHUB_DISPATCH_TOKEN\]/);
   assert.match(block, /dispatchFeed\(fetch, GITHUB_DISPATCH_TOKEN\.value\(\), "news"\)/);
 });
+
+test("index.js schedules the Numbers dispatch at 05:20 Manila, before the 06:00 Morning 5", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "index.js"), "utf8");
+  const at = source.indexOf("exports.dispatchMorningNumbers = onSchedule(");
+  assert.ok(at >= 0, "dispatchMorningNumbers is exported");
+  const block = source.slice(at, at + 700);
+  assert.match(block, /schedule: "20 5 \* \* \*"/);
+  assert.match(block, /timeZone: "Asia\/Manila"/);
+  assert.match(block, /retryCount: 2/);
+  assert.match(block, /secrets: \[GITHUB_DISPATCH_TOKEN\]/);
+  assert.match(block, /dispatchFeed\(fetch, GITHUB_DISPATCH_TOKEN\.value\(\), "grounding"\)/);
+  const {init} = dispatchRequest("t", "grounding");
+  assert.deepEqual(JSON.parse(init.body), {ref: "main", inputs: {feed: "grounding"}});
+});

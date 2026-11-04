@@ -6,7 +6,9 @@
 // scheduler is on time, so dispatchMorningNews (index.js) asks GitHub to run
 // the news job now; a workflow_dispatch starts within a minute or so. The
 // GitHub crons stay as catch-ups, and a news run is a no-op once the day's
-// snapshot exists (news/refresh-news.js).
+// snapshot exists (news/refresh-news.js). dispatchMorningNumbers does the same
+// for the Numbers (grounding) job at 05:20, after its 04:15 schedule ran 2-6
+// hours late every day from 15 Oct to 4 Nov 2026.
 
 const REPO = "bobbynacario-design/bobdailybriefing";
 const WORKFLOW = "refresh-intelligence.yml";

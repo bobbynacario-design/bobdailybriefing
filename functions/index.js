@@ -2155,6 +2155,20 @@ exports.dispatchMorningNews = onSchedule(
   }
 );
 
+// 05:20 Manila: start the Numbers (grounding) job on time, so the night's
+// changes are in the mirror before the 06:00 Morning 5. GitHub started its
+// 04:15 schedule 2-6 hours late on every day from 15 Oct to 4 Nov 2026, so an
+// RBA decision reached Numbers only after the next morning's push. The GitHub
+// cron stays as a catch-up; inside each series' 12-hour cadence it re-checks
+// nothing.
+exports.dispatchMorningNumbers = onSchedule(
+  {schedule: "20 5 * * *", timeZone: "Asia/Manila", region: "asia-southeast1", timeoutSeconds: 60, retryCount: 2, secrets: [GITHUB_DISPATCH_TOKEN]},
+  async () => {
+    const result = await dispatchFeed(fetch, GITHUB_DISPATCH_TOKEN.value(), "grounding");
+    logger.info("Morning numbers dispatched", result);
+  }
+);
+
 exports.deliverMorningFive = onSchedule(
   {
     schedule: "0,30 6-11 * * *",
