@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const V = require('../validate');
-const { run } = require('./publish');
+const { run, retryingFetch, describeError } = require('./publish');
 
 function fakeDb(initial) {
   const docs = Object.assign({}, initial);
@@ -171,6 +171,39 @@ test('only due sources fetch; failures report unhealthy and persist until a new 
   assert.equal(mock.docs['feed-health'].feeds.grounding.status, 'failed');
   await run(opts(d, '2026-10-03T04:15:00Z', config));
   assert.equal(calls, 2);
+});
+
+// The Victoria Gazette did not answer GitHub's runner once on 4 Nov 2026
+// ("fetch failed"), and that marked the whole Numbers run failed.
+const noAnswer = () => Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }) });
+test('a source that does not answer is asked once more, and answers count', async () => {
+  const urls = [];
+  let calls = 0;
+  const flaky = async (url, init) => { urls.push([url, init && init.body]); if (++calls === 1) throw noAnswer(); return { ok: true, status: 200 }; };
+  const res = await retryingFetch(flaky, 0)('https://example.org/search', { method: 'POST', body: 'q=212H' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(urls, [['https://example.org/search', 'q=212H'], ['https://example.org/search', 'q=212H']]);
+});
+test('a source that answers with an HTTP error is not retried, and a second silence fails', async () => {
+  let calls = 0;
+  const refusing = async (url) => { calls++; throw Object.assign(new Error('HTTP 403 from ' + url), { status: 403, url }); };
+  await assert.rejects(retryingFetch(refusing, 0)('https://example.org/x'), /HTTP 403/);
+  assert.equal(calls, 1);
+  calls = 0;
+  const silent = async () => { calls++; throw noAnswer(); };
+  await assert.rejects(retryingFetch(silent, 0)('https://example.org/x'), /fetch failed/);
+  assert.equal(calls, 2);
+  assert.equal(describeError(noAnswer()), 'fetch failed (ECONNRESET)');
+  assert.equal(describeError(new Error('HTTP 500 from x')), 'HTTP 500 from x');
+});
+test('a failed run names the source that failed and the reason', async () => {
+  const d = tempDirs(), mock = fakeDb();
+  const registry = [{ seriesId: 'test_gazette', title: 'Test gazette watch', cadenceHours: 12, fetch: async () => { throw noAnswer(); } }];
+  await run(opts(d, '2026-11-04T00:37:00Z', { firestore: true, db: mock.db, registry }));
+  const h = mock.docs['feed-health'].feeds.grounding;
+  assert.equal(h.status, 'failed');
+  assert.equal(h.message, '1 source check(s) failed; Test gazette watch: fetch failed (ECONNRESET)');
+  assert.equal(mock.docs['grounding-ops'].series.test_gazette.lastError, 'fetch failed (ECONNRESET)');
 });
 
 test('a later run recovers change notices after publication succeeded but mirroring failed', async () => {

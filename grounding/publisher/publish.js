@@ -81,12 +81,40 @@ function loadManual(manualDir) {
   });
 }
 
-async function fetchWithIdentity(url, init) {
+async function fetchOnce(url, init) {
   const res = await fetch(url, Object.assign({ signal: AbortSignal.timeout(20000) }, init || {}, {
     headers: Object.assign({ 'user-agent': USER_AGENT }, (init && init.headers) || {}),
   }));
   if (!res.ok) throw Object.assign(new Error('HTTP ' + res.status + ' from ' + url), { status: res.status, url });
   return res;
+}
+
+// A source that gives no answer at all (a dropped connection, a name that did
+// not resolve, a timeout) is asked once more after a pause. On 4 Nov 2026 the
+// Victoria Gazette did not answer GitHub's runner once, and that one blip
+// marked the whole Numbers run failed while every figure was current. An HTTP
+// answer, even a refusal, is the source speaking and is never retried.
+const RETRY_PAUSE_MS = 15000;
+function retryingFetch(fetchImpl, pauseMs) {
+  return async function fetchWithRetry(url, init) {
+    try {
+      return await fetchImpl(url, init);
+    } catch (e) {
+      if (e && e.status) throw e;
+      console.log('grounding: no answer from ' + url + ' (' + describeError(e) + '); trying once more');
+      await new Promise((resolve) => setTimeout(resolve, pauseMs));
+      return fetchImpl(url, init);
+    }
+  };
+}
+const fetchWithIdentity = retryingFetch(fetchOnce, RETRY_PAUSE_MS);
+
+// Node's fetch says only "fetch failed"; the reason (ECONNRESET, ENOTFOUND, a
+// certificate) is in its cause.
+function describeError(e) {
+  const cause = e && e.cause;
+  const why = cause && (cause.code || cause.message);
+  return String((e && e.message) || e) + (why && why !== (e && e.message) ? ' (' + why + ')' : '');
 }
 
 // Run the automated series that are due. A refusal (401/403) is reported as
@@ -108,7 +136,7 @@ async function runAutomated(registry, ops, now, fetchImpl, manualDir) {
       status[series.seriesId] = e.status === 401 || e.status === 403
         ? { state: 'blocked', detail: 'The source refused Daybook\'s reader (HTTP ' + e.status + '). Capture this series by hand instead.', url: e.url || null }
         : { keep: true };
-      checked[series.seriesId] = { lastCheckedAt: now, lastError: String(e.message || e).slice(0, 200) };
+      checked[series.seriesId] = { lastCheckedAt: now, lastError: describeError(e).slice(0, 200) };
     }
   }
   return { observations, status, checked };
@@ -228,8 +256,13 @@ async function run(opts) {
       message: (result.changed ? 'released ' : 'unchanged at ') + String(sequence).padStart(6, '0') + '; ' + result.changes.length + ' change(s); ' + result.skipped.length + ' skipped',
     } };
     const latestChecks = Object.assign({}, ops, auto.checked);
-    const failures = registry.map((s) => latestChecks[s.seriesId]).filter((c) => c && c.lastError);
-    if (failures.length) { pending.health.status = 'failed'; pending.health.message = failures.length + ' source check(s) failed; ' + failures[0].lastError; }
+    // The message names the first failed source, so "fetch failed" on the
+    // Morning 5 says which site did not answer.
+    const failures = registry.filter((s) => latestChecks[s.seriesId] && latestChecks[s.seriesId].lastError);
+    if (failures.length) {
+      pending.health.status = 'failed';
+      pending.health.message = failures.length + ' source check(s) failed; ' + (titles[failures[0].seriesId] || failures[0].seriesId) + ': ' + latestChecks[failures[0].seriesId].lastError;
+    }
     if (opts.deferMirror) fs.writeFileSync(opts.pendingFile, JSON.stringify(pending));
     else await saveMirror(db, pending);
   }
@@ -278,4 +311,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { run, readPrevious, loadManual, writeRelease, RELEASE_URL, USER_AGENT };
+module.exports = { run, readPrevious, loadManual, writeRelease, retryingFetch, describeError, RELEASE_URL, USER_AGENT };
