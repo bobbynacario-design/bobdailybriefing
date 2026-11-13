@@ -237,14 +237,9 @@ function extractText(responseJson) {
   return chunks.join("").trim();
 }
 
-function parseBriefing(raw) {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("Model did not return a JSON object");
-  }
-  return JSON.parse(raw.slice(start, end + 1));
-}
+// Reads the model's JSON reply, forgiving a comma before a closing bracket
+// (functions/briefing-parse.js).
+const {parseBriefing} = require("./briefing-parse");
 
 // Load the day's fetched insurance headlines so the briefing can be grounded in
 // them. NEVER throws: if the news feed is unreachable, stale or empty, the
@@ -447,6 +442,35 @@ async function buildBriefingFor(db, uid, dateLabel, model) {
     include: ["web_search_call.action.sources"],
   };
 
+  // One unreadable reply is asked for again, once: on 7 Nov 2026 a single
+  // malformed reply meant no briefing that day. The second request costs a
+  // full build, so there is never a third, and the reply that failed is still
+  // recorded in the cost ledger because it was billed.
+  let json;
+  let briefing;
+  for (let attempt = 1; ; attempt++) {
+    json = await requestBriefing(body);
+    try {
+      briefing = parseBriefing(extractText(json));
+      break;
+    } catch (err) {
+      logger.error("OpenAI JSON parse error", {attempt, message: err.message});
+      if (attempt >= 2) throw new HttpsError("internal", "OpenAI returned invalid briefing JSON twice.");
+      await recordBriefingCost(db, model, json);
+    }
+  }
+  return finishBriefing({db, model, dateLabel, json, briefing, evidence, groundingReason, context, facts, feedback});
+}
+
+// Token usage, and the web searches billed per use, to the shared LLM cost
+// ledger (no-throw).
+async function recordBriefingCost(db, model, json) {
+  await recordUsage(db, "briefing", model, extractUsage(json), phtDateKey());
+  await recordSearches(db, "briefing", webSearchCount(json), phtDateKey());
+}
+
+// One request to OpenAI for the briefing; returns the parsed API response.
+async function requestBriefing(body) {
   let response;
   try {
     response = await fetch("https://api.openai.com/v1/responses", {
@@ -476,17 +500,11 @@ async function buildBriefingFor(db, uid, dateLabel, model) {
     logger.error("OpenAI API error", {status: response.status, message: msg});
     throw new HttpsError("internal", msg);
   }
+  return json;
+}
 
-  let raw;
-  let briefing;
-  try {
-    raw = extractText(json);
-    briefing = parseBriefing(raw);
-  } catch (err) {
-    logger.error("OpenAI JSON parse error", err);
-    throw new HttpsError("internal", "OpenAI returned invalid briefing JSON.");
-  }
-
+// The checks every briefing goes through after the model has answered.
+async function finishBriefing({db, model, dateLabel, json, briefing, evidence, groundingReason, context, facts, feedback}) {
   // Check the returned citations against what was actually supplied, and
   // record the outcome on the briefing so the app can show provenance —
   // including when grounding did not happen, and why.
@@ -585,10 +603,7 @@ async function buildBriefingFor(db, uid, dateLabel, model) {
   const recent = context && context.recent;
   briefing.context.recent = recent ? Object.assign({}, recent.stats, countReruns(briefing, recent)) : null;
 
-  // Record token usage, and the web searches billed per use, to the shared
-  // LLM cost ledger (no-throw).
-  await recordUsage(db, "briefing", model, extractUsage(json), phtDateKey());
-  await recordSearches(db, "briefing", webSearchCount(json), phtDateKey());
+  await recordBriefingCost(db, model, json);
 
   return {
     model,
