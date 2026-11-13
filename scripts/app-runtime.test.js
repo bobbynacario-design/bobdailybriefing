@@ -2265,3 +2265,49 @@ test('a briefing built at 05:40 says so, and the button then reads REBUILD', () 
   btn.disabled=true; btn.textContent='working'; context._currentData={date:context.getTodayBriefingDateLabel()}; context.setGenerateLabel();
   assert.equal(btn.textContent,'working','left alone while a build runs');
 });
+// 9-11 Nov 2026: with billing off there was no briefing for three days, and
+// Today opened on an empty desk with a bare "Generate failed". It now opens on
+// the newest earlier briefing, dated, and swaps to today's when that arrives.
+test('with no briefing for today, Today opens on the newest earlier one and says which', () => {
+  const tracked=[];
+  const {context,element}=environment(['autoLoadToday','todayBriefingIn','standInNote','setAutoLoadBanner','autoLoadNote','getTodayBriefingDateLabel'],
+    {esc:v=>String(v ?? '').replace(/</g,'&lt;'),_currentData:null,_fallbackDate:'',_generateFailure:'',trackUse:k=>tracked.push(k)});
+  context.renderBriefing=()=>{context._currentData=JSON.parse(element('raw-input').value);};
+  const older={key:'Friday--November-6--2026',saved:2,data:{date:'Friday, November 6, 2026'}};
+  const newest={key:'Sunday--November-8--2026',saved:3,data:{date:'Sunday, November 8, 2026'}};
+  context._briefingHistory=[older,newest];
+  context.autoLoadToday();
+  assert.equal(context._currentData.date,'Sunday, November 8, 2026','the newest by save time, whatever the list order');
+  assert.match(element('auto-load-banner').innerHTML,/class="auto-load-banner warn"/);
+  assert.match(element('auto-load-banner').innerHTML,/No briefing for today yet · showing Sunday, November 8, 2026/);
+  assert.deepEqual(tracked,['briefing_standin_seen']);
+  // A second pass with nothing new changes nothing and counts nothing.
+  context.autoLoadToday(); assert.deepEqual(tracked,['briefing_standin_seen']);
+  // Today's arrives (the 05:40 build, or the first sync after the cache): it replaces the stand-in.
+  const todayLabel=context.getTodayBriefingDateLabel();
+  context._briefingHistory=[{key:'today',saved:4,builtBy:'schedule',data:{date:todayLabel}},newest];
+  context.autoLoadToday();
+  assert.equal(context._currentData.date,todayLabel);
+  assert.match(element('auto-load-banner').innerHTML,/class="auto-load-banner"><span class="alb-text">Built for you/);
+  assert.equal(context._fallbackDate,'');
+  // A briefing he opened himself is never replaced.
+  context._currentData={date:'Friday, November 6, 2026'}; context._briefingHistory=[newest];
+  context.autoLoadToday(); assert.equal(context._currentData.date,'Friday, November 6, 2026');
+});
+test('the 1st of a month is not taken for the 11th when looking for today\'s briefing', () => {
+  class Day extends Date { constructor(...a){ super(...(a.length?a:['2026-11-01T04:00:00'])); } }
+  const {context}=environment(['todayBriefingIn'],{Date:Day,RegExp});
+  assert.equal(context.todayBriefingIn([{key:'a',data:{date:'Wednesday, November 11, 2026'}}]),null);
+  assert.equal(context.todayBriefingIn([{key:'a',data:{date:'Sunday, November 1, 2026'}}]).key,'a');
+});
+test('a failed Generate says why, and the reason stays on the page', () => {
+  const {context}=environment(['generateFailureReason'],{navigator:{onLine:true}});
+  const why=context.generateFailureReason;
+  assert.match(why({code:'functions/internal',message:'internal'}),/refused the request before the build started.*billing/,'the platform refused it (billing off, 11 Nov 2026)');
+  assert.equal(why({code:'functions/internal',message:'OpenAI returned invalid briefing JSON twice.'}),'OpenAI returned invalid briefing JSON twice.','Daybook\'s own errors keep their message');
+  assert.match(why({code:'functions/unauthenticated',message:'x'}),/Sign in again/);
+  assert.match(why({code:'functions/deadline-exceeded',message:'deadline-exceeded'}),/longer than 9 minutes/);
+  assert.match(why({code:'functions/unavailable',message:'unavailable'}),/answered “unavailable”/);
+  assert.equal(why(null),'No reason was given.');
+  context.navigator.onLine=false; assert.equal(why({code:'functions/internal',message:'internal'}),'This device is offline.');
+});
