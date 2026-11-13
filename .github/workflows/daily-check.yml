@@ -1,0 +1,35 @@
+name: Daybook daily check
+on:
+  schedule:
+    # Daily, 07:15 Philippine time, after the 05:40 briefing and the 06:00 push.
+    # It used to run from the Claude desktop app, which needed the laptop awake
+    # and stopped reporting on 31 Oct 2026; nothing then noticed the functions
+    # being refused for three days (9-11 Nov). A failed run here emails the owner.
+    - cron: '15 23 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: daily-check
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - run: npm --prefix functions ci
+      # --ci: this repository is public, so the log carries problem keys and
+      # counts only. The full report is `npm run check:daily` on the laptop.
+      - run: node scripts/daily-check.mjs --ci
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -7,6 +7,10 @@
 //   -- --usage [N]   add tap counts for the last N days (default 14), split into
 //                    quiet days and build days by the commits made that day
 //   -- --no-audit    skip the npm audit gate (it takes about a minute)
+//   -- --ci          for the GitHub run (.github/workflows/daily-check.yml): the
+//                    repository is public, so it prints problem keys and counts
+//                    only, skips the personal sections, and exits 1 on any
+//                    ALERT so GitHub emails the failure
 //
 // It needs the same service-account key as check:real and only reads: the
 // database, GitHub run results, the npm audit gate and this laptop's own
@@ -26,6 +30,7 @@ const flag = (name) => args.indexOf(name);
 const outDir = flag('--out') >= 0 ? args[flag('--out') + 1] : null;
 const usageDays = flag('--usage') >= 0 ? (Number(args[flag('--usage') + 1]) || 14) : 0;
 const runAudit = flag('--no-audit') < 0;
+const ci = flag('--ci') >= 0;
 
 const lines = [], problems = [];
 const say = (text) => lines.push(text);
@@ -169,6 +174,54 @@ section('Push');
   info('Last 7 days: ' + sentWeek + ' push(es) sent, ' + taps + ' opened from a push');
 }
 
+// 5b. Cloud functions: are they running at all? On 9-11 Nov 2026 the billing
+// account was closed and every function was refused for three days while this
+// check said "0 alerts". Two signs, so one quiet morning is not an alarm: what
+// the functions should have written (the push and the 05:40 briefing), and,
+// where gcloud is signed in, the error log itself, which names the cause.
+section('Cloud functions');
+{
+  const prefs = (await get('command-prefs-' + uid)) || {};
+  const sent = (Array.isArray((prefs.deliveryState || {}).audit) ? prefs.deliveryState.audit : []).filter((a) => a.type === 'sent');
+  const pushOn = !!(prefs.delivery || {}).enabled;
+  const brief = await db.collection(COLL).where('uid', '==', uid).orderBy('saved', 'desc').limit(10).get().then((q) => q.docs.map((d) => d.data()).find((d) => typeof d.data === 'string') || null).catch(() => null);
+  const briefAt = brief ? (Number(brief.saved) < 1e12 ? Number(brief.saved) * 1000 : Number(brief.saved)) : 0;
+  const usage = (await get('usage-' + uid)) || {days: {}};
+  // The 05:40 build pauses itself after three days without an open.
+  const opened = Object.keys(usage.days || {}).some((d) => d >= pht(Date.now() - 3 * 86400000));
+  const pushHours = sent[0] ? hoursAgo(sent[0].at) : Infinity, briefHours = briefAt ? (Date.now() - briefAt) / 3600000 : Infinity;
+  const pushLate = pushOn && pushHours > 30, briefLate = opened && briefHours > 30;
+  if (pushLate && briefLate) alert('functions:down', 'Cloud functions look down: no push since ' + (sent[0] ? phtTime(sent[0].at) : 'ever') + ' and no briefing since ' + (briefAt ? phtTime(briefAt) : 'ever') + '. Check Google Cloud billing first.');
+  else if (briefLate) warn('functions:briefing', 'No briefing saved since ' + (briefAt ? phtTime(briefAt) : 'ever') + ', though Daybook was opened in the last 3 days.');
+  else info('Last push ' + (sent[0] ? phtTime(sent[0].at) : 'never') + ' · last briefing ' + (briefAt ? phtTime(briefAt) : 'never'));
+
+  const since = new Date(Date.now() - 26 * 3600000).toISOString();
+  const filter = 'resource.type=cloud_run_revision AND severity>=ERROR AND timestamp>=\\"' + since + '\\"';
+  const r = spawnSync('gcloud logging read "' + filter + '" --project pokerhq-a67e4 --limit 300 --format=json', {cwd: root, encoding: 'utf8', timeout: 120000, shell: true, maxBuffer: 64 * 1024 * 1024});
+  let rows = null;
+  try { rows = r.status === 0 ? JSON.parse(r.stdout || '[]') : null; } catch (e) { rows = null; }
+  if (!rows) info('Error log not read (gcloud is not signed in here).');
+  else {
+    const by = {};
+    let billing = 0, billingLast = 0;
+    rows.forEach((x) => {
+      const name = ((x.resource || {}).labels || {}).service_name || '?';
+      by[name] = (by[name] || 0) + 1;
+      if (/billing is disabled/i.test(String(x.textPayload || ''))) {
+        billing += 1;
+        billingLast = Math.max(billingLast, Date.parse(x.timestamp) || 0);
+      }
+    });
+    const names = Object.entries(by).sort((a, b) => b[1] - a[1]);
+    // While billing is off, the 15-minute jobs are refused every quarter hour,
+    // so none in the last 2 hours means it is back on.
+    if (billing && Date.now() - billingLast < 2 * 3600000) alert('functions:billing', 'Google Cloud billing is off: ' + billing + ' function call(s) refused in the last 26 hours (' + names.map(([n]) => n).slice(0, 6).join(', ') + '). Reopen the billing account.');
+    else if (billing) info('Billing refusals stopped at ' + phtTime(billingLast) + ' (' + billing + ' in the last 26 hours).');
+    else if (names.length) warn('functions:errors', 'Function errors in the last 26 hours: ' + names.map(([n, c]) => n + ' × ' + c).join(', ') + '.');
+    else info('No function errors in the last 26 hours.');
+  }
+}
+
 // 6. GitHub: CI, publish and feed workflows over the last day.
 section('GitHub runs');
 {
@@ -211,7 +264,8 @@ if (process.platform === 'win32') {
 
 // 9. The personal loops: is anything being used? (Information, never a problem.)
 section('Your loops');
-{
+if (ci) info('skipped (--ci)');
+else {
   const [review, goals, mirror, notes, ask, boost] = await Promise.all(['review', 'goals', 'weekly-mirror', 'client-notes', 'ask', 'daily-boost'].map((p) => get(p + '-' + uid)));
   const weeks = Object.entries((review && review.weeks) || {}).sort();
   const set = weeks.filter(([, w]) => (w.commitments || []).length);
@@ -237,7 +291,7 @@ section('Your loops');
 
 // 10. Optional: what got used, with build days kept apart. Days with many
 // commits are mostly Bob trying out new features, not everyday use.
-if (usageDays) {
+if (usageDays && !ci) {
   section('Usage, last ' + usageDays + ' days');
   const usage = (await get('usage-' + uid)) || {days: {}};
   const since = pht(Date.now() - (usageDays - 1) * 86400000);
@@ -269,6 +323,11 @@ function finish() {
   if (fresh.length && fresh !== problems) head.push('NEW since the last report:', ...fresh.map((p) => '  ' + p.level + ' ' + p.text));
   const status = 'STATUS: ' + (problems.length ? alerts.length + ' alert(s), ' + warns.length + ' warning(s)' + (outDir ? ', ' + fresh.length + ' new' : '') : 'OK, nothing needs you');
   const text = head.concat(lines, ['', status]).join('\n');
+  // Public log: keys only (a key's tail can quote a headline, so it is cut).
+  if (ci) {
+    console.log([head[0], ...problems.map((p) => p.level + ' ' + p.key.split(':').slice(0, 2).join(':')), status].join('\n'));
+    process.exit(alerts.length ? 1 : 0);
+  }
   console.log(text);
   if (outDir) {
     writeFileSync(path.join(outDir, today + '.txt'), text + '\n');
