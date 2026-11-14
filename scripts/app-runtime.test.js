@@ -1819,7 +1819,7 @@ test('Ask on Today opens Search with the question and asks it as a new thread, w
   context.renderTodayAsk();
   const chips=element('today-ask-chips').innerHTML;
   assert.equal((chips.match(/data-track="today_ask_chip"/g) || []).length,3);assert.match(chips,/data-q="What’s new on Allianz this week\?"/);
-  assert.ok(/id="page-today">\s*<section class="today-ask owner-only" id="today-ask"/.test(html),'first on Today, owner-only like Ask itself');
+  assert.ok(/id="page-today">\s*<section class="today-glance owner-only" id="today-glance" hidden aria-label="At a glance"><\/section>\s*<section class="today-ask owner-only" id="today-ask"/.test(html),'right under At a glance on Today, owner-only like Ask itself');
 });
 test('a page opened by a push tap counts it once and takes the mark off the address',()=>{
   const used=[], replaced=[];
@@ -2310,4 +2310,41 @@ test('a failed Generate says why, and the reason stays on the page', () => {
   assert.match(why({code:'functions/unavailable',message:'unavailable'}),/answered “unavailable”/);
   assert.equal(why(null),'No reason was given.');
   context.navigator.onLine=false; assert.equal(why({code:'functions/internal',message:'internal'}),'This device is offline.');
+});
+
+test('At a glance: small records paint at once; a big feed is read again only after a new run', async()=>{
+  const today='2026-11-14',store={},loads={flights:0,rentals:0,sports:0},seen=[];
+  const health={feeds:{rentals:{lastOkAt:'run-1'},sports:{lastOkAt:'run-1'},flights:{lastOkAt:'run-1'}}};
+  const condo={id:'dot:a1',url:'https://www.dotproperty.com.ph/x/a1',price:20000,beds:0,area:'cubao',stay:'long',firstSeen:'2026-11-13T03:00:00Z'};
+  let events=[{id:'evt-aaaaaaaa',title:'Dentist',start:today,time:'15:30'}];
+  const {context,element}=environment(['renderTodayGlance','glanceCache','glanceFeed','glanceRowHtml','checkupToday','sportsFollowKey'],{
+    esc:escHtml,URL,localStorage:{getItem:k=>store[k] ?? null,setItem:(k,v)=>{store[k]=v;}},WeeklyReviewCore:{today:()=>today},sportsCachedData:null,
+    trackUse:k=>seen.push(k),_firebaseUid:'u1',fbLoadDaybookEvents:async()=>events,fbLoadMeetings:async()=>null,fbLoadBookedTrips:async()=>({items:{}}),
+    fbLoadPseWatch:async()=>null,fbLoadFeedHealth:async()=>health,fbLoadFlightWatch:async()=>({items:{}}),
+    fbLoadRentalPrefs:async()=>({budget:25000,areas:['cubao'],sizes:['studio'],areaVersion:3,updatedAt:'p1'}),
+    fbLoadRentals:async()=>{loads.rentals++;return {feed:{generatedAt:'2026-11-14T03:00:00Z',trackingSince:'2026-10-29T00:00:00Z',items:[condo]}};},
+    fbLoadFlights:async()=>{loads.flights++;return null;},
+    fbLoadSports:async()=>{loads.sports++;return {};},
+    sportsDigestItems:()=>({today:[{tag:'FIGHT',at:new Date(Date.now()+3600000).toISOString(),text:'UFC 334: Hokit vs Gane',sub:'x'}]})});
+  ['glance-core','daybook-calendar-core','flights-core','rentals-core'].forEach(n=>vm.runInContext(readFileSync(new URL('../lib/'+n+'.js',import.meta.url),'utf8'),context));
+  const s=html.indexOf('var GLANCE_CACHE');vm.runInContext(html.slice(s,html.indexOf('\nfunction glanceCache',s)),context);
+  await context.renderTodayGlance();
+  const el=element('today-glance');
+  assert.equal(el.hidden,false);
+  assert.match(el.innerHTML,/Today<\/span><span class="glance-text">15:30 Dentist/);
+  assert.match(el.innerHTML,/UFC 334: Hokit vs Gane/);
+  assert.match(el.innerHTML,/1 new in your areas \(up to ₱25,000\)/);
+  assert.match(el.innerHTML,/data-track="glance_sports" onclick="switchPage\('sports',null\)"/);
+  assert.ok(el.innerHTML.indexOf('glance_calendar')<el.innerHTML.indexOf('glance_sports'),'calendar leads');
+  assert.deepEqual(loads,{flights:0,rentals:1,sports:1},'no fare watch, so the flights feed is never read');
+  assert.deepEqual(seen,['glance_seen']);
+  await context.renderTodayGlance();
+  assert.deepEqual(loads,{flights:0,rentals:1,sports:1},'same runs: nothing big read again');
+  assert.match(element('today-glance').innerHTML,/1 new in your areas/);
+  health.feeds.rentals.lastOkAt='run-2';
+  await context.renderTodayGlance();
+  assert.equal(loads.rentals,2,'a new rentals run is read');
+  events=[];context.fbLoadRentals=async()=>({feed:{items:[]}});health.feeds.rentals.lastOkAt='run-3';context.sportsDigestItems=()=>({today:[]});health.feeds.sports.lastOkAt='run-2';
+  await context.renderTodayGlance();
+  assert.equal(element('today-glance').hidden,true,'nothing to say: hidden');
 });

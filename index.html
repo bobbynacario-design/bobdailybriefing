@@ -56,6 +56,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/health-core.js"></script>
 <script src="./lib/checkup-core.js"></script>
 <script src="./lib/grooming-core.js"></script>
+<script src="./lib/glance-core.js"></script>
 <script src="./lib/lifestyle-core.js"></script>
 <script src="./lib/life-records-core.js"></script>
 <script src="./lib/weekly-review-ui.js"></script>
@@ -1343,6 +1344,8 @@ window.fbLoadRentals = async function() {
   var snaps = await Promise.all([getDoc(doc(db, COLL, 'rentals-latest')),getDocs(query(collection(db, COLL),where('uid','==',uid),where('kind','==','rentals-prefs'),limit(1)))]);
   return {feed: snaps[0].exists() ? snaps[0].data() : null, prefs: snaps[1].empty ? {} : snaps[1].docs[0].data()};
 };
+// Only his search (a few hundred bytes), for Today's At a glance line.
+window.fbLoadRentalPrefs = function() { return fbReadOwn('rentals-prefs-'); };
 window.fbSaveRentalPrefs = async function(prefs) {
   var uid = getUid(); if (!uid) throw new Error('Sign in to save your rental search.');
   await setDoc(doc(db, COLL, 'rentals-prefs-' + uid), Object.assign({}, RentalsCore.cleanPrefs(prefs), {uid:uid,kind:'rentals-prefs',updatedAt:new Date().toISOString()}));
@@ -2109,7 +2112,8 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .weekly-item:first-child{border-top:0}.weekly-item .flights-note{margin:.1rem 0 0}
 .weekly-area{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--gold);margin-right:.25rem}
 .weekly-dots{display:flex;gap:4px}.weekly-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--rim2);background:transparent}
-.weekly-dot.is-on{background:var(--green);border-color:var(--green)}.today-body{margin:0 0 1rem;padding:.55rem .85rem;border:1px solid var(--rim);border-left:3px solid var(--green);border-radius:10px;background:var(--bg2);font-size:13px;line-height:1.5;color:var(--txt2)}.today-body.is-notable{border-left-color:var(--amber);color:var(--txt)}.today-body.is-stale{border-left-color:var(--txt3)}.today-body a{color:inherit}
+.weekly-dot.is-on{background:var(--green);border-color:var(--green)}.today-glance{margin:0 0 1rem;padding:.55rem .85rem .5rem;border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:10px;background:var(--bg2)}.glance-head{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin-bottom:.2rem}.glance-row{display:grid;grid-template-columns:62px minmax(0,1fr);gap:.6rem;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:.3rem .2rem;font:inherit;font-size:13.5px;line-height:1.45;color:var(--txt);cursor:pointer}.glance-row:hover,.glance-row:focus-visible{background:var(--bg3)}.glance-tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);padding-top:.15rem}.glance-note{color:var(--txt3);font-size:12px}@media(max-width:768px){.glance-row{font-size:13px;line-height:1.4}.glance-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
+.today-body{margin:0 0 1rem;padding:.55rem .85rem;border:1px solid var(--rim);border-left:3px solid var(--green);border-radius:10px;background:var(--bg2);font-size:13px;line-height:1.5;color:var(--txt2)}.today-body.is-notable{border-left-color:var(--amber);color:var(--txt)}.today-body.is-stale{border-left-color:var(--txt3)}.today-body a{color:inherit}
 .weekly-dot.is-auto{background:var(--bg2);border:3px solid var(--green)}.weekly-auto-note{color:var(--green)}.weekly-dot.is-today{outline:2px solid var(--gold-dim);outline-offset:1px;border-color:var(--gold)}.weekly-dot.is-future{opacity:.45}
 .weekly-step{margin-top:.9rem;padding-top:.8rem;border-top:1px dashed var(--rim2)}.weekly-step h3{font-size:14px;margin:0 0 .45rem}
 .weekly-facts{margin:.2rem 0 .4rem 1rem;padding:0}
@@ -3771,6 +3775,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <p class="display-note">Kept on this device.</p>
 </div>
 <div class="page active" id="page-today">
+  <section class="today-glance owner-only" id="today-glance" hidden aria-label="At a glance"></section>
   <section class="today-ask owner-only" id="today-ask" aria-label="Ask your Daybook">
     <form class="today-ask-row" onsubmit="return askFromToday(event)"><input id="today-ask-input" type="search" maxlength="300" autocomplete="off" aria-label="Ask your Daybook" placeholder="Ask your Daybook: an account, a call, your week, your time off…"><button type="submit" class="tool-chip weekly-primary" data-track="today_ask">Ask</button></form>
     <div class="today-ask-chips" id="today-ask-chips"></div>
@@ -4627,7 +4632,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     </div>
     <div class="help-card help-wide help-takeaway">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> Today — how the page works</div>
-      <p>Top to bottom: <b>Ask your Daybook</b>, <b>This week</b> with your Apple Health lines (the weekly review opens from it), then the <b>briefing</b>, with the <b>Morning check-in</b> just above the Generate button. The briefing is built for you at about <b>05:40</b>, so it is waiting when you open the app and the 06:00 push can lead with it; the banner says <b>Built for you</b>, and the button then reads <b>REBUILD</b> (it asks first, since a second build takes 3–5 minutes and about $0.60). The 05:40 build pauses after three days without opening Daybook and starts again the morning after you next open it. With no briefing for today yet, Today shows the newest earlier one under an amber line naming its date, and swaps to today’s as soon as it arrives. If Generate fails, a red line says why and stays until you close it; a refusal before the build starts usually means Google Cloud billing is off. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
+      <p><b>At a glance</b> sits at the very top: one line each for your calendar today (or the next entry this week), your sports in the next 24 hours in Manila time, a booked trip or a fare at your target, PSE watchlist alerts from the last close, and new or cheaper rentals in your areas. A line shows only when it has something, and tapping it opens that page. It reads the big flight, rental and sports feeds only after they have a new run, so opening Today stays quick.</p>
+      <p>Below it, top to bottom: <b>Ask your Daybook</b>, <b>This week</b> with your Apple Health lines (the weekly review opens from it), then the <b>briefing</b>, with the <b>Morning check-in</b> just above the Generate button. The briefing is built for you at about <b>05:40</b>, so it is waiting when you open the app and the 06:00 push can lead with it; the banner says <b>Built for you</b>, and the button then reads <b>REBUILD</b> (it asks first, since a second build takes 3–5 minutes and about $0.60). The 05:40 build pauses after three days without opening Daybook and starts again the morning after you next open it. With no briefing for today yet, Today shows the newest earlier one under an amber line naming its date, and swaps to today’s as soon as it arrives. If Generate fails, a red line says why and stays until you close it; a refusal before the build starts usually means Google Cloud billing is off. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
       <p><b>Daily Boost</b> — your daily spark, goals, experiments, <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> and the weekly read — moved to the bottom of <b>About you</b> on 17 Oct, so it no longer sits above the briefing. A check or experiment that comes due still rides on the morning push.</p>
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
       <p><b>Waiting on the AI</b> — Go deeper, the briefing, the weekly read, a meeting brief and deep research all show a turning ring and a timer counting up while they work. Past the usual time for that job the line adds <b>longer than usual</b>; it does not invent progress steps, because the server does not report any.</p>
@@ -5182,6 +5188,7 @@ function onSignedIn() {
   if (window.renderDailyBoost) window.renderDailyBoost();
   if (window.renderWeeklyMirror) window.renderWeeklyMirror();
   if (window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard(true)).then(function () { if (window.renderCheckin) window.renderCheckin(); });
+  renderTodayGlance();
   renderTodayAsk();
   renderTodayBody();
   renderTodayCheckups();
@@ -5550,7 +5557,7 @@ function switchPage(id, el) {
   if (boostHere && window.renderDailyBoost) window.renderDailyBoost();
   if (boostHere && window.renderWeeklyMirror) window.renderWeeklyMirror();
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayGrooming(); renderTodayResearch(); }
+  if (id==='today') { renderTodayGlance(); renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayGrooming(); renderTodayResearch(); }
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.ntab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.mob-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -5565,7 +5572,7 @@ function switchPage(id, el) {
   if (id==='timeline') pending = renderEntityTimeline();
   if (id==='trends') pending = renderTrends(7, document.querySelector('.trend-period-btn.active'));
   if (id==='today' && window.renderWeeklyCard) Promise.resolve(window.renderWeeklyCard()).then(function () { if (window.renderCheckin) window.renderCheckin(); });
-  if (id==='today') { renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayGrooming(); renderTodayResearch(); }
+  if (id==='today') { renderTodayGlance(); renderTodayAsk(); renderTodayBody(); renderTodayCheckups(); renderTodayGrooming(); renderTodayResearch(); }
   if (id==='research') pending = renderResearchList();
   if (id==='radar') pending = renderRadar();
   if (id==='journal') pending = renderJournal();
@@ -6592,6 +6599,8 @@ var USAGE_LABELS = {
   push_open:'Opened from a push',
   briefing_auto_seen:'Opened the 05:40 briefing',
   briefing_standin_seen:'Opened to an earlier briefing (none for today)',
+  glance_seen:'At a glance shown', glance_calendar:'At a glance: Calendar line', glance_sports:'At a glance: Sports line',
+  glance_flights:'At a glance: trip or fares line', glance_pse:'At a glance: PSE line', glance_rentals:'At a glance: Rentals line',
   today_ask:'Ask from Today (typed)', today_ask_chip:'Ask from Today (one-tap question)',
   pse_watch_toggle:'PSE watchlist ☆', pse_watch_add:'PSE watchlist add code', pse_watch_remove:'PSE watchlist remove',
   pse_watch_target:'PSE buy-below price (open)', pse_watch_target_save:'PSE buy-below price saved', pse_watch_target_clear:'PSE buy-below price cleared',
@@ -7510,6 +7519,73 @@ async function renderTodayGrooming() {
   }).join(' · ') + (line.more ? ' · <a href="#about" data-groom-act="setup">+' + line.more + ' more</a>' : '') +
     (open ? '<div data-groom="' + esc(open.id) + '" data-groom-place="today">' + groomPlanHtml(open, today) + '</div>' : '');
   el.hidden = false;
+}
+
+// ── At a glance (lib/glance-core.js) ──
+// One line per source at the top of Today. The small records are read on each
+// open. The three big feeds (flights ~0.8 MB, rentals ~0.65 MB, sports ~0.5 MB)
+// are read only when feed-health shows a newer run than the line this device
+// last worked out, so an ordinary open stays light.
+var GLANCE_CACHE = 'daybook_glance_v1', _glanceToken = 0;
+var GLANCE_PAGES = {calendar: 'calendar', sports: 'sports', flights: 'flights', pse: 'pse', rentals: 'rentals'};
+function glanceCache() {
+  try { var c = JSON.parse(localStorage.getItem(GLANCE_CACHE) || '{}'); return c && typeof c === 'object' ? c : {}; } catch (e) { return {}; }
+}
+// A value worked out from a big feed, reused while its key holds. With no key
+// (feed-health unread) it is worked out afresh each time.
+async function glanceFeed(name, key, work) {
+  var hit = glanceCache()[name];
+  if (key && hit && hit.key === key) return hit.value;
+  var value = await work();
+  var c = glanceCache();
+  c[name] = {key: key, value: value === undefined ? null : value};
+  try { localStorage.setItem(GLANCE_CACHE, JSON.stringify(c)); } catch (e) {}
+  return value;
+}
+function glanceRowHtml(r) {
+  return '<button type="button" class="glance-row" data-track="glance_' + esc(r.source) + '" onclick="switchPage(\'' + GLANCE_PAGES[r.source] + '\',null)"><span class="glance-tag">' + esc(r.label) +
+    '</span><span class="glance-text">' + esc(r.text) + (r.note ? ' <span class="glance-note">· ' + esc(r.note) + '</span>' : '') + '</span></button>';
+}
+async function renderTodayGlance() {
+  var el = document.getElementById('today-glance'), G = window.GlanceCore, uid = window._firebaseUid || null;
+  if (!el) return;
+  if (!uid || window.daybookMember || !G) { el.hidden = true; return; }
+  var token = ++_glanceToken, today = checkupToday();
+  var get = function(f) { return Promise.resolve().then(f).catch(function() { return null; }); };
+  var small = await Promise.all([get(function() { return window.fbLoadDaybookEvents(); }), get(function() { return window.fbLoadMeetings(uid); }),
+    get(function() { return window.fbLoadBookedTrips(); }), get(function() { return window.fbLoadPseWatch(); }), get(function() { return window.fbLoadFeedHealth(); }),
+    get(function() { return window.fbLoadFlightWatch(); }), get(function() { return window.fbLoadRentalPrefs(); })]);
+  if (token !== _glanceToken || window._firebaseUid !== uid) return;
+  var rows = [G.calendarLine(window.DaybookCalendarCore, {manual: small[0] || [], meetings: small[1]}, today), G.tripLine(window.FlightsCore, small[2], today), G.pseLine(small[3], today)];
+  var paint = function() {
+    var list = G.rows(rows);
+    el.innerHTML = list.length ? '<div class="glance-head">At a glance</div>' + list.map(glanceRowHtml).join('') : '';
+    el.hidden = !list.length;
+  };
+  paint();
+  var feeds = (small[4] && small[4].feeds) || {}, watch = small[5], prefs = small[6];
+  var key = function(name, extra) { var at = (feeds[name] || {}).lastOkAt; return at ? [uid, at].concat(extra).join('|') : ''; };
+  var follows = '';
+  try { follows = localStorage.getItem(sportsFollowKey('nba', 'teams')) || ''; } catch (e) {}
+  var later = await Promise.all([
+    get(function() { return glanceFeed('sports', key('sports', [follows]), async function() {
+      var d = sportsCachedData || await window.fbLoadSports();
+      return d ? sportsDigestItems(d, Date.now()).today.map(function(x) { return {tag: x.tag, at: x.at, text: x.text}; }) : null;
+    }); }),
+    get(function() { return !watch || !Object.keys(watch.items || {}).length ? null : glanceFeed('fares', key('flights', [watch.updatedAt || '', today]), async function() {
+      var r = await Promise.all([window.fbLoadFlights(), get(function() { return window.fbLoadPh(); })]);
+      return G.fareLine(window.FlightsCore, watch, r[0], r[1], Date.now());
+    }); }),
+    get(function() { return !prefs ? null : glanceFeed('rentals', key('rentals', [prefs.updatedAt || '']), async function() {
+      var r = await window.fbLoadRentals();
+      return G.rentalsLine(window.RentalsCore, r && r.feed, prefs);
+    }); })
+  ]);
+  if (token !== _glanceToken || window._firebaseUid !== uid) return;
+  rows.push(G.sportsLine(later[0], Date.now()), later[1], later[2]);
+  paint();
+  // Counted on each open that shows it, beside the taps on each line.
+  if (!el.hidden && typeof trackUse === 'function') trackUse('glance_seen');
 }
 async function groomFreshEvents() {
   try { _groomEvents = await window.fbLoadDaybookEvents(); } catch (e) { _groomEvents = null; }
