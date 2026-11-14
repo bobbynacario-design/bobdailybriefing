@@ -2145,7 +2145,7 @@ test('Boxing & UFC: cards with prelims folded, Filipino fighters first, upsets n
 });
 
 test('sports digest: next 24 hours for followed teams, players and fight cards; your results before upsets; edges only at 5+ points',()=>{
-  const names=['sportsDigestHtml','sportsFollowed','sportsFollowKey','sportsIsFollowedMatch','sportsTeamKey','sportsShortTeam','sportsDate','tennisRankTxt','tennisNotable'];
+  const names=['sportsDigestHtml','sportsDigestItems','sportsFollowed','sportsFollowKey','sportsIsFollowedMatch','sportsTeamKey','sportsShortTeam','sportsDate','tennisRankTxt','tennisNotable'];
   const {context}=environment(names,{esc:escHtml,localStorage:{getItem:()=>null,setItem:()=>{}}});
   const now=Date.parse('2026-10-13T06:00:00Z');
   const d={modules:{
@@ -2173,7 +2173,7 @@ test('sports digest: next 24 hours for followed teams, players and fight cards; 
 });
 
 test('digest dates every source and never promotes retained scores or probabilities as current',()=>{
-  const names=['sportsDigestHtml','sportsFollowed','sportsFollowKey','sportsIsFollowedMatch','sportsTeamKey','sportsShortTeam','sportsDate','tennisRankTxt','tennisNotable'];
+  const names=['sportsDigestHtml','sportsDigestItems','sportsFollowed','sportsFollowKey','sportsIsFollowedMatch','sportsTeamKey','sportsShortTeam','sportsDate','tennisRankTxt','tennisNotable'];
   const {context:c}=environment(names,{esc:escHtml,localStorage:{getItem:()=>null,setItem:()=>{}}});
   const now=Date.parse('2026-10-13T06:00:00Z'),checked='2026-10-13T05:55:00Z';
   const nba={generatedAt:checked,watchlist:[{team:'H'}],projectionJournal:{resolved:12},matches:[{home:'H',away:'A',status:'SCHEDULED',utcDate:'2026-10-14T01:00:00Z',market:{pHome:.7},edge:{size:8,side:'H'}}]};

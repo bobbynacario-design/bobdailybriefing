@@ -13588,7 +13588,8 @@ function sportsGenericModuleHtml(mod, key) {
 // The digest (lane 5): one card above the tabs with what matters now, from
 // the stored doc only. Today = the next 24 hours; overnight = the last 36.
 // Edges list model-vs-bookmaker gaps only once the model has projections.
-function sportsDigestHtml(d, nowMs) {
+// Today's At a glance line reads the same lists (GlanceCore.sportsLine).
+function sportsDigestItems(d, nowMs) {
   d = d || {};
   var mods = d.modules || {}, nba = mods.nba || {}, tennis = mods.tennis || {}, combat = mods.combat || {};
   var nf=SportsTrust.freshness(nba,nowMs),tf=SportsTrust.freshness(tennis,nowMs),cf=SportsTrust.freshness(combat,nowMs);
@@ -13652,11 +13653,15 @@ function sportsDigestHtml(d, nowMs) {
     if (r.settlementConfirmed!==true || !within(r.date, nowMs - 48 * 3600000, nowMs) || r.winnerPct == null || r.winnerPct >= 50) return;
     overnight.push({ at: r.date, tag: 'UPSET', text: r.winner + ' beat ' + r.loser + ' as a ' + r.winnerPct + '% underdog', sub: (r.card || 'boxing')+checked(cf) });
   });
-  function rows(list) { return list.map(function (x) { return '<div class="sd-row"><span class="tag">' + esc(x.tag) + '</span><span>' + esc(x.text) + (x.sub ? '<span class="sub">' + esc(x.sub) + '</span>' : '') + '</span></div>'; }).join(''); }
   today.sort(function (a, b) { return a.tag === 'LIVE' ? -1 : b.tag === 'LIVE' ? 1 : String(a.at).localeCompare(String(b.at)); });
   // Your teams and players first (newest first), then upsets, biggest first.
   overnight.sort(function (a, b) { var ua = a.tag === 'UPSET' ? 1 : 0, ub = b.tag === 'UPSET' ? 1 : 0; return ua - ub || (ua ? (a.rank || 999) - (b.rank || 999) : String(b.at).localeCompare(String(a.at))); });
   edges.sort(function (a, b) { return b.size - a.size; });
+  return { today: today, overnight: overnight, lastReported: lastReported, edges: edges };
+}
+function sportsDigestHtml(d, nowMs) {
+  var x = sportsDigestItems(d, nowMs), today = x.today, overnight = x.overnight, lastReported = x.lastReported, edges = x.edges;
+  function rows(list) { return list.map(function (x) { return '<div class="sd-row"><span class="tag">' + esc(x.tag) + '</span><span>' + esc(x.text) + (x.sub ? '<span class="sub">' + esc(x.sub) + '</span>' : '') + '</span></div>'; }).join(''); }
   var html = '';
   if (today.length) html += '<div class="sd-group">Next 24 hours</div>' + rows(today.slice(0, 6));
   if (overnight.length) html += '<div class="sd-group">Since yesterday</div>' + rows(overnight.slice(0, 6));
