@@ -22,6 +22,7 @@ import {createRequire} from 'node:module';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import path from 'node:path';
+import vm from 'node:vm';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(root, 'functions', 'package.json'));
@@ -220,6 +221,53 @@ section('Cloud functions');
     else if (names.length) warn('functions:errors', 'Function errors in the last 26 hours: ' + names.map(([n, c]) => n + ' × ' + c).join(', ') + '.');
     else info('No function errors in the last 26 hours.');
   }
+}
+
+// 5c. AI spend, priced with the app's own table (index.html), so the Help tab
+// and this check never disagree about a rate.
+section('AI spend');
+{
+  const html = readFileSync(path.join(root, 'index.html'), 'utf8');
+  const cut = (start, end) => { const s = html.indexOf(start); return s < 0 ? '' : html.slice(s, html.indexOf(end, s) + end.length); };
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext([cut('var LLM_PRICING_USD_PER_1K = {', '\n};'), cut('var LLM_LOCAL_PREFIX', ';'), cut('function llmPriceUsd(', '\n}')].join('\n'), ctx);
+  await import(pathToFileURL(path.join(root, 'lib', 'llm-trend-core.js')).href);
+  const core = globalThis.LlmTrendCore;
+  const s = core.spike(core.build(await get('llm-usage'), ctx.llmPriceUsd));
+  const usd = (v) => (v == null ? 'n/a' : '$' + v.toFixed(2));
+  const line = 'Yesterday ' + usd(s.yesterday) + ' · today so far ' + usd(s.today) + ' · usual day ' + usd(s.median);
+  if (s.level === 'alert') alert('spend:spike', 'AI spend ' + usd(s.cost) + ' on ' + s.day + ', against a usual day of ' + usd(s.median) + '. Look for a stuck retry or a loop. ' + line);
+  else if (s.level === 'warn') warn('spend:high', 'AI spend ' + usd(s.cost) + ' on ' + s.day + ', twice a usual day (' + usd(s.median) + ').');
+  else info(line);
+}
+
+// 5d. Backups. PokerHQ's weekly backup failed every Sunday from 29 Sep to
+// 14 Nov 2026 (its bucket did not exist) and nothing said so. Weekly Firestore
+// backups (Sundays, kept 8 weeks) cover Daybook, PokerHQ and SonicVault.
+section('Backups');
+{
+  const gcloud = (cmd) => {
+    const r = spawnSync('gcloud ' + cmd + ' --project pokerhq-a67e4 --format=json', {cwd: root, encoding: 'utf8', timeout: 120000, shell: true, maxBuffer: 16 * 1024 * 1024});
+    try { return r.status === 0 ? JSON.parse(r.stdout || '[]') : null; } catch (e) { return null; }
+  };
+  const fresh = (at) => at && Date.now() - at < 8.5 * 86400000;
+  const schedules = gcloud('firestore backups schedules list --database="(default)"');
+  const backups = gcloud('firestore backups list');
+  if (!schedules || !backups) info('Firestore backups not read (gcloud is not signed in here).');
+  else if (!schedules.length) alert('backup:none', 'No Firestore backup schedule, so nothing is backed up.');
+  else {
+    const ready = backups.filter((b) => b.state === 'READY').map((b) => Date.parse(b.snapshotTime)).sort((a, b) => b - a);
+    const since = Math.min(...schedules.map((s) => Date.parse(s.createTime)));
+    if (fresh(ready[0])) info('Firestore: newest backup ' + phtTime(ready[0]) + ', ' + ready.length + ' kept');
+    else if (!ready.length && fresh(since)) info('Firestore: first weekly backup due on Sunday');
+    else warn('backup:firestore', 'No Firestore backup in the last 8 days' + (ready[0] ? ' (newest ' + phtTime(ready[0]) + ')' : '') + '.');
+  }
+  const files = gcloud('storage objects list "gs://pokerhq-a67e4.firebasestorage.app/pokerhq-backups/weekly/*"');
+  const newest = files && files.map((f) => Date.parse(String(f.update_time || '').replace(/([+-]\d\d)(\d\d)$/, '$1:$2'))).filter(Boolean).sort((a, b) => b - a)[0];
+  if (!files) info('PokerHQ backup file not read.');
+  else if (fresh(newest)) info('PokerHQ: newest backup ' + phtTime(newest) + ', ' + files.length + ' kept');
+  else warn('backup:pokerhq', 'No PokerHQ backup file in the last 8 days' + (newest ? ' (newest ' + phtTime(newest) + ')' : '') + '.');
 }
 
 // 6. GitHub: CI, publish and feed workflows over the last day.
