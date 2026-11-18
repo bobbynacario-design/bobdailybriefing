@@ -78,7 +78,7 @@ const {
 const {authorize, daybookRole, guardedGeneration} = require("./generation-guard");
 const {
   normalizeDelivery, isQuietTime, selectDeliverable, decisionAsks, todayLine, pseLine, fareWatchLine, bookedTripLine, uniqloLine, askedAfter, urgentItems, pushKind, ledAfter, pushedAfter,
-  notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, reminderIds, newReminders, weeklyReadDue,
+  notificationCopy, todaysSparkTitle, dueReminders, dueExperiment, dropRepeatedLines, reminderIds, newReminders, weeklyReadDue,
   commitmentLine, weeklyReviewDue,
 } = require("./delivery-core");
 const DailyBoostCore = require("./daily-boost");
@@ -1818,6 +1818,15 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   // push he chose reads lead, today, this week.
   const copy = kind === "urgent" ? notificationCopy(urgent, false, {urgent: true}) :
     notificationCopy(items, kind === "test", {today, asks, pse: pse && pse.line, fares: fares && fares.line, trip, uniqlo, reminders, experiment: boost.experiment, remindersOnly, weekly: boost.weekly, weeklyOnly, commitment: boost.commitment, body});
+  // A line under the lead that has run seven mornings word for word is left out
+  // (the 17 Oct experiment rode every push for a month). A push left with
+  // nothing but such lines is not sent.
+  const primary = items.length > 0 || remindersOnly || weeklyOnly;
+  const repeat = kind === "morning" ? dropRepeatedLines(copy.body, state.lineRuns, dayKey, state.morningDay, primary) : null;
+  if (repeat) {
+    if (!primary && !repeat.body) return {status: "nothing-new"};
+    copy.body = repeat.body;
+  }
   const response = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
@@ -1850,6 +1859,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
         if (pse) next.lastPseAlertsAsOf = pse.asOf;
         // These fare-watch hits are announced; a new price or fare is news again.
         if (fares) next.fareAlerted = (Array.isArray(next.fareAlerted) ? next.fareAlerted : []).concat(fares.keys).slice(-60);
+        if (repeat) next.lineRuns = repeat.runs;
       }
       next.asked = askedAfter(next.asked, kind === "morning" ? asks : [], dayKey);
       next.pushed = pushedAfter(next.pushed, sentItems, dayKey);
@@ -1865,6 +1875,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
       reminders: reminders.length,
       pse: pse ? pse.asOf : null,
       fares: fares ? fares.keys.length : 0,
+      repeatsLeftOut: repeat ? repeat.dropped.length : 0,
       // What the phone showed, so a push can be checked without the phone.
       title: copy.title,
       body: String(copy.body || "").slice(0, 500),

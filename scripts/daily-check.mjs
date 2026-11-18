@@ -166,6 +166,13 @@ section('Push');
   recent.forEach((a) => { const k = a.lead || ''; (counts[k] = counts[k] || new Set()).add(pht(a.at)); });
   Object.entries(counts).filter(([lead, days]) => days.size >= 3 && lead && !/^Reliability:/.test(lead))
     .forEach(([lead, days]) => warn('push:stale:' + lead, 'Push led with "' + lead + '" on ' + days.size + ' different days.'));
+  // A line under the lead on most mornings is a nag: an experiment never closed
+  // was on 8 of 9 pushes up to 18 Nov 2026 and only the lead was checked here.
+  // The push leaves such a line out after seven mornings (dropRepeatedLines).
+  const lineDays = {};
+  recent.forEach((a) => String(a.body || '').split('\n').slice(1).forEach((line) => { const k = line.trim(); if (k) (lineDays[k] = lineDays[k] || new Set()).add(pht(a.at)); }));
+  Object.entries(lineDays).filter(([, days]) => days.size >= 5)
+    .forEach(([line, days]) => warn('push:repeat-line:' + line.slice(0, 60), 'Push carried "' + line.slice(0, 100) + '" on ' + days.size + ' of the last ' + recent.length + ' pushes.'));
   if (state.tokenUpdatedAt && hoursAgo(state.tokenUpdatedAt) > 24 * 45) warn('push:token', 'Phone push token last refreshed ' + phtTime(state.tokenUpdatedAt) + '.');
   // Taps, counted by the app as push_open (from 11 Oct, v212).
   const usage = (await get('usage-' + uid)) || {days: {}};

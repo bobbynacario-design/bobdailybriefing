@@ -4687,7 +4687,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <ul>
         <li><b>Reminders</b> fall due on a date named in the watch metric (“due 12 Oct”), otherwise in 3 days, 2 weeks or 30 days by the story's timeframe. Due ones appear in <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> with <b>✓ Checked</b>, <b>✎ Note what you found</b>, <b>Snooze a week</b>, and a <b>Due</b> date you can change.</li>
         <li><b>In the Morning 5 push</b> a line reads “To check: …”; on a quiet morning, a reminder coming due gets a push of its own. Each is announced once.</li>
-        <li><b>Experiments</b> — under <b>Try an idea</b>, plan one small thing and when to revisit it; it comes back in <b>Your experiments</b> to record what happened. When one is due, a Morning 5 push that is already going out adds “Experiment to review: …”, and the Morning 5 lists it: tap it there to open its review. It never creates an extra push on its own. A decision whose <b>Review on</b> date has come is listed the same way.</li>
+        <li><b>Experiments</b> — under <b>Try an idea</b>, plan one small thing and when to revisit it; it comes back in <b>Your experiments</b> to record what happened. When one is due, a Morning 5 push that is already going out adds “Experiment to review: …” for up to a week, and the Morning 5 lists it until you close it: tap it there to open its review, or tap <b>Done</b> or <b>Drop</b> on its card to close it in one go. It never creates an extra push on its own, and any push line other than the first that has run seven mornings in a row is left out after that. A decision whose <b>Review on</b> date has come is listed the same way.</li>
         <li><b>Sundays</b> bring <b>Look back on your week</b>: the week's notes and stories. <b>Carry forward</b> one note and it rides along on the spark until next Sunday.</li>
         <li><b>Your week, read back</b> — tap <b>Read my week back</b> (it opens by itself on Sundays) and an AI reads your last seven days: notes, quests, the stories you opened and voted on, experiments and decisions. It names what kept coming up, what gave or took energy, where what you said and did part ways, one small thing you have not tried, and a question to sit with. Each read follows up on the last one from at least five days before, so there has been time for something to change. Under its question, <b>Write my answer</b> saves your reply with that question, and the next read responds to what you wrote. A note you bring back with <b>Coming back to…</b> is read as that earlier day's words, and only what you add counts as this week's. Your <b>Called it?</b> verdicts from the week are part of what it reads. It only sees what you recorded here, never gives trading advice, and your notes go to Claude only when you tap. Up to three reads a day; the last twelve are kept. On Sundays, until you have read it, the Morning 5 push says so (one push that day, even when nothing else changed) and the collapsed spark strip shows <b>Read my week back</b>.</li>
       </ul>
@@ -9968,6 +9968,18 @@ function commandDismiss(encoded) {
   saveCommandPreferences('Dismissed for today');
 }
 
+// Done or Drop on an experiment's Morning 5 card (id "experiment-<its day>").
+// Daily Boost saves it, so the next morning push leaves it out too.
+function commandCloseExperiment(encoded, how) {
+  var key = commandItemId(encoded).replace(/^experiment-/, '');
+  if (!window.dailyBoostCloseExperiment || !window.dailyBoostCloseExperiment(key, how)) {
+    showToast('Could not close it here. Open About you → Your experiments.', 'warn');
+    return;
+  }
+  rebuildCommandCenter();
+  showToast(how === 'drop' ? 'Experiment dropped. It is off the Morning 5 and the push.' : 'Experiment done. It is off the Morning 5 and the push.', 'success');
+}
+
 function commandSportsFollows(sports) {
   var result = {};
   var modules = sports && sports.modules || {};
@@ -10018,6 +10030,10 @@ function commandItemHtml(item, rank, featured) {
     // item keeps a single tap to start.
     (featured || review ? '' : '<button class="command-item-btn' + (review && review.state === quickState ? ' pinned' : '') + '" onclick="event.stopPropagation();setCommandReviewState(\'' + encodedId + '\',\'' + quickState + '\')">' + quickLabel + '</button>') +
     (item.source === 'Reliability' ? '' :
+      // An experiment closes here in one tap; Dismiss would only hide it until tomorrow.
+      item.source === 'Experiments' ?
+      '<button class="command-item-btn" onclick="event.stopPropagation();commandCloseExperiment(\'' + encodedId + '\',\'done\')">Done</button>' +
+      '<button class="command-item-btn" onclick="event.stopPropagation();commandCloseExperiment(\'' + encodedId + '\',\'drop\')">Drop</button>' :
       '<button class="command-item-btn' + (item.pinned ? ' pinned' : '') + '" onclick="event.stopPropagation();commandTogglePin(\'' + encodedId + '\')">' + (item.pinned ? 'Pinned' : 'Pin') + '</button>' +
       '<button class="command-item-btn" onclick="event.stopPropagation();commandDismiss(\'' + encodedId + '\')">Dismiss</button>') + '</div>';
   var explanation = '<details class="command-explain" onclick="event.stopPropagation()"><summary data-track="command_why">Why this rank?</summary><div class="command-explain-body">' +

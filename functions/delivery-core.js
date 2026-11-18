@@ -340,12 +340,17 @@ function dueReminders(core, entries, dayKey) {
 
 // The oldest open experiment whose revisit date has arrived. It only rides on a
 // Morning 5 that was already going out; it never creates another notification.
+// For a week at most: on 18 Nov 2026 one due 18 Oct had been on every morning
+// push for a month. After that it waits on Today's Morning 5, where one tap
+// closes it.
+const EXPERIMENT_PUSH_DAYS = 7;
 function dueExperiment(core, entries, dayKey) {
   if (!core || typeof core.clean !== "function" || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return null;
   const records = core.clean(entries && typeof entries === "object" ? entries : {});
+  const oldest = new Date(Date.parse(dayKey + "T00:00:00Z") - (EXPERIMENT_PUSH_DAYS - 1) * 86400000).toISOString().slice(0, 10);
   const key = Object.keys(records).filter((day) => {
     const item = records[day];
-    return item.trialPlan && !item.trialDone && item.trialDue && item.trialDue <= dayKey;
+    return item.trialPlan && !item.trialDone && item.trialDue && item.trialDue <= dayKey && item.trialDue >= oldest;
   }).sort((a,b) => records[a].trialDue.localeCompare(records[b].trialDue) || a.localeCompare(b))[0];
   return key ? {plan: records[key].trialPlan, due: records[key].trialDue, day: key} : null;
 }
@@ -380,6 +385,31 @@ function todaysSparkTitle(core, entries, dayKey, lean) {
   return core.sparkTitle(spark) || "";
 }
 
+// A line under the lead that has been on seven morning pushes in a row is no
+// longer news, so it is left out from the eighth on, for as long as it stays
+// word for word the same. A line that changes (a new price, another tick) or
+// skips a morning starts over. runs: [{line, days, last}] from the last morning
+// push (a list, because the state is written with merge, which would keep a
+// map's old keys for ever); prevDay: that push's day. keepFirst: the first line
+// is the lead, or the reminders or weekly line a push is about, and always stays.
+// Returns {body, runs, dropped}; runs holds only this morning's lines.
+const LINE_RUN_MAX = 7;
+function dropRepeatedLines(body, runs, dayKey, prevDay, keepFirst) {
+  const lines = String(body || "").split("\n");
+  const head = keepFirst ? lines.shift() : null;
+  const old = new Map((Array.isArray(runs) ? runs : []).filter((r) => r && r.line).map((r) => [r.line, r]));
+  const next = [], kept = [], dropped = [];
+  lines.forEach((line) => {
+    const key = line.replace(/\s+/g, " ").trim().slice(0, 160);
+    if (!key || next.some((r) => r.line === key)) return;
+    const was = old.get(key);
+    const days = was && was.last === dayKey ? Number(was.days) || 1 : was && prevDay && was.last === prevDay ? (Number(was.days) || 0) + 1 : 1;
+    next.push({line: key, days, last: dayKey});
+    (days > LINE_RUN_MAX ? dropped : kept).push(line);
+  });
+  return {body: (head == null ? [] : [head]).concat(kept).join("\n"), runs: next.slice(0, 20), dropped};
+}
+
 module.exports = {
   DELIVERY_SOURCES,
   normalizeDelivery,
@@ -405,6 +435,7 @@ module.exports = {
   weeklyReviewDue,
   dueReminders,
   dueExperiment,
+  dropRepeatedLines,
   reminderIds,
   hasNewReminders,
   newReminders,

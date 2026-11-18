@@ -280,6 +280,41 @@ test("one due experiment rides on an existing Morning 5 and points at its review
   assert.equal(dueExperiment(null,entries,"2026-09-25"),null);
 });
 
+// 18 Nov 2026: an experiment due 18 Oct, never closed, was on 8 of 9 pushes.
+test("an open experiment rides the push for a week after its revisit date, then only Today lists it", () => {
+  const entries = {"2026-10-17": {spark:1,trialPlan:"Fix the fast-track flow",trialDue:"2026-10-18",trialDone:false}};
+  assert.equal(dueExperiment(DailyBoostCore, entries, "2026-10-18").plan, "Fix the fast-track flow");
+  assert.equal(dueExperiment(DailyBoostCore, entries, "2026-10-24").plan, "Fix the fast-track flow", "seventh morning");
+  assert.equal(dueExperiment(DailyBoostCore, entries, "2026-10-25"), null, "eighth morning");
+  assert.equal(dueExperiment(DailyBoostCore, entries, "2026-11-18"), null);
+  const both = Object.assign({"2026-11-10": {spark:2,trialPlan:"Ask one clearer question",trialDue:"2026-11-15",trialDone:false}}, entries);
+  assert.equal(dueExperiment(DailyBoostCore, both, "2026-11-18").plan, "Ask one clearer question", "a stale one does not hide a fresh one");
+});
+
+test("a line under the lead is left out after seven mornings word for word, and starts over when it changes", () => {
+  const {dropRepeatedLines} = require("./delivery-core");
+  const day = (n) => new Date(Date.parse("2026-11-10T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+  let runs = {}, prev = null, out;
+  for (let n = 0; n < 7; n++) {
+    out = dropRepeatedLines("Briefing: story " + n + "\nFare watch: ₱" + (13000 + n) + "\nExperiment to review: X", runs, day(n), prev, true);
+    assert.equal(out.body.split("\n").length, 3, "morning " + (n + 1) + " keeps every line");
+    runs = out.runs; prev = day(n);
+  }
+  out = dropRepeatedLines("Briefing: story 7\nFare watch: ₱13007\nExperiment to review: X", runs, day(7), prev, true);
+  assert.equal(out.body, "Briefing: story 7\nFare watch: ₱13007", "the eighth morning leaves the repeat out; the lead and a changed line stay");
+  assert.deepEqual(out.dropped, ["Experiment to review: X"]);
+  assert.equal(out.runs.find((r) => r.line === "Experiment to review: X").days, 8, "still counted, so it stays out");
+  assert.ok(Array.isArray(out.runs) && out.runs.length === 2, "a list of this morning's lines only");
+  out = dropRepeatedLines("Briefing: s\nExperiment to review: X", out.runs, day(9), day(7), true);
+  assert.equal(out.body, "Briefing: s");
+  out = dropRepeatedLines("Briefing: s", out.runs, day(10), day(9), true);
+  out = dropRepeatedLines("Briefing: s\nExperiment to review: X", out.runs, day(11), day(10), true);
+  assert.equal(out.body, "Briefing: s\nExperiment to review: X", "a morning without it starts the count over");
+  assert.equal(dropRepeatedLines("This week: X", [{line: "This week: X", days: 7, last: day(0)}], day(1), day(0), false).body, "", "with no lead, every line can be left out");
+  assert.equal(dropRepeatedLines("A\nB", {B: {days: 9, last: day(0)}}, day(1), day(0), true).body, "A\nB", "an old map-shaped state is ignored");
+  assert.equal(dropRepeatedLines("A\nB", null, day(0), null, true).body, "A\nB");
+});
+
 test("the push's spark leans towards his goals exactly as the app does", () => {
   const core = DailyBoostCore, day = "2026-09-28";
   const base = core.sparkFor(day, {}), target = core.order.find((id) => core.themes[id] !== core.themes[base]);
