@@ -1731,11 +1731,11 @@ async function bookedTripFor(db, uid, dayKey) {
 
 // His fare watches met by the latest flight scout, once each. Best effort:
 // a failed read leaves the line off.
-async function fareWatchFor(db, uid, alerted, now) {
+async function fareWatchFor(db, uid, alerted, now, lows) {
   try {
     const [watch, latest, ph] = await Promise.all(["flights-watch-" + uid, "flights-latest", "radar-ph"].map((id) => db.collection(BRIEFINGS_COLL).doc(id).get()));
     if (!watch.exists || !latest.exists) return null;
-    return fareWatchLine(FlightsCore, watch.data(), latest.data(), ph.exists ? ph.data() : null, alerted, now);
+    return fareWatchLine(FlightsCore, watch.data(), latest.data(), ph.exists ? ph.data() : null, alerted, now, lows);
   } catch (error) {
     logger.warn("Fare watch line failed", {message: error.message});
     return null;
@@ -1797,7 +1797,7 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
   // A test push shows the latest alerts even if a morning push already carried them.
   const pse = await pseFor(db, prefs.uid, options.test ? null : state.lastPseAlertsAsOf, dayKey);
   // A test push shows met fare watches even if a morning push carried them.
-  const fares = await fareWatchFor(db, prefs.uid, options.test ? [] : state.fareAlerted, now);
+  const fares = await fareWatchFor(db, prefs.uid, options.test ? [] : state.fareAlerted, now, options.test ? [] : state.fareLows);
   const trip = await bookedTripFor(db, prefs.uid, dayKey);
   // Rides only on a push already going out, like this week's commitment.
   const body = role === "owner" ? await bodyFor(db, prefs.uid, now) : "";
@@ -1859,6 +1859,8 @@ async function deliverMorningFiveForUser(db, prefDoc, options) {
         if (pse) next.lastPseAlertsAsOf = pse.asOf;
         // These fare-watch hits are announced; a new price or fare is news again.
         if (fares) next.fareAlerted = (Array.isArray(next.fareAlerted) ? next.fareAlerted : []).concat(fares.keys).slice(-60);
+        // The fare last sent per watch: only a cheaper one (3%+) or a 14-day reminder is news.
+        if (fares) next.fareLows = fares.lows;
         if (repeat) next.lineRuns = repeat.runs;
       }
       next.asked = askedAfter(next.asked, kind === "morning" ? asks : [], dayKey);

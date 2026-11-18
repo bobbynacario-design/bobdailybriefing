@@ -376,6 +376,34 @@ test("a met fare watch rides the morning push once; a new price is news again", 
   assert.match(notificationCopy([], false, {fares: first.line}).body, /^Fare watch: Tokyo/);
 });
 
+// 18 Nov 2026: a fare line was on 7 of 9 pushes, the same Bangkok trip a few
+// hundred pesos either way. Only a fare 3%+ under the last one sent is news,
+// or a reminder once 14 days have passed.
+test("a fare watch speaks again only for a fare 3% under the last one sent, or after 14 days", () => {
+  const {fareWatchLine} = require("./delivery-core");
+  const core = require("./flights-core");
+  const at = (day) => Date.parse(day + "T22:00:00Z") - 8 * 3600000;
+  const fare = (id, amount, now) => ({id: id.repeat(20), kind: "advertised-fare", airline: "Philippine Airlines", origin: "MNL", destination: "NRT", destinationName: "Tokyo",
+    departureDate: "2026-12-10", returnDate: "2026-12-15", tripType: "round-trip", cabin: "Economy", currency: "USD", amount,
+    sourceUrl: "https://flights.philippineairlines.com/en-ph/", bookingUrl: "https://flights.philippineairlines.com/en-ph/", checkedAt: new Date(now - 3600000).toISOString()});
+  const watch = {items: {wabc1: {city: "Tokyo", airports: ["NRT"], from: "2026-12-01", to: "2026-12-31", minNights: 3, maxNights: 10, target: 20000}}};
+  const run = (id, amount, day, alerted, lows) => fareWatchLine(core, watch, {offers: [fare(id, amount, at(day))]}, {asOf: day, fx: {usdphp: {level: 60}}}, alerted, at(day), lows);
+  const first = run("a", 300, "2026-11-01", [], []);
+  assert.match(first.line, /₱18,000/);
+  assert.deepEqual(first.lows, [{watch: "wabc1", php: 18000, day: "2026-11-01"}]);
+  assert.equal(run("b", 295, "2026-11-02", first.keys, first.lows), null, "another fare ₱300 cheaper (1.7%) is not news");
+  assert.equal(run("c", 310, "2026-11-03", first.keys, first.lows), null, "a dearer one is not");
+  const lower = run("d", 290, "2026-11-04", first.keys, first.lows);
+  assert.match(lower.line, /₱17,400/, "3.3% under the last one sent is news");
+  assert.deepEqual(lower.lows, [{watch: "wabc1", php: 17400, day: "2026-11-04"}]);
+  assert.equal(run("e", 292, "2026-11-17", first.keys.concat(lower.keys), lower.lows), null, "13 days on, still quiet");
+  assert.match(run("e", 292, "2026-11-18", first.keys.concat(lower.keys), lower.lows).line, /₱17,520/, "14 days on, a reminder");
+  // Before the lows list existed, the price in his latest sent key stands in.
+  assert.equal(run("f", 296, "2026-11-18", ["wabc1|" + "z".repeat(20) + "|18000"], undefined), null);
+  assert.ok(run("f", 290, "2026-11-18", ["wabc1|" + "z".repeat(20) + "|18000"], undefined));
+  assert.ok(run("a", 299, "2026-11-18", [], []), "a test push (nothing sent) shows the hit");
+});
+
 test("the next booked trip rides the morning push: countdown and open to-dos within a week, only late or soon-due items further out", () => {
   const {bookedTripLine} = require("./delivery-core");
   const core = require("./flights-core");

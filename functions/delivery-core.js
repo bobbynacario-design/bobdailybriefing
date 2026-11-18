@@ -145,23 +145,37 @@ function pseLine(watch, lastAsOf, dayKey) {
 
 // His fare watches (flights-watch-<uid>, set on Trips) against the latest
 // flight scout, through the shared FlightsCore so the push and the page agree.
-// A fare at or under its target is announced once: alerted holds the
-// watch|fare|price keys already sent, so a new price or a new fare is news
-// and the same one is not. {line, keys}, or null when nothing is new.
-function fareWatchLine(core, watchDoc, latest, fx, alerted, now) {
+// A fare at or under its target is news when it is the first sent for that
+// watch, at least 3% under the fare last sent for it, or the last was sent 14
+// or more days ago. Until 18 Nov 2026 any new fare or price was news, and a
+// fare line was on 7 of 9 pushes, mostly the same Bangkok trip at ₱13–14k.
+// alerted holds the watch|fare|price keys already sent (never the same one
+// twice); lows ([{watch, php, day}]) the fare last sent per watch. Before there
+// were lows, the price in his latest sent key stands in. {line, keys, lows}
+// (lows: the hit watches only, so a watch that leaves its target starts
+// afresh), or null when nothing is new.
+const FARE_NEWS_DROP = 0.03, FARE_REMIND_DAYS = 14;
+function fareWatchLine(core, watchDoc, latest, fx, alerted, now, lows) {
   if (!core || typeof core.fareWatch !== "function" || !watchDoc || !latest) return null;
   const items = watchDoc.items && typeof watchDoc.items === "object" ? watchDoc.items : {};
   const sent = Array.isArray(alerted) ? alerted.map(String) : [];
   const peso = (n) => "₱" + Math.round(n).toLocaleString("en-PH");
-  const hits = [];
+  const today = new Date(Number(now == null ? Date.now() : now) + 8 * 3600000).toISOString().slice(0, 10);
+  const last = {};
+  if (Array.isArray(lows)) lows.forEach((l) => { if (l && l.watch && Number(l.php) > 0) last[l.watch] = {php: Number(l.php), day: l.day || today}; });
+  else sent.forEach((key) => { const parts = key.split("|"), php = Number(parts[parts.length - 1]); if (parts.length >= 3 && php > 0) last[parts[0]] = {php, day: today}; });
+  const hits = [], next = [];
   Object.keys(items).sort().forEach((id) => {
     const r = core.fareWatch(items[id], latest, fx, now);
     if (!r || !r.hit) return;
-    const key = id + "|" + r.best.fare.id + "|" + r.best.php;
-    if (sent.indexOf(key) < 0) hits.push({key, text: r.watch.city + " ≈ " + peso(r.best.php) + " (" + core.tripLabel(r.best.fare, now) + "), at or under your " + peso(r.watch.target)});
+    const key = id + "|" + r.best.fare.id + "|" + r.best.php, prior = last[id];
+    const remind = prior && (Date.parse(today) - Date.parse(prior.day)) / 86400000 >= FARE_REMIND_DAYS;
+    const news = remind || (sent.indexOf(key) < 0 && (!prior || r.best.php <= prior.php * (1 - FARE_NEWS_DROP)));
+    next.push(news ? {watch: id, php: r.best.php, day: today} : {watch: id, php: prior ? prior.php : r.best.php, day: prior ? prior.day : today});
+    if (news) hits.push({key, text: r.watch.city + " ≈ " + peso(r.best.php) + " (" + core.tripLabel(r.best.fare, now) + "), at or under your " + peso(r.watch.target)});
   });
   if (!hits.length) return null;
-  return {keys: hits.map((h) => h.key), line: "Fare watch: " + hits.slice(0, 2).map((h) => h.text).join(" · ") + (hits.length > 2 ? " · +" + (hits.length - 2) + " more" : "")};
+  return {keys: hits.map((h) => h.key), lows: next.slice(0, 40), line: "Fare watch: " + hits.slice(0, 2).map((h) => h.text).join(" · ") + (hits.length > 2 ? " · +" + (hits.length - 2) + " more" : "")};
 }
 
 // His next booked trip (trips-booked-<uid>) for the morning push, through
