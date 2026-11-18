@@ -17,11 +17,30 @@ test('a stock row flags a 200-day cross and a new 52-week low from the last sess
   // 220 rising days from 100, then a drop to 90: crosses below the 200-day and breaks the year low.
   const bars = weekdays('2026-10-12', 221, i => (i < 220 ? 100 + i * 0.1 : 90));
   const s = stockMetrics(bars);
-  assert.equal(s.crossed200, 'down'); assert.equal(s.newLow52, true); assert.equal(s.newHigh52, false);
+  assert.equal(s.crossed200, null, 'one close below is not yet a cross'); assert.equal(s.newLow52, true); assert.equal(s.newHigh52, false);
   const next = stockMetrics(bars.concat([{ date: '2026-10-13', open: 91, high: 91, low: 91, close: 91, value: 1 }]));
-  assert.equal(next.crossed200, null, 'still below: no second cross'); assert.equal(next.newLow52, false);
+  assert.equal(next.crossed200, 'down', 'the second close below is'); assert.equal(next.newLow52, false);
+  const third = stockMetrics(bars.concat([{ date: '2026-10-13', open: 91, high: 91, low: 91, close: 91, value: 1 }, { date: '2026-10-14', open: 90.5, high: 90.5, low: 90.5, close: 90.5, value: 1 }]));
+  assert.equal(third.crossed200, null, 'still below: no second cross');
   const flat = stockMetrics(weekdays('2026-10-12', 260, () => 14));
   assert.equal(flat.newLow52, false); assert.equal(flat.newHigh52, false, 'an unmoving stock sets no new low or high');
+});
+
+// BDO "crossed" above, below and above its 200-day average on 14, 17 and 18 Nov
+// 2026, swinging from 1.9% below to 1.4% above it. A cross now needs two closes
+// in a row on the new side, each 1% past the average.
+test('a stock swinging around its 200-day average does not cross back and forth; a clear move does', () => {
+  // 230 days at 100, three clearly above (the side is "above"), then the tail.
+  const after = (tail) => weekdays('2026-11-18', 233 + tail.length, i => (i < 230 ? 100 : i < 233 ? 102 : tail[i - 233]));
+  // BDO's last six closes as a share of its average: +0.3, +0.9, −0.7, +1.4, −1.9, +1.2%.
+  const swing = [100.3, 100.9, 99.3, 101.4, 98.1, 101.2];
+  swing.forEach((_, k) => assert.equal(stockMetrics(after(swing.slice(0, k + 1))).crossed200, null, 'swing day ' + (k + 1)));
+  assert.equal(stockMetrics(after([98.5])).crossed200, null, 'one clear close below is not yet a cross');
+  assert.equal(stockMetrics(after([98.5, 98.4])).crossed200, 'down', 'the second clear close below is');
+  assert.equal(stockMetrics(after([98.5, 98.4, 98.3])).crossed200, null, 'and it is reported once');
+  assert.equal(stockMetrics(after([98.5, 98.4, 99.8, 101.6, 101.7])).crossed200, 'up', 'two clear closes back above cross up');
+  assert.equal(stockMetrics(after([98.5, 99.9, 98.4])).crossed200, null, 'not in a row: no cross');
+  assert.equal(stockMetrics(weekdays('2026-11-18', 150, () => 10)).crossed200, null, 'under 200 days, no average to cross');
 });
 
 test('watchlist alerts: one per stock, own price first, only for the session asked, signed moves', () => {

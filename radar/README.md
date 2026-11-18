@@ -539,7 +539,9 @@ close), no model calls. `--dry-run` builds without writing.
   After the snapshot is written, the job fetches any watched code outside the 30
   (`rows`), lists unknown codes (`missing`) and computes `alerts` for the session
   (`watchAlerts` in ph-metrics.js: own price, new 52-week low, 200-day cross, a
-  4%+ day, new 52-week high; one per stock). It writes with `update()`, never
+  4%+ day, new 52-week high; one per stock). A 200-day cross (`cross200`) needs
+  two closes in a row on the new side, each 1% past that day's average, so a
+  stock swinging around its average (BDO, 14–18 Nov 2026) does not cross daily. It writes with `update()`, never
   touching `items` or `uid`. The repo is public, so the log carries counts only.
 - **Dividends, company news, IPOs** (`pse-events.js`, ~15 PSE Edge requests a
   run, each source non-fatal): the dividends list (≈18 months) gives every board

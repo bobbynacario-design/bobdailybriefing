@@ -11740,7 +11740,7 @@ function pseWatchHtml(d, w, editing) {
     'oninput="pseSuggest()" onfocus="pseSuggest()" onkeydown="pseSuggestKey(event)" onblur="setTimeout(pseSuggestClose, 150)">' +
     '<button type="button" class="tool-chip" data-track="pse_watch_add" onclick="pseAddWatch()">Add</button>' +
     '<div id="pse-watch-suggest" class="pse-suggest" role="listbox" hidden></div></div>' +
-    '<div class="pse-how" id="pse-watch-status">' + (codes.length ? 'Alerts after each close: your buy-below price, a new 52-week low or high, a 200-day cross, or a 4%+ day.' : '') + '</div>';
+    '<div class="pse-how" id="pse-watch-status">' + (codes.length ? 'Alerts after each close: your buy-below price, a new 52-week low or high, a 200-day cross (two closes in a row 1% past the average), or a 4%+ day.' : '') + '</div>';
   return html + '</div>';
 }
 

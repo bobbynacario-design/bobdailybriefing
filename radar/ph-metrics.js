@@ -151,6 +151,30 @@ function lastYear(bars) {
   return bars.filter(function (b) { return b.date > from; });
 }
 
+// Did the last close cross the 200-day average, clearly? A stock hugging its
+// average "crossed" every other day: BDO went above, below and above again on
+// 14, 17 and 18 Nov 2026, its closes swinging from 1.9% below to 1.4% above
+// ₱121.62. So a stock changes side only after two closes in a row on the new
+// side, each at least CROSS_MARGIN past that day's average, and the cross is
+// the second of them. Anything else keeps the side it had; the side is worked
+// out over the last 120 sessions. 'up', 'down' or null.
+var CROSS_MARGIN = 0.01, CROSS_LOOKBACK = 120;
+function cross200(closes) {
+  var n = closes.length;
+  if (n < 201) return null;
+  var side = null, before = null, crossed = null;
+  for (var i = Math.max(200, n - CROSS_LOOKBACK); i <= n; i++) {
+    var c = closes[i - 1], s = sma(closes.slice(0, i), 200);
+    var pos = c > s * (1 + CROSS_MARGIN) ? 'above' : c < s * (1 - CROSS_MARGIN) ? 'below' : 'near';
+    if (pos !== 'near' && pos === before && pos !== side) {
+      if (i === n && side) crossed = pos === 'above' ? 'up' : 'down';
+      side = pos;
+    }
+    before = pos;
+  }
+  return crossed;
+}
+
 // One PSEi stock from its PSE Edge daily bars ({date, open, high, low, close,
 // value}, ascending). The 52-week range uses the bars' intraday highs and lows
 // over the last 52 weeks, the same basis as PSE Edge's own figures.
@@ -166,13 +190,7 @@ function stockMetrics(bars) {
   var priorLo = lows.length > 1 ? minOf(lows.slice(0, -1)) : null;
   var s50 = sma(closes, 50), s200 = sma(closes, 200);
   var values = bars.slice(-20).map(function (b) { return b.value; }).filter(function (v) { return v != null; });
-  // Did the last close cross the 200-day average? Yesterday's close against
-  // yesterday's average, today's against today's.
-  var s200prev = sma(closes.slice(0, -1), 200), crossed = null;
-  if (s200 != null && s200prev != null) {
-    var nowAbove = last.close > s200, wasAbove = closes[closes.length - 2] > s200prev;
-    if (nowAbove !== wasAbove) crossed = nowAbove ? 'up' : 'down';
-  }
+  var crossed = cross200(closes);
   return {
     asOf: last.date, close: r2(last.close), dayChangePct: r2(dayPct(bars)),
     ret1w: r2(retDays(bars, 7)), ret1m: r2(retDays(bars, 30)), ret3m: r2(retDays(bars, 91)),
