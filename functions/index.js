@@ -896,6 +896,15 @@ exports.buildHealthResearch = onSchedule(
         const built = await db.collection(BRIEFINGS_COLL).doc("health-research-" + user.uid).get()
           .then((snap) => !!(snap.exists && (snap.data().weeks || {})[weekKey])).catch(() => false);
         if (built) continue;
+        // Paused while Health has been silent for 14 days (healthQuiet); a
+        // failed read builds as before.
+        const read = (id) => db.collection(BRIEFINGS_COLL).doc(id + user.uid).get().then((snap) => (snap.exists ? snap.data() : null));
+        const quiet = await Promise.all([read("health-"), read("health-basics-"), read("lifestyle-")])
+          .then(([health, basics, lifestyle]) => HealthResearch.healthQuiet({health, basics, lifestyle}, now)).catch(() => ({quiet: false}));
+        if (quiet.quiet) {
+          logger.info("Sunday health research skipped: nothing from Health in 14 days", {week: weekKey, lastAt: quiet.lastAt});
+          continue;
+        }
         // The same monthly budget as the callable (protectGeneration "health"),
         // one request per week, so a retry of the job cannot run it twice.
         await guardedGeneration({db, uid: user.uid, feature: "health", period: phtDateKey(now).slice(0, 7), cap: HEALTH_RESEARCH_MONTHLY_CAP,

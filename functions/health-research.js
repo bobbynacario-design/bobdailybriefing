@@ -105,4 +105,19 @@ function keepWeeks(stored, key, entry) {
   return out;
 }
 
-module.exports = {TOPICS, EVIDENCE, SHOWS, MAX_ITEMS, KEEP_WEEKS, SYSTEM, ageBand, buildResearchPrompt, cleanResearch, keepWeeks};
+// Whether the Sunday build should wait: nothing from Health in the last 14 days
+// (no Apple Health send, no edit to his health basics or lifestyle answers).
+// On 18 Nov 2026 the last send was 30 Oct and basics and lifestyle had never
+// been saved, yet a research week was built and paid for every Sunday. The
+// button on Today still builds one on request. docs: {health, basics,
+// lifestyle}, each the stored doc or null. Returns {quiet, lastAt}.
+const QUIET_DAYS = 14;
+function healthQuiet(docs, now) {
+  const d = docs || {};
+  const times = [d.health && d.health.lastReceived && d.health.lastReceived.at, d.basics && d.basics.updatedAt, d.lifestyle && d.lifestyle.updatedAt]
+    .map((v) => (typeof v === "number" ? v : Date.parse(v))).filter((t) => isFinite(t));
+  const last = times.length ? Math.max(...times) : null;
+  return {quiet: last == null || Number(now) - last > QUIET_DAYS * 86400000, lastAt: last == null ? null : new Date(last).toISOString()};
+}
+
+module.exports = {TOPICS, EVIDENCE, SHOWS, MAX_ITEMS, KEEP_WEEKS, SYSTEM, QUIET_DAYS, ageBand, buildResearchPrompt, cleanResearch, keepWeeks, healthQuiet};

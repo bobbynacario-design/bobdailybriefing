@@ -57,3 +57,17 @@ test("at most three findings, and twelve weeks kept", () => {
   assert.equal(Object.keys(stored).length, 12);
   assert.equal(Object.keys(stored).sort()[0], "2026-01-26");
 });
+
+// 18 Nov 2026: the last Apple Health send was 30 Oct, and a research week was
+// still built every Sunday. The Sunday build waits while Health is silent.
+test("the Sunday build waits after 14 days with nothing from Health", () => {
+  const now = Date.parse("2026-11-22T21:15:00Z");
+  const sent = (iso) => ({lastReceived: {at: iso}});
+  assert.deepEqual(R.healthQuiet({health: sent("2026-10-30T01:34:25.888Z")}, now), {quiet: true, lastAt: "2026-10-30T01:34:25.888Z"});
+  assert.equal(R.healthQuiet({health: sent("2026-11-10T00:00:00Z")}, now).quiet, false, "a send 13 days ago keeps it going");
+  assert.equal(R.healthQuiet({health: sent("2026-10-30T00:00:00Z"), basics: {updatedAt: "2026-11-20T00:00:00Z"}}, now).quiet, false, "editing his health basics counts");
+  assert.equal(R.healthQuiet({lifestyle: {updatedAt: Date.parse("2026-11-21T00:00:00Z")}}, now).quiet, false, "a lifestyle answer counts, stored as a number too");
+  assert.deepEqual(R.healthQuiet({health: null, basics: null, lifestyle: null}, now), {quiet: true, lastAt: null}, "never connected: quiet");
+  assert.equal(R.healthQuiet(null, now).quiet, true);
+  assert.equal(R.QUIET_DAYS, 14);
+});
