@@ -68,7 +68,7 @@ const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback, recentBriefingDocs} = require("./briefing-context");
-const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS, profileBrief} = require("./briefing-prompt-core");
+const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, dropLinkReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS, profileBrief} = require("./briefing-prompt-core");
 const {morningBriefingPlan, morningBriefingDoc, morningBriefingKey} = require("./morning-briefing");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
 const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, materialFromIndex, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
@@ -296,7 +296,8 @@ async function loadStandingContext(db, uid) {
       pointedDocument(db, "miro-latest", "miro-").catch(() => null),
       db.collection(JOURNAL_COLL).where("uid", "==", uid)
         .orderBy("saved", "desc").limit(100).get().catch(() => null),
-      recentBriefingDocs(db.collection(BRIEFINGS_COLL), uid, 5).catch(() => null),
+      // Seven: five days of headlines for the prompt, seven of links for dropLinkReruns.
+      recentBriefingDocs(db.collection(BRIEFINGS_COLL), uid, 7).catch(() => null),
       db.collection(BRIEFINGS_COLL).doc("accounts-" + uid).get().catch(() => null),
     ]);
     // His accounts (Evidence, Your accounts), or the starter list until he keeps his own.
@@ -321,8 +322,9 @@ async function loadStandingContext(db, uid) {
     return {
       standing: buildStandingContext({decisions, radar, markets}),
       watch: priorWatch(archive, phtDateKey()),
-      // The last three briefings' headlines and watch lines, so a story only
-      // comes back as an "Update:" that says what changed (briefing-prompt-core).
+      // The last five briefings' headlines and watch lines, so a story only
+      // comes back as an "Update:" that says what changed (briefing-prompt-core),
+      // and the last seven days' links.
       recent: buildRecentBriefings(archive, phtDateKey()),
       accounts: kept.length ? kept : DEFAULT_ACCOUNTS,
       accountsSource: kept.length ? "his" : "starter",
@@ -587,6 +589,12 @@ async function finishBriefing({db, model, dateLabel, json, briefing, evidence, g
     });
   }
 
+  // A story citing a page Bob was given in the last seven days is dropped
+  // unless it declares an "Update:" (18 Nov 2026: the AXIMA freight update and
+  // an APRA piece from 14 Nov came back word for word).
+  const linkRepeats = dropLinkReruns(briefing, context && context.recent);
+  briefing.sections = linkRepeats.sections;
+  if (linkRepeats.dropped.length) logger.info("briefing stories dropped: link given in the last seven days", {count: linkRepeats.dropped.length});
   // The aha is checked last, after grounding and link checks may have dropped
   // stories, so its link chips only name stories the briefing still has.
   briefing.aha = cleanAha(briefing.aha, briefing.sections);
@@ -601,7 +609,7 @@ async function finishBriefing({db, model, dateLabel, json, briefing, evidence, g
   // Whether the no-rerun rule held: declared updates, and stories that look
   // like a recent headline without saying so. Counted after the checks above.
   const recent = context && context.recent;
-  briefing.context.recent = recent ? Object.assign({}, recent.stats, countReruns(briefing, recent)) : null;
+  briefing.context.recent = recent ? Object.assign({}, recent.stats, countReruns(briefing, recent), {linkRepeatsDropped: linkRepeats.dropped.length}) : null;
 
   await recordBriefingCost(db, model, json);
 

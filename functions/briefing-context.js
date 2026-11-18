@@ -233,9 +233,9 @@ function priorWatch(briefings, todayKey) {
 // read let them push every briefing out, so the no-rerun list and the watch
 // follow-up went empty on 15-16 Oct and stories came back word for word. Read a
 // wide window with only the two fields needed and keep the docs that carry a
-// briefing. Trip builds are capped at ten a day (twenty docs), so a hundred
-// still reaches three days back.
-const RECENT_SCAN = 100;
+// briefing. Trip builds are capped at ten a day (twenty docs), so two hundred
+// still reaches the seven days the link check needs (18 Nov 2026).
+const RECENT_SCAN = 200;
 async function recentBriefingDocs(coll, uid, count) {
   const snap = await coll.where("uid", "==", uid).orderBy("saved", "desc")
     .select("data", "saved").limit(RECENT_SCAN).get();
