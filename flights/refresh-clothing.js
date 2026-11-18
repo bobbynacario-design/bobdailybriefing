@@ -26,7 +26,7 @@ async function main(){
     const nike=results.find(r=>r.id==='nike');
     if(nike && nike.items.length){
       const {found,stopped}=await nikeSizes([...nike.items].sort((a,b)=>a.price/a.originalPrice-b.price/b.originalPrice));
-      nike.items=nike.items.map(i=>found.has(i.id)?{...i,...found.get(i.id),sizeSystem:i.category==='Footwear'?'US men':'Labelled clothing',sizesCheckedAt:checkedAt}:i);
+      nike.items=nike.items.map(i=>found.has(i.id)?{...i,...found.get(i.id),sizeSystem:i.category==='Footwear'?'US men':'Labelled clothing'}:i);
       nike.sizesChecked=found.size;
       nike.message='Published PHP markdowns read; sizes in stock checked on '+found.size+' of '+nike.items.length+' product pages'+(stopped?' (stopped: '+stopped+')':'')+'.';
     }
@@ -36,7 +36,7 @@ async function main(){
   for(const url of results.flatMap(r=>r.candidates).slice(0,8)){
     try{const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(15000)});if(r.ok){const html=await r.text();if(html.length<4000000)promos.push(...parseMall(html,url,checkedAt));}}catch{/* Do not invent a branch offer when a detail page is unavailable. */}
   }
-  const tracked=priceHistory(balancedItems(results),prior,checkedAt);
+  const tracked=priceHistory(balancedItems(results).map(i=>Array.isArray(i.availableSizes) && i.sizesCheckedAt===undefined?{...i,sizesCheckedAt:i.checkedAt}:i),prior,checkedAt);
   const sources=results.map(({items,candidates,campaigns,fetchUrl,browser,shopify,vendors,pages,pageSize,shoes,...row})=>row);
   const feed={kind:'shopping-feed',generatedAt:checkedAt,items:tracked.items,promos,campaigns,sources,modelCalls:0,coverage:'A bounded sample of official Philippine sale pages; not a complete catalogue or live branch inventory. Shipping and vouchers are unverified unless explicitly shown.'};
   console.log(JSON.stringify({items:feed.items.length,promos:promos.length,campaigns:campaigns.length,sources:sources.map(s=>({brand:s.brand,status:s.status,count:s.count,...(s.sizesChecked!=null?{sizesChecked:s.sizesChecked}:{})})),bytes:Buffer.byteLength(JSON.stringify(feed)),modelCalls:0}));

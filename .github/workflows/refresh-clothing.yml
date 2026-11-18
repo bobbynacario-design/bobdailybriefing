@@ -1,8 +1,8 @@
 name: Refresh clothing deals
 on:
   schedule:
-    # Monday and Thursday, 08:00 Philippine time. No AI or paid data API.
-    - cron: '0 0 * * 1,4'
+    # Daily, 08:00 Philippine time. No AI or paid data API.
+    - cron: '0 0 * * *'
   workflow_dispatch:
 permissions:
   contents: read

@@ -92,9 +92,8 @@ Object.entries(health.feeds || {}).sort().forEach(([name, f]) => {
   const since = f.lastOkAt ? phtTime(f.lastOkAt) : 'never';
   if (RETIRED.includes(name)) return info(name + ': retired (' + (f.status || '?') + ', last ok ' + since + ')');
   if (f.status === 'failed') return alert('feed:' + name, name + ' failing, last good ' + since + ': ' + (f.message || f.stage || 'no message'));
-  // Clothing (shopping) runs Monday and Thursday 08:00 PHT, so Thursday to
-  // Monday is 96 hours plus GitHub's late starts; 36 alerted every weekend.
-  const maxHours = name === 'radar' || name === 'grounding' ? 30 : name === 'shopping' ? 108 : 36;
+  // Clothing now runs daily at 08:00 PHT; allow late scheduled starts.
+  const maxHours = name === 'radar' || name === 'grounding' ? 30 : 36;
   const age = f.lastOkAt && (name === 'radar' || name === 'ph' ? weekdayHours(f.lastOkAt, Date.now()) : hoursAgo(f.lastOkAt));
   if (f.lastOkAt && age > maxHours) return alert('feed:' + name + ':stale', name + ' has not run cleanly since ' + since);
   info(name + ': ' + (f.status || '?') + ', as of ' + (f.asOf || '?') + (f.message ? ' (' + String(f.message).slice(0, 70) + ')' : ''));

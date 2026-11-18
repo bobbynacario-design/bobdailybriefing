@@ -22,7 +22,7 @@ export async function nikeSizes(items,{limit=30,budgetMs=240000}={}){
         // Two identical reads 1.5 s apart, so a grid still settling never counts.
         const read=async()=>parseNikeSizes(await grid.evaluateAll(nodes=>nodes.map(n=>n.outerHTML).join('')));
         const first=await read();await page.waitForTimeout(1500);const second=await read();
-        if(first && JSON.stringify(first)===JSON.stringify(second))found.set(item.id,first);
+        if(first && JSON.stringify(first)===JSON.stringify(second))found.set(item.id,{...first,sizesCheckedAt:new Date().toISOString()});
       }catch{/* One unreadable page leaves that item's size unchecked. */}
       finally{await page.close();}
     }
