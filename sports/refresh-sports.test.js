@@ -478,7 +478,7 @@ test('moduleHasData recognises real lane data and rejects empty scaffolding', fu
 test('lanesMissing flags every lane a module-scoped run would erase', function () {
   var onlyTennis = { modules: { tennis: laneDoc().modules.tennis } };
   var wantsTennis = function (k) { return k === 'tennis'; };
-  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'combat', 'worldcup']);
+  assert.deepEqual(lanesMissing(onlyTennis, wantsTennis), ['nba', 'combat'], 'the finished World Cup is not a lane to restore (18 Nov 2026)');
   // Lanes carried forward from the previous doc are not missing.
   assert.deepEqual(lanesMissing(laneDoc(), wantsTennis), []);
   // A lane this run is responsible for is never reported (its own fallback owns it).
@@ -509,8 +509,17 @@ test('concurrent module writes preserve lanes committed by another runner', func
   assert.equal(merged.modules.nba.matches[0].id, 'new-nba');
   assert.equal(merged.modules.tennis.tiers.slam.current.name, 'New tennis snapshot');
   assert.equal(merged.modules.pba, undefined, 'the removed PBA lane is not carried forward from an older doc');
-  assert.equal(merged.worldCup.matches.length, 1);
-  assert.deepEqual(merged.sports.sort(), ['combat', 'nba', 'tennis', 'worldcup']);
+  assert.equal(merged.worldCup.matches.length, 1, 'an explicit World Cup run still writes what it fetched');
+  assert.deepEqual(merged.sports.sort(), ['combat', 'nba', 'tennis']);
+});
+
+// 18 Nov 2026: the World Cup ended in July and was 85 KB of every 544 KB doc.
+test('a new write does not carry the finished World Cup from the doc it replaces', function () {
+  var incoming = laneDoc();
+  delete incoming.worldCup;
+  var merged = mergeConcurrentSportsDoc(incoming, laneDoc(), ['nba']);
+  assert.equal(merged.worldCup, undefined);
+  assert.deepEqual(merged.sports.sort(), ['combat', 'nba', 'tennis']);
 });
 
 test('shiftDateKey walks back across month boundaries', function () {

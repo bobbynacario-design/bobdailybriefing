@@ -92,7 +92,15 @@ function argValue(name) {
 }
 
 function wantsModule(name) {
+  if (name === 'worldcup') return wantsWorldCup();
   return SELECTED_MODULES.indexOf('all') >= 0 || SELECTED_MODULES.indexOf(name) >= 0;
+}
+// The 2026 World Cup ended on 19 Jul; from 18 Nov 2026 it is no longer carried
+// in each day's doc (85 KB of 544, downloaded on every Sports open). Its final
+// archive is in every sports-<day> doc up to sports-2026-11-18, which are never
+// deleted. Only an explicit --module worldcup run fetches it now, never "all".
+function wantsWorldCup() {
+  return SELECTED_MODULES.indexOf('worldcup') >= 0;
 }
 
 function phtDateKey() {
@@ -1451,8 +1459,9 @@ function activeSportsList() {
   var out = [];
   if (wantsModule('nba')) out.push('nba');
   if (wantsModule('tennis')) out.push('tennis');
-  if (wantsModule('worldcup')) out.push('worldcup');
-  if (!out.length || wantsModule('all')) out = ['nba', 'tennis', 'worldcup'];
+  if (wantsModule('combat')) out.push('combat');
+  if (wantsWorldCup()) out.push('worldcup');
+  if (!out.length) out = ['nba', 'tennis', 'combat'];
   return out;
 }
 
@@ -2412,7 +2421,9 @@ async function fetchCombatModule(db, dryRun) {
 // machine's network was up: the prev-doc read threw (DNS), nothing was carried
 // forward, and the write went ahead with a tennis-only doc. That silently erased
 // NBA, the then PBA lane and the FIFA archive, and every later run inherited the loss.
-var LANE_KEYS = ['nba', 'tennis', 'combat', 'worldcup'];
+// The World Cup left this list on 18 Nov 2026 (wantsWorldCup): a lane listed
+// here is pulled back from earlier docs when a run lacks it.
+var LANE_KEYS = ['nba', 'tennis', 'combat'];
 var LANE_LOOKBACK_DAYS = 21;
 
 // ── Per-lane feed health ─────────────────────────────────────────────────────
@@ -2692,9 +2703,7 @@ async function main() {
       doc.modules[key] = prevDocData.modules[key];
     }
   });
-  if (!wantsModule('worldcup') && prevDocData && prevDocData.worldCup) {
-    doc.worldCup = prevDocData.worldCup;
-  }
+  // The finished World Cup is no longer carried forward (wantsWorldCup).
   if (wantsModule('nba')) {
     try {
       doc.modules.nba = await fetchNbaModule(prevDocData && prevDocData.modules && prevDocData.modules.nba);
