@@ -4743,7 +4743,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-bars"/></svg> What you use</div>
-      <p class="help-key">Counts of which pages and buttons you use, per day, kept on your own account and visible only to you. Never what you read, typed or opened. It shows which features earn their place and which could go.</p>
+      <p class="help-key">Counts of which pages and buttons you use, per day, kept on your own account and visible only to you. Never which story, note or page you read, typed or opened. On today’s briefing it also counts how many stories came into view (a card that stays mostly on screen for a second and a half, once a day), by section only, so the briefing’s cost can be weighed against what gets read. It shows which features earn their place and which could go.</p>
       <div id="usage-out"><p class="rel-none-txt">Loading…</p></div>
     </div>
 
@@ -6575,6 +6575,67 @@ document.addEventListener('click', function(event) {
 }, true);
 document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'hidden') flushUsage(); });
 
+// ── Briefing reading ──
+// The briefing is the biggest AI cost (43% in 14-18 Nov 2026) and taps said
+// little about whether it is read: 4 "More like this" and 1 aha jump in five
+// days. So a card on today's briefing counts as seen once most of it (or half
+// the screen, for a tall card) has stayed in view for 1.5 seconds: once per
+// story per day on this device. Keys name the section, never the story:
+// seen_story, seen_<section>, seen_high, seen_last (the last story card),
+// seen_aha, seen_wildcard.
+var READ_KEY = 'daybook_seen_v1', READ_SEEN_MS = 1500;
+var _readSeen = {day: '', ids: []}, _readObserver = null, _readTimers = [];
+function readMarkSeen(day, id) {
+  if (_readSeen.day !== day) {
+    var kept = null;
+    try { kept = JSON.parse(localStorage.getItem(READ_KEY) || 'null'); } catch (e) { kept = null; }
+    _readSeen = {day: day, ids: kept && kept.day === day && Array.isArray(kept.ids) ? kept.ids.slice(0, 200) : []};
+  }
+  if (_readSeen.ids.indexOf(id) >= 0) return false;
+  _readSeen.ids.push(id);
+  try { localStorage.setItem(READ_KEY, JSON.stringify(_readSeen)); } catch (e) { /* counted for this session only */ }
+  return true;
+}
+function briefingCardSeen(card, day, isLast) {
+  var section = card.getAttribute('data-section');
+  var id = section ? (card.getAttribute('data-command-id') || section) : (card.classList.contains('aha-card') ? 'aha' : 'wildcard');
+  if (!readMarkSeen(day, id)) return false;
+  if (!section) { trackUse('seen_' + id); return true; }
+  trackUse('seen_story'); trackUse('seen_' + section);
+  if (card.getAttribute('data-rel') === 'high') trackUse('seen_high');
+  if (isLast) trackUse('seen_last');
+  return true;
+}
+function watchBriefingReading() {
+  if (_readObserver) _readObserver.disconnect();
+  _readTimers.forEach(function(t) { clearTimeout(t.timer); }); _readTimers = [];
+  _readObserver = null;
+  var out = document.getElementById('today-out');
+  if (!out || typeof IntersectionObserver !== 'function' || !todayBriefingShown()) return;
+  var cards = [].slice.call(out.querySelectorAll('.card[data-section], .aha-card, .wildcard-card'));
+  var stories = cards.filter(function(c) { return c.hasAttribute('data-section'); }), last = stories[stories.length - 1];
+  var day = manilaDateKey();
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      var card = entry.target, root = entry.rootBounds;
+      var inView = entry.isIntersecting && (entry.intersectionRatio >= 0.6 || (root && entry.intersectionRect.height >= root.height * 0.5));
+      var open = _readTimers.filter(function(t) { return t.card === card; })[0];
+      if (!inView) { if (open) { clearTimeout(open.timer); _readTimers.splice(_readTimers.indexOf(open), 1); } return; }
+      if (open) return;
+      var t = {card: card};
+      t.timer = setTimeout(function() {
+        _readTimers.splice(_readTimers.indexOf(t), 1);
+        if (document.visibilityState !== 'visible' || observer !== _readObserver) return;
+        briefingCardSeen(card, day, card === last);
+        observer.unobserve(card);
+      }, READ_SEEN_MS);
+      _readTimers.push(t);
+    });
+  }, {threshold: [0, 0.3, 0.6, 1]});
+  _readObserver = observer;
+  cards.forEach(function(c) { observer.observe(c); });
+}
+
 // Plain names for what the Help readout shows; anything else shows its key.
 var USAGE_LABELS = {
   fn_runaskdaybook:'Ask Daybook', ask_ref:'Ask: open a source', ask_follow:'Ask: follow-up', fn_saveaskanswer:'Ask: save to Evidence', ask_send_decision:'Ask: decision draft', ask_send_check:'Ask: to check', ask_send_take:'Ask: my take', ask_send_copy:'Ask: copy as text', 'ask_send_confirm-check':'Ask: check added',
@@ -6598,6 +6659,9 @@ var USAGE_LABELS = {
   fn_completecommandreviewday:'Morning 5: close review', 'open_command-week':'Morning 5: weekly discipline', 'open_grounding-panel':'Evidence: your numbers',
   push_open:'Opened from a push',
   briefing_auto_seen:'Opened the 05:40 briefing',
+  seen_story:'Briefing: stories seen', seen_high:'Briefing: HIGH stories seen', seen_last:'Briefing: reached the last story',
+  seen_aha:'Briefing: aha seen', seen_wildcard:'Briefing: wildcard seen', seen_global:'Seen: Global', seen_ph:'Seen: Philippines',
+  seen_insurance:'Seen: Insurance', seen_interruptions:'Seen: Interruptions', seen_ai:'Seen: AI', seen_markets:'Seen: Markets', seen_ev:'Seen: EV',
   briefing_standin_seen:'Opened to an earlier briefing (none for today)',
   glance_seen:'At a glance shown', glance_calendar:'At a glance: Calendar line', glance_sports:'At a glance: Sports line',
   glance_flights:'At a glance: trip or fares line', glance_pse:'At a glance: PSE line', glance_rentals:'At a glance: Rentals line',
@@ -14860,6 +14924,8 @@ function renderBriefing(options) {
   applyAccountBadges(); loadAccounts().then(applyAccountBadges);
   // So Share briefing on a phone already has any Go deeper built on another device.
   savedDossiers(true);
+  // Which of today's stories come into view (seen_* in What you use).
+  watchBriefingReading();
 }
 
 function setTick(vi,mi,val,mov) {

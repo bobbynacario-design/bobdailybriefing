@@ -1652,6 +1652,42 @@ test('usage counts batch into one save per window, and a failed save keeps them'
   context._firebaseUid='alice'; context.flushUsage(); await new Promise(r=>setTimeout(r,0));
   assert.deepEqual(saves[2].counts,{card_more:1},'saved after sign-in');
 });
+// Briefing reading (18 Nov 2026): a card counts as seen after 1.5 s mostly in
+// view, once per story per day on a device, by section only, today's briefing only.
+test('briefing reading counts a story once it stays in view, by section, once a day',()=>{
+  const used=[], timers=[], store=new Map();
+  let observer=null, shown=true, day='2026-11-18';
+  const card=(attrs,cls='card')=>({attrs,classList:{contains:c=>cls.split(' ').includes(c)},getAttribute:n=>attrs[n]==null?null:attrs[n],hasAttribute:n=>attrs[n]!=null});
+  const cards=[card({'data-section':'insurance','data-command-id':'briefing-insurance-0','data-rel':'high'}),card({'data-section':'ai','data-command-id':'briefing-ai-0','data-rel':'med'}),card({},'aha-card')];
+  const {context}=environment(['readMarkSeen','briefingCardSeen','watchBriefingReading'],{
+    READ_KEY:'daybook_seen_v1',READ_SEEN_MS:1500,_readSeen:{day:'',ids:[]},_readObserver:null,_readTimers:[],
+    trackUse:k=>used.push(k),manilaDateKey:()=>day,todayBriefingShown:()=>shown,
+    localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)},
+    setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout:id=>{timers[id-1]=null;},
+    IntersectionObserver:function(cb){observer={cb,watched:new Set(),observe(c){this.watched.add(c);},unobserve(c){this.watched.delete(c);},disconnect(){this.watched.clear();}};return observer;}});
+  context.document.visibilityState='visible';
+  context.document.getElementById=id=>id==='today-out'?{querySelectorAll:()=>cards}:null;
+  const view=(c,ratio,h=100)=>observer.cb([{target:c,isIntersecting:ratio>0,intersectionRatio:ratio,intersectionRect:{height:h},rootBounds:{height:800}}]);
+  const fire=()=>{const due=timers.splice(0);due.forEach(fn=>fn&&fn());};
+  context.watchBriefingReading();
+  assert.equal(observer.watched.size,3);
+  view(cards[0],0.7); view(cards[0],0.2); fire();
+  assert.deepEqual(used,[],'scrolled past before 1.5 s: not seen');
+  view(cards[0],0.7); fire();
+  assert.deepEqual(used,['seen_story','seen_insurance','seen_high'],'section and HIGH only, never the headline');
+  view(cards[1],0.35,500); fire();
+  assert.deepEqual(used.slice(3),['seen_story','seen_ai','seen_last'],'a tall card filling half the screen counts; the last story card is marked');
+  view(cards[2],1); fire();
+  assert.equal(used[used.length-1],'seen_aha');
+  // Re-rendered the same day (a reload): nothing counts twice.
+  const before=used.length; context._readSeen={day:'',ids:[]};
+  context.watchBriefingReading(); view(cards[0],0.9); fire();
+  assert.equal(used.length,before,'kept on the device for the day');
+  day='2026-11-19'; context.watchBriefingReading(); view(cards[0],0.9); fire();
+  assert.equal(used.length,before+3,'a new day counts again');
+  shown=false; observer=null; context.watchBriefingReading();
+  assert.equal(observer,null,'an older briefing is not watched');
+});
 test('the usage summary ranks the last 30 days and names what has gone unused',()=>{
   const {context}=environment(['usageSummary'],{USAGE_LABELS:{card_deeper:'Go deeper',page_today:'Today',account_brief:'Account: meeting brief'},USAGE_WATCH:['card_deeper','account_brief']});
   const s=context.usageSummary({'2026-09-26':{page_today:3,card_deeper:1},'2026-09-20':{page_today:2},'2026-07-01':{account_brief:9},'2026-09-25':{x:0}},'2026-09-26',30);
