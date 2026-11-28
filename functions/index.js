@@ -1676,7 +1676,8 @@ async function dailyBoostFor(db, uid, now, lastWeeklyNudge, weeklyAllowed) {
     .catch((error) => { logger.warn("Weekly review lookup failed", {message: error.message}); return {}; });
   const commitment = commitmentLine(WeeklyReviewCore, review, dayKey);
   let weekly = lastWeeklyNudge !== dayKey && weeklyReviewDue(WeeklyReviewCore, review, dayKey);
-  if (!weekly && weeklyAllowed && weeklyReadDue(dayKey, {}, lastWeeklyNudge)) {
+  // Read the stored weekly reads only on a Sunday not yet nudged.
+  if (!weekly && weeklyAllowed && lastWeeklyNudge !== dayKey && new Date(dayKey + "T00:00:00Z").getUTCDay() === 0) {
     try {
       const reads = await db.collection(BRIEFINGS_COLL).doc("weekly-mirror-" + uid).get();
       weekly = weeklyReadDue(dayKey, reads.exists ? reads.data().mirrors : {}, lastWeeklyNudge);

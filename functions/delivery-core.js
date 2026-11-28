@@ -206,6 +206,13 @@ function bookedTripLine(core, doc, today) {
 // (shopping-uniqlo-<uid>). On a Friday once that import has ended, while
 // UNIQLO is one of his Clothing brands, the morning push says so. prefs is
 // his shopping-prefs doc; without one he doesn't use Clothing.
+// Three Fridays unanswered and it stops: his import ended 22 Oct 2026 and the
+// line came every Friday to 27 Nov while he browsed Clothing without pasting.
+// A new paste brings it back once that import ends.
+const NUDGE_UNANSWERED_DAYS = 21;
+function daysBetween(fromKey, toKey) {
+  return Math.round((Date.parse(toKey + "T00:00:00Z") - Date.parse(fromKey + "T00:00:00Z")) / 86400000);
+}
 function uniqloLine(importDoc, prefs, dayKey) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || "")) || new Date(dayKey + "T00:00:00Z").getUTCDay() !== 5) return null;
   if (!prefs || (Array.isArray(prefs.brands) && prefs.brands.indexOf("UNIQLO") < 0)) return null;
@@ -213,6 +220,7 @@ function uniqloLine(importDoc, prefs, dayKey) {
   const ends = offers.map((i) => String((i && i.validTo) || "")).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   const last = ends[ends.length - 1];
   if (last && last >= dayKey) return null;
+  if (last && daysBetween(last, dayKey) > NUDGE_UNANSWERED_DAYS) return null;
   return "UNIQLO: this week’s offers start today" + (last ? "; your import ended " + dayLabel(last) : "") + ". Paste them in Clothing.";
 }
 
@@ -323,19 +331,34 @@ function commitmentLine(core, weeks, dayKey) {
 
 // Sunday's weekly review (Today's "This week" card) is worth one nudge that
 // day when there is a week to score or a next week to set.
+// A week to score is always worth the Sunday line. Asking only to set next
+// week's commitments stops after three unanswered Sundays (none in this week or
+// the two before, none ahead): he set none from 19 Oct to 28 Nov 2026 and the
+// line came every Sunday. Setting one brings it back.
 function weeklyReviewDue(core, weeks, dayKey) {
   if (!core || typeof core.plan !== "function" || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return false;
   if (new Date(dayKey + "T00:00:00Z").getUTCDay() !== 0) return false;
-  return core.plan(core.cleanWeeks(weeks && typeof weeks === "object" ? weeks : {}), dayKey).due;
+  const clean = core.cleanWeeks(weeks && typeof weeks === "object" ? weeks : {});
+  const plan = core.plan(clean, dayKey);
+  if (!plan.due || plan.review) return plan.due;
+  const start = core.weekStart(dayKey);
+  return [0, -7, -14].some((days) => {
+    const week = clean[core.offset(start, days)];
+    return !!(week && week.commitments.length);
+  });
 }
 
 // Sunday's weekly read (functions/weekly-mirror.js) is worth one nudge that day,
-// until it has been read: it opens by itself on Today, but only for someone who
-// opens Today. mirrors: the stored reads keyed by PHT day.
+// until it has been read. Since 17 Oct 2026 it is made only on a tap (About
+// you), so the nudge goes only while he uses it: a read in the three weeks
+// before. The last was 26 Sep, and the nudge came every Sunday since.
+// mirrors: the stored reads keyed by PHT day.
 function weeklyReadDue(dayKey, mirrors, lastNudge) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey || ""))) return false;
   if (new Date(dayKey + "T00:00:00Z").getUTCDay() !== 0) return false;
-  if (mirrors && typeof mirrors === "object" && mirrors[dayKey]) return false;
+  const days = Object.keys(mirrors && typeof mirrors === "object" ? mirrors : {}).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
+  if (days.indexOf(dayKey) >= 0) return false;
+  if (!days.some((k) => k < dayKey && daysBetween(k, dayKey) <= NUDGE_UNANSWERED_DAYS)) return false;
   return lastNudge !== dayKey;
 }
 

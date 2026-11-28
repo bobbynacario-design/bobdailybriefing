@@ -152,14 +152,21 @@ test("the notification carries today's spark as a second line when there is one"
   assert.equal(notificationCopy(items, false, "").body, "Radar: NVDA confirmed");
 });
 
-test("Sunday's weekly read is worth one nudge that day, until it has been read", () => {
+test("Sunday's weekly read is worth one nudge that day, until it has been read, while he uses it", () => {
   const {weeklyReadDue} = require("./delivery-core");
-  assert.equal(weeklyReadDue("2026-09-27", {}, ""), true, "a Sunday with no read yet");
-  assert.equal(weeklyReadDue("2026-09-26", {}, ""), false, "not a Sunday");
+  const last = {"2026-09-20": {question: "q"}};
+  assert.equal(weeklyReadDue("2026-09-27", last, ""), true, "a Sunday with no read yet, last week's read does not count");
+  assert.equal(weeklyReadDue("2026-09-26", last, ""), false, "not a Sunday");
   assert.equal(weeklyReadDue("2026-09-27", {"2026-09-27": {question: "q"}}, ""), false, "already read today");
-  assert.equal(weeklyReadDue("2026-09-27", {"2026-09-20": {question: "q"}}, ""), true, "last week's read does not count");
-  assert.equal(weeklyReadDue("2026-09-27", {}, "2026-09-27"), false, "only one nudge that day");
-  assert.equal(weeklyReadDue("junk", {}, ""), false);
+  assert.equal(weeklyReadDue("2026-09-27", last, "2026-09-27"), false, "only one nudge that day");
+  assert.equal(weeklyReadDue("junk", last, ""), false);
+  // His reads: one, on 26 Sep 2026. Three Sundays on, the nudge stops.
+  const his = {"2026-09-26": {question: "q"}};
+  assert.equal(weeklyReadDue("2026-10-11", his, ""), true, "15 days on");
+  assert.equal(weeklyReadDue("2026-10-18", his, ""), false, "22 days on: three Sundays unanswered");
+  assert.equal(weeklyReadDue("2026-11-29", his, ""), false);
+  assert.equal(weeklyReadDue("2026-12-06", {...his, "2026-12-02": {question: "q"}}, ""), true, "a new read brings it back");
+  assert.equal(weeklyReadDue("2026-09-27", {}, ""), false, "never read: no nudge");
 });
 
 test("the weekly read rides along with a push, or is the push on a quiet Sunday", () => {
@@ -200,7 +207,16 @@ test("this week's least-ticked commitment rides along with a push; Sunday's revi
   assert.match(notificationCopy(items, false, {commitment: {text: "y".repeat(120), ticked: 2, elapsed: 4}}).body, /This week: y{89}… · ticked 2 days so far$/);
   // Sunday: a week to score, or next week to set.
   assert.equal(weeklyReviewDue(W, weeks, "2026-10-18"), true);
-  assert.equal(weeklyReviewDue(W, {}, "2026-10-18"), true, "nothing set: next week still to plan");
+  assert.equal(weeklyReviewDue(W, {}, "2026-10-18"), false, "nothing set in three weeks: the ask has gone unanswered");
+  // His record: weeks of 12 and 19 Oct 2026, the second reviewed, none since.
+  const his = {"2026-10-12": Object.assign({}, weeks["2026-10-12"], {reviewedAt: "x"}), "2026-10-19": {start: "2026-10-19", commitments: [c("c-eeeeee", "Last", "work", [])], reviewedAt: "y"}};
+  assert.equal(weeklyReviewDue(W, his, "2026-10-25"), true, "this week reviewed, next to set");
+  assert.equal(weeklyReviewDue(W, his, "2026-11-01"), true, "one Sunday unanswered");
+  assert.equal(weeklyReviewDue(W, his, "2026-11-08"), true, "two");
+  assert.equal(weeklyReviewDue(W, his, "2026-11-15"), false, "three Sundays unanswered: it stops");
+  assert.equal(weeklyReviewDue(W, his, "2026-11-29"), false);
+  const again = Object.assign({}, his, {"2026-11-30": {start: "2026-11-30", commitments: [c("c-ffffff", "Back", "work", [])]}});
+  assert.equal(weeklyReviewDue(W, again, "2026-12-06"), true, "a commitment set brings it back");
   assert.equal(weeklyReviewDue(W, weeks, "2026-10-17"), false, "not a Sunday");
   const done = {"2026-10-12": Object.assign({}, weeks["2026-10-12"], {reviewedAt: "x"}), "2026-10-19": {start: "2026-10-19", commitments: [c("c-dddddd", "Next", "money", [])]}};
   assert.equal(weeklyReviewDue(W, done, "2026-10-18"), false, "already reviewed and next week set");
@@ -430,6 +446,11 @@ test("on a Friday after his UNIQLO import has ended, the morning push says to pa
   assert.equal(uniqloLine(imported, {brands: ["H&M"]}, "2026-10-30"), null, "UNIQLO unticked");
   assert.equal(uniqloLine(imported, null, "2026-10-30"), null, "no Clothing profile");
   assert.equal(uniqloLine(null, {}, "2026-10-30"), "UNIQLO: this week’s offers start today. Paste them in Clothing.", "never imported, all brands");
+  // Three Fridays after the import ended and nothing pasted, it stops (22 Oct 2026: 23 Oct, 30 Oct, 6 Nov).
+  assert.match(uniqloLine(imported, prefs, "2026-11-06"), /your import ended 22 Oct/);
+  assert.equal(uniqloLine(imported, prefs, "2026-11-13"), null, "three Fridays unanswered");
+  assert.equal(uniqloLine(imported, prefs, "2026-11-27"), null);
+  assert.equal(uniqloLine({items: [{validTo: "2026-12-03"}]}, prefs, "2026-12-04"), "UNIQLO: this week’s offers start today; your import ended 3 Dec. Paste them in Clothing.", "a new paste brings it back once it ends");
   const line = uniqloLine(imported, prefs, "2026-10-30");
   assert.equal(notificationCopy([{source: "News", title: "Insurer lifts BI reserves"}], false, {fares: "Fare watch: Tokyo", uniqlo: line}).body,
     ["News: Insurer lifts BI reserves", "Fare watch: Tokyo", line].join("\n"));
