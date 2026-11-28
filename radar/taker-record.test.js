@@ -58,8 +58,8 @@ test('the record keeps the first stored pick, counts wins and the recent list', 
 
 // 28 Nov 2026: the whole list on the same runs, to compare the picks with.
 test('the list record holds every name that was not Invalidated, on runs that made picks, for two years', async () => {
-  const {listFromRun, LIST_DOC, LIST_KEEP_DAYS} = await import('./taker-record.js');
-  assert.equal(LIST_DOC, 'radar-list-record'); assert.equal(LIST_KEEP_DAYS, 730);
+  const {listFromRun, LIST_DOC, LIST_KEEP_DAYS, LIST_MAX_ENTRIES} = await import('./taker-record.js');
+  assert.equal(LIST_DOC, 'radar-list-record'); assert.equal(LIST_KEEP_DAYS, 365); assert.equal(LIST_MAX_ENTRIES, 3000);
   const doc = {generatedAt: '2026-11-02T04:01:00.000Z', picks: {taker: ['XLV'], wildcard: []}, signals: [
     {symbol: 'XLV', benchmark: 'SPY', status: 'confirmed', score: 79}, {symbol: 'LMT', benchmark: 'SPY', status: 'forming', score: 50},
     {symbol: 'XOM', benchmark: 'SPY', status: 'invalidated', score: 20}, {symbol: 'SPY', benchmark: 'SPY', status: 'forming'}, {symbol: 'NOB', status: 'forming'}]};
@@ -69,6 +69,10 @@ test('the list record holds every name that was not Invalidated, on runs that ma
   const bars = {XLV: series('2026-11-02', 20, 100, 1), LMT: series('2026-11-02', 20, 100, 0), SPY: series('2026-11-02', 20, 100, 0.5)};
   const old = {key: 'LMT|2024-10-01', symbol: 'LMT', benchmark: 'SPY', dateKey: '2024-10-01', generatedAt: '2024-10-01T04:00:00.000Z', status: 'unavailable'};
   const rec = measureTakerRecord({entries: {[old.key]: old}}, listFromRun(doc, '2026-11-02'), bars, '2026-11-27T22:00:00.000Z', {keepDays: LIST_KEEP_DAYS, method: 'The whole list.'});
-  assert.deepEqual(Object.keys(rec.entries).sort(), ['LMT|2026-11-02', 'XLV|2026-11-02'], 'a run over two years old drops out');
+  assert.deepEqual(Object.keys(rec.entries).sort(), ['LMT|2026-11-02', 'XLV|2026-11-02'], 'a run over a year old drops out');
   assert.equal(rec.stats.resolved, 2); assert.equal(rec.stats.beat, 1); assert.equal(rec.method, 'The whole list.');
+  // The cap keeps the newest runs' names (104 KB after two months on 28 Nov 2026).
+  const later = listFromRun({...doc, generatedAt: '2026-11-03T04:01:00.000Z'}, '2026-11-03');
+  const capped = measureTakerRecord(rec, later, bars, '2026-11-27T22:00:00.000Z', {maxEntries: 2});
+  assert.deepEqual(Object.keys(capped.entries).sort(), ['LMT|2026-11-03', 'XLV|2026-11-03']);
 });

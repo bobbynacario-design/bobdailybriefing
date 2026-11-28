@@ -36,7 +36,7 @@ import { buildJournal } from './journal.js';
 import { tagCatalysts, focusPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
 import { runForecastPanel } from './forecast.js';
 import { stageForecastJournal, JOURNAL_DOC } from './forecast-journal.js';
-import { RECORD_DOC as TAKER_RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, picksFromRun, listFromRun, measureTakerRecord } from './taker-record.js';
+import { RECORD_DOC as TAKER_RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, LIST_MAX_ENTRIES, picksFromRun, listFromRun, measureTakerRecord } from './taker-record.js';
 import { recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -625,8 +625,8 @@ async function main() {
     var recordNow = new Date().toISOString();
     takerRecord = measureTakerRecord(priorTaker, takerAdds, barsByAsset, recordNow);
     doc.takerRecord = takerRecord.stats;
-    listRecord = measureTakerRecord(priorList, listAdds, barsByAsset, recordNow, {keepDays: LIST_KEEP_DAYS,
-      method: 'Every Radar name that was not Invalidated, on each run that made Taker picks, scored as the picks are: from the first completed close after the run day to ten matched sessions later, against its benchmark. No trading costs. Runs older than two years drop out.'});
+    listRecord = measureTakerRecord(priorList, listAdds, barsByAsset, recordNow, {keepDays: LIST_KEEP_DAYS, maxEntries: LIST_MAX_ENTRIES,
+      method: 'Every Radar name that was not Invalidated, on each run that made Taker picks, scored as the picks are: from the first completed close after the run day to ten matched sessions later, against its benchmark. No trading costs. Runs older than a year drop out, and at most 3,000 names are kept.'});
     var ls = listRecord.stats;
     doc.listRecord = {picks: ls.picks, resolved: ls.resolved, pending: ls.pending, beat: ls.beat, meanExcessReturn: ls.meanExcessReturn, medianExcessReturn: ls.medianExcessReturn, effectiveSample: ls.effectiveSample, since: ls.since};
     var ts = takerRecord.stats;

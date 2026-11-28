@@ -19,10 +19,12 @@ const RECORD_DOC = 'radar-taker-record';
 // Invalidated, scored the same way, so the card can say whether picking the
 // top names has added anything over the list itself. On replay the average
 // listed name (53% beat their benchmark, -0.3 points) had done better than the
-// Taker picks (38%, -2.8). About eleven names a run, so entries are kept
-// compact and only for two years (well under Firestore's 1 MB a document).
+// Taker picks (38%, -2.8). About eleven names a run at about 220 bytes each
+// (104 KB after two months), so it keeps one year and at most 3,000 names,
+// about 660 KB, under Firestore's 1 MB a document.
 const LIST_DOC = 'radar-list-record';
-const LIST_KEEP_DAYS = 730;
+const LIST_KEEP_DAYS = 365;
+const LIST_MAX_ENTRIES = 3000;
 const UNAVAILABLE_AFTER_DAYS = 60;
 const RECENT = 12;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -96,7 +98,10 @@ function measureTakerRecord(prior, additions, bars, now, opts) {
   for (const entry of additions || []) if (entry && entry.key && !current[entry.key]) current[entry.key] = {...entry};
   const keepDays = opts && opts.keepDays;
   const cutoff = keepDays ? new Date(Date.parse(now) - keepDays * 86400000).toISOString().slice(0, 10) : '';
-  const entries = Object.values(current).filter((entry) => !cutoff || entry.dateKey >= cutoff).map((entry) => resolvePick(entry, bars, now));
+  let kept = Object.values(current).filter((entry) => !cutoff || entry.dateKey >= cutoff);
+  // opts.maxEntries keeps only the newest runs' entries.
+  if (opts && opts.maxEntries && kept.length > opts.maxEntries) kept = kept.sort((a, b) => b.dateKey.localeCompare(a.dateKey) || a.key.localeCompare(b.key)).slice(0, opts.maxEntries);
+  const entries = kept.map((entry) => resolvePick(entry, bars, now));
   return {
     version: 1, horizon: HORIZON, generatedAt: now,
     entries: Object.fromEntries(entries.map((e) => [e.key, e])),
@@ -105,4 +110,4 @@ function measureTakerRecord(prior, additions, bars, now, opts) {
   };
 }
 
-export { RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, pickKey, picksFromRun, listFromRun, resolvePick, takerStats, measureTakerRecord };
+export { RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, LIST_MAX_ENTRIES, pickKey, picksFromRun, listFromRun, resolvePick, takerStats, measureTakerRecord };
