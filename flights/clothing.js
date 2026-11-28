@@ -27,6 +27,7 @@ export const SOURCES=[
   {id:'timberland',brand:'Timberland',shopify:true,url:'https://timberland.com.ph/collections/sale'},
   {id:'sc-skechers',brand:'Sports Central · Skechers',retailer:'Sports Central',shopify:true,vendors:{skechers:'Skechers'},url:'https://sportscentral.ph/collections/skechers-men'},
   {id:'sc-puma',brand:'Sports Central · Puma',retailer:'Sports Central',shopify:true,vendors:{puma:'Puma'},url:'https://sportscentral.ph/collections/puma'},
+  {id:'sc-adidas',brand:'Sports Central · Adidas',retailer:'Sports Central',shopify:true,vendors:{adidas:'Adidas'},url:'https://sportscentral.ph/collections/adidas'},
   {id:'sm',brand:'Mall promotions',url:'https://www.smsupermalls.com/smdeals'}
 ];
 const id=s=>createHash('sha256').update(s).digest('hex').slice(0,24);
@@ -159,16 +160,19 @@ export function parseShopify(source,products,checkedAt){
 }
 export function mallCandidates(html){const $=load(html);return [...new Set($('a[href]').map((_,e)=>{const a=$(e),text=a.text()+' '+(a.find('img').attr('alt') || '');if(!/uniqlo|h\s*&\s*m|nike|adidas|crocs|zalora/i.test(text))return null;try{const u=new URL(a.attr('href'),'https://www.smsupermalls.com');return u.origin==='https://www.smsupermalls.com' && u.pathname.startsWith('/smdeals/')?(u.search='',u.href):null;}catch{return null;}}).get().filter(Boolean))].slice(0,8);}
 export function parseMall(html,url,checkedAt){
-  const $=load(html);$('script,style,header,footer,nav').remove();const main=$('main').length?$('main'):$('body');const text=main.text().replace(/\s+/g,' '),title=main.find('h1').first().text().trim();
+  try{const u=new URL(url);if(u.origin!=='https://www.smsupermalls.com' || !u.pathname.startsWith('/smdeals/') || u.username || u.password)return [];}catch{return [];}
+  const $=load(html);$('script,style,header,footer,nav,#latest-deals').remove();const main=$('main').length?$('main'):$('body');const heading=main.find('h1').first(),title=heading.text().trim();
+  const detail=$('#deals-info'),text=(detail.length?heading.parent().text()+' '+detail.text():main.text()).replace(/\s+/g,' ');
   const brand=/uniqlo|h\s*&\s*m|nike|adidas|crocs|zalora/i.exec(title)?.[0];
+  if(!/\bsale\b|\boff\b|discount|buy\s+\d.*(?:get|take)|markdown/i.test(title+' '+(detail.length?detail.text():'')) || /\bwomen'?s?\b|\bkids?\b|\bboys?\b|\bgirls?\b/i.test(title))return [];
   const end=/Valid (?:Until|To)\s+(\w+ \d{1,2},? \d{4})/i.exec(text)?.[1],start=/Valid From\s+(\w+ \d{1,2},? \d{4})/i.exec(text)?.[1];
-  const iso=s=>{const d=new Date(s+' 12:00:00 GMT+0800');return Number.isFinite(d.getTime())?new Date(d.getTime()+8*3600000).toISOString().slice(0,10):'';};
+  const iso=s=>{const m=/^(\w+) (\d{1,2}),? (\d{4})$/.exec(s),month=m?'jan feb mar apr may jun jul aug sep oct nov dec'.split(' ').indexOf(m[1].slice(0,3).toLowerCase()):-1;if(month<0)return '';const d=new Date(Date.UTC(+m[3],month,+m[2]));return d.getUTCMonth()===month && d.getUTCDate()===+m[2]?d.toISOString().slice(0,10):'';};
   const validTo=end?iso(end):'',validFrom=start?iso(start):'',today=new Date(Date.parse(checkedAt)+8*3600000).toISOString().slice(0,10);
-  if(!brand || !validTo || validTo<today || validFrom && validFrom>today)return [];
+  if(!brand || !validTo || start && !validFrom || validTo<today || validFrom && (validFrom>today || validFrom>validTo))return [];
   // Participating malls must be in the deal's main content, not the site's
   // global mall directory/footer. No branch stock or brand-wide price claim.
   const branches=[['SM City North Edsa','Quezon City'],['SM City Fairview','Quezon City'],['SM Megamall','Ortigas'],['SM Makati','Makati'],['SM Mall of Asia','Pasay']];
-  const participation=/(?:Participating Malls|Available at|Participating Branches)\s*:?\s*(.{1,1800})/i.exec(text)?.[1]?.split(/Related Deals|Other Deals|Terms and Conditions|Recommended|See Also/i)[0] || '';
+  const participation=$('#gtmPartMalls').length?$('#gtmPartMalls').text():/(?:Participating Malls|Available at|Participating Branches)\s*:?\s*(.{1,1800})/i.exec(text)?.[1]?.split(/Related Deals|Other Deals|Terms and Conditions|Recommended|See Also/i)[0] || '';
   return branches.filter(([name])=>participation.toLowerCase().includes(name.toLowerCase())).map(([branch,area])=>({id:id(url+branch),brand:brand.toLowerCase().replace(/\s/g,'')==='h&m'?'H&M':SOURCES.find(s=>s.brand.toLowerCase()===brand.toLowerCase())?.brand || brand,name:title.slice(0,180),branch,area,validFrom,validTo,url,checkedAt,channel:'store',terms:text.slice(0,900)}));
 }
 export async function readSource(source,checkedAt,fetchImpl=fetch){

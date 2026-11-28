@@ -1,7 +1,8 @@
 import {readFileSync,existsSync,appendFileSync} from 'node:fs';
 import {initializeApp,cert,applicationDefault} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
-import {SOURCES,readSource,parseMall,priceHistory,balancedItems} from './clothing.js';
+import {SOURCES,readSource,priceHistory,balancedItems} from './clothing.js';
+import {readMallAlternatives} from './clothing-malls.js';
 import {browserSources,nikeSizes} from './clothing-browser.js';
 import {recordRunHealth} from '../lib/feed-health.js';
 import {clothingRefreshDecision,assertPricedClothingFeed} from './clothing-refresh-policy.js';
@@ -42,12 +43,9 @@ async function main(){
     }
   }
   const campaigns=results.flatMap(r=>r.campaigns || []).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).slice(0,60);
-  const promos=[];
-  for(const url of results.flatMap(r=>r.candidates).slice(0,8)){
-    try{const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(15000)});if(r.ok){const html=await r.text();if(html.length<4000000)promos.push(...parseMall(html,url,checkedAt));}}catch{/* Do not invent a branch offer when a detail page is unavailable. */}
-  }
+  const malls=await readMallAlternatives(checkedAt,{candidates:results.flatMap(r=>r.candidates || [])}),promos=malls.promos;
   const tracked=priceHistory(balancedItems(results).map(i=>Array.isArray(i.availableSizes) && i.sizesCheckedAt===undefined?{...i,sizesCheckedAt:i.checkedAt}:i),prior,checkedAt);
-  const sources=results.map(({items,candidates,campaigns,fetchUrl,browser,shopify,vendors,pages,pageSize,shoes,...row})=>row);
+  const sources=results.map(({items,candidates,campaigns,fetchUrl,browser,shopify,vendors,pages,pageSize,shoes,...row})=>row).concat(malls.sources);
   const feed={kind:'shopping-feed',generatedAt:checkedAt,items:tracked.items,promos,campaigns,sources,modelCalls:0,coverage:'A bounded sample of official Philippine sale pages; not a complete catalogue or live branch inventory. Shipping and vouchers are unverified unless explicitly shown.'};
   console.log(JSON.stringify({items:feed.items.length,promos:promos.length,campaigns:campaigns.length,sources:sources.map(s=>({brand:s.brand,status:s.status,count:s.count,...(s.sizesChecked!=null?{sizesChecked:s.sizesChecked}:{})})),bytes:Buffer.byteLength(JSON.stringify(feed)),modelCalls:0}));
   if(dry)return;
