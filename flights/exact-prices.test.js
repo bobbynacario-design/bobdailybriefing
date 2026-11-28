@@ -36,3 +36,16 @@ test('pricing reuses a price under 20 hours old, stops at the budget, keeps an o
   assert.ok(!JSON.stringify(out.doc).includes('secret-key'));
   await assert.rejects(searchSerp(reqs[0],'k',async()=>({ok:false,status:429,json:async()=>({error:'limit'})})),/SerpApi answered 429: limit/);
 });
+// 28 Nov 2026: Google's own daily price for the exact dates, kept for the trend.
+test('Google\'s price history for the dates is kept as Manila days, one a day, the newest sixty',async()=>{
+  const {priceHistory,HISTORY_DAYS}=await import('./exact-prices.js');
+  assert.equal(HISTORY_DAYS,60);
+  // 1790611200 is 29 Sep 2026 00:00 in Manila (16:00 UTC the day before), as Google sends it.
+  const pi={price_history:[[1790611200,14546],[1790611200+86400,14600],[1790611200+86400,14700],[1790611200+2*86400,0],['x',1],[1790611200+3*86400,15100.4]]};
+  assert.deepEqual(priceHistory(pi),[['2026-09-29',14546],['2026-09-30',14700],['2026-10-02',15100]],'a repeated day keeps the later point; bad points dropped');
+  const long={price_history:Array.from({length:70},(_,i)=>[1790611200+i*86400,10000+i])};
+  const h=priceHistory(long);assert.equal(h.length,60);assert.equal(h[0][1],10010);assert.equal(h[59][1],10069);
+  assert.deepEqual(priceHistory(null),[]);
+  assert.deepEqual(parseSerp({...serp,price_insights:{...serp.price_insights,price_history:[[1790611200,14546]]}}).history,[['2026-09-29',14546]]);
+  assert.deepEqual(parseSerp(serp).history,[],'no history in the answer: an empty list');
+});

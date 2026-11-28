@@ -37,6 +37,21 @@ export function requestsFor({trips, watch, flights, fx, today, now}) {
   return out.slice(0, PER_ACCOUNT);
 }
 
+// Google's daily price for these exact dates (price_insights.price_history,
+// [unix seconds at Manila midnight, PHP]), as [day, price] pairs in Manila,
+// one a day, the newest HISTORY_DAYS. SerpApi returned 61 points over 60 days
+// for MNL-TPE 3-11 Jan on 28 Nov 2026. It costs no extra search, and it is what
+// lets Trips say whether a fare has been rising or falling (FlightsCore.bookingRead).
+export const HISTORY_DAYS = 60;
+export function priceHistory(pi) {
+  const byDay = new Map();
+  (Array.isArray(pi && pi.price_history) ? pi.price_history : []).forEach(p => {
+    if (!Array.isArray(p) || !Number.isFinite(p[0]) || !Number.isFinite(p[1]) || p[1] <= 0) return;
+    byDay.set(new Date((p[0] + 8 * 3600) * 1000).toISOString().slice(0, 10), Math.round(p[1]));
+  });
+  return [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-HISTORY_DAYS);
+}
+
 // The parts of a Google Flights answer worth keeping: the cheapest option,
 // the cheapest per airline, and Google's own read of the price.
 export function parseSerp(json) {
@@ -52,7 +67,8 @@ export function parseSerp(json) {
   return {price: best.price, airline: airlineOf(best), flights: best.flights.map(f => String(f.flight_number || '').slice(0, 12)).filter(Boolean).join(' / '),
     stops: best.flights.length - 1, departTime: String(best.flights[0].departure_airport && best.flights[0].departure_airport.time || '').slice(11, 16),
     byAirline: Object.fromEntries(Object.entries(byAirline).slice(0, 6)), level: /^(low|typical|high)$/.test(pi.price_level || '') ? pi.price_level : '',
-    typical: range ? {low: range[0], high: range[1]} : null, googleUrl: /^https:\/\/www\.google\.com\/travel\/flights/.test(url) ? url : '', options: options.length};
+    typical: range ? {low: range[0], high: range[1]} : null, googleUrl: /^https:\/\/www\.google\.com\/travel\/flights/.test(url) ? url : '', options: options.length,
+    history: priceHistory(pi)};
 }
 
 export async function searchSerp(r, apiKey, fetchImpl = fetch) {
