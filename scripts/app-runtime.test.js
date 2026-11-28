@@ -2537,3 +2537,8 @@ test('At a glance: small records paint at once; a big feed is read again only af
   await context.renderTodayGlance();
   assert.equal(element('today-glance').hidden,true,'nothing to say: hidden');
 });
+
+test('purchase follow-ups load on sign-in independently of briefing success and are a live Today card',()=>{
+ const start=html.indexOf('function onSignedIn()'),end=html.indexOf('  watchTodayCards();',start),signed=html.slice(start,end);assert.ok(signed.includes('renderTodayPurchases()'));
+ assert.match(html,/<section class="today-body owner-only is-notable" id="today-purchases" hidden/);assert.ok(html.includes("['today-purchases', 'Purchases']"));assert.ok(html.includes('./lib/purchase-tracker.js'));assert.ok(html.includes('./lib/purchase-tracker-ui.js'));
+});
