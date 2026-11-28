@@ -46,7 +46,6 @@ const hoursAgo = (at) => (Date.now() - Date.parse(at)) / 3600000;
 const today = pht();
 const phtHour = Number(new Intl.DateTimeFormat('en-GB', {timeZone: 'Asia/Manila', hour: '2-digit', hour12: false}).format(new Date()));
 const weekday = new Date(today + 'T12:00:00Z').getUTCDay(); // 0 = Sunday, in Manila
-const marketDay = weekday >= 1 && weekday <= 5;
 const run = (cmd, cmdArgs, opts) => spawnSync(cmd, cmdArgs, Object.assign({cwd: root, encoding: 'utf8', timeout: 240000}, opts || {}));
 // npm is a .cmd on Windows, which only starts through a shell.
 const runNpm = (script) => spawnSync('npm run ' + script, {cwd: root, encoding: 'utf8', timeout: 240000, shell: true});
@@ -83,18 +82,18 @@ section('Feeds');
 // 9 Oct. Take it off this list if PBA comes back.
 const RETIRED = ['sports-pba'];
 const health = (await get('feed-health')) || {feeds: {}};
-// Radar and PSE run Monday to Friday, so their weekends are not counted (the
-// PSE alert fired every Sunday with nothing wrong, 18 Oct 2026).
+// Radar (Mon, Wed, Fri from 28 Nov 2026) and PSE (Mon-Fri) count only their run
+// days' hours (the PSE alert fired every Sunday with nothing wrong, 18 Oct 2026).
 // The root package is ESM, so the shared core is imported for the global it sets.
 await import(pathToFileURL(path.join(root, 'lib', 'command-center-core.js')).href);
-const {weekdayHours} = globalThis.CommandCenterCore;
+const {runDayHours, RUN_DAYS} = globalThis.CommandCenterCore;
 Object.entries(health.feeds || {}).sort().forEach(([name, f]) => {
   const since = f.lastOkAt ? phtTime(f.lastOkAt) : 'never';
   if (RETIRED.includes(name)) return info(name + ': retired (' + (f.status || '?') + ', last ok ' + since + ')');
   if (f.status === 'failed') return alert('feed:' + name, name + ' failing, last good ' + since + ': ' + (f.message || f.stage || 'no message'));
   // Clothing targets 08:17 PHT daily, with a guarded 12:47 retry; allow late starts.
   const maxHours = name === 'radar' || name === 'grounding' ? 30 : 36;
-  const age = f.lastOkAt && (name === 'radar' || name === 'ph' ? weekdayHours(f.lastOkAt, Date.now()) : hoursAgo(f.lastOkAt));
+  const age = f.lastOkAt && (RUN_DAYS[name] ? runDayHours(f.lastOkAt, Date.now(), RUN_DAYS[name]) : hoursAgo(f.lastOkAt));
   if (f.lastOkAt && age > maxHours) return alert('feed:' + name + ':stale', name + ' has not run cleanly since ' + since);
   info(name + ': ' + (f.status || '?') + ', as of ' + (f.asOf || '?') + (f.message ? ' (' + String(f.message).slice(0, 70) + ')' : ''));
 });
@@ -119,8 +118,10 @@ section('Radar');
     const signals = r.doc.signals || [];
     info('radar-' + r.date + ' written ' + phtTime(r.doc.generatedAt) + ', prices as of ' + r.doc.asOf + ', ' + signals.length + ' names');
     info('Taker ' + ((r.doc.picks || {}).taker || []).join(', ') + ' · Wildcard ' + ((r.doc.picks || {}).wildcard || []).join(', '));
-    const level = marketDay ? alert : warn;
-    if (marketDay && r.date !== today && phtHour >= 10) alert('radar:not-today', 'No Radar for today (' + today + ') by ' + phtHour + ':00; latest is ' + r.date + '.');
+    // Radar runs on Monday, Wednesday and Friday only (from 28 Nov 2026).
+    const radarDay = globalThis.CommandCenterCore.RUN_DAYS.radar.includes(weekday);
+    const level = radarDay ? alert : warn;
+    if (radarDay && r.date !== today && phtHour >= 10) alert('radar:not-today', 'No Radar for today (' + today + ') by ' + phtHour + ':00; latest is ' + r.date + '.');
     if (c.error || !c.reads) level('radar:reads', 'Radar ' + r.date + ' has no catalyst reads (' + (c.error || '0 reads') + ').');
     else info('Catalyst reads: ' + c.reads + ' by ' + c.model + (c.readsUnsourced ? ', ' + c.readsUnsourced + ' unsourced' : ''));
     // Forecasts are keyed by each name's latest close, so with no new close (a

@@ -6,6 +6,12 @@ import vm from 'node:vm';
 const workflowDir = new URL('../.github/workflows/',import.meta.url);
 for (const file of readdirSync(workflowDir).filter(name => /\.ya?ml$/.test(name))) {
   const workflow = readFileSync(new URL(file,workflowDir),'utf8');
+  // A job chosen by `github.event.schedule == '<cron>'` silently stops when
+  // its cron line changes and the condition does not (Radar moved to Mon, Wed
+  // and Fri on 28 Nov 2026), so every cron must be named by a condition.
+  if (workflow.includes('github.event.schedule ==')) {
+    for (const [,cron] of workflow.matchAll(/- cron: "([^"]+)"/g)) assert.ok(workflow.includes("github.event.schedule == '"+cron+"'"),file+': no job runs on cron "'+cron+'"');
+  }
   if (!workflow.includes('actions/deploy-pages@')) continue;
   const build = workflow.indexOf('run: npm run check:site');
   const upload = workflow.indexOf('actions/upload-pages-artifact@');

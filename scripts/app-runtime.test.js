@@ -718,7 +718,7 @@ test('feed health: each sports lane has its own pill, and a lane that kept old d
   assert.match(out,/NBA last run failed at fetch \(kept last good data\) \(ESPN NBA 400: Failed to get events endpoint\.\); last good data 21d old\./);
 });
 // 18-19 Oct 2026: the PSE pill went red every Sunday because the board runs Monday to Friday.
-test('feed health: Radar and PSE pills leave out the weekend, other feeds do not',()=>{
+test('feed health: Radar and PSE pills count only their run days, other feeds count every day',()=>{
   const NOW=Date.parse('2026-10-19T16:30:00Z'); // Tue 00:30 PHT
   class FixedDate extends Date { constructor(...a){ super(...(a.length?a:[NOW])); } static now(){ return NOW; } }
   const specStart=html.indexOf('var FEED_SPEC = [');
@@ -731,8 +731,16 @@ test('feed health: Radar and PSE pills leave out the weekend, other feeds do not
   assert.match(out,/feed-pill "[^>]*><span class="feed-dot"><\/span>PSE <span class="feed-age">3d/,'Friday night to Monday night is not stale');
   assert.match(out,/feed-pill bad[^>]*><span class="feed-dot"><\/span>Markets </,'a daily feed still counts the weekend');
   assert.match(out,/feed-pill warn[^>]*><span class="feed-dot"><\/span>Radar </,'a missing Monday radar is still flagged');
-  assert.match(out,/Radar has not refreshed in 4d; expects 06:00 \+ 08:30 catch-up, Mon–Fri\./);
+  assert.match(out,/Radar has not refreshed in 4d; expects 06:00 \+ 08:30 catch-up, Mon, Wed and Fri\./);
   assert.doesNotMatch(out,/PSE has not refreshed/);
+  // From 28 Nov 2026 Radar runs Mon, Wed and Fri: Monday's run is current all Tuesday.
+  context.renderFeedHealth({feeds:{radar:{status:'ok',lastOkAt:'2026-10-19T00:30:00Z'}}});
+  assert.match(element('feed-health').innerHTML,/feed-pill "[^>]*><span class="feed-dot"><\/span>Radar /,'Tuesday: Monday\'s Radar is not stale');
+});
+test('the Radar heading names the run it shows, since Radar runs Mon, Wed and Fri',()=>{
+  const {context}=environment(['radarRunLabel'],{Intl});
+  assert.equal(context.radarRunLabel('2026-11-30T04:01:56.536Z'),' · Mon 30 Nov’s run · runs Mon, Wed and Fri');
+  assert.equal(context.radarRunLabel(''),' · runs Mon, Wed and Fri');
 });
 
 const NUMBERS=['groundingShortName','groundingDay','groundingPeriod','groundingStatus','groundingNumbersHtml'];

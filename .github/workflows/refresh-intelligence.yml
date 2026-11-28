@@ -6,11 +6,11 @@ on:
     - cron: "45 19 * * *"    # News 03:45 PHT daily (lands before the morning briefing even when late)
     - cron: "15 20 * * *"    # Grounding catch-up 04:15 PHT daily (runs hours late; dispatchMorningNumbers starts it at 05:20)
     - cron: "45 21 * * *"    # News catch-up 05:45 PHT daily
-    - cron: "0 22 * * 0-4"   # Radar 06:00 PHT Monday-Friday
+    - cron: "0 22 * * 0,2,4" # Radar 06:00 PHT Monday, Wednesday, Friday (from 28 Nov 2026, to save two-fifths of its cost)
     - cron: "0 0,12 * * *"  # Flight scout 08:00 and 20:00 PHT daily
     - cron: "15 22 * * *"    # Markets 06:15 PHT daily
     - cron: "45 0 * * *"     # News catch-up 08:45 PHT daily
-    - cron: "30 0 * * 1-5"   # Radar catch-up 08:30 PHT Monday-Friday
+    - cron: "30 0 * * 1,3,5" # Radar catch-up 08:30 PHT Monday, Wednesday, Friday
     - cron: "30 8 * * 1-5"   # PSE board 16:30 PHT Monday-Friday (after the 15:30 PSE close)
   workflow_dispatch:
     inputs:
@@ -128,7 +128,7 @@ jobs:
         run: node grounding/publisher/publish.js --data-dir gdata --mirror-only --pending-file "$RUNNER_TEMP/grounding-pending.json"
 
   radar:
-    if: github.event.schedule == '0 22 * * 0-4' || github.event.schedule == '30 0 * * 1-5' || github.event.inputs.feed == 'radar'
+    if: github.event.schedule == '0 22 * * 0,2,4' || github.event.schedule == '30 0 * * 1,3,5' || github.event.inputs.feed == 'radar'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
