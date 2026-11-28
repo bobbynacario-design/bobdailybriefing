@@ -2,7 +2,7 @@ name: Refresh clothing deals
 on:
   schedule:
     # 08:17 PHT, with a 12:47 PHT retry. Avoid the busy start of the hour.
-    # A scheduled retry skips collection after a successful scan that PHT day.
+    # Retry only failed sources after today’s full scan, at most twice per source.
     - cron: '17 0 * * *'
     - cron: '47 4 * * *'
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
         id: freshness
         run: node flights/refresh-clothing.js --check-only
       - name: Install the standard Chromium renderer
-        if: steps.freshness.outputs.refresh_needed == 'true'
+        if: steps.freshness.outputs.refresh_needed == 'true' && steps.freshness.outputs.browser_needed == 'true'
         working-directory: flights
         run: npx playwright install --with-deps chromium
       - name: Collect fresh retailer observations

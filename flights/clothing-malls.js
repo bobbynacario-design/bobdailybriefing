@@ -36,9 +36,10 @@ export function parseRetailerEvent(html,checkedAt){
   const offered=['Adidas','Nike','Crocs','Under Armour','Skechers','Puma'].filter(b=>new RegExp('\\b'+b+'\\b','i').test(text.split(/PLUS ENJOY|EVENT EXCLUSIVES/i)[0]));
   return branches.filter(([b])=>location.toLowerCase().includes(b.toLowerCase())).flatMap(([branch,area])=>offered.map(brand=>({id:createHash('sha256').update(EVENT+branch+brand).digest('hex').slice(0,24),brand,retailer:'Sports Central',name:'Sports Central clearance sale · '+brand,branch,area,validFrom,validTo,url:EVENT,checkedAt,channel:'store',terms:text.slice(0,1800)})));
 }
-export async function readMallAlternatives(checkedAt,{fetchImpl=fetch,candidates=[]}={}){
+export async function readMallAlternatives(checkedAt,{fetchImpl=fetch,candidates=[],sourceIds=['sm-search','sc-events']}={}){
   const get=async url=>{const r=await fetchImpl(url,{redirect:'error',signal:AbortSignal.timeout(15000),headers:{accept:'text/html,application/json','user-agent':'DaybookClothingScout/1.0 (public sale listings)'}});if(!r.ok)throw Error('HTTP '+r.status);const text=await r.text();if(text.length>4000000)throw Error('Page exceeded reader limit');return text;};
   const urls=new Set(candidates),promos=[],sources=[];let searchesChecked=0,detailsChecked=0,failed=0;
+  if(sourceIds.includes('sm-search')){
   for(const keyword of ['uniqlo','adidas','nike','crocs','h&m']){
     try{const data=JSON.parse(await get(SM+'/list-deals?malls=all&tenants=all&category=all&keyword='+encodeURIComponent(keyword)+'&page=0'));mallSearchCandidates(data,checkedAt).forEach(u=>urls.add(u));searchesChecked++;}catch{failed++;}
   }
@@ -46,7 +47,10 @@ export async function readMallAlternatives(checkedAt,{fetchImpl=fetch,candidates
     try{const u=new URL(url);if(u.origin!==SM || !/^\/smdeals\/[a-z0-9-]+$/.test(u.pathname) || u.username || u.password)continue;promos.push(...parseMall(await get(u.href),u.href,checkedAt));detailsChecked++;}catch{failed++;}
   }
   sources.push({id:'sm-search',brand:'SM · clothing offer search',url:SM+'/smdeals',checkedAt,status:failed?'partial':'checked',count:0,promoCount:promos.length,searchesChecked,detailsChecked,message:searchesChecked+' of 5 brand searches and '+detailsChecked+' detail pages read; '+promos.length+' current branch announcements verified.'+(failed?' Some public pages were unavailable.':' No verified offer does not mean no sale.')});
+  }
+  if(sourceIds.includes('sc-events')){
   try{const rows=parseRetailerEvent(await get(EVENT),checkedAt);promos.push(...rows);sources.push({id:'sc-events',brand:'Sports Central · mall events',url:EVENT,checkedAt,status:rows.length?'announcements':'checked',count:0,promoCount:rows.length,message:rows.length?'Dated retailer event and participating venue verified; member/card perks remain in the published terms.':'Event page checked; no current dated event at a covered mall was verified.'});}
   catch(e){sources.push({id:'sc-events',brand:'Sports Central · mall events',url:EVENT,checkedAt,status:'unavailable',count:0,promoCount:0,message:e.message+'; open the retailer event page to check.'});}
+  }
   return {promos:promos.filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i),sources};
 }

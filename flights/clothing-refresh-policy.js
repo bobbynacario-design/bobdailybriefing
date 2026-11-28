@@ -1,4 +1,4 @@
-// Scheduled retries should collect once per Philippine day. Manual refreshes
+// Full scans run once per Philippine day; failed sources get a bounded retry. Manual refreshes
 // can force another observation without pretending that a skipped run is fresh.
 const DAY=86400000,day=ms=>new Date(ms+8*3600000).toISOString().slice(0,10);
 
@@ -9,16 +9,22 @@ function usablePrice(item,now){
     (!item.validFrom || item.validFrom<=today) && (!item.validTo || item.validTo>=today);
 }
 
-export function clothingRefreshDecision(feed,health,{now=Date.now(),force=false}={}){
+export const sourceSucceeded=s=>['ok','checked','announcements','imported'].includes(s?.status);
+export function clothingRefreshDecision(feed,health,{now=Date.now(),force=false,expectedIds=[]}={}){
   if(!Number.isFinite(now))throw Error('Invalid scout check time.');
-  if(force)return {needed:true,reason:'Manual refresh requested.'};
+  const full=reason=>({needed:true,mode:'full',sourceIds:expectedIds,reason});
+  if(force)return full('Manual refresh requested.');
   const generated=Date.parse(feed?.generatedAt);
-  if(!Number.isFinite(generated) || generated>now+300000)return {needed:true,reason:'No usable saved scan timestamp.'};
-  if(day(generated)!==day(now))return {needed:true,reason:'No successful scan for today in Philippine time.'};
+  if(!Number.isFinite(generated) || generated>now+300000)return full('No usable saved scan timestamp.');
+  if(day(generated)!==day(now))return full('No successful scan for today in Philippine time.');
+  if(!(Array.isArray(feed.items)?feed.items:[]).some(i=>usablePrice(i,now) && Date.parse(i.checkedAt)>=generated-300000))return full('The saved scan has no current priced observations.');
+  const sources=Array.isArray(feed.sources)?feed.sources:[],ids=[...new Set(expectedIds.concat(sources.map(s=>s.id)))];
+  const failed=ids.filter(id=>{const s=sources.find(r=>r.id===id);return !s || !sourceSucceeded(s);});
+  const retry=failed.filter(id=>{const s=sources.find(r=>r.id===id);return !s || s.attemptDay!==day(now) || !(s.attempts>=2);});
+  if(retry.length)return {needed:true,mode:'sources',sourceIds:retry,reason:'Retrying only failed or missing sources ('+retry.length+'); successful observations keep their timestamps.'};
   const lastRun=Date.parse(health?.lastRunAt);
-  if(health?.status==='failed' && (!Number.isFinite(lastRun) || lastRun>=generated))return {needed:true,reason:'Retrying a failed scout.'};
-  if(!(Array.isArray(feed.items)?feed.items:[]).some(i=>usablePrice(i,now) && Date.parse(i.checkedAt)>=generated-300000))return {needed:true,reason:'The saved scan has no current priced observations.'};
-  return {needed:false,reason:'A successful scan with priced observations already exists for today.'};
+  if(!failed.length && health?.status==='failed' && (!Number.isFinite(lastRun) || lastRun>=generated))return full('Retrying a failed scout.');
+  return {needed:false,mode:'skip',sourceIds:[],reason:failed.length?'Failed sources have reached today’s two-attempt limit.':'A successful scan with priced observations already exists for today.'};
 }
 
 export function assertPricedClothingFeed(feed,now=Date.now()){

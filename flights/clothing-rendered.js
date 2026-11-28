@@ -43,7 +43,7 @@ export function parseZalora(html,checkedAt){
     const kind=category(name,'',brand==='Crocs'?'Footwear':'Other');
     if(!brand || !name || !url || !kind || seen.has(url) || /women|womens|kids|toddler|baby|girl|boy|sock|backpack|wristband|waist bag/i.test(name))return;seen.add(url);
     const originalPrice=php(a.find('[data-test-id="originalPrice"]').text()),current=a.find('[data-test-id="specialPrice"]'),price=php(current.text()),pill=a.find('[data-test-id="voucherPill"]');
-    const image=a.find('[data-test-id="productImages"] img').first().attr('src') || '',item={...base(brand,'ZALORA',name,url,checkedAt),category:kind,image,price,originalPrice,priceFrom:/\bFrom\b/i.test(current.text())};
+    const image=a.find('[data-test-id="productImages"] img').first().attr('src') || '',item={...base(brand,'ZALORA',name,url,checkedAt),category:kind,...(globalThis.ShoppingIdentity.code(brand,/(?:\||\()\s*([A-Z0-9-]+)\)?\s*$/.exec(name)?.[1])?{styleCode:globalThis.ShoppingIdentity.code(brand,/(?:\||\()\s*([A-Z0-9-]+)\)?\s*$/.exec(name)?.[1])}:{}),image,price,originalPrice,priceFrom:/\bFrom\b/i.test(current.text())};
     // The purple VIP badge sits beside the brand name (live page, 17 Oct): it
     // marks VIP perks, not a member-only price, so it no longer makes a
     // markdown conditional. The voucher pill IS the price after a voucher;

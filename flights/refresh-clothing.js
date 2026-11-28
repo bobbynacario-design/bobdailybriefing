@@ -1,58 +1,33 @@
 import {readFileSync,existsSync,appendFileSync} from 'node:fs';
 import {initializeApp,cert,applicationDefault} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
-import {SOURCES,readSource,priceHistory,balancedItems} from './clothing.js';
-import {readMallAlternatives} from './clothing-malls.js';
-import {browserSources,nikeSizes} from './clothing-browser.js';
+import {SOURCES} from './clothing.js';
+import {collectClothingSources} from './clothing-collector.js';
+import {buildClothingFeed,CLOTHING_SOURCE_IDS} from './clothing-feed.js';
 import {recordRunHealth} from '../lib/feed-health.js';
-import {clothingRefreshDecision,assertPricedClothingFeed} from './clothing-refresh-policy.js';
+import {clothingRefreshDecision} from './clothing-refresh-policy.js';
 const dry=process.argv.includes('--dry-run'),checkOnly=process.argv.includes('--check-only'),ifNeeded=process.argv.includes('--if-needed'),force=process.argv.includes('--force') || process.env.CLOTHING_FORCE==='1',started=Date.now(),checkedAt=new Date().toISOString();
 let db;
 async function main(){
   if(dry && (checkOnly || ifNeeded))throw Error('Use --dry-run separately from freshness checks.');
-  let prior=null;
+  let previous=null,prior=null,decision={needed:true,mode:'full',sourceIds:CLOTHING_SOURCE_IDS,reason:'Full collection requested.'};
   if(!dry){
     const key=new URL('../radar/serviceAccountKey.json',import.meta.url);
     initializeApp({projectId:'pokerhq-a67e4',credential:existsSync(key)?cert(JSON.parse(readFileSync(key,'utf8'))):applicationDefault()});db=getFirestore();
-    if(checkOnly || ifNeeded){
-      const [feed,health]=await Promise.all(['shopping-latest','feed-health'].map(id=>db.collection('briefings-bob').doc(id).get()));
-      const decision=clothingRefreshDecision(feed.exists?feed.data():null,health.exists?health.data().feeds?.shopping:null,{force});
-      console.log(JSON.stringify({refreshNeeded:decision.needed,reason:decision.reason,modelCalls:0}));
-      if(checkOnly){if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,'refresh_needed='+decision.needed+'\n');return;}
-      // A skip neither changes product timestamps nor records a new lastOkAt.
-      if(!decision.needed)return;
-    }
+    const [feed,health]=await Promise.all(['shopping-latest','feed-health'].map(id=>db.collection('briefings-bob').doc(id).get()));previous=feed.exists?feed.data():null;
+    if(checkOnly || ifNeeded)decision=clothingRefreshDecision(previous,health.exists?health.data().feeds?.shopping:null,{force,expectedIds:CLOTHING_SOURCE_IDS});
+    const browserNeeded=decision.needed && SOURCES.some(s=>decision.sourceIds.includes(s.id) && (s.browser || s.id==='nike'));
+    console.log(JSON.stringify({refreshNeeded:decision.needed,mode:decision.mode,sourceIds:decision.sourceIds,browserNeeded,reason:decision.reason,modelCalls:0}));
+    if(checkOnly){if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,'refresh_needed='+decision.needed+'\nbrowser_needed='+browserNeeded+'\n');return;}
+    if(!decision.needed)return;
     const snap=await db.collection('briefings-bob').doc('shopping-history').get();prior=snap.exists?snap.data().products:null;
   }
-  const results=[];
-  for(let i=0;i<SOURCES.length;i+=2)results.push(...await Promise.all(SOURCES.slice(i,i+2).map(s=>readSource(s,checkedAt))));
-  if(process.env.CLOTHING_BROWSER==='1'){
-    const rendered=await browserSources(SOURCES.filter(s=>s.browser),checkedAt);
-    for(const r of rendered){const index=results.findIndex(s=>s.id===r.id),old=results[index];
-      if(r.items.length || r.campaigns.length)results[index]={...r,items:r.items.length?r.items:old.items,candidates:old.candidates || []};
-      else if(!old.items.length)results[index]={...r,candidates:old.candidates || []};
-    }
-    // Nike's sale listing names no sizes; its product pages do. Deepest
-    // markdowns first, so a cut-short round still covers the likely leaders.
-    const nike=results.find(r=>r.id==='nike');
-    if(nike && nike.items.length){
-      const {found,stopped}=await nikeSizes([...nike.items].sort((a,b)=>a.price/a.originalPrice-b.price/b.originalPrice));
-      nike.items=nike.items.map(i=>found.has(i.id)?{...i,...found.get(i.id),sizeSystem:i.category==='Footwear'?'US men':'Labelled clothing'}:i);
-      nike.sizesChecked=found.size;
-      nike.message='Published PHP markdowns read; sizes in stock checked on '+found.size+' of '+nike.items.length+' product pages'+(stopped?' (stopped: '+stopped+')':'')+'.';
-    }
-  }
-  const campaigns=results.flatMap(r=>r.campaigns || []).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).slice(0,60);
-  const malls=await readMallAlternatives(checkedAt,{candidates:results.flatMap(r=>r.candidates || [])}),promos=malls.promos;
-  const tracked=priceHistory(balancedItems(results).map(i=>Array.isArray(i.availableSizes) && i.sizesCheckedAt===undefined?{...i,sizesCheckedAt:i.checkedAt}:i),prior,checkedAt);
-  const sources=results.map(({items,candidates,campaigns,fetchUrl,browser,shopify,vendors,pages,pageSize,shoes,...row})=>row).concat(malls.sources);
-  const feed={kind:'shopping-feed',generatedAt:checkedAt,items:tracked.items,promos,campaigns,sources,modelCalls:0,coverage:'A bounded sample of official Philippine sale pages; not a complete catalogue or live branch inventory. Shipping and vouchers are unverified unless explicitly shown.'};
-  console.log(JSON.stringify({items:feed.items.length,promos:promos.length,campaigns:campaigns.length,sources:sources.map(s=>({brand:s.brand,status:s.status,count:s.count,...(s.sizesChecked!=null?{sizesChecked:s.sizesChecked}:{})})),bytes:Buffer.byteLength(JSON.stringify(feed)),modelCalls:0}));
+  const results=await collectClothingSources(decision.sourceIds,checkedAt,{browser:process.env.CLOTHING_BROWSER==='1'});
+  const {feed,history}=buildClothingFeed(previous,results,prior,checkedAt,{full:decision.mode==='full'}),bytes=Buffer.byteLength(JSON.stringify(feed));
+  console.log(JSON.stringify({mode:decision.mode,attempted:results.map(s=>s.id),items:feed.items.length,promos:feed.promos.length,campaigns:feed.campaigns.length,sources:feed.sources.map(s=>({brand:s.brand,status:s.status,count:s.count,lastSuccessAt:s.lastSuccessAt,retainedCount:s.retainedCount})),bytes,modelCalls:0}));
   if(dry)return;
-  if(results.every(r=>r.status==='unavailable'))throw Error('All clothing sources unavailable; previous feed preserved.');
-  assertPricedClothingFeed(feed);
-  if(Buffer.byteLength(JSON.stringify(feed))>850000)throw Error('Clothing feed exceeds size budget; previous feed preserved.');
-  const batch=db.batch();batch.set(db.collection('briefings-bob').doc('shopping-latest'),feed);batch.set(db.collection('briefings-bob').doc('shopping-history'),{products:tracked.history,updatedAt:checkedAt});await batch.commit();
-  await recordRunHealth(db,'shopping',{status:'ok',durationMs:Date.now()-started,asOf:checkedAt.slice(0,10),message:feed.items.length+' priced markdowns, '+promos.length+' dated branch offers; no AI calls.'});
+  if(bytes>850000)throw Error('Clothing feed exceeds size budget; previous feed preserved.');
+  const batch=db.batch();batch.set(db.collection('briefings-bob').doc('shopping-latest'),feed);batch.set(db.collection('briefings-bob').doc('shopping-history'),{products:history,updatedAt:checkedAt});await batch.commit();
+  await recordRunHealth(db,'shopping',{status:'ok',durationMs:Date.now()-started,asOf:feed.generatedAt.slice(0,10),message:(decision.mode==='sources'?'Retried '+results.length+' sources; full scan time unchanged. ':'')+feed.items.length+' priced markdowns, '+feed.promos.length+' dated branch offers; no AI calls.'});
 }
 main().catch(async e=>{console.error(e.message);if(db)await recordRunHealth(db,'shopping',{status:'failed',durationMs:Date.now()-started,message:e.message});process.exitCode=1;});

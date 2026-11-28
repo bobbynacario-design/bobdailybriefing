@@ -1,5 +1,6 @@
 import {load} from 'cheerio';
 import {createHash} from 'node:crypto';
+import {catalogueIdentity} from './clothing-identity.js';
 export const SOURCES=[
   {id:'hm',brand:'H&M',url:'https://www2.hm.com/en_ph/men/sale/view-all.html'},
   {id:'uniqlo',brand:'UNIQLO',browser:true,url:'https://www.uniqlo.com/ph/en/feature/limited-offers/men'},
@@ -93,7 +94,7 @@ export function parseNike(html,checkedAt){
     if(url.origin!=='https://www.nike.com' || !url.pathname.startsWith('/ph/t/'))return [];seen.add(p.productCode);
     // Nike's subtitle names the garment ("Men's Golf Polo"); the title often doesn't.
     const kind=p.productType==='FOOTWEAR'?'Footwear':category(name+' '+subtitle);if(!kind)return [];
-    return [{id:id('nike:'+p.productCode),brand:'Nike',name:String(name+' · '+subtitle).slice(0,140),color:String(p.displayColors?.colorDescription || '').slice(0,90),category:kind,image:p.colorwayImages?.portraitURL || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:null,sizeSystem:'Unverified',shipping:null}];
+    return [{id:id('nike:'+p.productCode),brand:'Nike',...(typeof p.productCode==='string'?{styleCode:p.productCode}:{}),name:String(name+' · '+subtitle).slice(0,140),color:String(p.displayColors?.colorDescription || '').slice(0,90),category:kind,image:p.colorwayImages?.portraitURL || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:null,sizeSystem:'Unverified',shipping:null}];
   });
 }
 // One listing per men's product colour with a marked-down size in stock online.
@@ -150,8 +151,9 @@ export function parseShopify(source,products,checkedAt){
       const best=deals.reduce((m,v)=>Number(v.price)<Number(m.price)?v:m),price=Number(best.price),originalPrice=Number(best.compare_at_price);
       const sizeRun=[...new Set(variants.map(size).filter(Boolean))],availableSizes=[...new Set(deals.map(size).filter(Boolean))];
       if(footwear && sizeAt>=0 && !availableSizes.length)continue;
+      const identity=catalogueIdentity(brand,p,best);
       const image=best.featured_image?.src || p.images?.[0]?.src || '';
-      made.push({id:id(source.id+':'+p.id+':'+color),brand,...(source.retailer?{retailer:source.retailer}:{}),name,color:(color || tagColors[0] || (titleColor?titleColor[2]:'')).slice(0,80),category:kind,image,price,originalPrice,currency:'PHP',url:host+'/products/'+encodeURIComponent(p.handle)+'?variant='+best.id,checkedAt,channel:'online',availableSizes:sizeAt<0 || !availableSizes.length?null:availableSizes,...(sizeRun.length?{sizeRun}:{}),sizeSystem,shipping:null,...(deals.some(v=>Number(v.price)!==price)?{priceFrom:true}:{})});
+      made.push({id:id(source.id+':'+p.id+':'+color),brand,...(source.retailer?{retailer:source.retailer}:{}),name,...(identity.styleCode?{styleCode:identity.styleCode}:{}),color:(color || identity.publishedColor || tagColors[0] || (titleColor?titleColor[2]:'')).slice(0,80),category:kind,image,price,originalPrice,currency:'PHP',url:host+'/products/'+encodeURIComponent(p.handle)+'?variant='+best.id,checkedAt,channel:'online',availableSizes:sizeAt<0 || !availableSizes.length?null:availableSizes,...(sizeRun.length?{sizeRun}:{}),sizeSystem,shipping:null,...(deals.some(v=>Number(v.price)!==price)?{priceFrom:true}:{})});
     }
     // Three colours of one product at most, deepest markdown first.
     rows.push(...made.sort((a,b)=>a.price/a.originalPrice-b.price/b.originalPrice).slice(0,3));
