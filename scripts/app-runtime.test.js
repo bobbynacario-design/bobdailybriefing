@@ -2300,6 +2300,36 @@ test('digest dates every source and never promotes retained scores or probabilit
   assert.doesNotMatch(old,/>LIVE<|70%|Difference from bookmaker/);assert.match(old,/LAST SEEN/);assert.match(old,/last reported score 6-4/);assert.match(old,/retained snapshot/);assert.match(old,/stale or unverified/);
   const aged=c.sportsDigestHtml({modules:{tennis:{...tennis,generatedAt:'2026-10-13T05:00:00Z'}}},now);assert.doesNotMatch(aged,/>LIVE</);assert.match(aged,/not a live update/);
 });
+// 28 Nov 2026: tennis between seasons, and the NBA Cup knockouts for every team.
+test('the digest shows NBA Cup knockout games for any team, and the tennis season ahead while nothing is on',()=>{
+  const names=['sportsDigestHtml','sportsDigestItems','sportsFollowed','sportsFollowKey','sportsIsFollowedMatch','sportsTeamKey','sportsShortTeam','sportsDate','tennisRankTxt','tennisNotable'];
+  const {context:c}=environment(names,{esc:escHtml,Intl,localStorage:{getItem:()=>null,setItem:()=>{}}});
+  const now=Date.parse('2026-12-08T04:00:00Z'),checked='2026-12-08T03:55:00Z';
+  const nba={generatedAt:checked,refreshStatus:'ok',staleAfterHours:12,watchlist:[{team:'Los Angeles Lakers'}],matches:[
+    {home:'TBD',away:'TBD',status:'SCHEDULED',utcDate:'2026-12-08T05:00:00Z',roundLabel:'NBA Cup - Semifinals',round:'league-semifinals'},
+    {home:'Orlando Magic',away:'New York Knicks',status:'FINISHED',utcDate:'2026-12-07T01:00:00Z',score:{home:101,away:110},roundLabel:'NBA Cup - Quarterfinals'},
+    {home:'Los Angeles Lakers',away:'Phoenix Suns',status:'SCHEDULED',utcDate:'2026-12-08T10:00:00Z',roundLabel:'NBA Cup - Quarterfinals'},
+    {home:'Boston Celtics',away:'Miami Heat',status:'SCHEDULED',utcDate:'2026-12-08T11:00:00Z',roundLabel:''}]};
+  const tennis={generatedAt:checked,refreshStatus:'ok',staleAfterHours:12,tiers:{
+    tour500:{current:{name:'Brisbane International',startDate:'2027-01-01T05:00Z'},live:[]},
+    slam:{current:{name:'Australian Open',startDate:'2027-01-10T05:00Z'},live:[]},
+    masters:{current:{name:'Qatar Ladies Open',startDate:'2027-02-05T05:00Z'},live:[]}},
+    followed:[{name:'Alexandra Eala',filipino:true,rank:15,recent:[{event:'Hong Kong Open',round:'Final',won:false,date:'2026-11-08T08:05Z',opponent:'Claire Liu'}]}]};
+  const x=c.sportsDigestItems({modules:{nba,tennis}},now);
+  assert.deepEqual([...x.today.map(r=>r.tag+' '+r.text)],['NBA CUP NBA Cup semifinal: teams to be decided','NBA CUP NBA Cup quarterfinal: Phoenix Suns at Los Angeles Lakers'],
+    'a knockout game for any team, a followed team once and as a Cup game; an ordinary game of a team he does not follow is left out');
+  assert.equal(x.overnight[0].text,'NBA Cup quarterfinal: New York Knicks beat Orlando Magic 110-101');
+  assert.deepEqual([...x.season.map(r=>r.text)],['Next: Brisbane International, Fri 1 Jan · Australian Open in 34 days (Sun 10 Jan)','🇵🇭 Alexandra Eala · world no. 15 · last played Hong Kong Open, Final (lost)']);
+  assert.match(c.sportsDigestHtml({modules:{nba,tennis}},now),/Coming up/);
+  // The glance strip reads today: the semifinal is on it.
+  vm.runInContext(readFileSync(new URL('../lib/glance-core.js',import.meta.url),'utf8'),c);
+  assert.match(c.GlanceCore.sportsLine(x.today,now).text,/NBA Cup semifinal: teams to be decided/);
+  // A player with a match coming, or an event on, and there is no off-season line.
+  const on={...tennis,followed:[{...tennis.followed[0],next:{date:'2026-12-08T09:00:00Z',opponent:'X',event:'Exhibition',round:'R1'}}]};
+  assert.deepEqual([...c.sportsDigestItems({modules:{tennis:on}},now).season],[]);
+  const soon=c.sportsDigestItems({modules:{tennis}},Date.parse('2026-12-31T00:00:00Z'));
+  assert.deepEqual([...soon.season],[],'within two days of the next event: the event itself takes over');
+});
 test('combat unresolved and no-winner outcomes never appear as wins or accuracy hits',()=>{
   const {context:c}=environment(['combatResultHtml'],{esc:escHtml});
   assert.match(c.combatResultHtml({bout:'A vs B',winner:'A'}),/Settlement unverified/);

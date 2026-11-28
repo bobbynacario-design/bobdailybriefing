@@ -4940,7 +4940,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-sports"/></svg> Sports — NBA and Tennis</div>
-      <p>The Sports tab defaults to <b>NBA</b>, with <b>Tennis</b> and <b>Boxing &amp; UFC</b> beside it; <b>Your sports today</b> at the top lists the next 24 hours for your teams, players and fight cards in Philippine time. The finished 2026 World Cup is no longer loaded with each day’s sports (from 18 Nov 2026), which makes the tab lighter to open. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
+      <p>The Sports tab defaults to <b>NBA</b>, with <b>Tennis</b> and <b>Boxing &amp; UFC</b> beside it; <b>Your sports today</b> at the top lists the next 24 hours for your teams, players and fight cards in Philippine time. NBA Cup knockout games (quarterfinals, semifinals, championship) are listed for every team, not only yours, with their results after, and the next one also shows on Today’s At a glance. While no tennis is on, <b>Coming up</b> names the next 500, 1000 or Grand Slam event, how many days to the Australian Open, and where your players stand; a player’s first match of the new season shows once its draw is out (the feed has no entry lists).The finished 2026 World Cup is no longer loaded with each day’s sports (from 18 Nov 2026), which makes the tab lighter to open. Each live module separates provider facts from a simple <b>0–100 momentum score</b>. Higher means stronger recent form, not a guaranteed result.</p>
       <ul>
         <li><b>Freshness banner</b> — says DATA CURRENT, STALE DATA, FALLBACK SNAPSHOT, or REFRESH FAILED and shows the last successful provider update.</li>
         <li><b>Feeds strip</b> — NBA and Tennis each have their own pill. A lane whose refresh failed turns amber (red once its data is over a day and a half old) with the error, even when it is still showing its last good snapshot, and Command raises it too.</li>
@@ -13879,10 +13879,14 @@ function sportsDigestItems(d, nowMs) {
   function checked(f){return ' · '+f.label+' '+(f.checkedAt ? sportsDate(f.checkedAt) : '(time unavailable)');}
   var ahead = 24 * 3600000, back = 36 * 3600000;
   var within = function (iso, from, to) { var t = Date.parse(iso); return isFinite(t) && t >= from && t <= to; };
-  var today = [], overnight = [], edges = [],lastReported=[];
+  var today = [], overnight = [], edges = [],lastReported=[], season = [];
   var followed = sportsFollowed(nba, 'nba', 'teams');
+  // NBA Cup knockout games (ESPN tags the round, e.g. "NBA Cup - Semifinals")
+  // are on for every team, not only the ones he follows (28 Nov 2026).
+  var cupRound = function (m) { var label = String((m && m.roundLabel) || ''); return /^NBA Cup\s*-\s*/i.test(label) ? label.replace(/^NBA Cup\s*-\s*/i, '').replace(/s$/, '').toLowerCase() : ''; };
+  var day = function (iso) { var t = Date.parse(iso); return isFinite(t) ? new Date(t).toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Manila'}) : ''; };
   (nba.matches || []).forEach(function (m) {
-    if (!sportsIsFollowedMatch(m, followed)) return;
+    if (cupRound(m) || !sportsIsFollowedMatch(m, followed)) return;
     if (m.status === 'SCHEDULED' && within(m.utcDate, nowMs, nowMs + ahead)) {
       var k = m.market, line = nf.current && k && k.pHome != null ? sportsShortTeam(m.home) + ' ' + Math.round(k.pHome * 100) + '% · ' + sportsShortTeam(m.away) + ' ' + (100 - Math.round(k.pHome * 100)) + '% (' + (k.details || 'bookmaker') + ')' : '';
       today.push({ at: m.utcDate, tag: 'NBA', text: m.away + ' at ' + m.home + (m.stage === 'preseason' ? ' (preseason)' : ''), sub: sportsDate(m.utcDate) + (line ? ' · ' + line : '')+checked(nf) });
@@ -13890,6 +13894,16 @@ function sportsDigestItems(d, nowMs) {
     if (m.status === 'FINISHED' && within(m.utcDate, nowMs - back, nowMs) && m.score && m.score.home != null) {
       var homeWon = m.score.home > m.score.away, hi = Math.max(m.score.home, m.score.away), lo = Math.min(m.score.home, m.score.away);
       overnight.push({ at: m.utcDate, tag: 'NBA', text: (homeWon ? m.home + ' beat ' + m.away : m.away + ' beat ' + m.home) + ' ' + hi + '-' + lo + (m.stage === 'preseason' ? ' (preseason)' : ''), sub: sportsDate(m.utcDate)+checked(nf) });
+    }
+  });
+  (nba.matches || []).forEach(function (m) {
+    var round = cupRound(m);
+    if (!round) return;
+    var tbd = /^TBD$/i.test(String(m.home || '')) || /^TBD$/i.test(String(m.away || ''));
+    if (m.status === 'SCHEDULED' && within(m.utcDate, nowMs, nowMs + ahead)) today.push({ at: m.utcDate, tag: 'NBA CUP', text: 'NBA Cup ' + round + ': ' + (tbd ? 'teams to be decided' : m.away + ' at ' + m.home), sub: sportsDate(m.utcDate) + checked(nf) });
+    if (m.status === 'FINISHED' && within(m.utcDate, nowMs - back, nowMs) && m.score && m.score.home != null) {
+      var homeWon = m.score.home > m.score.away;
+      overnight.push({ at: m.utcDate, tag: 'NBA CUP', text: 'NBA Cup ' + round + ': ' + (homeWon ? m.home + ' beat ' + m.away : m.away + ' beat ' + m.home) + ' ' + Math.max(m.score.home, m.score.away) + '-' + Math.min(m.score.home, m.score.away), sub: sportsDate(m.utcDate) + checked(nf) });
     }
   });
   (nba.matches || []).forEach(function (m) {
@@ -13923,6 +13937,24 @@ function sportsDigestItems(d, nowMs) {
     });
   });
   upsets.sort(function (a, b) { return a.rank - b.rank; }).slice(0, 3).forEach(function (u) { overnight.push(u); });
+  // Tennis off-season (late Nov to the Australian summer): with no event on
+  // and nothing for his players, say when the season starts and how far off the
+  // Australian Open is, and where his players stand. The feed has no entry
+  // lists, so a player's first event is named only once its draw is out.
+  var tiers = tennis.tiers || {}, tierKeys = ['tour500', 'masters', 'slam'];
+  var tennisOn = tierKeys.some(function (k) { return ((tiers[k] || {}).live || []).length; }) || (tennis.followed || []).some(function (p) { return p.live || p.next; });
+  var starts = tierKeys.map(function (k) { return (tiers[k] || {}).current || (tiers[k] || {}).next; }).filter(function (t) { return t && Date.parse(t.startDate) > nowMs; })
+    .sort(function (a, b) { return Date.parse(a.startDate) - Date.parse(b.startDate); });
+  var slam = (tiers.slam || {}).current || (tiers.slam || {}).next;
+  if (!tennisOn && starts.length && Date.parse(starts[0].startDate) - nowMs > 2 * 86400000) {
+    var first = starts[0], slamDays = slam && Date.parse(slam.startDate) > nowMs ? Math.ceil((Date.parse(slam.startDate) - nowMs) / 86400000) : 0;
+    // The feed follows the 500, 1000 and Grand Slam tiers only, so this is the next of those, not the first match of the year.
+    season.push({ at: first.startDate, tag: 'TENNIS', text: 'Next: ' + first.name + ', ' + day(first.startDate) + (slamDays && slam.name !== first.name ? ' · ' + slam.name + ' in ' + slamDays + ' days (' + day(slam.startDate) + ')' : ''), sub: 'Off-season · 500, 1000 and Grand Slam events' + checked(tf) });
+    (tennis.followed || []).forEach(function (p) {
+      var last = (p.recent || [])[0];
+      season.push({ at: first.startDate, tag: 'TENNIS', text: (p.filipino ? '🇵🇭 ' : '') + p.name + (p.rank ? ' · world no. ' + p.rank : '') + (last ? ' · last played ' + last.event + ', ' + last.round + ' (' + (last.won ? 'won' : 'lost') + ')' : ''), sub: 'First 2027 match shows here once the draw is out' });
+    });
+  }
   (combat.cards || []).forEach(function (c) {
     if (!within(c.date, nowMs, nowMs + 48 * 3600000)) return;
     var top = c.fights[0];
@@ -13940,7 +13972,7 @@ function sportsDigestItems(d, nowMs) {
   // Your teams and players first (newest first), then upsets, biggest first.
   overnight.sort(function (a, b) { var ua = a.tag === 'UPSET' ? 1 : 0, ub = b.tag === 'UPSET' ? 1 : 0; return ua - ub || (ua ? (a.rank || 999) - (b.rank || 999) : String(b.at).localeCompare(String(a.at))); });
   edges.sort(function (a, b) { return b.size - a.size; });
-  return { today: today, overnight: overnight, lastReported: lastReported, edges: edges };
+  return { today: today, overnight: overnight, lastReported: lastReported, edges: edges, season: season };
 }
 function sportsDigestHtml(d, nowMs) {
   var x = sportsDigestItems(d, nowMs), today = x.today, overnight = x.overnight, lastReported = x.lastReported, edges = x.edges;
@@ -13950,6 +13982,7 @@ function sportsDigestHtml(d, nowMs) {
   if (overnight.length) html += '<div class="sd-group">Since yesterday</div>' + rows(overnight.slice(0, 6));
   if(lastReported.length)html += '<div class="sd-group">Last reported activity — not a live update</div>'+rows(lastReported.slice(0,3));
   if (edges.length) html += '<div class="sd-group">Difference from bookmaker</div>' + rows(edges.slice(0, 3));
+  if ((x.season || []).length) html += '<div class="sd-group">Coming up</div>' + rows(x.season.slice(0, 4));
   if (!html) html = '<div class="sports-empty">Nothing on for your teams, players or the fight cards in the next day.</div>';
   return '<div class="sports-panel sports-digest"><div class="sports-panel-title">Your sports today</div>' + html + '</div>';
 }
