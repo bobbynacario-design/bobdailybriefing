@@ -45,6 +45,16 @@ test('Nike uses public PH prices for the exact color SKU but never guesses size 
  const rows=parseNike(html,at);assert.equal(rows.length,1);assert.equal(rows[0].price,3000);assert.equal(rows[0].availableSizes,null);assert.equal(rows[0].shipping,null);
 });
 
+test('Nike square-only catalogue photos survive alongside older portrait photos',()=>{
+ const portrait='https://static.nike.com/a/images/t_default/portrait.png',square='https://static.nike.com/a/images/t_default/square.png';
+ const p={productCode:'IW6276-001',productType:'FOOTWEAR',copy:{title:'Air Jordan 1 Retro Low OG',subTitle:"Men's shoes"},prices:{currency:'PHP',currentPrice:6000,initialPrice:8000},pdpUrl:{url:'https://www.nike.com/ph/t/example/IW6276-001'}};
+ // The public PH sale catalogue on 28 Nov 2026 provides squarishURL only.
+ for(const [colorwayImages,expected] of [[{squarishURL:square},square],[{portraitURL:portrait,squarishURL:square},portrait],[{portraitURL:'',squarishURL:square},square],[undefined,'']]){
+  const html='<script id="__NEXT_DATA__">'+JSON.stringify({props:{pageProps:{initialState:{Wall:{productGroupings:[{products:[{...p,colorwayImages}]}]}}}}})+'</script>';
+  const [row]=parseNike(html,at);assert.equal(row.image,expected);assert.equal(row.styleCode,'IW6276-001');assert.equal(row.availableSizes,null);
+ }
+});
+
 // Names and codes as the H&M PH sale page listed them on 17 Oct 2026.
 test('categories read the product name before the retailer code, and accessories are not clothing',()=>{
  assert.equal(category('Regular-Fit Fine-Knit Polo Shirt','men_tshirtstanks_poloshirts_shortsleeve'),'Tops');

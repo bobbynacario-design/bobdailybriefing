@@ -94,7 +94,7 @@ export function parseNike(html,checkedAt){
     if(url.origin!=='https://www.nike.com' || !url.pathname.startsWith('/ph/t/'))return [];seen.add(p.productCode);
     // Nike's subtitle names the garment ("Men's Golf Polo"); the title often doesn't.
     const kind=p.productType==='FOOTWEAR'?'Footwear':category(name+' '+subtitle);if(!kind)return [];
-    return [{id:id('nike:'+p.productCode),brand:'Nike',...(typeof p.productCode==='string'?{styleCode:p.productCode}:{}),name:String(name+' · '+subtitle).slice(0,140),color:String(p.displayColors?.colorDescription || '').slice(0,90),category:kind,image:p.colorwayImages?.portraitURL || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:null,sizeSystem:'Unverified',shipping:null}];
+    return [{id:id('nike:'+p.productCode),brand:'Nike',...(typeof p.productCode==='string'?{styleCode:p.productCode}:{}),name:String(name+' · '+subtitle).slice(0,140),color:String(p.displayColors?.colorDescription || '').slice(0,90),category:kind,image:p.colorwayImages?.portraitURL || p.colorwayImages?.squarishURL || '',price,originalPrice,currency:'PHP',url:url.href,checkedAt,channel:'online',availableSizes:null,sizeSystem:'Unverified',shipping:null}];
   });
 }
 // One listing per men's product colour with a marked-down size in stock online.
