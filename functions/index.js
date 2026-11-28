@@ -68,7 +68,7 @@ const {missingReportAction} = require("./webhook-event");
 const {buildCommandCenter} = require("./command-center-core");
 const {buildEvidence, verifyGrounding, searchUrls, urlKey} = require("./briefing-evidence");
 const {buildStandingContext, priorWatch, buildReaderFeedback, recentBriefingDocs} = require("./briefing-context");
-const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, countReruns, dropLinkReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS, profileBrief} = require("./briefing-prompt-core");
+const {buildBriefingPrompt, cleanAha, cleanWildcard, buildRecentBriefings, buildLastWeek, cleanWeek, countReruns, dropLinkReruns, storyDossierKey, cleanAccounts, DEFAULT_ACCOUNTS, profileBrief} = require("./briefing-prompt-core");
 const {morningBriefingPlan, morningBriefingDoc, morningBriefingKey} = require("./morning-briefing");
 const {cleanStory, buildDossierPrompt, cleanDossier, keepDossiers, SYSTEM: DOSSIER_SYSTEM} = require("./story-dossier");
 const {cleanTopic, cleanMaterial, buildMeetingPrompt, cleanBrief, keepBriefs, materialFromIndex, SYSTEM: MEETING_SYSTEM} = require("./meeting-brief");
@@ -288,17 +288,35 @@ async function loadReaderFeedback(db, uid) {
   }
 }
 
+// The Numbers mirror's changes (grounding-latest), stored as an object or as
+// a JSON string in value. Best effort: unreadable means none.
+function groundingChanges(snap) {
+  if (!snap || !snap.exists) return [];
+  let doc = snap.data() || {};
+  if (typeof doc.value === "string") {
+    try {
+      doc = JSON.parse(doc.value);
+    } catch (error) {
+      return [];
+    }
+  }
+  return Array.isArray(doc.changes) ? doc.changes : [];
+}
+
 async function loadStandingContext(db, uid) {
   if (!uid) return {standing: null, watch: null, reason: "no-uid"};
   try {
-    const [radar, markets, decisionsSnap, briefingSnap, accountsSnap] = await Promise.all([
+    const [radar, markets, decisionsSnap, briefingSnap, accountsSnap, groundingSnap] = await Promise.all([
       pointedDocument(db, "radar-latest", "radar-").catch(() => null),
       pointedDocument(db, "miro-latest", "miro-").catch(() => null),
       db.collection(JOURNAL_COLL).where("uid", "==", uid)
         .orderBy("saved", "desc").limit(100).get().catch(() => null),
-      // Seven: five days of headlines for the prompt, seven of links for dropLinkReruns.
-      recentBriefingDocs(db.collection(BRIEFINGS_COLL), uid, 7).catch(() => null),
+      // Eight: five days of headlines for the prompt, seven of links for
+      // dropLinkReruns, and on a Monday all of last week even after a rebuild.
+      recentBriefingDocs(db.collection(BRIEFINGS_COLL), uid, 8).catch(() => null),
       db.collection(BRIEFINGS_COLL).doc("accounts-" + uid).get().catch(() => null),
+      // Numbers published last week, for Monday's look back (buildLastWeek).
+      db.collection(BRIEFINGS_COLL).doc("grounding-latest").get().catch(() => null),
     ]);
     // His accounts (Evidence, Your accounts), or the starter list until he keeps his own.
     const kept = accountsSnap && accountsSnap.exists ? cleanAccounts((accountsSnap.data() || {}).accounts) : [];
@@ -326,13 +344,15 @@ async function loadStandingContext(db, uid) {
       // comes back as an "Update:" that says what changed (briefing-prompt-core),
       // and the last seven days' links.
       recent: buildRecentBriefings(archive, phtDateKey()),
+      // Mondays only: last week's stories and Numbers, sorted into his lines.
+      week: buildLastWeek(archive, phtDateKey(), groundingChanges(groundingSnap)),
       accounts: kept.length ? kept : DEFAULT_ACCOUNTS,
       accountsSource: kept.length ? "his" : "starter",
       reason: null,
     };
   } catch (error) {
     logger.warn("standing context unavailable", {message: error.message});
-    return {standing: null, watch: null, recent: null, accounts: DEFAULT_ACCOUNTS, accountsSource: "starter", reason: "error"};
+    return {standing: null, watch: null, recent: null, week: null, accounts: DEFAULT_ACCOUNTS, accountsSource: "starter", reason: "error"};
   }
 }
 
@@ -598,6 +618,11 @@ async function finishBriefing({db, model, dateLabel, json, briefing, evidence, g
   // The aha is checked last, after grounding and link checks may have dropped
   // stories, so its link chips only name stories the briefing still has.
   briefing.aha = cleanAha(briefing.aha, briefing.sections);
+  // Monday's look back: only items naming a story or figure from last week's
+  // block survive; on other days there is no block and week is null.
+  briefing.week = cleanWeek(briefing.week, context && context.week);
+  briefing.context.week = context && context.week ?
+    Object.assign({}, context.week.stats, {kept: briefing.week ? briefing.week.items.length : 0}) : null;
   // The wildcard's link is held to a story's standard, but a wildcard without
   // one is dropped rather than shown bare: it comes from outside Bob's beats,
   // where he has the least to judge a story by.

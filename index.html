@@ -2657,6 +2657,7 @@ a.pse-sym:hover{text-decoration:underline}
 .note-actions,.note-rate{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.4rem 0}.note-rate span{font-size:12.5px;color:var(--txt2);margin-right:.2rem}
 .note-rate [aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}.note-ask{font-size:13px;color:var(--txt);margin:.5rem 0 .2rem}.note-last{border:1px solid var(--rim);border-radius:10px;padding:.2rem .7rem;margin:.2rem 0 .7rem;background:var(--bg2)}
 .aha-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.aha-card{background:var(--gold-dim);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:1.1rem 1.35rem}.aha-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.45rem}.aha-kind{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.aha-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.aha-title{font-family:var(--serif);font-size:21px;line-height:1.3;color:var(--txt);margin:.15rem 0 .5rem}.aha-insight{font-size:14px;line-height:1.65;color:var(--txt2)}.aha-chain{margin:.7rem 0 .2rem;padding-left:1.25rem;font-size:13px;line-height:1.6;color:var(--txt2)}.aha-chain li{margin:.2rem 0}.aha-links{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.75rem}.aha-links span{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}.aha-links .card-act{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.aha-wrong{margin-top:.7rem;font-size:12px;line-height:1.6;color:var(--txt2)}.aha-wrong strong{color:var(--txt)}
+.week-card{background:var(--bg2);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:1rem 1.35rem}.week-line{margin-top:.7rem}.week-line-name{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}.week-line ul{margin:.3rem 0 0;padding-left:1.1rem}.week-line li{margin:.45rem 0}.week-hl{font-size:14px;line-height:1.45;color:var(--txt)}.week-hl a{color:inherit}.week-meta{font-family:var(--mono);font-size:10.5px;color:var(--txt3);white-space:nowrap}.week-point{font-size:13.5px;line-height:1.6;color:var(--txt2);margin-top:.15rem}
 .wildcard-group{margin-bottom:1.75rem;animation:fadeIn .4s ease}.wildcard-card{border-left:3px solid var(--purple);background:linear-gradient(135deg,var(--purple-dim),transparent 55%),var(--bg2)}.wildcard-top{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.5rem}.wildcard-lens{display:inline-flex;align-items:center;gap:.35rem;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:.15rem .45rem}.wildcard-lens .ico{color:var(--purple)}.wildcard-note{font-family:var(--mono);font-size:10px;color:var(--txt3)}.wildcard-card .card-hl{display:block;margin-bottom:.45rem}.wildcard-bridge{font-size:13px;line-height:1.65;color:var(--txt2);border-top:1px solid var(--rim);padding-top:.6rem;margin:.2rem 0 .1rem}.wildcard-bridge strong{color:var(--txt)}
 .card.is-kb,.aha-card.is-kb{outline:2px solid var(--gold);outline-offset:3px}.card[tabindex="-1"]:focus,.aha-card[tabindex="-1"]:focus{outline:none}.card.is-kb[tabindex="-1"]:focus,.aha-card.is-kb[tabindex="-1"]:focus{outline:2px solid var(--gold)}
 .watch-card{background:var(--red-dim);border:1px solid rgba(232,92,92,.28);border-radius:12px;padding:1.1rem 1.35rem;position:relative;overflow:hidden}
@@ -4691,7 +4692,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="help-card help-wide help-takeaway">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> Today — how the page works</div>
       <p><b>At a glance</b> sits at the very top: one line each for your calendar today (or the next entry this week), your sports in the next 24 hours in Manila time, a booked trip or a fare at your target, PSE watchlist alerts from the last close, and new or cheaper rentals in your areas. A line shows only when it has something, and tapping it opens that page. It reads the big flight, rental and sports feeds only after they have a new run, so opening Today stays quick.</p>
-      <p>Below it comes the <b>briefing</b>. A card goes above the briefing only on a day it has something live: <b>This week</b> once you have commitments (or a week to review), your <b>Apple Health</b> line while Health is sending, <b>Check-ups</b> or <b>Grooming</b> that are due, and the <b>Morning check-in</b> (just above the Generate button) when it asks about a commitment you set. Everything with nothing live today waits, closed, in <b>More on Today</b> at the very bottom: <b>Ask your Daybook</b>, a This week card that only asks for commitments, a check-in offering ideas, a Health line saying it has not sent. Its heading names what is inside. A card comes back up by itself the day it has something; nothing moves while More on Today is open, so you can use a card there and it stays put until you close it. Ask is also in Search. The briefing is built for you at about <b>05:40</b>, so it is waiting when you open the app and the 06:00 push can lead with it; the banner says <b>Built for you</b>, and the button then reads <b>REBUILD</b> (it asks first, since a second build takes 3–5 minutes and about $0.60). The 05:40 build pauses after three days without opening Daybook and starts again the morning after you next open it. With no briefing for today yet, Today shows the newest earlier one under an amber line naming its date, and swaps to today’s as soon as it arrives. If Generate fails, a red line says why and stays until you close it; a refusal before the build starts usually means Google Cloud billing is off. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
+      <p>Below it comes the <b>briefing</b>. On a Monday it opens with <b>Last week in your lines</b>: up to five of last week’s stories and newly published Numbers, sorted into network and road assets, heavy-vehicle loss of income and small-business BI, each with one line on what it changes in an assessment. It only points at things you were already given: anything the server cannot match to last week’s briefings or Numbers is dropped, so it never reports new news.A card goes above the briefing only on a day it has something live: <b>This week</b> once you have commitments (or a week to review), your <b>Apple Health</b> line while Health is sending, <b>Check-ups</b> or <b>Grooming</b> that are due, and the <b>Morning check-in</b> (just above the Generate button) when it asks about a commitment you set. Everything with nothing live today waits, closed, in <b>More on Today</b> at the very bottom: <b>Ask your Daybook</b>, a This week card that only asks for commitments, a check-in offering ideas, a Health line saying it has not sent. Its heading names what is inside. A card comes back up by itself the day it has something; nothing moves while More on Today is open, so you can use a card there and it stays put until you close it. Ask is also in Search. The briefing is built for you at about <b>05:40</b>, so it is waiting when you open the app and the 06:00 push can lead with it; the banner says <b>Built for you</b>, and the button then reads <b>REBUILD</b> (it asks first, since a second build takes 3–5 minutes and about $0.60). The 05:40 build pauses after three days without opening Daybook and starts again the morning after you next open it. With no briefing for today yet, Today shows the newest earlier one under an amber line naming its date, and swaps to today’s as soon as it arrives. If Generate fails, a red line says why and stays until you close it; a refusal before the build starts usually means Google Cloud billing is off. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
       <p><b>Daily Boost</b> — your daily spark, goals, experiments, <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> and the weekly read — moved to the bottom of <b>About you</b> on 17 Oct, so it no longer sits above the briefing. A check or experiment that comes due still rides on the morning push.</p>
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
       <p><b>Waiting on the AI</b> — Go deeper, the briefing, the weekly read, a meeting brief and deep research all show a turning ring and a timer counting up while they work. Past the usual time for that job the line adds <b>longer than usual</b>; it does not invent progress steps, because the server does not report any.</p>
@@ -6657,7 +6658,7 @@ function readMarkSeen(day, id) {
 }
 function briefingCardSeen(card, day, isLast) {
   var section = card.getAttribute('data-section');
-  var id = section ? (card.getAttribute('data-command-id') || section) : (card.classList.contains('aha-card') ? 'aha' : 'wildcard');
+  var id = section ? (card.getAttribute('data-command-id') || section) : card.classList.contains('aha-card') ? 'aha' : card.classList.contains('week-card') ? 'week' : 'wildcard';
   if (!readMarkSeen(day, id)) return false;
   if (!section) { trackUse('seen_' + id); return true; }
   trackUse('seen_story'); trackUse('seen_' + section);
@@ -6671,7 +6672,7 @@ function watchBriefingReading() {
   _readObserver = null;
   var out = document.getElementById('today-out');
   if (!out || typeof IntersectionObserver !== 'function' || !todayBriefingShown()) return;
-  var cards = [].slice.call(out.querySelectorAll('.card[data-section], .aha-card, .wildcard-card'));
+  var cards = [].slice.call(out.querySelectorAll('.card[data-section], .week-card, .aha-card, .wildcard-card'));
   var stories = cards.filter(function(c) { return c.hasAttribute('data-section'); }), last = stories[stories.length - 1];
   var day = manilaDateKey();
   var observer = new IntersectionObserver(function(entries) {
@@ -6719,7 +6720,7 @@ var USAGE_LABELS = {
   push_open:'Opened from a push',
   briefing_auto_seen:'Opened the 05:40 briefing',
   seen_story:'Briefing: stories seen', seen_high:'Briefing: HIGH stories seen', seen_last:'Briefing: reached the last story',
-  seen_aha:'Briefing: aha seen', seen_wildcard:'Briefing: wildcard seen', seen_global:'Seen: Global', seen_ph:'Seen: Philippines',
+  seen_aha:'Briefing: aha seen', seen_wildcard:'Briefing: wildcard seen', seen_week:'Briefing: Monday look back seen', week_link:'Monday look back: link opened', seen_global:'Seen: Global', seen_ph:'Seen: Philippines',
   seen_insurance:'Seen: Insurance', seen_interruptions:'Seen: Interruptions', seen_ai:'Seen: AI', seen_markets:'Seen: Markets', seen_ev:'Seen: EV',
   briefing_standin_seen:'Opened to an earlier briefing (none for today)',
   glance_seen:'At a glance shown', glance_calendar:'At a glance: Calendar line', glance_sports:'At a glance: Sports line',
@@ -14854,6 +14855,28 @@ function wildcardHtml(w) {
     act('evidence', '＋ Evidence', 'Save this story, with its link, to an evidence set') + act('deeper', uiIcon('research') + ' Go deeper', 'A short dossier on this story') + '</div>';
   return html + '</div></div>';
 }
+// Monday's look back (briefing-prompt-core buildLastWeek/cleanWeek): last week's
+// stories and Numbers sorted into his three kinds of file, each with what it
+// changes in an assessment. Only headlines the server matched to last week's
+// briefings or Numbers reach here, so it reports nothing new.
+var WEEK_LINE_LABELS = {network: 'Network and road assets', heavy: 'Heavy-vehicle loss of income', sme: 'Small-business BI'};
+function weekDayLabel(dayKey) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(dayKey || '') ? new Date(dayKey + 'T00:00:00Z').toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC'}) : '';
+}
+function weekHtml(week) {
+  if (!week || !(week.items || []).length) return '';
+  var html = '<div data-group="today" class="aha-group week-group"><div class="sec-hdr"><div class="sec-pip" style="background:var(--gold)"></div><div class="sec-name">LAST WEEK IN YOUR LINES</div></div>';
+  html += '<div class="week-card"><div class="aha-top"><span class="aha-kind">Monday look back</span><span class="aha-note">' + esc(weekDayLabel(week.from) + ' – ' + weekDayLabel(week.to)) + ' · from last week’s briefings and Numbers, not new news</span></div>';
+  Object.keys(WEEK_LINE_LABELS).forEach(function(line) {
+    var items = week.items.filter(function(i) { return i.line === line; });
+    if (!items.length) return;
+    html += '<div class="week-line"><div class="week-line-name">' + esc(WEEK_LINE_LABELS[line]) + '</div><ul>' + items.map(function(i) {
+      var hl = /^https?:\/\//i.test(i.url || '') ? '<a href="' + esc(i.url) + '" target="_blank" rel="noopener" data-track="week_link">' + esc(i.headline) + ' ↗</a>' : esc(i.headline);
+      return '<li><div class="week-hl">' + hl + ' <span class="week-meta">' + esc((i.kind === 'number' ? 'Numbers · ' : '') + weekDayLabel(i.dateKey)) + '</span></div><div class="week-point">' + esc(i.point) + '</div></li>';
+    }).join('') + '</ul></div>';
+  });
+  return html + '</div></div>';
+}
 function ahaHtml(aha) {
   if (!aha || !aha.title || !aha.insight) return '';
   var html = '<div data-group="today" class="aha-group"><div class="sec-hdr"><div class="sec-pip" style="background:var(--gold)"></div><div class="sec-name">TODAY’S AHA</div></div>';
@@ -14976,7 +14999,7 @@ function renderBriefing(options) {
 
   // Render all sections
   var counts = {high:0,med:0,low:0,none:0};
-  var todayHTML = ahaHtml(data.aha);
+  var todayHTML = weekHtml(data.week) + ahaHtml(data.aha);
 
   Object.keys(SEC_META).forEach(function(id) {
     var meta = SEC_META[id];

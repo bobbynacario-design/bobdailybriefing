@@ -1696,6 +1696,24 @@ test('briefing reading counts a story once it stays in view, by section, once a 
   shown=false; observer=null; context.watchBriefingReading();
   assert.equal(observer,null,'an older briefing is not watched');
 });
+// 28 Nov 2026: Monday's look back opens the briefing.
+test('Monday\'s look back draws its lines in order, links its sources and counts as seen once',()=>{
+  const {context}=environment(['weekHtml','weekDayLabel'],{esc:escHtml,Intl});
+  vm.runInContext(html.slice(html.indexOf('var WEEK_LINE_LABELS = '),html.indexOf('function weekDayLabel(')),context);
+  const out=context.weekHtml({from:'2026-11-23',to:'2026-11-29',items:[
+    {line:'sme',headline:'Cyclone shutdown fails to trigger BI payout',point:'Cover wording on <prevention of access> decides it.',kind:'story',dateKey:'2026-11-21',url:'https://x.test/a'},
+    {line:'network',headline:'AER opens reset track',point:'Labour rates.',kind:'story',dateKey:'2026-11-26',url:''},
+    {line:'heavy',headline:'Diesel terminal gate prices',point:'Saved fuel.',kind:'number',dateKey:'2026-11-27',url:'https://aip.test/tgp'}]});
+  assert.match(out,/LAST WEEK IN YOUR LINES/);assert.match(out,/Mon 23 Nov – Sun 29 Nov · from last week’s briefings and Numbers, not new news/);
+  assert.ok(out.indexOf('Network and road assets')<out.indexOf('Heavy-vehicle loss of income') && out.indexOf('Heavy-vehicle loss of income')<out.indexOf('Small-business BI'),'his three lines in a fixed order');
+  assert.match(out,/<a href="https:\/\/x\.test\/a" target="_blank" rel="noopener" data-track="week_link">Cyclone shutdown fails to trigger BI payout ↗<\/a>/);
+  assert.match(out,/AER opens reset track <span class="week-meta">Thu 26 Nov<\/span>/,'no link: plain headline');
+  assert.match(out,/Numbers · Fri 27 Nov/);assert.match(out,/&lt;prevention of access/,'escaped');
+  assert.equal(context.weekHtml(null),'');assert.equal(context.weekHtml({items:[]}),'');
+  assert.match(html,/var todayHTML = weekHtml\(data\.week\) \+ ahaHtml\(data\.aha\);/,'first on the briefing');
+  assert.match(handler('briefingCardSeen'),/'week-card'\) \? 'week'/);
+  assert.match(handler('watchBriefingReading'),/\.week-card, \.aha-card/);
+});
 test('the usage summary ranks the last 30 days and names what has gone unused',()=>{
   const {context}=environment(['usageSummary'],{USAGE_LABELS:{card_deeper:'Go deeper',page_today:'Today',account_brief:'Account: meeting brief'},USAGE_WATCH:['card_deeper','account_brief']});
   const s=context.usageSummary({'2026-09-26':{page_today:3,card_deeper:1},'2026-09-20':{page_today:2},'2026-07-01':{account_brief:9},'2026-09-25':{x:0}},'2026-09-26',30);
