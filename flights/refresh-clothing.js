@@ -1,16 +1,26 @@
-import {readFileSync,existsSync} from 'node:fs';
+import {readFileSync,existsSync,appendFileSync} from 'node:fs';
 import {initializeApp,cert,applicationDefault} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {SOURCES,readSource,parseMall,priceHistory,balancedItems} from './clothing.js';
 import {browserSources,nikeSizes} from './clothing-browser.js';
 import {recordRunHealth} from '../lib/feed-health.js';
-const dry=process.argv.includes('--dry-run'),started=Date.now(),checkedAt=new Date().toISOString();
+import {clothingRefreshDecision,assertPricedClothingFeed} from './clothing-refresh-policy.js';
+const dry=process.argv.includes('--dry-run'),checkOnly=process.argv.includes('--check-only'),ifNeeded=process.argv.includes('--if-needed'),force=process.argv.includes('--force') || process.env.CLOTHING_FORCE==='1',started=Date.now(),checkedAt=new Date().toISOString();
 let db;
 async function main(){
+  if(dry && (checkOnly || ifNeeded))throw Error('Use --dry-run separately from freshness checks.');
   let prior=null;
   if(!dry){
     const key=new URL('../radar/serviceAccountKey.json',import.meta.url);
     initializeApp({projectId:'pokerhq-a67e4',credential:existsSync(key)?cert(JSON.parse(readFileSync(key,'utf8'))):applicationDefault()});db=getFirestore();
+    if(checkOnly || ifNeeded){
+      const [feed,health]=await Promise.all(['shopping-latest','feed-health'].map(id=>db.collection('briefings-bob').doc(id).get()));
+      const decision=clothingRefreshDecision(feed.exists?feed.data():null,health.exists?health.data().feeds?.shopping:null,{force});
+      console.log(JSON.stringify({refreshNeeded:decision.needed,reason:decision.reason,modelCalls:0}));
+      if(checkOnly){if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,'refresh_needed='+decision.needed+'\n');return;}
+      // A skip neither changes product timestamps nor records a new lastOkAt.
+      if(!decision.needed)return;
+    }
     const snap=await db.collection('briefings-bob').doc('shopping-history').get();prior=snap.exists?snap.data().products:null;
   }
   const results=[];
@@ -42,6 +52,7 @@ async function main(){
   console.log(JSON.stringify({items:feed.items.length,promos:promos.length,campaigns:campaigns.length,sources:sources.map(s=>({brand:s.brand,status:s.status,count:s.count,...(s.sizesChecked!=null?{sizesChecked:s.sizesChecked}:{})})),bytes:Buffer.byteLength(JSON.stringify(feed)),modelCalls:0}));
   if(dry)return;
   if(results.every(r=>r.status==='unavailable'))throw Error('All clothing sources unavailable; previous feed preserved.');
+  assertPricedClothingFeed(feed);
   if(Buffer.byteLength(JSON.stringify(feed))>850000)throw Error('Clothing feed exceeds size budget; previous feed preserved.');
   const batch=db.batch();batch.set(db.collection('briefings-bob').doc('shopping-latest'),feed);batch.set(db.collection('briefings-bob').doc('shopping-history'),{products:tracked.history,updatedAt:checkedAt});await batch.commit();
   await recordRunHealth(db,'shopping',{status:'ok',durationMs:Date.now()-started,asOf:checkedAt.slice(0,10),message:feed.items.length+' priced markdowns, '+promos.length+' dated branch offers; no AI calls.'});

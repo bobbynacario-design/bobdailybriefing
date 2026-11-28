@@ -92,7 +92,7 @@ Object.entries(health.feeds || {}).sort().forEach(([name, f]) => {
   const since = f.lastOkAt ? phtTime(f.lastOkAt) : 'never';
   if (RETIRED.includes(name)) return info(name + ': retired (' + (f.status || '?') + ', last ok ' + since + ')');
   if (f.status === 'failed') return alert('feed:' + name, name + ' failing, last good ' + since + ': ' + (f.message || f.stage || 'no message'));
-  // Clothing now runs daily at 08:00 PHT; allow late scheduled starts.
+  // Clothing targets 08:17 PHT daily, with a guarded 12:47 retry; allow late starts.
   const maxHours = name === 'radar' || name === 'grounding' ? 30 : 36;
   const age = f.lastOkAt && (name === 'radar' || name === 'ph' ? weekdayHours(f.lastOkAt, Date.now()) : hoursAgo(f.lastOkAt));
   if (f.lastOkAt && age > maxHours) return alert('feed:' + name + ':stale', name + ' has not run cleanly since ' + since);

@@ -1,9 +1,16 @@
 name: Refresh clothing deals
 on:
   schedule:
-    # Daily, 08:00 Philippine time. No AI or paid data API.
-    - cron: '0 0 * * *'
+    # 08:17 PHT, with a 12:47 PHT retry. Avoid the busy start of the hour.
+    # A scheduled retry skips collection after a successful scan that PHT day.
+    - cron: '17 0 * * *'
+    - cron: '47 4 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: Collect again even if today's scan already succeeded
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -13,6 +20,8 @@ jobs:
   scout:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CLOTHING_FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,9 +33,15 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       - run: npm --prefix flights ci
+      - name: Check whether a collection is needed
+        id: freshness
+        run: node flights/refresh-clothing.js --check-only
       - name: Install the standard Chromium renderer
+        if: steps.freshness.outputs.refresh_needed == 'true'
         working-directory: flights
         run: npx playwright install --with-deps chromium
-      - run: node flights/refresh-clothing.js
+      - name: Collect fresh retailer observations
+        if: steps.freshness.outputs.refresh_needed == 'true'
+        run: node flights/refresh-clothing.js --if-needed
         env:
           CLOTHING_BROWSER: '1'
