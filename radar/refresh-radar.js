@@ -36,7 +36,7 @@ import { buildJournal } from './journal.js';
 import { tagCatalysts, focusPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
 import { runForecastPanel } from './forecast.js';
 import { stageForecastJournal, JOURNAL_DOC } from './forecast-journal.js';
-import { RECORD_DOC as TAKER_RECORD_DOC, picksFromRun, measureTakerRecord } from './taker-record.js';
+import { RECORD_DOC as TAKER_RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, picksFromRun, listFromRun, measureTakerRecord } from './taker-record.js';
 import { recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -603,24 +603,36 @@ async function main() {
   // bars. Picks come from this run and the runs of the last 14 days, so one
   // run whose record write failed is not lost; with no record yet, from every
   // run since 1 Oct 2026. Best effort: without it Radar is written as before.
+  // The list record (every name not Invalidated, on the same runs) rides
+  // with it, so the card can compare the picks with the list they came from.
   STAGE.set('taker-record');
-  var takerRecord = null;
+  var takerRecord = null, listRecord = null;
   try {
-    var takerSnap = await db.collection(COLL).doc(TAKER_RECORD_DOC).get();
-    var priorTaker = takerSnap.exists ? takerSnap.data() : null;
-    var takerFrom = priorTaker ? new Date(Date.parse(dateKey + 'T00:00:00Z') - 14 * 86400000).toISOString().slice(0, 10) : '2026-10-01';
+    var recordSnaps = await Promise.all([TAKER_RECORD_DOC, LIST_DOC].map(function (id) { return db.collection(COLL).doc(id).get(); }));
+    var priorTaker = recordSnaps[0].exists ? recordSnaps[0].data() : null, priorList = recordSnaps[1].exists ? recordSnaps[1].data() : null;
+    var takerFrom = priorTaker && priorList ? new Date(Date.parse(dateKey + 'T00:00:00Z') - 14 * 86400000).toISOString().slice(0, 10) : '2026-10-01';
     // Ids between 'radar-<from>' and 'radar-<today>' are only the dated run docs:
     // 'radar-drift-…', 'radar-journal' and the rest sort after the digits.
     var pastRuns = await db.collection(COLL).where(FieldPath.documentId(), '>=', 'radar-' + takerFrom)
       .where(FieldPath.documentId(), '<', 'radar-' + dateKey).get();
-    var takerAdds = [];
-    pastRuns.forEach(function (snap) { takerAdds = takerAdds.concat(picksFromRun(snap.data(), snap.id.slice(6))); });
+    var takerAdds = [], listAdds = [];
+    pastRuns.forEach(function (snap) {
+      takerAdds = takerAdds.concat(picksFromRun(snap.data(), snap.id.slice(6)));
+      listAdds = listAdds.concat(listFromRun(snap.data(), snap.id.slice(6)));
+    });
     takerAdds = takerAdds.concat(picksFromRun(doc, dateKey));
-    takerRecord = measureTakerRecord(priorTaker, takerAdds, barsByAsset, new Date().toISOString());
+    listAdds = listAdds.concat(listFromRun(doc, dateKey));
+    var recordNow = new Date().toISOString();
+    takerRecord = measureTakerRecord(priorTaker, takerAdds, barsByAsset, recordNow);
     doc.takerRecord = takerRecord.stats;
+    listRecord = measureTakerRecord(priorList, listAdds, barsByAsset, recordNow, {keepDays: LIST_KEEP_DAYS,
+      method: 'Every Radar name that was not Invalidated, on each run that made Taker picks, scored as the picks are: from the first completed close after the run day to ten matched sessions later, against its benchmark. No trading costs. Runs older than two years drop out.'});
+    var ls = listRecord.stats;
+    doc.listRecord = {picks: ls.picks, resolved: ls.resolved, pending: ls.pending, beat: ls.beat, meanExcessReturn: ls.meanExcessReturn, medianExcessReturn: ls.medianExcessReturn, effectiveSample: ls.effectiveSample, since: ls.since};
     var ts = takerRecord.stats;
     console.log('Taker record: ' + ts.picks + ' picks, ' + ts.resolved + ' scored, ' + ts.beat + ' beat their benchmark' +
       (ts.meanExcessReturn == null ? '' : ', mean ' + ts.meanExcessReturn + ' pts') + ', ' + ts.pending + ' pending');
+    console.log('List record: ' + ls.picks + ' names, ' + ls.resolved + ' scored, ' + ls.beat + ' beat' + (ls.meanExcessReturn == null ? '' : ', mean ' + ls.meanExcessReturn + ' pts'));
   } catch (e) {
     console.warn('Taker record unavailable; Radar written without it:', e.message || e);
   }
@@ -631,7 +643,10 @@ async function main() {
   if (takerRecord) {
     try { await db.collection(COLL).doc(TAKER_RECORD_DOC).set(takerRecord); } catch (e) { console.warn('Taker record not saved (the next run re-reads these picks):', e.message || e); }
   }
-  console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', radar-journal' + (takerRecord ? ' and ' + TAKER_RECORD_DOC : '') + '.');
+  if (listRecord) {
+    try { await db.collection(COLL).doc(LIST_DOC).set(listRecord); } catch (e) { console.warn('List record not saved (the next run re-reads these runs):', e.message || e); }
+  }
+  console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', radar-journal' + (takerRecord ? ', ' + TAKER_RECORD_DOC : '') + (listRecord ? ' and ' + LIST_DOC : '') + '.');
 
   // The radar itself is now safely written — record health before the optional
   // PH leg so a PH failure can never mask a good radar run.

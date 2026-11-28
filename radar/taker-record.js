@@ -15,6 +15,14 @@
 import { HORIZON, completedThrough, pairedBars, effectiveSample } from './forecast-journal.js';
 
 const RECORD_DOC = 'radar-taker-record';
+// The whole list on the same runs (28 Nov 2026): every name that was not
+// Invalidated, scored the same way, so the card can say whether picking the
+// top names has added anything over the list itself. On replay the average
+// listed name (53% beat their benchmark, -0.3 points) had done better than the
+// Taker picks (38%, -2.8). About eleven names a run, so entries are kept
+// compact and only for two years (well under Firestore's 1 MB a document).
+const LIST_DOC = 'radar-list-record';
+const LIST_KEEP_DAYS = 730;
 const UNAVAILABLE_AFTER_DAYS = 60;
 const RECENT = 12;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -32,6 +40,15 @@ function picksFromRun(doc, dateKey) {
     return {key: pickKey(symbol, dateKey), symbol, benchmark: s.benchmark, theme: s.theme || null, dateKey,
       generatedAt: doc.generatedAt || dateKey + 'T00:00:00.000Z', score: Number.isFinite(s.score) ? s.score : null, status: 'pending'};
   }).filter(Boolean);
+}
+
+// Every listed name on a run that made Taker picks (the same runs the picks
+// come from), as compact pending entries.
+function listFromRun(doc, dateKey) {
+  if (!doc || !DAY.test(String(dateKey || '')) || !doc.picks || !Array.isArray(doc.picks.taker) || !doc.picks.taker.length) return [];
+  return (Array.isArray(doc.signals) ? doc.signals : []).filter((s) => s && s.symbol && s.benchmark && s.symbol !== s.benchmark && s.status !== 'invalidated')
+    .map((s) => ({key: pickKey(s.symbol, dateKey), symbol: s.symbol, benchmark: s.benchmark, dateKey,
+      generatedAt: doc.generatedAt || dateKey + 'T00:00:00.000Z', status: 'pending'}));
 }
 
 // Returns a new object; a stored entry is never edited in place. The start is
@@ -70,18 +87,22 @@ function takerStats(entries) {
   };
 }
 
-// prior: the stored record (or null); additions: picksFromRun entries, from
-// this run and recent ones (a pick already stored is kept as first stored).
-function measureTakerRecord(prior, additions, bars, now) {
+// prior: the stored record (or null); additions: picksFromRun (or
+// listFromRun) entries, from this run and recent ones (a pick already stored
+// is kept as first stored). opts.keepDays drops entries from runs older than
+// that many days, so a long record cannot outgrow its document.
+function measureTakerRecord(prior, additions, bars, now, opts) {
   const current = {...((prior && prior.entries) || {})};
   for (const entry of additions || []) if (entry && entry.key && !current[entry.key]) current[entry.key] = {...entry};
-  const entries = Object.values(current).map((entry) => resolvePick(entry, bars, now));
+  const keepDays = opts && opts.keepDays;
+  const cutoff = keepDays ? new Date(Date.parse(now) - keepDays * 86400000).toISOString().slice(0, 10) : '';
+  const entries = Object.values(current).filter((entry) => !cutoff || entry.dateKey >= cutoff).map((entry) => resolvePick(entry, bars, now));
   return {
     version: 1, horizon: HORIZON, generatedAt: now,
     entries: Object.fromEntries(entries.map((e) => [e.key, e])),
     stats: takerStats(entries),
-    method: 'Every published Taker pick, from the first completed close after the day it was published to ten matched sessions later, against the benchmark it was judged against. No trading costs. Effective sample counts non-overlapping ten-session windows per symbol; related symbols still move together.'
+    method: (opts && opts.method) || 'Every published Taker pick, from the first completed close after the day it was published to ten matched sessions later, against the benchmark it was judged against. No trading costs. Effective sample counts non-overlapping ten-session windows per symbol; related symbols still move together.'
   };
 }
 
-export { RECORD_DOC, pickKey, picksFromRun, resolvePick, takerStats, measureTakerRecord };
+export { RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, pickKey, picksFromRun, listFromRun, resolvePick, takerStats, measureTakerRecord };
