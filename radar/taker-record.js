@@ -44,6 +44,15 @@ function picksFromRun(doc, dateKey) {
   }).filter(Boolean);
 }
 
+// The challenger rule's picks (catalysts.js challengerPicks), stored on each
+// run from 30 Nov 2026 as doc.challengerPicks and scored exactly like the
+// Taker picks, forward only: older runs have none, so nothing is backfilled.
+const CHALLENGER_DOC = 'radar-challenger-record';
+function challengerFromRun(doc, dateKey) {
+  if (!doc || !Array.isArray(doc.challengerPicks)) return [];
+  return picksFromRun({generatedAt: doc.generatedAt, signals: doc.signals, picks: {taker: doc.challengerPicks}}, dateKey);
+}
+
 // Every listed name on a run that made Taker picks (the same runs the picks
 // come from), as compact pending entries.
 function listFromRun(doc, dateKey) {
@@ -110,4 +119,4 @@ function measureTakerRecord(prior, additions, bars, now, opts) {
   };
 }
 
-export { RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, LIST_MAX_ENTRIES, pickKey, picksFromRun, listFromRun, resolvePick, takerStats, measureTakerRecord };
+export { RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, LIST_MAX_ENTRIES, CHALLENGER_DOC, pickKey, picksFromRun, challengerFromRun, listFromRun, resolvePick, takerStats, measureTakerRecord };

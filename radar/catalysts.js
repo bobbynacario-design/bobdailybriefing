@@ -38,12 +38,36 @@ var SYSTEM = 'You produce factual, concise market catalyst tags for a personal r
 function upsidePct(s) {
   return s && s.entry > 0 && s.target != null ? (s.target - s.entry) / s.entry * 100 : null;
 }
+function takerRank(s) {
+  var rs = s.relStrength20d, lead = rs == null ? 0 : (rs >= 0 ? Math.min(rs, 12) * 0.5 : rs * 0.4);
+  return (s.score || 0) + (s.status === 'confirmed' ? 6 : 0) + lead;
+}
+// The challenger rule, tracked beside the Taker picks from 30 Nov 2026 and
+// never shown as picks (Bob's call, after a test on 28 Nov): the same filter
+// and ranking, but no name more than 5% above its 20-day average, and at most
+// one per theme. Live since 5 Oct it did best (63% beat their benchmark over
+// ten sessions, +0.7, against 37%, -2.9 for the Taker rule); in the 2024-26
+// back-test it did worst (48%, -0.1, against 56%, +1.3). Only a forward record
+// can settle it, so it is recorded (radar-challenger-record), not used.
+var CHALLENGER_MAX_STRETCH = 5;
+function stretchPct(s) {
+  // Rounded to 0.01 points, so exactly 5% is not lost to floating point.
+  return s && s.close > 0 && s.sma20 > 0 ? Math.round((s.close / s.sma20 - 1) * 10000) / 100 : null;
+}
+function challengerPicks(signals) {
+  var seen = {};
+  return (signals || []).filter(function (s) {
+    var st = stretchPct(s);
+    return s.status !== 'invalidated' && s.score >= 58 && st != null && st <= CHALLENGER_MAX_STRETCH;
+  }).sort(function (a, b) { return takerRank(b) - takerRank(a); }).filter(function (s) {
+    var theme = s.theme || s.symbol;
+    if (seen[theme]) return false;
+    seen[theme] = true;
+    return true;
+  }).slice(0, 3);
+}
 function focusPicks(signals) {
   signals = signals || [];
-  function takerRank(s) {
-    var rs = s.relStrength20d, lead = rs == null ? 0 : (rs >= 0 ? Math.min(rs, 12) * 0.5 : rs * 0.4);
-    return (s.score || 0) + (s.status === 'confirmed' ? 6 : 0) + lead;
-  }
   var taker = signals.filter(function (s) { return s.status !== 'invalidated' && s.score >= 58; })
     .sort(function (a, b) { return takerRank(b) - takerRank(a); }).slice(0, 3);
   var taken = {};
@@ -322,6 +346,6 @@ async function tagCatalysts(opts) {
 }
 
 export {
-  tagCatalysts, focusPicks, focusNames, buildPrompt, collectSources, runCatalystCall, applyCatalysts,
+  tagCatalysts, focusPicks, focusNames, challengerPicks, takerRank, stretchPct, CHALLENGER_MAX_STRETCH, buildPrompt, collectSources, runCatalystCall, applyCatalysts,
   usageForLedger, SAVE_TOOL, EVENT_TYPES, DEFAULT_MODEL
 };

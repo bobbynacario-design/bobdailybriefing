@@ -76,3 +76,13 @@ test('the list record holds every name that was not Invalidated, on runs that ma
   const capped = measureTakerRecord(rec, later, bars, '2026-11-27T22:00:00.000Z', {maxEntries: 2});
   assert.deepEqual(Object.keys(capped.entries).sort(), ['LMT|2026-11-03', 'XLV|2026-11-03']);
 });
+
+// 28 Nov 2026: the challenger rule's picks, forward only.
+test('challenger picks are scored like Taker picks, and older runs have none', async () => {
+  const {challengerFromRun, CHALLENGER_DOC} = await import('./taker-record.js');
+  assert.equal(CHALLENGER_DOC, 'radar-challenger-record');
+  const doc = run(['XLV'], {challengerPicks: ['LMT']});
+  assert.deepEqual(challengerFromRun(doc, '2026-11-30').map((p) => p.key), ['LMT|2026-11-30'], 'its own picks, not the Taker ones');
+  assert.equal(challengerFromRun(doc, '2026-11-30')[0].benchmark, 'SPY');
+  assert.deepEqual(challengerFromRun(run(['XLV']), '2026-11-27'), [], 'a run from before the challenger began adds nothing');
+});

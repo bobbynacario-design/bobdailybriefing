@@ -3,7 +3,7 @@
 //   node radar/catalysts.test.js
 import assert from 'assert';
 import {
-  tagCatalysts, focusPicks, focusNames, collectSources, runCatalystCall, applyCatalysts,
+  tagCatalysts, focusPicks, focusNames, challengerPicks, stretchPct, collectSources, runCatalystCall, applyCatalysts,
   usageForLedger, SAVE_TOOL
 } from './catalysts.js';
 
@@ -80,6 +80,25 @@ await t('focusPicks: keeps the Taker and Wildcard lists apart, even with fewer t
   assert.deepEqual(picks.wildcard.map(sym), ['W1', 'W2']);
   // focusNames is the same names as one list, Taker first.
   assert.deepEqual(focusNames(list).map(sym), ['T1', 'W1', 'W2']);
+});
+
+// 28 Nov 2026: the challenger rule, recorded beside the Taker picks, never shown.
+await t('challengerPicks: the Taker filter and ranking, but no name over 5% above its 20-day average, one per theme', function () {
+  var list = [
+    sig({ symbol: 'HOT', theme: 'Energy/geo', status: 'confirmed', score: 85, close: 110, sma20: 100 }),
+    sig({ symbol: 'E1', theme: 'Energy/geo', status: 'forming', score: 70, close: 104, sma20: 100 }),
+    sig({ symbol: 'E2', theme: 'Energy/geo', status: 'forming', score: 68, close: 101, sma20: 100 }),
+    sig({ symbol: 'H1', theme: 'Healthcare', status: 'forming', score: 62, close: 99, sma20: 100 }),
+    sig({ symbol: 'LOW', theme: 'Defense', status: 'forming', score: 55, close: 100, sma20: 100 }),
+    sig({ symbol: 'BAD', theme: 'Consumer', status: 'invalidated', score: 90, close: 100, sma20: 100 }),
+    sig({ symbol: 'NOSMA', theme: 'Financials', status: 'forming', score: 75 })
+  ];
+  var sym = function (s) { return s.symbol; };
+  assert.deepEqual(challengerPicks(list).map(sym), ['E1', 'H1'], 'HOT is stretched, E2 shares a theme, LOW under 58, BAD invalidated, NOSMA has no 20-day average');
+  assert.equal(stretchPct({ close: 105, sma20: 100 }).toFixed(1), '5.0'); assert.equal(stretchPct({ close: 1 }), null);
+  assert.deepEqual(challengerPicks(list.concat([sig({ symbol: 'EDGE', theme: 'AI infra', score: 60, close: 105, sma20: 100 })])).map(sym), ['E1', 'H1', 'EDGE'], 'exactly 5% is allowed');
+  assert.deepEqual(focusPicks(list).taker.map(sym), ['HOT', 'NOSMA', 'E1'], 'the Taker rule itself still takes the stretched name');
+  assert.deepEqual(challengerPicks(null), []);
 });
 
 await t('focusNames: an early name below the upside bar is not a Wildcard', function () {

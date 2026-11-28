@@ -33,10 +33,10 @@ import { getFirestore, FieldPath } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
-import { tagCatalysts, focusPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
+import { tagCatalysts, focusPicks, challengerPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
 import { runForecastPanel } from './forecast.js';
 import { stageForecastJournal, JOURNAL_DOC } from './forecast-journal.js';
-import { RECORD_DOC as TAKER_RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, LIST_MAX_ENTRIES, picksFromRun, listFromRun, measureTakerRecord } from './taker-record.js';
+import { RECORD_DOC as TAKER_RECORD_DOC, LIST_DOC, LIST_KEEP_DAYS, LIST_MAX_ENTRIES, CHALLENGER_DOC, picksFromRun, challengerFromRun, listFromRun, takerStats, measureTakerRecord } from './taker-record.js';
 import { recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -471,6 +471,9 @@ async function main() {
     // The names the Radar shows first, by the app's own rules, so Search and
     // Ask can say which are today's Taker and Wildcard picks.
     picks: { taker: symbolsOf(picks.taker), wildcard: symbolsOf(picks.wildcard) },
+    // What the challenger rule would pick (catalysts.js challengerPicks):
+    // recorded and scored beside the Taker picks, never shown as picks.
+    challengerPicks: symbolsOf(challengerPicks(result.signals)),
     signals: result.signals
   };
 
@@ -606,22 +609,25 @@ async function main() {
   // The list record (every name not Invalidated, on the same runs) rides
   // with it, so the card can compare the picks with the list they came from.
   STAGE.set('taker-record');
-  var takerRecord = null, listRecord = null;
+  var takerRecord = null, listRecord = null, challengerRecord = null;
   try {
-    var recordSnaps = await Promise.all([TAKER_RECORD_DOC, LIST_DOC].map(function (id) { return db.collection(COLL).doc(id).get(); }));
+    var recordSnaps = await Promise.all([TAKER_RECORD_DOC, LIST_DOC, CHALLENGER_DOC].map(function (id) { return db.collection(COLL).doc(id).get(); }));
     var priorTaker = recordSnaps[0].exists ? recordSnaps[0].data() : null, priorList = recordSnaps[1].exists ? recordSnaps[1].data() : null;
+    var priorChallenger = recordSnaps[2].exists ? recordSnaps[2].data() : null;
     var takerFrom = priorTaker && priorList ? new Date(Date.parse(dateKey + 'T00:00:00Z') - 14 * 86400000).toISOString().slice(0, 10) : '2026-10-01';
     // Ids between 'radar-<from>' and 'radar-<today>' are only the dated run docs:
     // 'radar-drift-…', 'radar-journal' and the rest sort after the digits.
     var pastRuns = await db.collection(COLL).where(FieldPath.documentId(), '>=', 'radar-' + takerFrom)
       .where(FieldPath.documentId(), '<', 'radar-' + dateKey).get();
-    var takerAdds = [], listAdds = [];
+    var takerAdds = [], listAdds = [], challengerAdds = [];
     pastRuns.forEach(function (snap) {
       takerAdds = takerAdds.concat(picksFromRun(snap.data(), snap.id.slice(6)));
       listAdds = listAdds.concat(listFromRun(snap.data(), snap.id.slice(6)));
+      challengerAdds = challengerAdds.concat(challengerFromRun(snap.data(), snap.id.slice(6)));
     });
     takerAdds = takerAdds.concat(picksFromRun(doc, dateKey));
     listAdds = listAdds.concat(listFromRun(doc, dateKey));
+    challengerAdds = challengerAdds.concat(challengerFromRun(doc, dateKey));
     var recordNow = new Date().toISOString();
     takerRecord = measureTakerRecord(priorTaker, takerAdds, barsByAsset, recordNow);
     doc.takerRecord = takerRecord.stats;
@@ -633,6 +639,16 @@ async function main() {
     console.log('Taker record: ' + ts.picks + ' picks, ' + ts.resolved + ' scored, ' + ts.beat + ' beat their benchmark' +
       (ts.meanExcessReturn == null ? '' : ', mean ' + ts.meanExcessReturn + ' pts') + ', ' + ts.pending + ' pending');
     console.log('List record: ' + ls.picks + ' names, ' + ls.resolved + ' scored, ' + ls.beat + ' beat' + (ls.meanExcessReturn == null ? '' : ', mean ' + ls.meanExcessReturn + ' pts'));
+    // The challenger, forward only, against the Taker picks on the same runs.
+    challengerRecord = measureTakerRecord(priorChallenger, challengerAdds, barsByAsset, recordNow, {
+      method: 'What the challenger rule (no name more than 5% above its 20-day average, one per theme) would have picked on each run from 30 Nov 2026, scored as the Taker picks are. Never shown as picks.'});
+    var cs2 = challengerRecord.stats, compact = function (s) {
+      return {picks: s.picks, resolved: s.resolved, pending: s.pending, beat: s.beat, meanExcessReturn: s.meanExcessReturn, medianExcessReturn: s.medianExcessReturn, effectiveSample: s.effectiveSample, since: s.since};
+    };
+    var sameRuns = Object.values(takerRecord.entries).filter(function (e) { return cs2.since && e.dateKey >= cs2.since; });
+    doc.challengerRecord = {rule: 'No name more than 5% above its 20-day average; at most one per theme', since: cs2.since,
+      challenger: compact(cs2), taker: compact(takerStats(sameRuns))};
+    console.log('Challenger record: ' + cs2.picks + ' picks since ' + cs2.since + ', ' + cs2.resolved + ' scored, ' + cs2.beat + ' beat');
   } catch (e) {
     console.warn('Taker record unavailable; Radar written without it:', e.message || e);
   }
@@ -645,6 +661,9 @@ async function main() {
   }
   if (listRecord) {
     try { await db.collection(COLL).doc(LIST_DOC).set(listRecord); } catch (e) { console.warn('List record not saved (the next run re-reads these runs):', e.message || e); }
+  }
+  if (challengerRecord) {
+    try { await db.collection(COLL).doc(CHALLENGER_DOC).set(challengerRecord); } catch (e) { console.warn('Challenger record not saved (the next run re-reads these runs):', e.message || e); }
   }
   console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', radar-journal' + (takerRecord ? ', ' + TAKER_RECORD_DOC : '') + (listRecord ? ' and ' + LIST_DOC : '') + '.');
 
