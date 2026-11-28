@@ -2458,6 +2458,32 @@ test('a failed Generate says why, and the reason stays on the page', () => {
   context.navigator.onLine=false; assert.equal(why({code:'functions/internal',message:'internal'}),'This device is offline.');
 });
 
+// 28 Nov 2026: money first. Radar, Markets and PSE in one line, each its own tap.
+test('At a glance: the Money line opens Radar, Markets or PSE, and reads Radar and Markets once per run', async()=>{
+  const today='2026-11-14',store={},loads={radar:0,miro:0};
+  const health={feeds:{radar:{lastOkAt:'r-1'},miro:{lastOkAt:'m-1'}}};
+  const {context,element}=environment(['renderTodayGlance','glanceCache','glanceFeed','glanceRowHtml','checkupToday','sportsFollowKey'],{
+    esc:escHtml,URL,localStorage:{getItem:k=>store[k] ?? null,setItem:(k,v)=>{store[k]=v;}},WeeklyReviewCore:{today:()=>today},sportsCachedData:null,
+    trackUse:()=>{},_firebaseUid:'u1',fbLoadDaybookEvents:async()=>[],fbLoadMeetings:async()=>null,fbLoadBookedTrips:async()=>({items:{}}),
+    fbLoadPseWatch:async()=>({alertsAsOf:'2026-11-13',items:{MREIT:{}},alerts:[{symbol:'MREIT',text:'MREIT made a new 52-week low (₱13.16)'}]}),
+    fbLoadFeedHealth:async()=>health,fbLoadFlightWatch:async()=>({items:{}}),fbLoadRentalPrefs:async()=>null,
+    fbLoadRadar:async()=>{loads.radar++;return {generatedAt:'2026-11-13T04:01:56Z',picks:{taker:['XLV','LMT']},signals:[{symbol:'XLV',theme:'Healthcare'}]};},
+    fbLoadMiro:async()=>{loads.miro++;return {asOf:'2026-11-14',changes:{items:[{label:'Fed cuts in December',from:0.55,to:0.62}]}};},
+    sportsDigestItems:()=>({today:[]})});
+  ['glance-core','daybook-calendar-core','flights-core','rentals-core'].forEach(n=>vm.runInContext(readFileSync(new URL('../lib/'+n+'.js',import.meta.url),'utf8'),context));
+  const s=html.indexOf('var GLANCE_CACHE');vm.runInContext(html.slice(s,html.indexOf('\nfunction glanceCache',s)),context);
+  await context.renderTodayGlance();
+  const out=element('today-glance').innerHTML;
+  assert.match(out,/<div class="glance-row glance-money"><span class="glance-tag">Money<\/span>/);
+  assert.match(out,/data-track="glance_radar" onclick="switchPage\('radar',null\)">Radar Fri: XLV, LMT<\/button>/);
+  assert.match(out,/data-track="glance_miro" onclick="switchPage\('miro',null\)">Fed cuts in December 62% \(\+7 pts\)<\/button>/);
+  assert.match(out,/data-track="glance_pse" onclick="switchPage\('pse',null\)">PSE: MREIT made a new 52-week low \(₱13\.16\)<\/button>/);
+  assert.doesNotMatch(out,/<span class="glance-tag">PSE</,'PSE is in the Money line, not a line of its own');
+  await context.renderTodayGlance();
+  assert.deepEqual(loads,{radar:1,miro:1},'same runs: the big feeds are not read again');
+  health.feeds.radar.lastOkAt='r-2';await context.renderTodayGlance();
+  assert.deepEqual(loads,{radar:2,miro:1},'a new Radar run is read');
+});
 test('At a glance: small records paint at once; a big feed is read again only after a new run', async()=>{
   const today='2026-11-14',store={},loads={flights:0,rentals:0,sports:0},seen=[];
   const health={feeds:{rentals:{lastOkAt:'run-1'},sports:{lastOkAt:'run-1'},flights:{lastOkAt:'run-1'}}};

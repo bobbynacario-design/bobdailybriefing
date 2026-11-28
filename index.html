@@ -2144,7 +2144,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .weekly-item:first-child{border-top:0}.weekly-item .flights-note{margin:.1rem 0 0}
 .weekly-area{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--gold);margin-right:.25rem}
 .weekly-dots{display:flex;gap:4px}.weekly-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--rim2);background:transparent}
-.weekly-dot.is-on{background:var(--green);border-color:var(--green)}.today-glance{margin:0 0 1rem;padding:.55rem .85rem .5rem;border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:10px;background:var(--bg2)}.glance-head{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin-bottom:.2rem}.glance-row{display:grid;grid-template-columns:62px minmax(0,1fr);gap:.6rem;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:.3rem .2rem;font:inherit;font-size:13.5px;line-height:1.45;color:var(--txt);cursor:pointer}.glance-row:hover,.glance-row:focus-visible{background:var(--bg3)}.glance-tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);padding-top:.15rem}.glance-note{color:var(--txt3);font-size:12px}@media(max-width:768px){.glance-row{font-size:13px;line-height:1.4}.glance-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
+.weekly-dot.is-on{background:var(--green);border-color:var(--green)}.today-glance{margin:0 0 1rem;padding:.55rem .85rem .5rem;border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:10px;background:var(--bg2)}.glance-head{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin-bottom:.2rem}.glance-row{display:grid;grid-template-columns:62px minmax(0,1fr);gap:.6rem;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:.3rem .2rem;font:inherit;font-size:13.5px;line-height:1.45;color:var(--txt);cursor:pointer}.glance-row:hover,.glance-row:focus-visible{background:var(--bg3)}.glance-tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);padding-top:.15rem}.glance-note{color:var(--txt3);font-size:12px}.glance-money{cursor:default}.glance-money:hover{background:none}.glance-part{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;text-align:left;cursor:pointer;border-radius:4px}.glance-part:hover,.glance-part:focus-visible{background:var(--bg3);text-decoration:underline}@media(max-width:768px){.glance-row{font-size:13px;line-height:1.4}.glance-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
 .today-body{margin:0 0 1rem;padding:.55rem .85rem;border:1px solid var(--rim);border-left:3px solid var(--green);border-radius:10px;background:var(--bg2);font-size:13px;line-height:1.5;color:var(--txt2)}.today-body.is-notable{border-left-color:var(--amber);color:var(--txt)}.today-body.is-stale{border-left-color:var(--txt3)}.today-body a{color:inherit}
 .weekly-dot.is-auto{background:var(--bg2);border:3px solid var(--green)}.weekly-auto-note{color:var(--green)}.weekly-dot.is-today{outline:2px solid var(--gold-dim);outline-offset:1px;border-color:var(--gold)}.weekly-dot.is-future{opacity:.45}
 .weekly-step{margin-top:.9rem;padding-top:.8rem;border-top:1px dashed var(--rim2)}.weekly-step h3{font-size:14px;margin:0 0 .45rem}
@@ -4710,7 +4710,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     </div>
     <div class="help-card help-wide help-takeaway">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> Today — how the page works</div>
-      <p><b>At a glance</b> sits at the very top: one line each for your calendar today (or the next entry this week), your sports in the next 24 hours in Manila time, a booked trip or a fare at your target, PSE watchlist alerts from the last close, and new or cheaper rentals in your areas. A line shows only when it has something, and tapping it opens that page. It reads the big flight, rental and sports feeds only after they have a new run, so opening Today stays quick.</p>
+      <p><b>At a glance</b> sits at the very top: one line each for your calendar today (or the next entry this week), your sports in the next 24 hours in Manila time, a booked trip or a fare at your target, one <b>Money</b> line, and new or cheaper rentals in your areas. The Money line has up to three parts, each opening its own page: the latest Radar Taker picks (while the Mon, Wed or Fri run is current), the biggest Markets move since its last run when it is 3 points or more, and your PSE watchlist news from the last close. A line shows only when it has something, and tapping it opens that page. It reads the big flight, rental and sports feeds only after they have a new run, so opening Today stays quick.</p>
       <p>Below it comes the <b>briefing</b>. On a Monday it opens with <b>Last week in your lines</b>: up to five of last week’s stories and newly published Numbers, sorted into network and road assets, heavy-vehicle loss of income and small-business BI, each with one line on what it changes in an assessment. It only points at things you were already given: anything the server cannot match to last week’s briefings or Numbers is dropped, so it never reports new news.A card goes above the briefing only on a day it has something live: <b>This week</b> once you have commitments (or a week to review), your <b>Apple Health</b> line while Health is sending, <b>Check-ups</b> or <b>Grooming</b> that are due, and the <b>Morning check-in</b> (just above the Generate button) when it asks about a commitment you set. Everything with nothing live today waits, closed, in <b>More on Today</b> at the very bottom: <b>Ask your Daybook</b>, a This week card that only asks for commitments, a check-in offering ideas, a Health line saying it has not sent. Its heading names what is inside. A card comes back up by itself the day it has something; nothing moves while More on Today is open, so you can use a card there and it stays put until you close it. Ask is also in Search. The briefing is built for you at about <b>05:40</b>, so it is waiting when you open the app and the 06:00 push can lead with it; the banner says <b>Built for you</b>, and the button then reads <b>REBUILD</b> (it asks first, since a second build takes 3–5 minutes and about $0.60). The 05:40 build pauses after three days without opening Daybook and starts again the morning after you next open it. With no briefing for today yet, Today shows the newest earlier one under an amber line naming its date, and swaps to today’s as soon as it arrives. If Generate fails, a red line says why and stays until you close it; a refusal before the build starts usually means Google Cloud billing is off. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
       <p><b>Daily Boost</b> — your daily spark, goals, experiments, <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> and the weekly read — moved to the bottom of <b>About you</b> on 17 Oct, so it no longer sits above the briefing. A check or experiment that comes due still rides on the morning push.</p>
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
@@ -6743,7 +6743,7 @@ var USAGE_LABELS = {
   seen_insurance:'Seen: Insurance', seen_interruptions:'Seen: Interruptions', seen_ai:'Seen: AI', seen_markets:'Seen: Markets', seen_ev:'Seen: EV',
   briefing_standin_seen:'Opened to an earlier briefing (none for today)',
   glance_seen:'At a glance shown', glance_calendar:'At a glance: Calendar line', glance_sports:'At a glance: Sports line',
-  glance_flights:'At a glance: trip or fares line', glance_pse:'At a glance: PSE line', glance_rentals:'At a glance: Rentals line',
+  glance_flights:'At a glance: trip or fares line', glance_pse:'At a glance: Money line, PSE', glance_rentals:'At a glance: Rentals line', glance_radar:'At a glance: Money line, Radar', glance_miro:'At a glance: Money line, Markets',
   today_ask:'Ask from Today (typed)', today_ask_chip:'Ask from Today (one-tap question)',
   pse_watch_toggle:'PSE watchlist ☆', pse_watch_add:'PSE watchlist add code', pse_watch_remove:'PSE watchlist remove',
   pse_watch_target:'PSE buy-below price (open)', pse_watch_target_save:'PSE buy-below price saved', pse_watch_target_clear:'PSE buy-below price cleared',
@@ -7728,7 +7728,7 @@ function revealTodayCard(el) {
 // are read only when feed-health shows a newer run than the line this device
 // last worked out, so an ordinary open stays light.
 var GLANCE_CACHE = 'daybook_glance_v1', _glanceToken = 0;
-var GLANCE_PAGES = {calendar: 'calendar', sports: 'sports', flights: 'flights', pse: 'pse', rentals: 'rentals'};
+var GLANCE_PAGES = {calendar: 'calendar', sports: 'sports', flights: 'flights', pse: 'pse', rentals: 'rentals', radar: 'radar', miro: 'miro'};
 function glanceCache() {
   try { var c = JSON.parse(localStorage.getItem(GLANCE_CACHE) || '{}'); return c && typeof c === 'object' ? c : {}; } catch (e) { return {}; }
 }
@@ -7744,6 +7744,10 @@ async function glanceFeed(name, key, work) {
   return value;
 }
 function glanceRowHtml(r) {
+  // The money line has a part per page (Radar, Markets, PSE), each its own tap.
+  if (Array.isArray(r.parts)) return '<div class="glance-row glance-money"><span class="glance-tag">' + esc(r.label) + '</span><span class="glance-text">' + r.parts.map(function(p) {
+    return '<button type="button" class="glance-part" data-track="glance_' + esc(p.source) + '" onclick="switchPage(\'' + GLANCE_PAGES[p.source] + '\',null)">' + esc(p.text) + '</button>';
+  }).join('<span class="glance-note"> · </span>') + '</span></div>';
   return '<button type="button" class="glance-row" data-track="glance_' + esc(r.source) + '" onclick="switchPage(\'' + GLANCE_PAGES[r.source] + '\',null)"><span class="glance-tag">' + esc(r.label) +
     '</span><span class="glance-text">' + esc(r.text) + (r.note ? ' <span class="glance-note">· ' + esc(r.note) + '</span>' : '') + '</span></button>';
 }
@@ -7757,7 +7761,8 @@ async function renderTodayGlance() {
     get(function() { return window.fbLoadBookedTrips(); }), get(function() { return window.fbLoadPseWatch(); }), get(function() { return window.fbLoadFeedHealth(); }),
     get(function() { return window.fbLoadFlightWatch(); }), get(function() { return window.fbLoadRentalPrefs(); })]);
   if (token !== _glanceToken || window._firebaseUid !== uid) return;
-  var rows = [G.calendarLine(window.DaybookCalendarCore, {manual: small[0] || [], meetings: small[1]}, today), G.tripLine(window.FlightsCore, small[2], today), G.pseLine(small[3], today)];
+  var money = function(radar, markets) { return G.moneyLine ? G.moneyLine(radar, markets, small[3], today) : G.pseLine(small[3], today); };
+  var rows = [G.calendarLine(window.DaybookCalendarCore, {manual: small[0] || [], meetings: small[1]}, today), G.tripLine(window.FlightsCore, small[2], today), money(null, null)];
   var paint = function() {
     var list = G.rows(rows);
     el.innerHTML = list.length ? '<div class="glance-head">At a glance</div>' + list.map(glanceRowHtml).join('') : '';
@@ -7780,9 +7785,16 @@ async function renderTodayGlance() {
     get(function() { return !prefs ? null : glanceFeed('rentals', key('rentals', [prefs.updatedAt || '']), async function() {
       var r = await window.fbLoadRentals();
       return G.rentalsLine(window.RentalsCore, r && r.feed, prefs);
-    }); })
+    }); }),
+    // Radar (47 KB) and Markets (37 KB): read once per new run, kept as small summaries.
+    get(function() { return !G.radarSummary ? null : glanceFeed('radar', key('radar', []), async function() {
+      var d = await window.fbLoadRadar(), day = d && d.generatedAt ? new Date(Date.parse(d.generatedAt) + 8 * 3600000).toISOString().slice(0, 10) : '';
+      return G.radarSummary(d, day);
+    }); }),
+    get(function() { return !G.marketsSummary ? null : glanceFeed('markets', key('miro', []), async function() { return G.marketsSummary(await window.fbLoadMiro()); }); })
   ]);
   if (token !== _glanceToken || window._firebaseUid !== uid) return;
+  rows[2] = money(later[3], later[4]);
   rows.push(G.sportsLine(later[0], Date.now()), later[1], later[2]);
   paint();
   // Counted on each open that shows it, beside the taps on each line.
