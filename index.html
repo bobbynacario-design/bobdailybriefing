@@ -58,6 +58,7 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/checkup-core.js"></script>
 <script src="./lib/grooming-core.js"></script>
 <script src="./lib/glance-core.js"></script>
+<script src="./lib/calls-score-core.js"></script>
 <script src="./lib/lifestyle-core.js"></script>
 <script src="./lib/life-records-core.js"></script>
 <script src="./lib/weekly-review-ui.js"></script>
@@ -2130,6 +2131,7 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .command-more>summary{cursor:pointer;padding:.55rem 0;font-family:var(--mono);font-size:11px;color:var(--txt2)}
 .command-more[open]>summary{border-bottom:1px solid var(--rim);margin-bottom:.7rem}
 .command-more .command-panel,.command-more .command-settings{margin-bottom:.8rem}
+.trust-card{margin:0 0 1rem;padding:.75rem 1rem .6rem;border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:10px;background:var(--bg2)}.trust-title{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt3);margin-bottom:.35rem}.trust-row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:.1rem .7rem;padding:.35rem 0;border-top:1px solid var(--rim)}.trust-row:first-of-type{border-top:0}.trust-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);padding-top:.15rem}.trust-verdict{font-size:14px;font-weight:600;color:var(--txt)}.trust-verdict.is-good{color:var(--green)}.trust-verdict.is-bad{color:var(--red)}.trust-verdict.is-flat{color:var(--amber)}.trust-verdict.is-wait{color:var(--txt2)}.trust-detail{grid-column:2;font-size:12.5px;line-height:1.5;color:var(--txt2)}.trust-bottom{margin:.45rem 0 .1rem;font-size:13px;line-height:1.5;color:var(--txt)}@media(max-width:600px){.trust-row{grid-template-columns:1fr}.trust-detail{grid-column:1}}
 .today-more{margin:1rem 0;border:1px solid var(--rim);border-radius:10px;background:var(--bg2);padding:.2rem .8rem}.today-more[hidden]{display:none}
 .today-more>summary{cursor:pointer;padding:.55rem 0;font-family:var(--mono);font-size:11px;color:var(--txt2)}.today-more-names{color:var(--txt3)}.today-more-names:not(:empty)::before{content:"· "}
 .today-more[open]>summary{border-bottom:1px solid var(--rim);margin-bottom:.7rem}
@@ -4196,6 +4198,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="hero-sub" id="radar-sub">Loading…</div>
     <div class="hero-divider"></div>
   </div>
+  <div id="radar-trust"></div>
   <div id="radar-regime"></div>
   <div id="radar-filter" class="radar-filter"></div>
   <div id="radar-status-filter"></div>
@@ -4381,6 +4384,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="hero-sub" id="miro-sub">Loading…</div>
     <div class="hero-divider"></div>
   </div>
+  <div id="miro-trust"></div>
   <details class="miro-settings" id="miro-settings" ontoggle="miroSettingsToggled(this)">
     <summary>Manage followed themes and model settings</summary>
     <div class="miro-settings-body">
@@ -4851,6 +4855,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-radar"/></svg> Radar — what's worth a look today</div>
+      <p><b>Can you trust these calls?</b> at the top is Radar's track record in plain words. <b>Taker picks</b>: every published pick since 5 Oct 2026, scored ten sessions after the first close after it was published, against its benchmark (no trading costs); a verdict from 20 scored picks, and "ahead" or "behind" only when at least 55% (or at most 45%) beat their benchmark and the average is more than half a point either way. <b>Forecasts</b>: the panel's probabilities against always saying 50/50. <b>Score</b> and <b>Status</b>: the back-tested journal, which the watchlist flatters. The last line says what that means for how far to lean on it.</p>
       <p>Each card is one asset, ranked by a <b>0–100 score</b> (higher = stronger setup right now on trend, volume, relative strength and <b>accumulation</b>: whether more shares trade on up days than on down days over the last 20 sessions). Read a card top to bottom:</p>
       <ul>
         <li><b>Score + status badge</b> — the quick read:
@@ -4908,6 +4913,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-miro"/></svg> Markets — what changed in decision-relevant events?</div>
       <p>The Markets tab treats event-market probabilities as an external intelligence signal. Its watchlist is limited to Philippine policy, macro and rates, energy, regional security, trade, and AI industry events.</p>
+      <p><b>Can you trust these calls?</b> at the top compares our read with the market price on every question that has settled (Brier score, lower is better). It gives a verdict only from 30 settled questions; before that it says how many have settled and, from five, which side has been closer so far.</p>
       <ul>
         <li><b>Priority Signals</b> — the six most relevant followed events, ranked by configured importance, probability movement, and market liquidity.</li>
         <li><b>Probability and market read</b> — the market's current implied chance that the event resolves YES, translated into plain language from "strongly expects this" through "open question" to "tail risk." It is a noisy crowd estimate, not a fact.</li>
@@ -9237,6 +9243,18 @@ function radarRunLabel(generatedAt) {
   if (!isFinite(t)) return ' · runs Mon, Wed and Fri';
   return ' · ' + new Date(t).toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Manila'}) + '’s run · runs Mon, Wed and Fri';
 }
+// "Can you trust these calls?" (lib/calls-score-core.js): the plain verdict
+// from each page's own journals, first on Radar and on Markets (28 Nov 2026).
+function trustCardHtml(card) {
+  if (!card || !(card.rows || []).length) return '';
+  return '<section class="trust-card" aria-label="Track record"><div class="trust-title">' + esc(card.title) + '</div>' + card.rows.map(function(r) {
+    return '<div class="trust-row"><span class="trust-label">' + esc(r.label) + '</span><span class="trust-verdict is-' + esc(r.tone) + '">' + esc(r.verdict) + '</span><div class="trust-detail">' + esc(r.detail) + '</div></div>';
+  }).join('') + '<p class="trust-bottom">' + esc(card.bottom) + '</p></section>';
+}
+function renderTrustCard(id, card) {
+  var el = document.getElementById(id);
+  if (el) el.innerHTML = trustCardHtml(card);
+}
 function renderRadar() {
   var out = document.getElementById('radar-out');
   var sub = document.getElementById('radar-sub');
@@ -9269,6 +9287,7 @@ function renderRadar() {
     var data = both[0].data;
     radarData = data; radarPreviousData = both[0].previous;
     radarJournal = both[1];
+    renderTrustCard('radar-trust', window.CallsScoreCore && data ? window.CallsScoreCore.radarCard(data, radarJournal) : null);
     if (!data || !data.signals || !data.signals.length) {
       radarSignals = null;
       if (regimeEl) regimeEl.innerHTML = '';
@@ -12703,6 +12722,7 @@ function renderMiro() {
   var journalPromise = window.fbLoadMiroJournal ? window.fbLoadMiroJournal() : Promise.resolve(null);
   return Promise.all([window.fbLoadMiro(), journalPromise]).then(function (result) {
     var data = result[0], journal = result[1];
+    renderTrustCard('miro-trust', window.CallsScoreCore ? window.CallsScoreCore.marketsCard(journal) : null);
     if (!data || !data.markets || !data.markets.length) {
       if (sub) sub.textContent = 'No data yet';
       out.innerHTML = '<div class="empty-state">NO MARKET SIGNALS YET - RUN miro/refresh-miro.js</div>';

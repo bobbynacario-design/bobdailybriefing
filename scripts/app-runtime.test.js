@@ -1714,6 +1714,23 @@ test('Monday\'s look back draws its lines in order, links its sources and counts
   assert.match(handler('briefingCardSeen'),/'week-card'\) \? 'week'/);
   assert.match(handler('watchBriefingReading'),/\.week-card, \.aha-card/);
 });
+// 28 Nov 2026: Radar and Markets open with their track record in plain words.
+test('the trust card draws each verdict in its tone, escaped, and both pages place it first',()=>{
+  const {context,element}=environment(['trustCardHtml','renderTrustCard'],{esc:escHtml});
+  const card={title:'Can you trust these calls?',rows:[{label:'Taker picks',tone:'bad',verdict:'Behind their benchmarks',detail:'33 of 88 <scored>'},{label:'Forecasts',tone:'flat',verdict:'No better than a coin flip',detail:'d'}],bottom:'So far the Taker picks have lagged.'};
+  context.renderTrustCard('radar-trust',card);
+  const out=element('radar-trust').innerHTML;
+  assert.match(out,/<section class="trust-card" aria-label="Track record"><div class="trust-title">Can you trust these calls\?<\/div>/);
+  assert.match(out,/<span class="trust-label">Taker picks<\/span><span class="trust-verdict is-bad">Behind their benchmarks<\/span><div class="trust-detail">33 of 88 &lt;scored/);
+  assert.match(out,/<p class="trust-bottom">So far the Taker picks have lagged\.<\/p><\/section>$/);
+  context.renderTrustCard('radar-trust',null);assert.equal(element('radar-trust').innerHTML,'','no record: nothing drawn');
+  assert.match(html,/<div id="radar-trust"><\/div>\s*<div id="radar-regime"><\/div>/,'first on Radar, above the regime line');
+  assert.match(html,/<div id="miro-trust"><\/div>\s*<details class="miro-settings"/,'first on Markets');
+  assert.match(html,/radarJournal = both\[1\];\s*renderTrustCard\('radar-trust', window\.CallsScoreCore && data \? window\.CallsScoreCore\.radarCard\(data, radarJournal\) : null\);/);
+  assert.match(html,/renderTrustCard\('miro-trust', window\.CallsScoreCore \? window\.CallsScoreCore\.marketsCard\(journal\) : null\);/);
+  assert.match(html,/<script src="\.\/lib\/calls-score-core\.js"><\/script>/);
+  assert.match(readFileSync(new URL('../sw.js',import.meta.url),'utf8'),/'\.\/lib\/calls-score-core\.js',/,'kept for offline');
+});
 test('the usage summary ranks the last 30 days and names what has gone unused',()=>{
   const {context}=environment(['usageSummary'],{USAGE_LABELS:{card_deeper:'Go deeper',page_today:'Today',account_brief:'Account: meeting brief'},USAGE_WATCH:['card_deeper','account_brief']});
   const s=context.usageSummary({'2026-09-26':{page_today:3,card_deeper:1},'2026-09-20':{page_today:2},'2026-07-01':{account_brief:9},'2026-09-25':{x:0}},'2026-09-26',30);
