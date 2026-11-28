@@ -29,13 +29,14 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { lookup as dnsLookup } from 'dns/promises';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldPath } from 'firebase-admin/firestore';
 import { CONFIG } from './config.js';
 import { scoreUniverse } from './scoring.js';
 import { buildJournal } from './journal.js';
 import { tagCatalysts, focusPicks, usageForLedger, DEFAULT_MODEL as CATALYST_DEFAULT_MODEL } from './catalysts.js';
 import { runForecastPanel } from './forecast.js';
 import { stageForecastJournal, JOURNAL_DOC } from './forecast-journal.js';
+import { RECORD_DOC as TAKER_RECORD_DOC, picksFromRun, measureTakerRecord } from './taker-record.js';
 import { recordUsage } from '../lib/llm-usage.js';
 import { recordRunHealth, makeStage } from '../lib/feed-health.js';
 import { fetchRetry } from '../lib/http.js';
@@ -598,10 +599,39 @@ async function main() {
     });
   }
 
+  // The Taker picks' own record (radar/taker-record.js), scored from these
+  // bars. Picks come from this run and the runs of the last 14 days, so one
+  // run whose record write failed is not lost; with no record yet, from every
+  // run since 1 Oct 2026. Best effort: without it Radar is written as before.
+  STAGE.set('taker-record');
+  var takerRecord = null;
+  try {
+    var takerSnap = await db.collection(COLL).doc(TAKER_RECORD_DOC).get();
+    var priorTaker = takerSnap.exists ? takerSnap.data() : null;
+    var takerFrom = priorTaker ? new Date(Date.parse(dateKey + 'T00:00:00Z') - 14 * 86400000).toISOString().slice(0, 10) : '2026-10-01';
+    // Ids between 'radar-<from>' and 'radar-<today>' are only the dated run docs:
+    // 'radar-drift-…', 'radar-journal' and the rest sort after the digits.
+    var pastRuns = await db.collection(COLL).where(FieldPath.documentId(), '>=', 'radar-' + takerFrom)
+      .where(FieldPath.documentId(), '<', 'radar-' + dateKey).get();
+    var takerAdds = [];
+    pastRuns.forEach(function (snap) { takerAdds = takerAdds.concat(picksFromRun(snap.data(), snap.id.slice(6))); });
+    takerAdds = takerAdds.concat(picksFromRun(doc, dateKey));
+    takerRecord = measureTakerRecord(priorTaker, takerAdds, barsByAsset, new Date().toISOString());
+    doc.takerRecord = takerRecord.stats;
+    var ts = takerRecord.stats;
+    console.log('Taker record: ' + ts.picks + ' picks, ' + ts.resolved + ' scored, ' + ts.beat + ' beat their benchmark' +
+      (ts.meanExcessReturn == null ? '' : ', mean ' + ts.meanExcessReturn + ' pts') + ', ' + ts.pending + ' pending');
+  } catch (e) {
+    console.warn('Taker record unavailable; Radar written without it:', e.message || e);
+  }
+
   STAGE.set('write');
   await writeDoc(db, dateKey, doc, barsByAsset, forecastResult.entries);
   await db.collection(COLL).doc('radar-journal').set(journalDoc);
-  console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', and radar-journal.');
+  if (takerRecord) {
+    try { await db.collection(COLL).doc(TAKER_RECORD_DOC).set(takerRecord); } catch (e) { console.warn('Taker record not saved (the next run re-reads these picks):', e.message || e); }
+  }
+  console.log('\nWrote briefings-bob/radar-' + dateKey + ', radar-latest = ' + dateKey + ', radar-journal' + (takerRecord ? ' and ' + TAKER_RECORD_DOC : '') + '.');
 
   // The radar itself is now safely written — record health before the optional
   // PH leg so a PH failure can never mask a good radar run.
