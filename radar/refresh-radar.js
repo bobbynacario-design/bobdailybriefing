@@ -620,11 +620,20 @@ async function main() {
     var pastRuns = await db.collection(COLL).where(FieldPath.documentId(), '>=', 'radar-' + takerFrom)
       .where(FieldPath.documentId(), '<', 'radar-' + dateKey).get();
     var takerAdds = [], listAdds = [], challengerAdds = [];
+    // How often the two rules picked differently: on 16-27 Nov 2026 they would
+    // have differed on one run in ten, and only those runs can tell them apart.
+    var challengerRuns = priorChallenger && priorChallenger.runs ? Object.assign({}, priorChallenger.runs) : {};
+    var noteRun = function (d, day) {
+      if (!d || !Array.isArray(d.challengerPicks) || !d.picks || !Array.isArray(d.picks.taker)) return;
+      challengerRuns[day] = d.challengerPicks.slice().sort().join(',') !== d.picks.taker.slice().sort().join(',');
+    };
     pastRuns.forEach(function (snap) {
       takerAdds = takerAdds.concat(picksFromRun(snap.data(), snap.id.slice(6)));
       listAdds = listAdds.concat(listFromRun(snap.data(), snap.id.slice(6)));
       challengerAdds = challengerAdds.concat(challengerFromRun(snap.data(), snap.id.slice(6)));
+      noteRun(snap.data(), snap.id.slice(6));
     });
+    noteRun(doc, dateKey);
     takerAdds = takerAdds.concat(picksFromRun(doc, dateKey));
     listAdds = listAdds.concat(listFromRun(doc, dateKey));
     challengerAdds = challengerAdds.concat(challengerFromRun(doc, dateKey));
@@ -646,8 +655,11 @@ async function main() {
       return {picks: s.picks, resolved: s.resolved, pending: s.pending, beat: s.beat, meanExcessReturn: s.meanExcessReturn, medianExcessReturn: s.medianExcessReturn, effectiveSample: s.effectiveSample, since: s.since};
     };
     var sameRuns = Object.values(takerRecord.entries).filter(function (e) { return cs2.since && e.dateKey >= cs2.since; });
+    challengerRecord.runs = challengerRuns;
+    var runDays = Object.keys(challengerRuns);
     doc.challengerRecord = {rule: 'No name more than 5% above its 20-day average; at most one per theme', since: cs2.since,
-      challenger: compact(cs2), taker: compact(takerStats(sameRuns))};
+      challenger: compact(cs2), taker: compact(takerStats(sameRuns)),
+      runs: {total: runDays.length, differ: runDays.filter(function (k) { return challengerRuns[k]; }).length}};
     console.log('Challenger record: ' + cs2.picks + ' picks since ' + cs2.since + ', ' + cs2.resolved + ' scored, ' + cs2.beat + ' beat');
   } catch (e) {
     console.warn('Taker record unavailable; Radar written without it:', e.message || e);
