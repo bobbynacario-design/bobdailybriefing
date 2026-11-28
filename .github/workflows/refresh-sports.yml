@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -74,6 +74,18 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+      # GitHub sometimes lists the uploaded artifact a few seconds after the
+      # upload finishes: "No artifacts named github-pages were found" failed
+      # 11 of 60 sports runs from 18 to 27 Nov 2026, each about a second after
+      # a good upload. One retry after 30 seconds; a second failure is real.
       - name: Deploy GitHub Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Wait before retrying the deploy
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - name: Deploy GitHub Pages (retry)
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4

@@ -11,6 +11,11 @@ for (const file of readdirSync(workflowDir).filter(name => /\.ya?ml$/.test(name)
   const upload = workflow.indexOf('actions/upload-pages-artifact@');
   assert.ok(build >= 0 && upload > build,file+' must verify the complete site before upload');
   assert.match(workflow,/path: _site\s/,file+' must upload the verified artifact');
+  // GitHub can list a fresh artifact a few seconds late (11 of 60 sports runs,
+  // 18-27 Nov 2026), so the first deploy may fail and one retry follows it.
+  assert.equal((workflow.match(/actions\/deploy-pages@/g) || []).length,2,file+' must retry the Pages deploy once');
+  assert.match(workflow,/id: deployment\s+continue-on-error: true/,file+' first deploy must let the retry run');
+  assert.match(workflow,/if: steps\.deployment\.outcome == 'failure'\s+uses: actions\/deploy-pages@/,file+' retry must run only after a failed deploy');
 }
 const html=readFileSync(new URL('../_site/index.html',import.meta.url),'utf8');
 assert.ok(!/<script src="\.\/lib\//.test(html),'shared application code must be bundled');

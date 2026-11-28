@@ -123,7 +123,11 @@ section('Radar');
     if (marketDay && r.date !== today && phtHour >= 10) alert('radar:not-today', 'No Radar for today (' + today + ') by ' + phtHour + ':00; latest is ' + r.date + '.');
     if (c.error || !c.reads) level('radar:reads', 'Radar ' + r.date + ' has no catalyst reads (' + (c.error || '0 reads') + ').');
     else info('Catalyst reads: ' + c.reads + ' by ' + c.model + (c.readsUnsourced ? ', ' + c.readsUnsourced + ' unsourced' : ''));
-    if (f.status !== 'ok') level('radar:forecast', 'Radar ' + r.date + ' forecast panel ' + (f.status || 'missing') + (f.error ? ': ' + f.error : '') + '.');
+    // Forecasts are keyed by each name's latest close, so with no new close (a
+    // US market holiday, or a rerun) they are carried over, not missing. That
+    // was an ALERT on 27 Nov 2026, the day after Thanksgiving.
+    if (f.status === 'skipped' && f.reason === 'already-forecast') info('Forecasts carried over: ' + signals.filter((s) => s.forecast && s.forecast.status !== 'unavailable').length + ' of ' + (f.selected || []).length + ' (no new closing prices since the last forecasts)');
+    else if (f.status !== 'ok') level('radar:forecast', 'Radar ' + r.date + ' forecast panel ' + (f.status || 'missing') + (f.error ? ': ' + f.error : '') + '.');
     else info('Forecasts: ' + signals.filter((s) => s.forecast).length + ' of ' + (f.selected || []).length + ' selected');
     const noAsOf = signals.filter((s) => !s.dataAsOf).length;
     if (noAsOf) warn('radar:dataAsOf', noAsOf + ' Radar names have no dataAsOf.');
@@ -284,7 +288,10 @@ section('GitHub runs');
   try { runs = JSON.parse(r.stdout); } catch (e) { warn('gh:run', 'Could not read GitHub runs: ' + String(r.stderr || e.message).trim().slice(0, 120)); }
   if (runs) {
     const dayRuns = runs.filter((x) => hoursAgo(x.createdAt) <= 26);
-    dayRuns.filter((x) => x.conclusion === 'failure').forEach((x) => alert('gh:' + x.workflowName, x.workflowName + ' failed at ' + phtTime(x.createdAt) + ' (run ' + x.databaseId + ').'));
+    // This check's own run from yesterday is not a new problem: counting it
+    // kept the GitHub run failing every day from 19 to 27 Nov 2026, so one
+    // real alert stayed red for nine days and buried the next ones.
+    dayRuns.filter((x) => x.conclusion === 'failure' && x.workflowName !== 'Daybook daily check').forEach((x) => alert('gh:' + x.workflowName, x.workflowName + ' failed at ' + phtTime(x.createdAt) + ' (run ' + x.databaseId + ').'));
     const tally = {};
     dayRuns.forEach((x) => { const k = x.workflowName + ' ' + (x.conclusion || x.status); tally[k] = (tally[k] || 0) + 1; });
     Object.entries(tally).forEach(([k, n]) => info(n + ' × ' + k));
