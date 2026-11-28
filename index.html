@@ -2112,6 +2112,9 @@ a.src:hover{color:var(--txt1);border-color:var(--txt3)}
 .command-more>summary{cursor:pointer;padding:.55rem 0;font-family:var(--mono);font-size:11px;color:var(--txt2)}
 .command-more[open]>summary{border-bottom:1px solid var(--rim);margin-bottom:.7rem}
 .command-more .command-panel,.command-more .command-settings{margin-bottom:.8rem}
+.today-more{margin:1rem 0;border:1px solid var(--rim);border-radius:10px;background:var(--bg2);padding:.2rem .8rem}.today-more[hidden]{display:none}
+.today-more>summary{cursor:pointer;padding:.55rem 0;font-family:var(--mono);font-size:11px;color:var(--txt2)}.today-more-names{color:var(--txt3)}.today-more-names:not(:empty)::before{content:"· "}
+.today-more[open]>summary{border-bottom:1px solid var(--rim);margin-bottom:.7rem}
 .weekly-card,.weekly-review{background:var(--bg2);border:1px solid var(--rim);border-left:3px solid var(--gold);border-radius:12px;padding:.9rem 1rem;margin:0 0 1rem;font-size:13px;line-height:1.6}
 .weekly-card[hidden],.weekly-review[hidden]{display:none}
 .weekly-head,.weekly-review-head{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}.weekly-head h2,.weekly-review-head h2{font-family:var(--serif);font-size:18px;margin:0}
@@ -3802,15 +3805,15 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 </div>
 <div class="page active" id="page-today">
   <section class="today-glance owner-only" id="today-glance" hidden aria-label="At a glance"></section>
-  <section class="today-ask owner-only" id="today-ask" aria-label="Ask your Daybook">
-    <form class="today-ask-row" onsubmit="return askFromToday(event)"><input id="today-ask-input" type="search" maxlength="300" autocomplete="off" aria-label="Ask your Daybook" placeholder="Ask your Daybook: an account, a call, your week, your time off…"><button type="submit" class="tool-chip weekly-primary" data-track="today_ask">Ask</button></form>
-    <div class="today-ask-chips" id="today-ask-chips"></div>
-  </section>
-  <section class="weekly-card" id="weekly-card" hidden aria-labelledby="weekly-title"></section>
+  <!-- Cards with something live today. One with nothing live waits in "More on Today" at the
+       bottom and comes back up by itself (arrangeTodayCards, 28 Nov 2026): the briefing is what
+       he reads every morning, and it sat under Ask, an empty week and a stale Health line. -->
+  <div id="today-cards">
   <p class="today-body owner-only" id="today-body" hidden role="status"></p>
   <p class="today-body today-checkups owner-only is-notable" id="today-checkups" hidden></p>
   <div class="today-body today-grooming owner-only" id="today-grooming" hidden></div>
   <section class="weekly-review" id="weekly-review" hidden aria-label="Weekly review"></section>
+  </div>
 
   <div class="hero" id="daily-intelligence" tabindex="-1">
     <div class="hero-eyebrow">Your wider world · Daily Intelligence Briefing</div>
@@ -3865,7 +3868,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
   <div id="auto-load-banner"></div>
 
-  <section class="checkin" id="checkin" hidden aria-label="Morning check-in"></section>
+  <div id="today-checkin-slot"><section class="checkin" id="checkin" hidden aria-label="Morning check-in"></section></div>
   <div class="briefing-actions"><button class="btn-sec owner-only" id="openai-generate-btn" onclick="generateWithOpenAI()">OPENAI GENERATE</button><button class="nav-btn" onclick="shareBriefing(this)" title="Every story with its link, plus each Go deeper already built: the share sheet on a phone, the clipboard on a computer">Share briefing</button><button class="nav-btn" onclick="copyAsText()">Copy briefing</button><button class="nav-btn" onclick="exportPDF()">Export PDF</button><button class="nav-btn" onclick="commandGo('command')">Open Morning 5</button></div>
   <details class="import-panel"><summary>Import / advanced</summary>
   <div class="paste-zone">
@@ -3941,9 +3944,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="empty-state">AWAITING BRIEFING INPUT</div><p class="member-only member-note">Daily briefings are written for Daybook&rsquo;s owner, so Today has none on your account. The Morning 5, Radar, Markets (with PSE stocks), Sports and Your numbers are shared with you and refresh every day.</p>
   </div>
 
-  <!-- Below the briefing since 17 Oct 2026: the briefing and the check-in are what get used every
-       morning, so they lead; This week stays above it (small, and the Sunday review starts there).
-       A push still lands on Morning 5 (#command scrolls to it). -->
+  <!-- Below the briefing since 17 Oct 2026: the briefing is what gets read every morning, so it
+       leads. A push still lands on Morning 5 (#command scrolls to it). -->
   <section class="research-card owner-only" id="today-research" hidden aria-labelledby="health-research-title"></section>
   <section id="scout-today" class="today-five" aria-label="Scout deadlines" hidden></section>
   <section class="today-five" id="today-five" aria-label="Morning 5">
@@ -4009,6 +4011,17 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
       <div class="radar-disclaimer">Priority is a deterministic triage aid built from existing app data. It does not create trades, bets, or new factual claims; open the source tab before acting.</div>
     </details>
   </section>
+
+  <details class="today-more" id="today-more" hidden>
+    <summary>More on Today <span class="today-more-names" id="today-more-names"></span></summary>
+    <div id="today-more-body">
+  <section class="today-ask owner-only" id="today-ask" data-quiet="1" aria-label="Ask your Daybook">
+    <form class="today-ask-row" onsubmit="return askFromToday(event)"><input id="today-ask-input" type="search" maxlength="300" autocomplete="off" aria-label="Ask your Daybook" placeholder="Ask your Daybook: an account, a call, your week, your time off…"><button type="submit" class="tool-chip weekly-primary" data-track="today_ask">Ask</button></form>
+    <div class="today-ask-chips" id="today-ask-chips"></div>
+  </section>
+  <section class="weekly-card" id="weekly-card" hidden data-quiet="1" aria-labelledby="weekly-title"></section>
+    </div>
+  </details>
 </div>
 
 <!-- Global / PH / AI are now in-page selectors on the Today tab (see #section-nav). -->
@@ -4660,7 +4673,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <div class="help-card help-wide help-takeaway">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> Today — how the page works</div>
       <p><b>At a glance</b> sits at the very top: one line each for your calendar today (or the next entry this week), your sports in the next 24 hours in Manila time, a booked trip or a fare at your target, PSE watchlist alerts from the last close, and new or cheaper rentals in your areas. A line shows only when it has something, and tapping it opens that page. It reads the big flight, rental and sports feeds only after they have a new run, so opening Today stays quick.</p>
-      <p>Below it, top to bottom: <b>Ask your Daybook</b>, <b>This week</b> with your Apple Health lines (the weekly review opens from it), then the <b>briefing</b>, with the <b>Morning check-in</b> just above the Generate button. The briefing is built for you at about <b>05:40</b>, so it is waiting when you open the app and the 06:00 push can lead with it; the banner says <b>Built for you</b>, and the button then reads <b>REBUILD</b> (it asks first, since a second build takes 3–5 minutes and about $0.60). The 05:40 build pauses after three days without opening Daybook and starts again the morning after you next open it. With no briefing for today yet, Today shows the newest earlier one under an amber line naming its date, and swaps to today’s as soon as it arrives. If Generate fails, a red line says why and stays until you close it; a refusal before the build starts usually means Google Cloud billing is off. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
+      <p>Below it comes the <b>briefing</b>. A card goes above the briefing only on a day it has something live: <b>This week</b> once you have commitments (or a week to review), your <b>Apple Health</b> line while Health is sending, <b>Check-ups</b> or <b>Grooming</b> that are due, and the <b>Morning check-in</b> (just above the Generate button) when it asks about a commitment you set. Everything with nothing live today waits, closed, in <b>More on Today</b> at the very bottom: <b>Ask your Daybook</b>, a This week card that only asks for commitments, a check-in offering ideas, a Health line saying it has not sent. Its heading names what is inside. A card comes back up by itself the day it has something; nothing moves while More on Today is open, so you can use a card there and it stays put until you close it. Ask is also in Search. The briefing is built for you at about <b>05:40</b>, so it is waiting when you open the app and the 06:00 push can lead with it; the banner says <b>Built for you</b>, and the button then reads <b>REBUILD</b> (it asks first, since a second build takes 3–5 minutes and about $0.60). The 05:40 build pauses after three days without opening Daybook and starts again the morning after you next open it. With no briefing for today yet, Today shows the newest earlier one under an amber line naming its date, and swaps to today’s as soon as it arrives. If Generate fails, a red line says why and stays until you close it; a refusal before the build starts usually means Google Cloud billing is off. Below the briefing: this week’s health research and the <b>Morning 5</b>. The morning push still opens straight on the Morning 5.</p>
       <p><b>Daily Boost</b> — your daily spark, goals, experiments, <b><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> To check</b> and the weekly read — moved to the bottom of <b>About you</b> on 17 Oct, so it no longer sits above the briefing. A check or experiment that comes due still rides on the morning push.</p>
       <p><b>From your past</b> — every third day (not Sundays), a note you wrote at least two weeks ago, or an experiment you said helped or wanted to keep, comes back under your spark: <b>Use today</b> puts it in today’s note or experiment box, <b>Later</b> brings it back in about two weeks, <b>Dismiss</b> retires it.</p>
       <p><b>Waiting on the AI</b> — Go deeper, the briefing, the weekly read, a meeting brief and deep research all show a turning ring and a timer counting up while they work. Past the usual time for that job the line adds <b>longer than usual</b>; it does not invent progress steps, because the server does not report any.</p>
@@ -4672,8 +4685,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 
     <div class="help-card">
       <div class="help-h"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg> This week and the weekly review</div>
-      <p><b>This week</b>, at the top of Today, holds your commitments for Monday to Sunday (Philippine time), up to ten, each in an area, listed in your order of focus: money, work, health, poker, then time and leave, learning and life. The form starts with three rows, as money, work and health; once those are filled it shows one more empty row, and <b>＋ Add another</b> adds more. Tap <b>Did it today</b> on any day you moved one forward; the dots show the days so far. Small and checkable beats ambitious.</p>
-      <p><b>Morning check-in</b>, just above the Generate button, asks one question a morning that one tap answers. With nothing set for the week it offers three ideas from your records, in your focus order: tap one and it becomes this week’s commitment. Once you have commitments it asks whether you moved one forward yesterday: <b>Yes</b> ticks that day. <b>Not now</b> and <b>No</b> just hide the question until tomorrow, on that device. When nothing is due, the card stays hidden.</p>
+      <p><b>This week</b> holds your commitments for Monday to Sunday (Philippine time), up to ten, each in an area, listed in your order of focus: money, work, health, poker, then time and leave, learning and life. The form starts with three rows, as money, work and health; once those are filled it shows one more empty row, and <b>＋ Add another</b> adds more. Tap <b>Did it today</b> on any day you moved one forward; the dots show the days so far. Small and checkable beats ambitious.</p>
+      <p><b>Morning check-in</b> asks one question a morning that one tap answers. With nothing set for the week it offers three ideas from your records, in your focus order, inside <b>More on Today</b> at the bottom: tap one and it becomes this week’s commitment, and This week comes back above the briefing. Once you have commitments it asks, just above the Generate button, whether you moved one forward yesterday: <b>Yes</b> ticks that day. <b>Not now</b> and <b>No</b> just hide the question until tomorrow, on that device. When nothing is due, the card stays hidden.</p>
       <p>On Sunday the card offers the <b>weekly review</b>: what your records show for the week (your ticks, days you opened Daybook, leave, calendar tasks, decision reviews and events you starred in PokerHQ), marking each commitment done, partly or missed with an optional line on what helped, then next week’s commitments. Tap an idea and it goes in the first empty row, or a new row when every row is filled, and its chip shows ✓; <b>Save commitments</b> keeps it with the rest. Ideas come from your own records and follow your focus order, at most two per area: last week’s unfinished commitments, open market calls without a review date, decision reviews due, calendar tasks and working-question deadlines, PokerHQ stars next week, upcoming leave, your goals’ next moves and your last weekly read. Where your records say nothing about money, work or health, one plainly labelled starter idea fills the gap. A week with little recorded is called thin. If you miss Sunday, the card asks on Monday. <b>Read your week back (AI)</b> opens the existing weekly read. The review itself makes no AI calls. Commitments are private to your account.</p>
     </div>
 
@@ -5221,6 +5234,7 @@ function onSignedIn() {
   renderTodayCheckups();
   renderTodayGrooming();
   renderTodayResearch();
+  watchTodayCards();
   setApplicationLocked(false);
   document.querySelectorAll('.page').forEach(function(el) { el.inert = false; });
   document.getElementById('auth-overlay').classList.add('hidden');
@@ -5909,7 +5923,7 @@ function openIndexedIntelligenceItem(item) {
   if (item.source === 'Commitments') {
     switchPage('today', document.querySelector('.ntab[data-page="today"]'));
     var week = document.getElementById('weekly-card');
-    if (week && !week.hidden) setTimeout(function() { week.scrollIntoView({behavior:'smooth', block:'start'}); }, 80);
+    if (week && !week.hidden) { revealTodayCard(week); setTimeout(function() { week.scrollIntoView({behavior:'smooth', block:'start'}); }, 80); }
     return;
   }
   if (item.source === 'Calendar') {
@@ -7209,6 +7223,7 @@ async function renderTodayBody() {
   }
   var h = _health, line = h && h.link ? H.bodyLine(h, Date.now()) : null;
   if (!line || (!line.text && !line.stale)) { el.hidden = true; return; }
+  markTodayQuiet(el, !line.text);  // "has not sent since…" waits in More on Today
   el.className = 'today-body owner-only' + (line.notable ? ' is-notable' : '') + (line.stale ? ' is-stale' : '');
   el.innerHTML = line.text ? esc(line.text)
     : 'Apple Health has not sent since ' + esc(H.dayLabel(line.since)) + '. Check the Daybook Health automation on your iPhone (<a href="#about" onclick="switchPage(\'about\'); return false;">About you</a>).';
@@ -7599,17 +7614,74 @@ async function renderTodayGrooming() {
     if (until > today) { el.hidden = true; return; }
     var names = items.slice(0, 3).map(function(i) { return i.title.toLowerCase(); });
     el.classList.remove('is-notable');
+    markTodayQuiet(el, true);
     el.innerHTML = 'Grooming: set the day you last had a ' + esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' or ' + names[names.length - 1] : names[0]) + ', and Daybook will tell you here when each is due.' +
       '<button type="button" class="tool-chip" data-groom-act="setup">Set it up</button><button type="button" class="tool-chip" data-groom-act="later">Not now</button>';
     el.hidden = false; return;
   }
   var open = line.items.filter(function(i) { return _groomOpen['today:' + i.id] === 'plan'; })[0];
   el.classList.toggle('is-notable', line.notable);
+  markTodayQuiet(el, false);
   el.innerHTML = 'Grooming: ' + line.items.map(function(i) {
     return '<span data-groom="' + esc(i.id) + '" data-groom-place="today"><b>' + esc(i.title) + '</b> ' + esc(G.stateText(i, today)) + groomButtonsHtml(i) + '</span>';
   }).join(' · ') + (line.more ? ' · <a href="#about" data-groom-act="setup">+' + line.more + ' more</a>' : '') +
     (open ? '<div data-groom="' + esc(open.id) + '" data-groom-place="today">' + groomPlanHtml(open, today) + '</div>' : '');
   el.hidden = false;
+}
+
+// ── Today's cards: live ones on top, the rest in "More on Today" ──
+// From 19 Oct to 28 Nov 2026 he read the briefing every morning (about ten
+// stories, to the last section) and used none of the cards above it: Ask, a
+// This week card asking for commitments, a stale Apple Health line and a
+// check-in offering commitments. A card marked quiet (data-quiet, set by its
+// own renderer) waits in the closed fold at the bottom of Today; the day it has
+// something live (a commitment, fresh Health data, a due check-up) it comes
+// back to its place. Nothing moves while the fold is open, so a card he is
+// using there stays put until he closes it.
+var TODAY_CARDS = [['today-ask', 'Ask'], ['weekly-card', 'This week'], ['today-body', 'Apple Health'], ['today-checkups', 'Check-ups'],
+  ['today-grooming', 'Grooming'], ['weekly-review', 'Weekly review'], ['checkin', 'Check-in']];
+function markTodayQuiet(el, quiet) {
+  if (!el || !el.setAttribute) return;
+  if (quiet) el.setAttribute('data-quiet', '1'); else el.removeAttribute('data-quiet');
+}
+window.markTodayQuiet = markTodayQuiet;
+function arrangeTodayCards() {
+  var more = document.getElementById('today-more'), body = document.getElementById('today-more-body');
+  if (!more || !body) return;
+  var byId = function(id) { return document.getElementById(id); };
+  if (!more.open) TODAY_CARDS.forEach(function(card, i) {
+    var el = byId(card[0]), home = byId(card[0] === 'checkin' ? 'today-checkin-slot' : 'today-cards');
+    var target = el && el.hasAttribute('data-quiet') ? body : home;
+    if (!el || !target || el.parentNode === target) return;
+    var next = null;
+    for (var j = i + 1; j < TODAY_CARDS.length && !next; j++) { var n = byId(TODAY_CARDS[j][0]); if (n && n.parentNode === target) next = n; }
+    target.insertBefore(el, next);
+  });
+  var folded = TODAY_CARDS.filter(function(card) {
+    var el = byId(card[0]);
+    return el && el.parentNode === body && !el.hidden && !(window.daybookMember && el.classList.contains('owner-only'));
+  });
+  var names = byId('today-more-names');
+  if (names) names.textContent = folded.map(function(card) { return card[1]; }).join(' · ');
+  more.hidden = !folded.length;
+}
+var _todayWatch = null;
+function watchTodayCards() {
+  var more = document.getElementById('today-more');
+  if (!_todayWatch && typeof MutationObserver === 'function') {
+    _todayWatch = new MutationObserver(arrangeTodayCards);
+    TODAY_CARDS.forEach(function(card) {
+      var el = document.getElementById(card[0]);
+      if (el) _todayWatch.observe(el, {attributes: true, attributeFilter: ['hidden', 'data-quiet']});
+    });
+    if (more) more.addEventListener('toggle', function() { if (!more.open) arrangeTodayCards(); });
+  }
+  arrangeTodayCards();
+}
+// Open the fold first when a link points at a card waiting there.
+function revealTodayCard(el) {
+  var more = el && el.closest ? el.closest('#today-more') : null;
+  if (more) more.open = true;
 }
 
 // ── At a glance (lib/glance-core.js) ──

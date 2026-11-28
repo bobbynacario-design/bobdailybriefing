@@ -1855,8 +1855,62 @@ test('Ask on Today opens Search with the question and asks it as a new thread, w
   context.renderTodayAsk();
   const chips=element('today-ask-chips').innerHTML;
   assert.equal((chips.match(/data-track="today_ask_chip"/g) || []).length,3);assert.match(chips,/data-q="What’s new on Allianz this week\?"/);
-  assert.ok(/id="page-today">\s*<section class="today-glance owner-only" id="today-glance" hidden aria-label="At a glance"><\/section>\s*<section class="today-ask owner-only" id="today-ask"/.test(html),'right under At a glance on Today, owner-only like Ask itself');
+  assert.ok(/<div id="today-more-body">\s*<section class="today-ask owner-only" id="today-ask" data-quiet="1"/.test(html),'unused 19 Oct to 28 Nov 2026: it waits in More on Today, owner-only like Ask itself');
 });
+// 28 Nov 2026: he read the briefing every morning and used none of the cards above it.
+test('Today keeps a card above the briefing only while it has something live, and never moves one while the fold is open',()=>{
+  const nodes=new Map();
+  const node=(id,parent,attrs={})=>{
+    const n={id,hidden:false,open:false,attrs:{...attrs},children:[],parentNode:null,textContent:'',
+      classList:{contains:c=>(n.className||'').split(' ').includes(c)},
+      hasAttribute:a=>a in n.attrs,setAttribute:(a,v)=>{n.attrs[a]=String(v);},removeAttribute:a=>{delete n.attrs[a];},
+      insertBefore(child,ref){if(child.parentNode)child.parentNode.children.splice(child.parentNode.children.indexOf(child),1);const i=ref?n.children.indexOf(ref):-1;if(i<0)n.children.push(child);else n.children.splice(i,0,child);child.parentNode=n;return child;},
+      closest:sel=>{let p=n;while(p){if('#'+p.id===sel)return p;p=p.parentNode;}return null;}};
+    nodes.set(id,n);if(parent)parent.insertBefore(n,null);return n;
+  };
+  const cards=node('today-cards'),slot=node('today-checkin-slot'),more=node('today-more'),body=node('today-more-body',more);node('today-more-names',more);
+  more.hidden=true;
+  ['today-body','today-checkups','today-grooming','weekly-review'].forEach(id=>node(id,cards).hidden=true);
+  node('checkin',slot).hidden=true;
+  const ask=node('today-ask',body,{'data-quiet':'1'});ask.className='today-ask owner-only';
+  const week=node('weekly-card',body,{'data-quiet':'1'});week.hidden=true;
+  const {context}=environment(['markTodayQuiet','arrangeTodayCards','revealTodayCard'],{document:{getElementById:id=>nodes.get(id)||null}});
+  vm.runInContext(html.slice(html.indexOf('var TODAY_CARDS = '),html.indexOf('function markTodayQuiet(')),context);
+  const ids=n=>n.children.map(c=>c.id);
+  context.arrangeTodayCards();
+  assert.equal(more.hidden,false);assert.equal(nodes.get('today-more-names').textContent,'Ask','the heading names only what shows inside');
+  // His Today on 28 Nov: a week with no commitments, Health silent since 30 Oct, a check-in offering ideas.
+  week.hidden=false;
+  const health=nodes.get('today-body');context.markTodayQuiet(health,true);health.hidden=false;
+  const checkin=nodes.get('checkin');context.markTodayQuiet(checkin,true);checkin.hidden=false;
+  context.arrangeTodayCards();
+  assert.deepEqual(ids(body),['today-ask','weekly-card','today-body','checkin']);
+  assert.equal(nodes.get('today-more-names').textContent,'Ask · This week · Apple Health · Check-in');
+  assert.deepEqual(ids(cards),['today-checkups','today-grooming','weekly-review']);assert.deepEqual(ids(slot),[]);
+  // A due check-up is live where it stands; Health sending again comes back up, in its place.
+  nodes.get('today-checkups').hidden=false;context.markTodayQuiet(health,false);context.arrangeTodayCards();
+  assert.deepEqual(ids(cards),['today-body','today-checkups','today-grooming','weekly-review']);
+  // While the fold is open nothing moves, even a card that became live.
+  more.open=true;context.markTodayQuiet(week,false);context.markTodayQuiet(checkin,false);context.arrangeTodayCards();
+  assert.deepEqual(ids(body),['today-ask','weekly-card','checkin']);
+  more.open=false;context.arrangeTodayCards();
+  assert.deepEqual(ids(cards),['weekly-card','today-body','today-checkups','today-grooming','weekly-review'],'closed again: This week goes back in its place');
+  assert.deepEqual(ids(slot),['checkin'],'the check-in returns above the Generate button');
+  assert.deepEqual(ids(body),['today-ask']);
+  // A member never sees Ask, so with nothing else inside the fold is hidden.
+  context.daybookMember=true;context.arrangeTodayCards();assert.equal(more.hidden,true);context.daybookMember=false;
+  ask.hidden=true;context.arrangeTodayCards();assert.equal(more.hidden,true,'nothing inside: no fold');
+  // A link to a card in the fold opens it first.
+  context.markTodayQuiet(week,true);context.arrangeTodayCards();context.revealTodayCard(week);assert.equal(more.open,true);
+  // The renderers mark their own cards.
+  assert.ok(handler('renderTodayBody').includes('markTodayQuiet(el, !line.text);'),'a Health line saying only that it has not sent is quiet');
+  assert.match(handler('renderTodayGrooming'),/markTodayQuiet\(el, true\);\s*el\.innerHTML = 'Grooming: set the day/,'the grooming set-up prompt is quiet');
+  assert.match(handler('renderTodayGrooming'),/markTodayQuiet\(el, false\);\s*el\.innerHTML = 'Grooming: ' \+ line\.items/,'grooming due or planned is live');
+  assert.match(html,/renderTodayResearch\(\);\s*watchTodayCards\(\);\s*setApplicationLocked\(false\);/,'watching starts on sign-in');
+  assert.match(html,/<div id="today-checkin-slot"><section class="checkin" id="checkin" hidden/);
+  assert.ok(html.indexOf('id="today-more"')>html.indexOf('id="today-five"'),'the fold is the last thing on Today');
+});
+
 test('a page opened by a push tap counts it once and takes the mark off the address',()=>{
   const used=[], replaced=[];
   const {context}=environment(['consumePushTap'],{URL,trackUse:name=>used.push(name),history:{replaceState:(s,t,u)=>replaced.push(u)}});
