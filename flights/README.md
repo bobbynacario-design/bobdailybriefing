@@ -202,3 +202,42 @@ Reset hotel settings removes an override. Edits whose check-in has come, or
 edited fare stays whose fare has left the scout, are dropped from the saved
 requests (never when the scout failed to load). Shared quotes remain one room/two
 adults. Use arrival, rather than departure, as the hotel check-in date.
+
+
+## Trip Packing Planner
+
+Booked trips have separate private packing checklists in Trips, linked by their
+booked-trip ID. Start an editable list of clothing and essentials, adjust each
+quantity, add or remove items, and confirm Needed, Already owned, Ordered,
+Received or Packed. Suggestions are personal, cover at most seven days before
+laundry, and use the existing rough monthly climate guide where available.
+An unknown return date starts with a one-night template. Wardrobe counts are
+category hints; unknown counts never establish a shortage or prove readiness.
+
+Each item can reference an existing Clothing need and an exact purchase record.
+A Clothing need can also be created from a saved clothing item. That need and
+its packing link commit in one Firestore transaction. Purchase delivery and
+return details stay in Clothing. Ordered, returned, return-requested, missing,
+and known wrong-fit purchases cannot count as ready or packed. Receipt supplies
+a readiness signal; packing the full quantity always needs explicit confirmation.
+Packing does not change wardrobe counts or fulfil shopping needs.
+
+Today shows unstarted lists, changed trip dates, empty lists, missing preparation
+and pending deliveries within 14 days of departure. Ready but unpacked items
+appear within three days. Completed and departed trips have no packing action.
+Actions open the relevant checklist in Trips and work even if the flight scout
+is unavailable. Clothing saves refresh these signals immediately.
+
+Storage: `briefings-bob/trip-packing-<uid>` contains `uid`, `kind: trip-packing`,
+`plans` (booked-trip ID to destination/date signature and up to 40 items), and
+`updatedAt`. Reads and writes check the current owner account. Transactions read
+the latest booked dates, checklist and, when linking, Clothing profile; edits to
+separate items merge, while stale edits to the same item reject without removing
+the form draft. Changing destination, departure or return requires reviewing the
+list, and resets packed confirmations. Removing a packing item keeps its Clothing
+records. No rule deployment, collector changes, new paid API or AI call is needed.
+
+Validation: `node --test lib/trip-packing*.test.js`, app runtime integration tests,
+and the normal `npm test` / production artifact checks. Browser fixtures exercise
+actual forms and transaction code with isolated accounts, including mobile width,
+need creation, blocked packing before delivery, completion, returns and date review.

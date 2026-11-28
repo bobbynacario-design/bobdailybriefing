@@ -51,6 +51,9 @@ Object.keys(window).filter(function(key) { return /^fbLoad/.test(key) && key !==
 <script src="./lib/uniqlo-import-ui.js"></script>
 <script src="./lib/purchase-tracker-ui.js"></script>
 <script src="./lib/shopping-ui.js"></script>
+<script src="./lib/trip-packing.js"></script>
+<script src="./lib/trip-packing-storage.js"></script>
+<script src="./lib/trip-packing-ui.js"></script>
 <script src="./lib/rentals-core.js"></script>
 <script src="./lib/rentals-ui.js"></script>
 <script src="./lib/daybook-calendar-core.js"></script>
@@ -1482,6 +1485,11 @@ window.fbSaveBookedTrips = async function(items) {
   });
   await setDoc(doc(db,COLL,'trips-booked-' + uid),{uid:uid,kind:'trips-booked',items:clean,updatedAt:new Date().toISOString()},{mergeFields:['uid','kind','items','updatedAt']});
 };
+// Private per-trip checklists. Shopping-need creation and its packing link commit together.
+var packingStorage = window.TripPackingStorage.create({uid:getUid,owner:function(){return window.fbIsDaybookOwner();},db:db,coll:COLL,doc:doc,getDoc:getDoc,getDocs:getDocs,query:query,collection:collection,where:where,limit:limit,setDoc:setDoc,runTransaction:runTransaction});
+window.fbLoadTripPacking = packingStorage.load;
+window.fbLoadPackingClothing = packingStorage.loadProfile;
+window.fbUpdateTripPacking = packingStorage.save;
 // Exact-date Google Flights prices for this account (flights/exact-prices.js).
 window.fbLoadExactPrices = async function() { return fbReadOwn('exact-prices-'); };
 window.fbLoadFlightWatch = async function() { var d = await fbReadOwn('flights-watch-'); return d || {items:{}}; };
@@ -3580,6 +3588,8 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
 #page-shopping .shopping-filters select{width:100%;box-sizing:border-box}
 #page-shopping .shopping-leads li{font-size:12px}
 #shopping-needs,#shopping-stores,#shopping-coverage{margin:1rem 0}
+
+#trip-packing{margin:1rem 0;padding:1rem;border:1px solid var(--rim);border-radius:10px}#trip-packing h3{margin:.25rem 0}#trip-packing summary{cursor:pointer;line-height:1.6}#trip-packing details{margin:.6rem 0}#trip-packing .packing-trip{border-top:1px solid var(--rim);padding:.7rem 0}#trip-packing .packing-item{padding:.5rem .65rem;background:var(--bg2);border-radius:8px}#trip-packing label{display:block;margin:.5rem 0}#trip-packing input,#trip-packing select{width:100%;max-width:100%;box-sizing:border-box}#trip-packing .flights-controls{grid-template-columns:repeat(2,minmax(0,1fr))}#trip-packing fieldset{border:0;padding:0;min-width:0}#trip-packing fieldset[disabled]{opacity:.65}#trip-packing .packing-issue{color:var(--gold)}#today-packing ul{padding-left:1.2rem}#today-packing li{margin:.6rem 0}#today-packing p{margin:.25rem 0}@media(max-width:520px){#trip-packing .flights-controls{grid-template-columns:1fr}}
 #shopping-purchases{margin:1rem 0}#shopping-purchases summary{cursor:pointer;padding:.5rem 0}.shopping-tracked-purchase{border-top:1px solid var(--rim);padding:.6rem 0}#shopping-purchases label{display:block;margin:.5rem 0}#shopping-purchases textarea,#page-shopping .shopping-purchase textarea{width:100%;box-sizing:border-box;background:var(--bg2);color:var(--txt);border:1px solid var(--rim);border-radius:8px;padding:.65rem}#shopping-purchases fieldset[disabled]{opacity:.65}#page-shopping .shopping-purchase .flights-controls{grid-template-columns:1fr}@media(max-width:520px){#shopping-purchases .flights-controls{grid-template-columns:1fr}}#today-purchases ul{padding-left:1.2rem}#today-purchases li{margin:.6rem 0}#today-purchases p{margin:.25rem 0}
 .shopping-comparison-scroll{overflow-x:auto}.shopping-comparison table{width:100%;border-collapse:collapse;font-size:12px}.shopping-comparison th,.shopping-comparison td{text-align:left;vertical-align:top;padding:.65rem;border-bottom:1px solid var(--rim)}
 @media(max-width:600px){#page-shopping .shopping-title{font-size:18px}#page-shopping .shopping-filters{grid-template-columns:repeat(2,minmax(0,1fr))}#page-shopping .shopping-filters label:last-child{grid-column:1/-1}#page-shopping .deal-grid{grid-template-columns:minmax(0,1fr)}#page-shopping .shopping-photo{height:160px}#page-shopping input,#page-shopping select,#page-shopping textarea{font-size:16px}}
@@ -3855,6 +3865,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
   <p class="today-body owner-only" id="today-body" hidden role="status"></p>
   <p class="today-body today-checkups owner-only is-notable" id="today-checkups" hidden></p>
   <div class="today-body today-grooming owner-only" id="today-grooming" hidden></div>
+  <section class="today-body owner-only is-notable" id="today-packing" hidden aria-label="Trip preparation"></section>
   <section class="today-body owner-only is-notable" id="today-purchases" hidden aria-label="Purchase follow-ups"></section>
   <section class="weekly-review" id="weekly-review" hidden aria-label="Weekly review"></section>
   </div>
@@ -4467,6 +4478,7 @@ body.light .about-savebar.is-dirty{box-shadow:0 10px 28px rgba(0,0,0,.14)}
     <button class="tool-chip" type="button" onclick="openFlightQuote()" aria-controls="flight-quote-panel">+ Add a flight quote</button>
   </div>
   <div id="flights-booked"></div>
+  <section id="trip-packing" class="owner-only" aria-label="Trip Packing Planner"></section>
   <div id="flights-bookread" class="owner-only"></div>
   <div id="flights-next" class="owner-only"></div>
   <div id="flights-watch"></div>
@@ -5287,6 +5299,7 @@ function onSignedIn() {
   renderTodayCheckups();
   renderTodayGrooming();
   if(window.renderTodayPurchases)window.renderTodayPurchases();
+  if(window.renderTodayPacking)window.renderTodayPacking();
   renderTodayResearch();
   watchTodayCards();
   setApplicationLocked(false);
@@ -5377,6 +5390,7 @@ function clearPrivateSession() {
   setText('grounding-numbers','Sign in to load published numbers.');
   if (window.resetFlights) window.resetFlights();
   if (window.resetShopping) window.resetShopping();
+  if (window.resetTripPacking) window.resetTripPacking();
   if (window.resetRentals) window.resetRentals();
   if (window.resetPseResearch) window.resetPseResearch();
   if (window.resetClientNotes) window.resetClientNotes();
@@ -7693,7 +7707,7 @@ async function renderTodayGrooming() {
 // back to its place. Nothing moves while the fold is open, so a card he is
 // using there stays put until he closes it.
 var TODAY_CARDS = [['today-ask', 'Ask'], ['weekly-card', 'This week'], ['today-body', 'Apple Health'], ['today-checkups', 'Check-ups'],
-  ['today-grooming', 'Grooming'], ['today-purchases', 'Purchases'], ['weekly-review', 'Weekly review'], ['checkin', 'Check-in']];
+  ['today-grooming', 'Grooming'], ['today-purchases', 'Purchases'], ['today-packing', 'Trip preparation'], ['weekly-review', 'Weekly review'], ['checkin', 'Check-in']];
 function markTodayQuiet(el, quiet) {
   if (!el || !el.setAttribute) return;
   if (quiet) el.setAttribute('data-quiet', '1'); else el.removeAttribute('data-quiet');
@@ -10390,6 +10404,7 @@ function setCommandFilter(filter, button) {
 var commandLoadedAt = 0;
 function renderTodayFive(force) {
   if(window.renderTodayPurchases)window.renderTodayPurchases();
+  if(window.renderTodayPacking)window.renderTodayPacking();
   if (window.fbIsDaybookOwner && window.fbIsDaybookOwner() && window.renderScout) window.renderScout();
   if (!force && commandCenterInputs && Date.now() - commandLoadedAt < 300000) {
     commandCenterInputs.briefing = _currentData || ((window._briefingHistory || [])[0] || {}).data || commandCenterInputs.briefing;

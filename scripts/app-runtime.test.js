@@ -2542,3 +2542,11 @@ test('purchase follow-ups load on sign-in independently of briefing success and 
  const start=html.indexOf('function onSignedIn()'),end=html.indexOf('  watchTodayCards();',start),signed=html.slice(start,end);assert.ok(signed.includes('renderTodayPurchases()'));
  assert.match(html,/<section class="today-body owner-only is-notable" id="today-purchases" hidden/);assert.ok(html.includes("['today-purchases', 'Purchases']"));assert.ok(html.includes('./lib/purchase-tracker.js'));assert.ok(html.includes('./lib/purchase-tracker-ui.js'));
 });
+
+
+test('packing preparation loads on sign-in and cached Today visits independently of the scout',()=>{
+ const start=html.indexOf('function onSignedIn()'),end=html.indexOf('  watchTodayCards();',start);assert.ok(html.slice(start,end).includes('renderTodayPacking()'));
+ const today=html.indexOf('function renderTodayFive(force)');assert.ok(html.slice(today,html.indexOf('if (!force',today)).includes('renderTodayPacking()'));
+ assert.match(html,/<section class="today-body owner-only is-notable" id="today-packing" hidden/);assert.ok(html.includes("['today-packing', 'Trip preparation']"));assert.ok(html.includes('window.resetTripPacking()'));
+ assert.ok(html.indexOf('./lib/shopping-core.js')<html.indexOf('./lib/trip-packing-ui.js'));assert.ok(html.includes('id="trip-packing" class="owner-only"'));
+});
